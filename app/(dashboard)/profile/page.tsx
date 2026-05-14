@@ -341,7 +341,7 @@ export default function ProfilePage() {
       <div className="max-w-6xl">
         <Card>
           <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-avs-yellow" />
+            <Loader2 className="h-6 w-6 animate-spin text-brand-yellow" />
           </CardContent>
         </Card>
       </div>
@@ -357,7 +357,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => void fetchProfileOverview()}
-              className="text-sm font-medium text-avs-yellow hover:underline"
+              className="text-sm font-medium text-brand-yellow hover:underline"
             >
               Retry loading profile
             </button>

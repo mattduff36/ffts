@@ -35,7 +35,7 @@ export async function GET() {
   const isActualSuperAdmin =
     typedProfile.super_admin === true ||
     typedProfile.role?.is_super_admin === true ||
-    userEmail === 'admin@mpdee.co.uk';
+    userEmail === 'template-admin@example.com';
 
   if (!isActualSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

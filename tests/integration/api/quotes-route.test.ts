@@ -191,11 +191,11 @@ describe('POST /api/quotes', () => {
     mockGetQuoteManagerOption.mockResolvedValue({
       profile_id: 'manager-1',
       initials: 'MD',
-      manager_email: 'admin@mpdee.co.uk',
+      manager_email: 'template-admin@example.com',
       approver_profile_id: 'approver-1',
-      signoff_name: 'Matt Duffill',
+      signoff_name: 'Example Admin',
       signoff_title: 'Contracts Manager',
-      profile: { full_name: 'Matt Duffill' },
+      profile: { full_name: 'Example Admin' },
     });
     mockGenerateQuoteReferenceForManager.mockResolvedValue({
       quoteReference: '80000-MD',
@@ -255,7 +255,7 @@ describe('POST /api/quotes', () => {
     const quoteInsert = vi.fn().mockResolvedValue({ error: null });
     const lineItemInsert = vi.fn().mockResolvedValue({ error: null });
     const profileSingle = vi.fn().mockResolvedValue({
-      data: { id: 'manager-1', full_name: 'Matt Duffill' },
+      data: { id: 'manager-1', full_name: 'Example Admin' },
       error: null,
     });
     const profileEq = vi.fn().mockReturnValue({ single: profileSingle });

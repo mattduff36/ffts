@@ -4,10 +4,11 @@ export interface DebugConsoleAccessParams {
   isViewingAs?: boolean | null | undefined;
 }
 
-const CHARLOTTE_DEBUG_ACCESS_EMAIL = 'charlotte@avsquires.co.uk';
+const ADDITIONAL_DEBUG_ACCESS_EMAIL =
+  process.env.NEXT_PUBLIC_DEBUG_ACCESS_EMAIL?.trim().toLowerCase() || 'debug.user@example.com';
 
-export function isCharlotteDebugAccessUser(email: string | null | undefined): boolean {
-  return (email || '').trim().toLowerCase() === CHARLOTTE_DEBUG_ACCESS_EMAIL;
+export function isAdditionalDebugAccessUser(email: string | null | undefined): boolean {
+  return (email || '').trim().toLowerCase() === ADDITIONAL_DEBUG_ACCESS_EMAIL;
 }
 
 export function canAccessDebugConsole(params: DebugConsoleAccessParams): boolean {
@@ -15,5 +16,5 @@ export function canAccessDebugConsole(params: DebugConsoleAccessParams): boolean
     return false;
   }
 
-  return Boolean(params.isActualSuperAdmin) || isCharlotteDebugAccessUser(params.email);
+  return Boolean(params.isActualSuperAdmin) || isAdditionalDebugAccessUser(params.email);
 }

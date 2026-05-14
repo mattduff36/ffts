@@ -129,7 +129,7 @@ This will show:
 - Whether permissions are correctly configured
 - Any issues that need fixing
 
-## Example: Andy Hill Case
+## Example: Example User Seven Case
 
 **Symptoms:**
 - Can see the "View inspections for: All Employees" dropdown (shows frontend recognizes admin role)
@@ -230,5 +230,5 @@ Then user must log out/in to fetch updated role.
 ---
 
 **Last Updated:** December 2, 2025  
-**Related Issue:** Andy Hill - andy@avsquires.co.uk
+**Related Issue:** Example User Seven - andy@example.com
 

@@ -12,6 +12,7 @@ import { extractSuggestionTitleFromNotificationBody, parseSuggestionIdFromCreate
 import { SUGGESTION_STATUS_COLORS, SUGGESTION_STATUS_LABELS, type Suggestion, type SuggestionUpdateWithUser } from '@/types/faq';
 import { Bell, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { templateConfig } from '@/lib/config/template-config';
 
 interface ReminderModalProps {
   open: boolean;
@@ -319,7 +320,7 @@ export function ReminderModal({
                         >
                           <div className="flex items-center justify-between gap-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              {isUserReply ? 'Your reply' : 'AV Squires update'}
+                              {isUserReply ? 'Your reply' : 'Template update'}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(update.created_at).toLocaleString()}
@@ -339,7 +340,7 @@ export function ReminderModal({
                           )}
 
                           <p className="mt-2 text-xs text-muted-foreground">
-                            by {update.user?.full_name || (isUserReply ? 'You' : 'AV Squires')}
+                            by {update.user?.full_name || (isUserReply ? 'You' : templateConfig.branding.appName)}
                           </p>
                         </div>
                       );
@@ -374,7 +375,7 @@ export function ReminderModal({
             <Button
               onClick={() => void handleReplySubmit()}
               disabled={!replyText.trim() || loadingSuggestionThread || submittingReply}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {submittingReply ? (
                 <>

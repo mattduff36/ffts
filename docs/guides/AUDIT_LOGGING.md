@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AVS Worklog application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
+The FieldOps Template application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
 
 ## Features
 
@@ -42,7 +42,7 @@ Each audit log entry includes:
 
 ### SuperAdmin Debug Console
 
-1. Log in as SuperAdmin (`admin@mpdee.co.uk`)
+1. Log in as SuperAdmin (`template-admin@example.com`)
 2. Navigate to `/debug`
 3. Click the **"Audit Log"** tab
 4. View the last 100 database changes

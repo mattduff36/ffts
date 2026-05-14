@@ -3,6 +3,24 @@
  * Documentation: https://resend.com/docs/send-with-nextjs
  */
 
+import { templateConfig } from '@/lib/config/template-config';
+import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
+import { inspectDemoEmailRecipients } from '@/lib/utils/demo-email';
+
+function getPrimaryEmailSettings() {
+  return getTemplateEmailConfig();
+}
+
+function shouldSimulateEmail(to: string | string[], context: string): boolean {
+  const demoCheck = inspectDemoEmailRecipients(to);
+  if (!demoCheck.shouldSimulate) return false;
+
+  console.info(
+    `Demo ${context} email simulated for ${demoCheck.demoRecipients.join(', ')}. No email was sent.`
+  );
+  return true;
+}
+
 interface SendPasswordEmailParams {
   to: string;
   userName: string;
@@ -20,10 +38,12 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
   error?: string;
 }> {
   const { to, userName, temporaryPassword, isReset = false } = params;
+  if (shouldSimulateEmail(to, 'password')) return { success: true };
   
   try {
     // Check if Resend API key is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -33,8 +53,8 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
     }
     
     const subject = isReset 
-      ? 'Your Password Has Been Reset - SquiresApp'
-      : 'Welcome to SquiresApp - Your Login Details';
+      ? `Your Password Has Been Reset - ${templateConfig.branding.appName}`
+      : `Welcome to ${templateConfig.branding.appName} - Your Login Details`;
     
     const htmlContent = isReset ? `
       <!DOCTYPE html>
@@ -45,7 +65,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
           </div>
           
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -67,7 +87,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
             
             <p><strong>Next Steps:</strong></p>
             <ol style="color: #4b5563;">
-              <li>Go to SquiresApp.com or open the app</li>
+              <li>Go to ${templateConfig.branding.publicUrl} or open the app</li>
               <li>Enter your email address and the temporary password above</li>
               <li>Create a new password when prompted</li>
             </ol>
@@ -78,7 +98,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -91,7 +111,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">Welcome to SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">Welcome to ${templateConfig.branding.appName}</h1>
           </div>
           
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -99,7 +119,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
             
             <p>Hello ${userName},</p>
             
-            <p>Welcome to SquiresApp! Your account has been created and you can now log in using the credentials below:</p>
+            <p>Welcome to ${templateConfig.branding.appName}! Your account has been created and you can now log in using the credentials below:</p>
             
             <div style="background-color: #fff; border: 2px solid #F1D64A; border-radius: 8px; padding: 20px; margin: 20px 0;">
               <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Email Address</p>
@@ -116,7 +136,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
             
             <p><strong>Getting Started:</strong></p>
             <ol style="color: #4b5563;">
-              <li>Go to SquiresApp.com or open the app</li>
+              <li>Go to ${templateConfig.branding.publicUrl} or open the app</li>
               <li>Enter your email address and the temporary password above</li>
               <li>Create a new password when prompted</li>
             </ol>
@@ -132,7 +152,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -146,7 +166,7 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+        from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
         html: htmlContent
@@ -187,8 +207,9 @@ export async function testEmailConfiguration(): Promise<{
   configured: boolean;
   message: string;
 }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL;
+  const emailConfig = getPrimaryEmailSettings();
+  const apiKey = emailConfig.primaryApiKey;
+  const fromEmail = emailConfig.primaryFromEmail;
   
   if (!apiKey) {
     return {
@@ -234,10 +255,12 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
   error?: string;
 }> {
   const { to, userName, changes } = params;
+  if (shouldSimulateEmail(to, 'profile update')) return { success: true };
   
   try {
     // Check if Resend API key is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -269,7 +292,7 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
           </div>
           
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -307,7 +330,7 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -321,9 +344,9 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+        from: emailConfig.primaryFromEmail,
         to: [to],
-        subject: 'Your SquiresApp Profile Has Been Updated',
+        subject: `Your ${templateConfig.branding.appName} Profile Has Been Updated`,
         html: htmlContent
       })
     });
@@ -373,10 +396,15 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
   error?: string;
 }> {
   const { to, senderName, subject } = params;
+  if (shouldSimulateEmail(to, 'toolbox talk')) {
+    const recipients = Array.isArray(to) ? to : [to];
+    return { success: true, sent: recipients.length, failed: 0 };
+  }
   
   try {
     // Check if Resend API key is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -431,7 +459,7 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
               
               <p><strong>Next Steps:</strong></p>
               <ol style="color: #4b5563;">
-                <li>Open the SquiresApp or log in at SquiresApp.com</li>
+                <li>Open ${templateConfig.branding.appName} or log in at ${templateConfig.branding.publicUrl}</li>
                 <li>Read the full Toolbox Talk message</li>
                 <li>Sign electronically to confirm you've read and understood it</li>
               </ol>
@@ -446,7 +474,7 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
             </div>
             
             <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-              <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
             </div>
           </body>
         </html>
@@ -462,7 +490,7 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+              from: emailConfig.primaryFromEmail,
               to: [email],
               subject: `New Toolbox Talk: ${subject}`,
               html: htmlContent
@@ -533,10 +561,15 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
   error?: string;
 }> {
   const { to, senderName, subject, vehicleReg, categoryName, dueInfo } = params;
+  if (shouldSimulateEmail(to, 'maintenance reminder')) {
+    const recipients = Array.isArray(to) ? to : [to];
+    return { success: true, sent: recipients.length, failed: 0 };
+  }
   
   try {
     // Check if Resend API key is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -605,7 +638,7 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
               
               <p><strong>Next Steps:</strong></p>
               <ol style="color: #4b5563;">
-                <li>Log in to SquiresApp to view full details</li>
+                <li>Log in to ${templateConfig.branding.appName} to view full details</li>
                 <li>Take the necessary action (renew, service, etc.)</li>
                 <li>Update the due date once completed</li>
               </ol>
@@ -620,7 +653,7 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
             </div>
             
             <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-              <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
             </div>
           </body>
         </html>
@@ -636,7 +669,7 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+              from: emailConfig.primaryFromEmail,
               to: [email],
               subject: `Maintenance Reminder: ${vehicleReg} - ${categoryName}`,
               html: htmlContent
@@ -707,9 +740,11 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
   error?: string;
 }> {
   const { to, employeeName, weekEnding, managerComments } = params;
+  if (shouldSimulateEmail(to, 'timesheet rejection')) return { success: true };
   
   try {
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -729,7 +764,7 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
           </div>
           
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -748,19 +783,19 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
             
             <p><strong>What You Need to Do:</strong></p>
             <ol style="color: #4b5563;">
-              <li>Log in to SquiresApp</li>
+              <li>Log in to ${templateConfig.branding.appName}</li>
               <li>Review the manager's comments</li>
               <li>Make the necessary corrections to your timesheet</li>
               <li>Resubmit for approval</li>
             </ol>
             
             <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              Please log in to SquiresApp to make the necessary corrections. If you have questions about the rejection, please contact your manager.
+              Please log in to ${templateConfig.branding.appName} to make the necessary corrections. If you have questions about the rejection, please contact your manager.
             </p>
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -773,7 +808,7 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+        from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
         html: htmlContent
@@ -823,9 +858,11 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
   error?: string;
 }> {
   const { to, recipientName, employeeName, weekEnding, adjustmentComments, adjustedBy } = params;
+  if (shouldSimulateEmail(to, 'timesheet adjustment')) return { success: true };
   
   try {
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -845,7 +882,7 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
           </div>
           
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -883,7 +920,7 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -896,7 +933,7 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+        from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
         html: htmlContent
@@ -942,9 +979,11 @@ export async function sendTrainingBookingDeclinedEmail(
   error?: string;
 }> {
   const { to, recipientName, employeeName, trainingDate, declinedBy } = params;
+  if (shouldSimulateEmail(to, 'training booking')) return { success: true };
 
   try {
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -964,7 +1003,7 @@ export async function sendTrainingBookingDeclinedEmail(
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
           </div>
 
           <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -985,12 +1024,12 @@ export async function sendTrainingBookingDeclinedEmail(
             </div>
 
             <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              This is an automated notification from SquiresApp.
+              This is an automated notification from ${templateConfig.branding.appName}.
             </p>
           </div>
 
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -1003,7 +1042,7 @@ export async function sendTrainingBookingDeclinedEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+        from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
         html: htmlContent,
@@ -1055,10 +1094,12 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
   error?: string;
 }> {
   const { to, reportId, title, description, errorCode, userName, userEmail, pageUrl, userAgent, additionalContext } = params;
+  if (shouldSimulateEmail(to, 'error report')) return { success: true, sent: to.length, failed: 0 };
   
   try {
     // Check if Resend API key is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getPrimaryEmailSettings();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
@@ -1120,11 +1161,11 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
             
             <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
               <p style="margin: 0; font-weight: bold; color: #92400e;">⚠️ Action Required</p>
-              <p style="margin: 5px 0 0 0; color: #92400e;">Please log in to SquiresApp to review and manage this error report. You can update the status and add notes for tracking.</p>
+              <p style="margin: 5px 0 0 0; color: #92400e;">Please log in to ${templateConfig.branding.appName} to review and manage this error report. You can update the status and add notes for tracking.</p>
             </div>
             
     <div style="text-align: center; margin: 20px 0;">
-      <a href="https://www.squiresapp.com/admin/errors/manage" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Manage Error Reports</a>
+      <a href="${templateConfig.branding.publicUrl}/admin/errors/manage" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Manage Error Reports</a>
     </div>
             
             <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
@@ -1133,7 +1174,7 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
           </div>
         </body>
       </html>
@@ -1156,7 +1197,7 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+              from: emailConfig.primaryFromEmail,
               to: [email],
               subject,
               html: htmlContent

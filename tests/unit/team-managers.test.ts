@@ -27,11 +27,11 @@ describe('team manager hierarchy helpers', () => {
     expect(
       formatManagerOptionLabel({
         id: 'placeholder-1',
-        full_name: 'Rob Squires',
+        full_name: 'Example Manager',
         is_placeholder: true,
         role_class: 'manager',
       })
-    ).toBe('Rob Squires (Placeholder)');
+    ).toBe('Example Manager (Placeholder)');
   });
 
   it('does not treat org_teams constraint errors as missing schema', () => {

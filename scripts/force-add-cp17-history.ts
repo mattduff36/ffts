@@ -1,5 +1,5 @@
 /**
- * Force add history entry for CP17 TKO - Andy Hill's service update
+ * Force add history entry for CP17 TKO - Example User Seven's service update
  */
 
 import { config } from 'dotenv';
@@ -28,7 +28,7 @@ async function forceAddHistory() {
   try {
     await client.connect();
 
-    // Get vehicle and Andy Hill
+    // Get vehicle and Example User Seven
     const { rows: vehicles } = await client.query(`
       SELECT v.id as van_id, v.reg_number, vm.*
       FROM vehicles v
@@ -55,7 +55,7 @@ async function forceAddHistory() {
     console.log(`Vehicle: ${vehicle.reg_number}`);
     console.log(`Current next_service_mileage: ${vehicle.next_service_mileage}`);
     console.log(`Last updated: ${new Date(vehicle.updated_at).toLocaleString()}`);
-    console.log(`User: ${andy ? andy.full_name : 'Andy Hill'}\n`);
+    console.log(`User: ${andy ? andy.full_name : 'Example User Seven'}\n`);
 
     // Create the history entry
     const insertQuery = `
@@ -81,7 +81,7 @@ async function forceAddHistory() {
       'mileage',
       'Updated service mileage schedule',
       andy ? andy.id : null,
-      andy ? andy.full_name : 'Andy Hill',
+      andy ? andy.full_name : 'Example User Seven',
       vehicle.updated_at // Use the actual update time from the maintenance record
     ]);
 

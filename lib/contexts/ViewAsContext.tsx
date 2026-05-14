@@ -22,7 +22,7 @@ export function ViewAsProvider({
   children: React.ReactNode;
   userEmail: string | null;
 }) {
-  const isSuperAdmin = userEmail === 'admin@mpdee.co.uk';
+  const isSuperAdmin = userEmail === 'template-admin@example.com';
   const [viewAsRoleId, setViewAsRoleIdState] = useState<string>(() => {
     if (typeof window === 'undefined' || !isSuperAdmin) {
       return '';

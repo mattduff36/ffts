@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TimesheetAdjustmentModal } from '@/components/timesheets/TimesheetAdjustmentModal';
-import { createSuzanneSquiresApiResponse, createManagerApiResponse } from '../../utils/factories';
+import { createPriorityManagerApiResponse, createManagerApiResponse } from '../../utils/factories';
 import { resetAllMocks, mockFetch } from '../../utils/test-helpers';
 
 describe('TimesheetAdjustmentModal', () => {
@@ -70,7 +70,7 @@ describe('TimesheetAdjustmentModal', () => {
     });
 
     it('should enable submission when comment is provided', async () => {
-      const suzanne = createSuzanneSquiresApiResponse();
+      const suzanne = createPriorityManagerApiResponse();
       mockFetch({ managers: [suzanne] });
 
       render(
@@ -85,7 +85,7 @@ describe('TimesheetAdjustmentModal', () => {
 
       // Wait for managers to load
       await waitFor(() => {
-        expect(screen.getByText('Suzanne Squires')).toBeInTheDocument();
+        expect(screen.getByText('Priority Manager')).toBeInTheDocument();
       });
 
       const commentInput = screen.getByPlaceholderText(/Explain what was adjusted/i);
@@ -94,8 +94,8 @@ describe('TimesheetAdjustmentModal', () => {
       // Type a comment
       fireEvent.change(commentInput, { target: { value: 'Adjusted hours for Thursday' } });
 
-      // Select Suzanne
-      const checkbox = screen.getByRole('checkbox', { name: /Suzanne Squires/i });
+      // Select Priority manager
+      const checkbox = screen.getByRole('checkbox', { name: /Priority Manager/i });
       fireEvent.click(checkbox);
 
       // Button should now be enabled
@@ -105,9 +105,9 @@ describe('TimesheetAdjustmentModal', () => {
     });
   });
 
-  describe('Suzanne Squires prioritisation', () => {
-    it('should show Suzanne Squires at the top of the list', async () => {
-      const suzanne = createSuzanneSquiresApiResponse();
+  describe('Priority Manager prioritisation', () => {
+    it('should show Priority Manager at the top of the list', async () => {
+      const suzanne = createPriorityManagerApiResponse();
       const manager2 = createManagerApiResponse({
         id: 'manager2-id',
         full_name: 'Alice Manager',
@@ -130,14 +130,14 @@ describe('TimesheetAdjustmentModal', () => {
         expect(managers.length).toBeGreaterThan(0);
       });
 
-      // Suzanne should be marked as recommended
+      // Priority manager should be marked as recommended
       expect(screen.getByText('(Recommended)')).toBeInTheDocument();
     });
   });
 
   describe('Recipient selection', () => {
     it('should allow selecting multiple recipients', async () => {
-      const suzanne = createSuzanneSquiresApiResponse();
+      const suzanne = createPriorityManagerApiResponse();
       const manager2 = createManagerApiResponse({
         id: 'manager2-id',
         full_name: 'Alice Manager',
@@ -155,10 +155,10 @@ describe('TimesheetAdjustmentModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Suzanne Squires')).toBeInTheDocument();
+        expect(screen.getByText('Priority Manager')).toBeInTheDocument();
       });
 
-      const suzanneCheckbox = screen.getByRole('checkbox', { name: /Suzanne Squires/i });
+      const suzanneCheckbox = screen.getByRole('checkbox', { name: /Priority Manager/i });
       const aliceCheckbox = screen.getByRole('checkbox', { name: /Alice Manager/i });
 
       fireEvent.click(suzanneCheckbox);
@@ -169,7 +169,7 @@ describe('TimesheetAdjustmentModal', () => {
     });
 
     it('should show count of selected recipients', async () => {
-      const suzanne = createSuzanneSquiresApiResponse();
+      const suzanne = createPriorityManagerApiResponse();
       mockFetch({ managers: [suzanne] });
 
       render(
@@ -186,7 +186,7 @@ describe('TimesheetAdjustmentModal', () => {
         expect(screen.getByText(/Select All \(0 selected\)/i)).toBeInTheDocument();
       });
 
-      const checkbox = screen.getByRole('checkbox', { name: /Suzanne Squires/i });
+      const checkbox = screen.getByRole('checkbox', { name: /Priority Manager/i });
       fireEvent.click(checkbox);
 
       await waitFor(() => {
@@ -198,7 +198,7 @@ describe('TimesheetAdjustmentModal', () => {
   describe('Form submission', () => {
     it('should call onConfirm with selected recipients and comments', async () => {
       mockOnConfirm.mockResolvedValue(undefined);
-      const suzanne = createSuzanneSquiresApiResponse();
+      const suzanne = createPriorityManagerApiResponse();
       mockFetch({ managers: [suzanne] });
 
       render(
@@ -212,13 +212,13 @@ describe('TimesheetAdjustmentModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Suzanne Squires')).toBeInTheDocument();
+        expect(screen.getByText('Priority Manager')).toBeInTheDocument();
       });
 
       const commentInput = screen.getByPlaceholderText(/Explain what was adjusted/i);
       fireEvent.change(commentInput, { target: { value: 'Corrected Thursday hours' } });
 
-      const checkbox = screen.getByRole('checkbox', { name: /Suzanne Squires/i });
+      const checkbox = screen.getByRole('checkbox', { name: /Priority Manager/i });
       fireEvent.click(checkbox);
 
       const submitButton = screen.getByRole('button', { name: /Mark as Adjusted/i });
@@ -235,7 +235,7 @@ describe('TimesheetAdjustmentModal', () => {
 
   describe('Search functionality', () => {
     it('should filter managers by search query', async () => {
-      const suzanne = createSuzanneSquiresApiResponse();
+      const suzanne = createPriorityManagerApiResponse();
       const manager2 = createManagerApiResponse({
         id: 'manager2-id',
         full_name: 'Alice Manager',
@@ -253,7 +253,7 @@ describe('TimesheetAdjustmentModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Suzanne Squires')).toBeInTheDocument();
+        expect(screen.getByText('Priority Manager')).toBeInTheDocument();
         expect(screen.getByText('Alice Manager')).toBeInTheDocument();
       });
 
@@ -261,7 +261,7 @@ describe('TimesheetAdjustmentModal', () => {
       fireEvent.change(searchInput, { target: { value: 'Alice' } });
 
       await waitFor(() => {
-        expect(screen.queryByText('Suzanne Squires')).not.toBeInTheDocument();
+        expect(screen.queryByText('Priority Manager')).not.toBeInTheDocument();
         expect(screen.getByText('Alice Manager')).toBeInTheDocument();
       });
     });

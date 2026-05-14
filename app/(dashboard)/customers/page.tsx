@@ -93,15 +93,15 @@ export default function CustomersPage() {
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-border p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-avs-yellow/10">
-              <Building2 className="h-5 w-5 text-avs-yellow" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-brand-yellow/10">
+              <Building2 className="h-5 w-5 text-brand-yellow" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Customers</h1>
               <p className="text-muted-foreground">Manage your customer directory and key contact records.</p>
             </div>
           </div>
-          <Button onClick={() => { setEditingCustomer(null); setFormOpen(true); }} className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold">
+          <Button onClick={() => { setEditingCustomer(null); setFormOpen(true); }} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold">
             <Plus className="h-4 w-4 mr-2" />
             Add Customer
           </Button>

@@ -1,7 +1,7 @@
 # Daily Error Email Summary
 
 **Feature:** Automatic daily email summary of application errors  
-**Recipient:** admin@mpdee.co.uk (SuperAdmin)  
+**Recipient:** template-admin@example.com (SuperAdmin)  
 **Status:** ✅ Implemented
 
 ---
@@ -126,14 +126,14 @@ The daily summary email includes:
 
 ### Required Environment Variable
 ```bash
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxx
+RESEND_API_KEY=your_resend_api_key
 ```
 
 ### Email Configuration
 ```javascript
 {
-  from: 'SQUIRES WorkLog <notifications@squiresapp.com>',
-  to: ['admin@mpdee.co.uk'],
+  from: 'FieldOps Template <notifications@your-app.example.com>',
+  to: ['template-admin@example.com'],
   subject: '🚨 Daily Error Summary - {count} errors on {date}',
   html: '...' // Formatted HTML email
 }
@@ -152,13 +152,13 @@ RESEND_API_KEY=your_resend_api_key_here
 
 ### 2. Verify Domain (Resend)
 - Go to Resend dashboard
-- Add and verify domain: `squiresapp.com`
+- Add and verify domain: `your-app.example.com`
 - Configure DNS records (SPF, DKIM)
 
 ### 3. Test Email System
 ```bash
 # Manual test
-curl -X POST https://www.squiresapp.com/api/errors/daily-summary
+curl -X POST https://your-app.example.com/api/errors/daily-summary
 
 # Or via debug page
 # Go to /debug → Click "Send Test Email" button (if implemented)
@@ -231,7 +231,7 @@ If you prefer a **fixed 9am daily email**, you can use:
 ### Option B: External Cron Service
 - Use cron-job.org or similar
 - Schedule: `0 9 * * *` (9am daily)
-- URL: `https://www.squiresapp.com/api/errors/daily-summary`
+- URL: `https://your-app.example.com/api/errors/daily-summary`
 - Method: POST
 
 ### Option C: GitHub Actions
@@ -245,7 +245,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Email
-        run: curl -X POST https://www.squiresapp.com/api/errors/daily-summary
+        run: curl -X POST https://your-app.example.com/api/errors/daily-summary
 ```
 
 ---
@@ -276,7 +276,7 @@ localStorage.removeItem('lastErrorEmailSentDate');
 ### Test Email Content
 ```bash
 # Trigger the API manually
-curl -X POST https://www.squiresapp.com/api/errors/daily-summary \
+curl -X POST https://your-app.example.com/api/errors/daily-summary \
   -H "Content-Type: application/json"
 ```
 
@@ -320,7 +320,7 @@ curl -X POST https://www.squiresapp.com/api/errors/daily-summary \
 **1. Check Resend API Key**
 ```bash
 echo $RESEND_API_KEY
-# Should output: re_xxxxxxxxxxxx
+# Should output: your_resend_api_key
 ```
 
 **2. Verify Domain**
@@ -341,7 +341,7 @@ localStorage.getItem('lastErrorEmailSentDate')
 ### Email Goes to Spam
 
 **Solutions:**
-1. Add `notifications@squiresapp.com` to contacts
+1. Add `notifications@your-app.example.com` to contacts
 2. Check SPF/DKIM records in DNS
 3. Verify Resend domain authentication
 4. Add to email whitelist
@@ -359,7 +359,7 @@ localStorage.getItem('lastErrorEmailSentDate')
 ✅ **Automatic daily error summaries**  
 ✅ **Triggered by first error of each day**  
 ✅ **Comprehensive email with charts and details**  
-✅ **Sent to admin@mpdee.co.uk**  
+✅ **Sent to template-admin@example.com**  
 ✅ **No external dependencies required**  
 ✅ **Simple localStorage-based tracking**
 

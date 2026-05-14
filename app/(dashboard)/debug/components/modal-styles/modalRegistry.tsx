@@ -57,7 +57,7 @@ import { createSafeAction } from './safeActions';
 
 export type ModalKind = 'dialog' | 'alert-dialog' | 'drawer' | 'composite';
 export type ModalStatus = 'implemented' | 'placeholder' | 'blocked-by-context';
-const PRIMARY_CTA_CLASS = 'bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold';
+const PRIMARY_CTA_CLASS = 'bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold';
 
 export interface ModalVariant {
   id: string;
@@ -563,7 +563,7 @@ const liveContextEntries: ModalShowcaseEntry[] = [
           invoice_number: null,
           invoice_notes: null,
           last_invoice_at: null,
-          signoff_name: 'George Healey',
+          signoff_name: 'Example User One',
           signoff_title: 'Contracts Manager',
           custom_footer_text: '',
           revision_number: 0,
@@ -572,8 +572,8 @@ const liveContextEntries: ModalShowcaseEntry[] = [
           version_notes: null,
           is_latest_version: true,
           duplicate_source_quote_id: null,
-          manager_name: 'George Healey',
-          manager_email: 'george@avsquires.co.uk',
+          manager_name: 'Example User One',
+          manager_email: 'george@example.com',
           approver_profile_id: 'approver-1',
           approved_by: null,
           approved_at: null,
@@ -601,15 +601,15 @@ const liveContextEntries: ModalShowcaseEntry[] = [
           initials: 'GH',
           next_number: 40001,
           number_start: 40000,
-          signoff_name: 'George Healey',
+          signoff_name: 'Example User One',
           signoff_title: 'Contracts Manager',
-          manager_email: 'george@avsquires.co.uk',
+          manager_email: 'george@example.com',
           approver_profile_id: 'approver-1',
           is_active: true,
-          profile: { id: 'manager-1', full_name: 'George Healey', email: 'george@avsquires.co.uk' },
-          approver: { id: 'approver-1', full_name: 'Charlotte Demo', email: 'charlotte@avsquires.co.uk' },
+          profile: { id: 'manager-1', full_name: 'Example User One', email: 'george@example.com' },
+          approver: { id: 'approver-1', full_name: 'Example Approver', email: 'debug.user@example.com' },
         }]}
-        approvers={[{ id: 'approver-1', full_name: 'Charlotte Demo', email: 'charlotte@avsquires.co.uk' }]}
+        approvers={[{ id: 'approver-1', full_name: 'Example Approver', email: 'debug.user@example.com' }]}
       />
     ),
   },

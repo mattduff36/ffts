@@ -1,4 +1,4 @@
--- AVS Worklog Database Schema
+-- FieldOps Template Database Schema
 -- Execute this SQL in your Supabase SQL Editor to set up the database
 
 -- Enable UUID extension

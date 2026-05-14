@@ -123,7 +123,7 @@ export async function getEffectiveRole(): Promise<EffectiveRoleInfo> {
     const isActualSuperAdmin =
       typedProfile.super_admin === true ||
       actualRole?.is_super_admin === true ||
-      userEmail === 'admin@mpdee.co.uk';
+      userEmail === 'template-admin@example.com';
 
     // Build baseline result from actual role
     const result: EffectiveRoleInfo = {

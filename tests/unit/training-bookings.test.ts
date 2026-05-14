@@ -60,7 +60,7 @@ describe('training booking decline helper', () => {
             data: {
               user: profileId === 'manager-1'
                 ? { email: 'manager@example.com' }
-                : { email: 'sarah@avsquires.co.uk' },
+                : { email: 'sarah@example.com' },
             },
             error: null,
           })),
@@ -199,7 +199,7 @@ describe('training booking decline helper', () => {
       expect.objectContaining({ to: 'manager@example.com', recipientName: 'Molly Manager' })
     );
     expect(sendTrainingBookingDeclinedEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'sarah@avsquires.co.uk', recipientName: 'Sarah Hubbard' })
+      expect.objectContaining({ to: 'sarah@example.com', recipientName: 'Sarah Hubbard' })
     );
   });
 

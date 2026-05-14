@@ -31,7 +31,7 @@ let testsFailed = 0;
 
 // Configuration
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:4000';
-const TEST_USER_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@avsworklog.test';
+const TEST_USER_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@example.test';
 const TEST_USER_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'TestPass123!';
 
 let authCookie: string = '';
@@ -267,7 +267,7 @@ async function testAuthorization(): Promise<void> {
  */
 async function runTests() {
   console.log(`\n${colors.blue}╔════════════════════════════════════════════════╗${colors.reset}`);
-  console.log(`${colors.blue}║    Squires Reports System - Test Suite        ║${colors.reset}`);
+  console.log(`${colors.blue}║    Template Reports System - Test Suite        ║${colors.reset}`);
   console.log(`${colors.blue}╚════════════════════════════════════════════════╝${colors.reset}\n`);
   
   console.log(`${colors.cyan}Testing against: ${BASE_URL}${colors.reset}\n`);

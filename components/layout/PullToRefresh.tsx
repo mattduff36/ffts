@@ -114,7 +114,7 @@ export function PullToRefresh() {
       <div className="flex items-center justify-center pt-2 pb-2">
         <div className="bg-slate-900/90 backdrop-blur-xl rounded-full p-3 border border-border/50 shadow-lg">
           <RefreshCw
-            className={`h-6 w-6 text-avs-yellow transition-transform duration-200 ${
+            className={`h-6 w-6 text-brand-yellow transition-transform duration-200 ${
               isRefreshing ? 'animate-spin' : ''
             }`}
             style={{

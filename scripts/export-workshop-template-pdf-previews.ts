@@ -7,7 +7,7 @@ import {
   WorkshopAttachmentPDF,
   type V2PdfSectionData,
 } from '../lib/pdf/workshop-attachment-pdf';
-import { loadSquiresLogoDataUrl } from '../lib/pdf/squires-logo';
+import { loadTemplateLogoDataUrl } from '../lib/pdf/template-logo';
 
 const { Client } = pg;
 
@@ -263,7 +263,7 @@ async function run() {
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const outputDir = resolve(process.cwd(), 'reports', 'workshop-attachments', 'pdf-previews', timestamp);
-    const logoSrc = await loadSquiresLogoDataUrl();
+    const logoSrc = await loadTemplateLogoDataUrl();
     mkdirSync(outputDir, { recursive: true });
 
     const previews: PreviewManifestItem[] = [];

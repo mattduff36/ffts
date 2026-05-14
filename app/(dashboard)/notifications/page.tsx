@@ -129,7 +129,7 @@ function NotificationDetailPane({
         <div className="space-y-6 p-6">
           {isMarkingRead && (
             <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin text-avs-yellow" />
+              <Loader2 className="h-4 w-4 animate-spin text-brand-yellow" />
               Marking as read...
             </div>
           )}
@@ -161,7 +161,7 @@ function NotificationDetailPane({
                   <Button
                     type="button"
                     onClick={() => onSignToolboxTalk(notification)}
-                    className="gap-2 bg-avs-yellow text-slate-900 hover:bg-avs-yellow-hover"
+                    className="gap-2 bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover"
                   >
                     <PenLine className="h-4 w-4" />
                     Read and sign
@@ -541,16 +541,16 @@ function NotificationsContent() {
       <div>
         <Tabs value={activeTab} onValueChange={(value) => void setTabParam(value)} className="w-full">
             <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-slate-100 dark:bg-slate-800 p-0">
-              <TabsTrigger value="all" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+              <TabsTrigger value="all" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
                 <Bell className="h-4 w-4" />
                 All Notifications
               </TabsTrigger>
-              <TabsTrigger value="preferences" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+              <TabsTrigger value="preferences" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
                 <Settings className="h-4 w-4" />
                 Preferences
               </TabsTrigger>
               {isAdmin && (
-                <TabsTrigger value="admin" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+                <TabsTrigger value="admin" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
                   <Users className="h-4 w-4" />
                   Admin
                 </TabsTrigger>
@@ -577,7 +577,7 @@ function NotificationsContent() {
               {/* Notifications List */}
               {isLoadingNotifications ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-avs-yellow" />
+                  <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
                 </div>
               ) : filteredNotifications.length === 0 ? (
                 <Card className={mobileDetailOpen && selectedNotification ? 'hidden md:block' : undefined}>
@@ -608,9 +608,9 @@ function NotificationsContent() {
                           const isSelected = selectedNotification?.id === notification.id;
                           const isUnread = notification.status === 'PENDING';
                           const rowStateClass = isSelected
-                            ? 'border-l-avs-yellow bg-slate-200/80 shadow-inner hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-800'
+                            ? 'border-l-brand-yellow bg-slate-200/80 shadow-inner hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-800'
                             : isUnread
-                              ? 'border-l-avs-yellow bg-avs-yellow/5 hover:bg-avs-yellow/10 dark:bg-avs-yellow/10 dark:hover:bg-avs-yellow/15'
+                              ? 'border-l-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 dark:bg-brand-yellow/10 dark:hover:bg-brand-yellow/15'
                               : 'border-l-transparent hover:bg-muted/60';
 
                           return (
@@ -619,7 +619,7 @@ function NotificationsContent() {
                               type="button"
                               aria-pressed={isSelected}
                               onClick={() => handleNotificationSelect(notification)}
-                              className={`relative flex w-full items-start gap-3 border-l-4 p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-avs-yellow ${rowStateClass}`}
+                              className={`relative flex w-full items-start gap-3 border-l-4 p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow ${rowStateClass}`}
                             >
                               <div className="mt-1 shrink-0">
                                 {notification.priority === 'HIGH' ? (
@@ -639,7 +639,7 @@ function NotificationsContent() {
                                     {notification.subject}
                                   </h3>
                                   {isUnread && (
-                                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-avs-yellow shadow-[0_0_0_3px_rgba(245,222,76,0.18)]" aria-label="Unread" />
+                                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-yellow shadow-[0_0_0_3px_rgba(245,222,76,0.18)]" aria-label="Unread" />
                                   )}
                                 </div>
                                 <p className={`mb-2 line-clamp-2 text-xs ${isUnread ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>

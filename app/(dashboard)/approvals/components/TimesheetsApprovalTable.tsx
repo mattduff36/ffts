@@ -345,7 +345,7 @@ export function TimesheetsApprovalTable({
                           variant="outline"
                           size="sm"
                           onClick={(e) => { e.stopPropagation(); onProcess(ts.id); }}
-                          className="border-avs-yellow/50 text-avs-yellow hover:bg-avs-yellow/20 hover:text-avs-yellow hover:border-avs-yellow active:bg-avs-yellow/30 active:text-avs-yellow active:scale-95 transition-all h-8 px-2"
+                          className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all h-8 px-2"
                         >
                           <Package className="h-3.5 w-3.5 mr-1" />
                           Manager Approved

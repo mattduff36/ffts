@@ -7,7 +7,7 @@ describe('password utilities', () => {
       const password = generateSecurePassword();
 
       expect(password).toHaveLength(8);
-      expect(password.startsWith('AVS')).toBe(true);
+      expect(password.startsWith('TMP')).toBe(true);
       expect(validatePasswordStrength(password).valid).toBe(true);
     }
   });

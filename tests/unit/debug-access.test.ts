@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { canAccessDebugConsole, isCharlotteDebugAccessUser } from '@/lib/utils/debug-access';
+import { canAccessDebugConsole, isAdditionalDebugAccessUser } from '@/lib/utils/debug-access';
 
-describe('isCharlotteDebugAccessUser', () => {
-  it('matches Charlotte email case-insensitively', () => {
-    expect(isCharlotteDebugAccessUser('CHARLOTTE@avsquires.co.uk')).toBe(true);
+describe('isAdditionalDebugAccessUser', () => {
+  it('matches additional debug email case-insensitively', () => {
+    expect(isAdditionalDebugAccessUser('DEBUG.USER@example.com')).toBe(true);
   });
 
   it('rejects other emails', () => {
-    expect(isCharlotteDebugAccessUser('someone@avsquires.co.uk')).toBe(false);
+    expect(isAdditionalDebugAccessUser('someone@example.com')).toBe(false);
   });
 });
 
@@ -15,17 +15,17 @@ describe('canAccessDebugConsole', () => {
   it('allows actual superadmins in actual-role mode', () => {
     expect(
       canAccessDebugConsole({
-        email: 'admin@mpdee.co.uk',
+        email: 'template-admin@example.com',
         isActualSuperAdmin: true,
         isViewingAs: false,
       })
     ).toBe(true);
   });
 
-  it('allows Charlotte without superadmin access', () => {
+  it('allows an additional debug user without superadmin access', () => {
     expect(
       canAccessDebugConsole({
-        email: 'charlotte@avsquires.co.uk',
+        email: 'debug.user@example.com',
         isActualSuperAdmin: false,
         isViewingAs: false,
       })
@@ -35,7 +35,7 @@ describe('canAccessDebugConsole', () => {
   it('blocks view-as mode even for otherwise eligible users', () => {
     expect(
       canAccessDebugConsole({
-        email: 'charlotte@avsquires.co.uk',
+        email: 'debug.user@example.com',
         isActualSuperAdmin: false,
         isViewingAs: true,
       })
@@ -45,7 +45,7 @@ describe('canAccessDebugConsole', () => {
   it('blocks other users', () => {
     expect(
       canAccessDebugConsole({
-        email: 'admin.user@avsquires.co.uk',
+        email: 'admin.user@example.com',
         isActualSuperAdmin: false,
         isViewingAs: false,
       })

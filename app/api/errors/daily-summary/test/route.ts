@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         error_message: 'Network error fetching notifications: {}',
         error_stack: 'Error: Network error fetching notifications: {}\n    at console.error (layout.tsx:189)',
         component_name: 'Console Error',
-        page_url: 'https://www.squiresapp.com/rams',
+        page_url: 'https://your-app.example.com/rams',
         user_id: null,
         user_email: null,
         user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
         error_message: 'Cannot read property "map" of undefined',
         error_stack: 'TypeError: Cannot read property "map" of undefined\n    at RAMSPage (page.tsx:142)',
         component_name: 'RAMS Page',
-        page_url: 'https://www.squiresapp.com/rams/manage',
+        page_url: 'https://your-app.example.com/rams/manage',
         user_id: 'user-123',
-        user_email: 'george@avsquires.co.uk',
+        user_email: 'george@example.com',
         user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/142.0.0.0',
         additional_data: { context: 'Loading documents' }
       },
@@ -43,9 +43,9 @@ export async function POST(request: NextRequest) {
         error_message: 'Failed to fetch inspection data',
         error_stack: 'Error: Failed to fetch inspection data\n    at fetchInspection (page.tsx:89)',
         component_name: 'Inspections Page',
-        page_url: 'https://www.squiresapp.com/inspections/abc-123',
+        page_url: 'https://your-app.example.com/inspections/abc-123',
         user_id: 'user-456',
-        user_email: 'nathan@avsquires.co.uk',
+        user_email: 'nathan@example.com',
         user_agent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Mobile Safari/537.36',
         additional_data: null
       },
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
         error_message: 'Network error fetching notifications: {}',
         error_stack: 'Error: Network error fetching notifications: {}\n    at console.error (layout.tsx:189)',
         component_name: 'Console Error',
-        page_url: 'https://www.squiresapp.com/dashboard',
+        page_url: 'https://your-app.example.com/dashboard',
         user_id: null,
         user_email: null,
         user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
         error_message: 'Request timeout',
         error_stack: 'NetworkError: Request timeout\n    at fetch (api-client.ts:45)',
         component_name: 'API Client',
-        page_url: 'https://www.squiresapp.com/timesheets',
+        page_url: 'https://your-app.example.com/timesheets',
         user_id: 'user-789',
-        user_email: 'richard@avsquires.co.uk',
+        user_email: 'timesheet.user@example.com',
         user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36',
         additional_data: { endpoint: '/api/timesheets' }
       },
@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
         error_message: 'Document not found or you do not have permission to view it',
         error_stack: 'Error: Document not found\n    at fetchDocument (read/page.tsx:74)',
         component_name: 'RAMS Read Page',
-        page_url: 'https://www.squiresapp.com/rams/doc-456/read',
+        page_url: 'https://your-app.example.com/rams/doc-456/read',
         user_id: 'user-234',
-        user_email: 'jonmatt01@outlook.com',
+        user_email: 'rams.user@example.com',
         user_agent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Mobile',
         additional_data: null
       },
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         error_message: 'Network error fetching notifications: {}',
         error_stack: 'Error: Network error fetching notifications: {}\n    at console.error (layout.tsx:189)',
         component_name: 'Console Error',
-        page_url: 'https://www.squiresapp.com/rams',
+        page_url: 'https://your-app.example.com/rams',
         user_id: null,
         user_email: null,
         user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -108,9 +108,9 @@ export async function POST(request: NextRequest) {
         error_message: 'Invalid timesheet data format',
         error_stack: 'Error: Invalid timesheet data\n    at validateTimesheet (page.tsx:156)',
         component_name: 'Timesheets Page',
-        page_url: 'https://www.squiresapp.com/timesheets/new',
+        page_url: 'https://your-app.example.com/timesheets/new',
         user_id: 'user-567',
-        user_email: 'conway@avsquires.co.uk',
+        user_email: 'conway@example.com',
         user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) Safari/604.1',
         additional_data: { validation: 'failed' }
       }
@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
 
     <!-- Action Button -->
     <div style="text-align: center; margin-top: 30px; padding-top: 30px; border-top: 2px solid #eee;">
-      <a href="https://www.squiresapp.com/debug" 
+      <a href="https://your-app.example.com/debug" 
          style="background: linear-gradient(135deg, #dc2626 0%, #ea580c 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);">
         🔍 View Full Error Log
       </a>
@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
 
   <!-- Footer -->
   <div style="text-align: center; margin-top: 20px; padding: 20px; color: #666; font-size: 13px;">
-    <p style="margin: 0;">This is a SAMPLE automated daily error summary for SQUIRES WorkLog</p>
+    <p style="margin: 0;">This is a SAMPLE automated daily error summary for FieldOps Template</p>
     <p style="margin: 5px 0 0 0;">Generated on ${new Date().toLocaleString('en-GB')}</p>
   </div>
 
@@ -296,9 +296,14 @@ export async function POST(request: NextRequest) {
 </html>
     `.trim();
 
-    // Send email using Resend API
-    const resendApiKey = process.env.RESEND_API_KEY || 're_MFndUias_JKudBfyXWDkfuvhM3DMwxa1q';
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'SquiresApp <no-reply@squiresapp.com>';
+    // Send email using Resend API. Template repos must never ship fallback keys.
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'TemplateApp <no-reply@your-app.example.com>';
+    const adminEmail = process.env.ADMIN_EMAIL || 'template-admin@example.com';
+
+    if (!resendApiKey) {
+      return NextResponse.json({ error: 'RESEND_API_KEY is not configured' }, { status: 500 });
+    }
 
     const emailResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -308,7 +313,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         from: fromEmail,
-        to: ['admin@mpdee.co.uk'],
+        to: [adminEmail],
         subject: `🚨 SAMPLE - Daily Error Summary - ${sampleErrors.length} errors on ${dateStr}`,
         html: emailHtml,
       }),
@@ -324,7 +329,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Sample email sent successfully to admin@mpdee.co.uk',
+      message: `Sample email sent successfully to ${adminEmail}`,
       errors_count: sampleErrors.length,
       email_id: emailResult.id,
       note: 'This was a test email with sample error data'

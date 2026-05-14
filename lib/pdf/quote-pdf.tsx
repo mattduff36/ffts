@@ -1,8 +1,9 @@
 import React from 'react';
 import { Document, Image, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { format } from 'date-fns';
+import { templateConfig } from '@/lib/config/template-config';
 
-const BRAND_YELLOW = '#f2cc0c';
+const BRAND_YELLOW = templateConfig.branding.brandColor;
 const BRAND_YELLOW_LIGHT = '#fff6cc';
 const BRAND_TEXT = '#111827';
 const BRAND_MUTED = '#475569';
@@ -459,8 +460,8 @@ export function QuotePDF({
                 <Image src={logoSrc} style={styles.logo} />
               ) : (
                 <>
-                  <Text style={styles.fallbackCompanyName}>A&V SQUIRES</Text>
-                  <Text style={styles.fallbackCompanySubtitle}>Plant Co. Ltd.</Text>
+                  <Text style={styles.fallbackCompanyName}>{templateConfig.branding.shortAppName}</Text>
+                  <Text style={styles.fallbackCompanySubtitle}>{templateConfig.branding.companyName}</Text>
                 </>
               )}
             </View>
@@ -473,13 +474,13 @@ export function QuotePDF({
             </View>
             <View style={styles.contactItem}>
               <Text style={styles.contactLabel}>Email / Web</Text>
-              <Text style={styles.contactValue}>office@avsquires.co.uk</Text>
-              <Text style={styles.contactValue}>avsquires.co.uk</Text>
+              <Text style={styles.contactValue}>office@example.com</Text>
+              <Text style={styles.contactValue}>example.com</Text>
             </View>
             <View style={styles.contactItem}>
               <Text style={styles.contactLabel}>Registered Office</Text>
               <Text style={styles.contactValue}>
-                Vivienne House, Racecourse Road, Crew Lane Ind Est, Southwell, Notts, NG25 0TX
+                1 Template Road, Sample Business Park, Sample City, AB1 2CD
               </Text>
             </View>
           </View>
@@ -590,7 +591,7 @@ export function QuotePDF({
             PLANT HIRE | TIPPER HIRE | CIVIL ENGINEERING | CONTRACT EARTH MOVING
           </Text>
           <Text style={styles.footerDetails}>
-            A&V Squires Plant Co. Ltd. | Registered in England No. 1000918
+            {templateConfig.branding.companyName} | {templateConfig.branding.registeredAddress}
           </Text>
         </View>
       </Page>

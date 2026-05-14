@@ -663,22 +663,22 @@ export function CategoryDialog({
                 onClick={() => setValue('responsibility', 'office')}
                 className={`p-4 rounded-lg border-2 transition-all text-left ${
                   selectedResponsibility === 'office'
-                    ? 'border-avs-yellow bg-avs-yellow/20 ring-2 ring-avs-yellow/30'
+                    ? 'border-brand-yellow bg-brand-yellow/20 ring-2 ring-brand-yellow/30'
                     : 'border-slate-600 bg-slate-800 hover:border-slate-500'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     selectedResponsibility === 'office' 
-                      ? 'bg-avs-yellow' 
+                      ? 'bg-brand-yellow' 
                       : 'bg-slate-700'
                   }`}>
                     <Briefcase className={`h-5 w-5 ${
-                      selectedResponsibility === 'office' ? 'text-slate-900' : 'text-avs-yellow'
+                      selectedResponsibility === 'office' ? 'text-slate-900' : 'text-brand-yellow'
                     }`} />
                   </div>
                   <div>
-                    <p className={`font-medium ${selectedResponsibility === 'office' ? 'text-avs-yellow' : 'text-white'}`}>
+                    <p className={`font-medium ${selectedResponsibility === 'office' ? 'text-brand-yellow' : 'text-white'}`}>
                       Office
                     </p>
                     <p className="text-xs text-muted-foreground">Office Action button</p>
@@ -797,8 +797,8 @@ export function CategoryDialog({
               </div>
               
               {(reminderInApp || reminderEmail) && (
-                <p className="text-xs text-avs-yellow mt-2 flex items-center gap-1">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-avs-yellow"></span>
+                <p className="text-xs text-brand-yellow mt-2 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-yellow"></span>
                   Configure reminder recipients in Settings after saving.
                 </p>
               )}

@@ -145,13 +145,13 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
                     <button
                       key={notification.id}
                       type="button"
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/60 transition-colors text-left min-h-[52px] focus:outline-none focus-visible:ring-2 focus-visible:ring-avs-yellow focus-visible:ring-inset"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/60 transition-colors text-left min-h-[52px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow focus-visible:ring-inset"
                       onClick={() => handleNotificationClick(notification)}
                     >
                       {/* Unread dot */}
                       <span
                         className={`flex-shrink-0 h-2.5 w-2.5 rounded-full ${
-                          isUnread ? 'bg-avs-yellow' : 'bg-transparent'
+                          isUnread ? 'bg-brand-yellow' : 'bg-transparent'
                         }`}
                         aria-label={isUnread ? 'Unread' : 'Read'}
                       />

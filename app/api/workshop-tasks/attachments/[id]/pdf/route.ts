@@ -6,7 +6,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { renderToStream } from '@react-pdf/renderer';
 import { WorkshopAttachmentPDF, type V2PdfSectionData } from '@/lib/pdf/workshop-attachment-pdf';
-import { loadSquiresLogoDataUrl } from '@/lib/pdf/squires-logo';
+import { loadTemplateLogoDataUrl } from '@/lib/pdf/template-logo';
 import { normalizeSignatureDataUrl } from '@/lib/pdf/signature-image';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type { StatusHistoryEvent } from '@/lib/utils/workshopTaskStatusHistory';
@@ -372,7 +372,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const templateName = attachment.workshop_attachment_templates?.name || 'Attachment';
-    const logoSrc = await loadSquiresLogoDataUrl();
+    const logoSrc = await loadTemplateLogoDataUrl();
     const reportCreatedAt = task?.created_at ?? attachment.created_at;
     const reportCompletedAt = task ? task.actioned_at : attachment.completed_at;
     const completedStatusEvent = getLatestCompletedStatusEvent(task?.status_history);

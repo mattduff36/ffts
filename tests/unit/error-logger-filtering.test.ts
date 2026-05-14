@@ -16,7 +16,7 @@ describe('error logger filtering', () => {
   it('ignores Next router RSC fetch fallback console noise', () => {
     expect(
       shouldIgnoreConsoleErrorForLogging(
-        'Failed to fetch RSC payload for https://www.squiresapp.com/plant-inspections. Falling back to browser navigation. TypeError: Load failed'
+        'Failed to fetch RSC payload for https://your-app.example.com/plant-inspections. Falling back to browser navigation. TypeError: Load failed'
       )
     ).toBe(true);
   });

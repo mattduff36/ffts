@@ -12,7 +12,7 @@ import type { Database } from '@/types/database';
 
 type AdminClient = SupabaseClient<Database>;
 
-const SARAH_HUBBARD_EMAIL = 'sarah@avsquires.co.uk';
+const SARAH_HUBBARD_EMAIL = 'sarah@example.com';
 const SARAH_HUBBARD_NAME = 'Sarah Hubbard';
 
 interface ProfileRow {

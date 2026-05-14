@@ -20,7 +20,7 @@ if (!connectionString) {
 
 async function diagnoseUserPermissions() {
   console.log('🔍 Diagnosing User Permissions\n');
-  console.log('Checking Andy Hill (andy@avsquires.co.uk)...\n');
+  console.log('Checking Example User Seven (andy@example.com)...\n');
 
   const url = new URL(connectionString!);
   
@@ -57,7 +57,7 @@ async function diagnoseUserPermissions() {
     console.table(roles);
 
     // 2. Check Andy's profile
-    console.log('\n👤 Andy Hill\'s Profile:');
+    console.log('\n👤 Example User Seven\'s Profile:');
     console.log('='.repeat(80));
     const { rows: andyProfile } = await client.query(`
       SELECT 
@@ -73,7 +73,7 @@ async function diagnoseUserPermissions() {
       FROM profiles p
       LEFT JOIN roles r ON p.role_id = r.id
       LEFT JOIN auth.users au ON p.id = au.id
-      WHERE au.email = 'andy@avsquires.co.uk';
+      WHERE au.email = 'andy@example.com';
     `);
 
     if (andyProfile.length === 0) {

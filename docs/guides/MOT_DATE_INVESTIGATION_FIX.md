@@ -56,7 +56,7 @@ if (motApiError.includes('No MOT history found') && dvlaData.monthOfFirstRegistr
 - FE24 TYP
 - FE24 TYT
 - FE24 TYU
-- FE24 TYV
+- AB12 CDE
 - KS24 OGD
 - KT24 PSX
 - KT24 UPJ

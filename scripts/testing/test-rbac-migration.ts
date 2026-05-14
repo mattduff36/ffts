@@ -183,7 +183,7 @@ async function runTests() {
       SELECT p.id, u.email, p.super_admin
       FROM profiles p
       INNER JOIN auth.users u ON u.id = p.id
-      WHERE p.super_admin = true OR u.email = 'admin@mpdee.co.uk'
+      WHERE p.super_admin = true OR u.email = 'template-admin@example.com'
     `);
     const hasSuperAdmin = superAdminExists.rows.length > 0;
     logTest(

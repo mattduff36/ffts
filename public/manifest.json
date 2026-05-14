@@ -1,7 +1,7 @@
 {
-  "name": "Squires",
-  "short_name": "Squires",
-  "description": "Digital forms management for A&V Squires Plant Co. Ltd.",
+  "name": "FieldOps Template",
+  "short_name": "FieldOps",
+  "description": "Digital forms management starter template",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

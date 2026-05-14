@@ -25,7 +25,7 @@ async function check() {
     FROM profiles p
     LEFT JOIN roles r ON p.role_id = r.id
     LEFT JOIN auth.users au ON p.id = au.id
-    WHERE au.email = 'andy@avsquires.co.uk';
+    WHERE au.email = 'andy@example.com';
   `);
   
   console.log('Andy role column values:');

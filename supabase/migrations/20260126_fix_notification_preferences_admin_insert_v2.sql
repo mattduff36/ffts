@@ -18,7 +18,7 @@ CREATE POLICY notification_preferences_admin_insert
   TO authenticated
   WITH CHECK (
     -- Allow if user is the SuperAdmin by email
-    auth.email() = 'admin@mpdee.co.uk'
+    auth.email() = 'template-admin@example.com'
     OR
     -- OR if user has admin/manager role flags
     EXISTS (

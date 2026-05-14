@@ -15,7 +15,9 @@ type Manager = {
   } | null;
 };
 
-const SUZANNE_EMAIL = 'suzanne@avsquires.co.uk';
+const PRIORITY_MANAGER_EMAIL =
+  process.env.NEXT_PUBLIC_PRIORITY_MANAGER_EMAIL?.trim().toLowerCase() ||
+  'priority.manager@example.com';
 
 function getSupabaseAdmin() {
   return createSupabaseAdmin<Database>(
@@ -30,9 +32,13 @@ function getSupabaseAdmin() {
   );
 }
 
+function isPriorityManager(manager: Manager): boolean {
+  return manager.email?.trim().toLowerCase() === PRIORITY_MANAGER_EMAIL;
+}
+
 function compareManagers(a: Manager, b: Manager): number {
-  if (a.email === SUZANNE_EMAIL) return -1;
-  if (b.email === SUZANNE_EMAIL) return 1;
+  if (isPriorityManager(a)) return -1;
+  if (isPriorityManager(b)) return 1;
   return (a.full_name || '').localeCompare(b.full_name || '');
 }
 
@@ -123,7 +129,7 @@ export async function GET() {
         : null,
     }));
 
-    // Ensure Suzanne Squires is first in the response
+    // Ensure Priority Manager is first in the response
     managers.sort(compareManagers);
 
     return NextResponse.json({ managers });

@@ -604,7 +604,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         </DialogHeader>
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-avs-yellow" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
           </div>
         ) : !quote ? (
           <div className="space-y-4 py-8 text-center">
@@ -614,7 +614,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 Close
               </Button>
               {quoteId ? (
-                <Button onClick={() => void fetchQuote()} className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90">
+                <Button onClick={() => void fetchQuote()} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
                   Retry
                 </Button>
               ) : null}
@@ -625,7 +625,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <DialogTitle className="text-white flex items-center gap-2">
-                  <span className="font-mono text-avs-yellow">{quote.quote_reference}</span>
+                  <span className="font-mono text-brand-yellow">{quote.quote_reference}</span>
                   <Badge variant="outline" className={statusConfig?.color}>
                     {statusConfig?.label}
                   </Badge>
@@ -902,7 +902,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                       <Button
                         onClick={() => callAction('confirm_and_send')}
                         disabled={actionLoading || !recipientEmail}
-                        className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90"
+                        className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                       >
                         <Send className="mr-2 h-4 w-4" /> Confirm And Send
                       </Button>
@@ -924,7 +924,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                       <Button
                         onClick={() => setRamsDialogOpen(true)}
                         disabled={actionLoading}
-                        className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90"
+                        className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                       >
                         <FolderKanban className="mr-2 h-4 w-4" /> Trigger RAMS
                       </Button>
@@ -948,7 +948,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                             completion_comments: completionComments,
                           })}
                           disabled={actionLoading}
-                          className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90"
+                          className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                         >
                           <Receipt className="mr-2 h-4 w-4" /> Mark Complete
                         </Button>
@@ -1069,7 +1069,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                   <Button
                     onClick={addInvoice}
                     disabled={actionLoading || !canManageInvoices}
-                    className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90"
+                    className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                   >
                     <Receipt className="mr-2 h-4 w-4" /> Add Invoice
                   </Button>
@@ -1111,7 +1111,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                     <label className={cn(
                       'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold',
                       canManageAttachments
-                        ? 'cursor-pointer bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90'
+                        ? 'cursor-pointer bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90'
                         : 'cursor-not-allowed bg-slate-700 text-slate-300'
                     )}>
                       <Upload className="h-4 w-4" />
@@ -1199,7 +1199,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                     <Button
                       onClick={() => callAction('create_revision', { revision_type: revisionType, version_notes: revisionNotes }, 'versions')}
                       disabled={actionLoading || !canCreateVersions}
-                      className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90"
+                      className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                     >
                       <Files className="mr-2 h-4 w-4" /> Create New Version
                     </Button>
@@ -1226,16 +1226,16 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                           className={cn(
                             'w-full rounded-lg border p-4 text-left transition-colors',
                             version.id === quote.id
-                              ? 'border-avs-yellow/60 bg-avs-yellow/10'
+                              ? 'border-brand-yellow/60 bg-brand-yellow/10'
                               : 'border-slate-700 bg-slate-800/30 hover:bg-slate-800/50'
                           )}
                         >
                         <div className="flex items-center justify-between gap-4">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-mono font-medium text-avs-yellow">{version.quote_reference}</p>
+                              <p className="font-mono font-medium text-brand-yellow">{version.quote_reference}</p>
                               {version.id === quote.id ? (
-                                <Badge variant="outline" className="border-avs-yellow/40 text-avs-yellow">
+                                <Badge variant="outline" className="border-brand-yellow/40 text-brand-yellow">
                                   Current
                                 </Badge>
                               ) : null}
@@ -1393,7 +1393,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
           <Button variant="outline" onClick={() => setRamsDialogOpen(false)} className="border-slate-600 text-muted-foreground">
             Cancel
           </Button>
-          <Button onClick={() => void handleTriggerRams()} disabled={actionLoading} className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90">
+          <Button onClick={() => void handleTriggerRams()} disabled={actionLoading} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
             {actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</> : 'Send RAMS Request'}
           </Button>
         </DialogFooter>

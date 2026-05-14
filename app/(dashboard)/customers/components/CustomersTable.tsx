@@ -101,7 +101,7 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
                 size="sm"
                 onClick={() => setStatusFilter(s)}
                 className={statusFilter === s
-                  ? 'bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90'
+                  ? 'bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90'
                   : 'border-slate-600 text-muted-foreground hover:bg-slate-700/50'
                 }
               >
@@ -194,7 +194,7 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-avs-yellow" />
+                  <Building2 className="h-4 w-4 text-brand-yellow" />
                   <span className="font-semibold text-white">{customer.company_name}</span>
                 </div>
                 <Badge variant="outline" className={

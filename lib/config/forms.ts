@@ -147,7 +147,7 @@ export const FORM_TYPES: FormType[] = [
     icon: HelpCircle,
     href: '/help',
     listHref: '/help',
-    color: 'avs-yellow', // Brand yellow color
+    color: 'brand-yellow', // Brand yellow color
     enabled: true,
   },
   // Future forms - uncomment and configure as needed:

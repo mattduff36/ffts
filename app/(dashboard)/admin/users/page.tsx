@@ -377,7 +377,7 @@ export default function UsersAdminPage() {
 
   const getUserRolePriority = useMemo(() => {
     return (user: ProfileWithEmail) => {
-      if (user.email === 'admin@mpdee.co.uk') {
+      if (user.email === 'template-admin@example.com') {
         return getRoleSortPriority('admin');
       }
 
@@ -1183,7 +1183,7 @@ export default function UsersAdminPage() {
           {activeTab === 'users' && userStatusTab === 'active' && (
             <Button
               onClick={openAddDialog}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               <UserPlus className="h-4 w-4 mr-2" />
               Add User
@@ -1199,7 +1199,7 @@ export default function UsersAdminPage() {
         } bg-slate-100 dark:bg-slate-800 p-0`}>
           <TabsTrigger 
             value="users" 
-            className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900"
+            className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
           >
             <User className="h-4 w-4" />
             Users
@@ -1207,7 +1207,7 @@ export default function UsersAdminPage() {
           {canManageRoleDefinitions && (
             <TabsTrigger 
               value="roles" 
-              className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900"
+              className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
             >
               <Briefcase className="h-4 w-4" />
               Roles
@@ -1216,7 +1216,7 @@ export default function UsersAdminPage() {
           {canManageRoleDefinitions && (
             <TabsTrigger
               value="teams"
-              className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900"
+              className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
             >
               <Briefcase className="h-4 w-4" />
               Teams
@@ -1225,7 +1225,7 @@ export default function UsersAdminPage() {
           {canEditRolePermissions && (
             <TabsTrigger 
               value="permissions" 
-              className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900"
+              className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
             >
               <Shield className="h-4 w-4" />
               Permissions
@@ -1458,7 +1458,7 @@ export default function UsersAdminPage() {
                           >
                             <Badge
                               variant={
-                                user.email === 'admin@mpdee.co.uk'
+                                user.email === 'template-admin@example.com'
                                   ? 'destructive'
                                   : isSupervisorRole(user.role)
                                     ? 'outline'
@@ -1474,7 +1474,7 @@ export default function UsersAdminPage() {
                                   : undefined
                               }
                             >
-                              {user.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
+                              {user.email === 'template-admin@example.com' ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
                             </Badge>
                           </button>
                         </TableCell>
@@ -1623,7 +1623,7 @@ export default function UsersAdminPage() {
                 size="sm"
                 onClick={() => handleQuickEditSave(quickEditUser)}
                 disabled={quickEditSaving}
-                className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
               >
                 {quickEditSaving ? 'Saving...' : 'Save'}
               </Button>
@@ -1910,7 +1910,7 @@ export default function UsersAdminPage() {
             <Button
               onClick={handleAddUser}
               disabled={formLoading || onboardingContextLoading}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {formLoading ? (
                 <>
@@ -2037,7 +2037,7 @@ export default function UsersAdminPage() {
             <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="border-slate-600 text-white hover:bg-slate-800">
               Cancel
             </Button>
-            <Button onClick={handleEditUser} disabled={formLoading} className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900">
+            <Button onClick={handleEditUser} disabled={formLoading} className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900">
               {formLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2080,7 +2080,7 @@ export default function UsersAdminPage() {
                   <span className="text-muted-foreground">Role:</span>{' '}
                   <Badge
                     variant={
-                      selectedUser.email === 'admin@mpdee.co.uk'
+                      selectedUser.email === 'template-admin@example.com'
                         ? 'destructive'
                         : selectedUser.role?.role_class === 'admin'
                           ? 'destructive'
@@ -2089,14 +2089,14 @@ export default function UsersAdminPage() {
                             : 'default'
                     }
                     className={
-                      selectedUser.email === 'admin@mpdee.co.uk' || selectedUser.role?.role_class === 'admin'
+                      selectedUser.email === 'template-admin@example.com' || selectedUser.role?.role_class === 'admin'
                         ? undefined
                         : isSupervisorRole(selectedUser.role)
                           ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
                           : 'bg-slate-700 border-slate-500 text-slate-100 hover:bg-slate-600'
                     }
                   >
-                    {selectedUser.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
+                    {selectedUser.email === 'template-admin@example.com' ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
                   </Badge>
                 </div>
               </div>
@@ -2346,7 +2346,7 @@ export default function UsersAdminPage() {
                 setTemporaryPassword('');
                 setPasswordCopied(false);
               }}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               Done
             </Button>

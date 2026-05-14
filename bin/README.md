@@ -13,7 +13,7 @@ This directory contains executable scripts for convenient command-line access.
 Add this to your `~/.bashrc` or `~/.bash_profile`:
 
 ```bash
-export PATH="$PATH:/d/Websites/avsworklog/bin"
+export PATH="$PATH:<repo-path>/bin"
 ```
 
 Then reload your shell:
@@ -28,7 +28,7 @@ Now you can type `fixerrors` from anywhere!
 Add this to your `~/.bashrc` or `~/.bash_profile`:
 
 ```bash
-alias fixerrors='/d/Websites/avsworklog/bin/fixerrors'
+alias fixerrors='<repo-path>/bin/fixerrors'
 ```
 
 Then reload:
@@ -52,4 +52,4 @@ Use the `.bat` version:
 bin\fixerrors.bat
 ```
 
-Or add `D:\Websites\avsworklog\bin` to your Windows PATH environment variable.
+Or add `D:\Websites\fieldops-template\bin` to your Windows PATH environment variable.

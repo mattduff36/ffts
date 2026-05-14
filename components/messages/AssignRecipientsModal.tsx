@@ -285,7 +285,7 @@ export function AssignRecipientsModal({
                       disabled={loading || fetching || roleCount === 0}
                       className={`justify-start text-sm transition-all ${
                         allRoleSelected 
-                          ? 'bg-avs-yellow text-slate-900 font-semibold border-2 border-avs-yellow shadow-lg' 
+                          ? 'bg-brand-yellow text-slate-900 font-semibold border-2 border-brand-yellow shadow-lg' 
                           : 'hover:bg-slate-800'
                       }`}
                     >

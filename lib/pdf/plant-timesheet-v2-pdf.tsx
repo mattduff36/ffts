@@ -7,6 +7,7 @@ import type { TimesheetOffDayState } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals } from '@/lib/utils/timesheet-leave-totals';
 import { normalizeTimesheetEntriesForDisplay } from '@/lib/utils/plant-timesheet-v2-normalization';
 import { formatEntryJobNumbers } from '@/lib/utils/timesheet-job-codes';
+import { templateConfig } from '@/lib/config/template-config';
 
 const styles = StyleSheet.create({
   page: {
@@ -340,9 +341,9 @@ export function PlantTimesheetV2PDF({ timesheet, employeeName, offDayStates = []
         </View>
 
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>A&V SQUIRES Plant Co. Ltd.</Text>
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
           <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
+            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
           </Text>
           <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
         </View>

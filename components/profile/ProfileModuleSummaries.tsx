@@ -23,7 +23,7 @@ const summaryItemClass =
   'rounded-md border border-border bg-slate-900/30 p-2.5';
 const summaryItemHoverClass = 'transition-colors hover:bg-slate-800/40';
 const summaryCtaClass =
-  'border-avs-yellow/50 text-avs-yellow hover:bg-avs-yellow hover:text-slate-900 hover:border-avs-yellow';
+  'border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow hover:text-slate-900 hover:border-brand-yellow';
 
 function getTimesheetStatusBadgeClass(status: string): string {
   const normalized = status.toLowerCase();

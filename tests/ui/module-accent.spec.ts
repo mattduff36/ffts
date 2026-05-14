@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const ADMIN_EMAIL = 'admin@avsworklog.test';
+const ADMIN_EMAIL = 'admin@example.test';
 const ADMIN_PASSWORD = 'TestPass123!';
 
 async function disableAnimations(page: import('@playwright/test').Page) {

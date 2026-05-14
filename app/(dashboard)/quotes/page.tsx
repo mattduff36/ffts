@@ -221,8 +221,8 @@ export default function QuotesPage() {
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-border p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-avs-yellow/10">
-              <Receipt className="h-5 w-5 text-avs-yellow" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-brand-yellow/10">
+              <Receipt className="h-5 w-5 text-brand-yellow" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Quotes</h1>
@@ -247,7 +247,7 @@ export default function QuotesPage() {
                 }}
                 disabled={!canViewCustomers}
                 aria-describedby={!canViewCustomers ? 'quotes-customer-access-note' : undefined}
-                className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold disabled:bg-slate-300 disabled:text-slate-600 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
+                className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold disabled:bg-slate-300 disabled:text-slate-600 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Quote

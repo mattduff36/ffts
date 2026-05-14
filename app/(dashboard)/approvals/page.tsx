@@ -1247,7 +1247,7 @@ function ApprovalsContent() {
                                     e.stopPropagation();
                                     handleOpenProcessModal(timesheet.id);
                                   }}
-                                  className="border-avs-yellow/50 text-avs-yellow hover:bg-avs-yellow/20 hover:text-avs-yellow hover:border-avs-yellow active:bg-avs-yellow/30 active:text-avs-yellow active:scale-95 transition-all"
+                                  className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all"
                                 >
                                   <Package className="h-4 w-4 mr-1" />
                                   Manager Approved
@@ -1713,7 +1713,7 @@ function AbsenceApprovalCard({
                 variant="outline"
                 size="sm"
                 onClick={handleProcess}
-                className="border-avs-yellow/50 text-avs-yellow hover:bg-avs-yellow/20 hover:text-avs-yellow hover:border-avs-yellow active:bg-avs-yellow/30 active:text-avs-yellow active:scale-95 transition-all"
+                className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all"
               >
                 <Package className="h-4 w-4 mr-1" />
                 Process

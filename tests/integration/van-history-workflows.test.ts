@@ -27,7 +27,7 @@ describeVanHistorySuite('Van history workflows', () => {
 
   beforeAll(async () => {
     supabase = createClient(supabaseUrl!, supabaseKey!);
-    const email = process.env.TESTSUITE_EMPLOYEE_EMAIL || process.env.TEST_USER_EMAIL || 'testsuite-employee@squiresapp.test';
+    const email = process.env.TESTSUITE_EMPLOYEE_EMAIL || process.env.TEST_USER_EMAIL || 'testsuite-employee@example.test';
     const password = process.env.TESTSUITE_PASSWORD || process.env.TEST_USER_PASSWORD || 'TestSuite2026!Secure';
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });

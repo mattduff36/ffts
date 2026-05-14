@@ -463,7 +463,7 @@ export default function SuggestionsManagePage() {
             <Button
               onClick={handleUpdateSuggestion}
               disabled={updating}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {updating ? (
                 <>

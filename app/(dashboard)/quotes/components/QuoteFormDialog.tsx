@@ -773,7 +773,7 @@ export function QuoteFormDialog({
             <Button
               type="submit"
               disabled={saving}
-              className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold"
+              className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold"
             >
               {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : isEditing ? 'Update Quote' : 'Create Quote'}
             </Button>

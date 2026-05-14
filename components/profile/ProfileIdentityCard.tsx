@@ -51,7 +51,7 @@ export function ProfileIdentityCard({
                         className="object-cover"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-slate-800 text-2xl font-semibold text-avs-yellow">
+                      <div className="flex h-full w-full items-center justify-center bg-slate-800 text-2xl font-semibold text-brand-yellow">
                         {initials}
                       </div>
                     )}

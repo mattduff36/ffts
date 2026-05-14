@@ -251,7 +251,7 @@ export function QuotesTable({
               size="sm"
               onClick={() => onStatusFilterChange(s)}
               className={isActive
-                ? 'bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90'
+                ? 'bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90'
                 : 'border-slate-600 text-muted-foreground hover:bg-slate-700/50'
               }
             >
@@ -308,7 +308,7 @@ export function QuotesTable({
                       onClick={() => onRowClick(quote)}
                       className="hover:bg-slate-800/50 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 font-mono font-semibold text-avs-yellow">
+                      <td className="px-4 py-3 font-mono font-semibold text-brand-yellow">
                         <div className="flex items-center gap-2">
                           {previousVersions.length > 0 ? (
                             <button
@@ -430,8 +430,8 @@ export function QuotesTable({
                         <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                       </button>
                     ) : null}
-                    <Receipt className="h-4 w-4 text-avs-yellow" />
-                    <span className="font-mono font-semibold text-avs-yellow">{quote.quote_reference}</span>
+                    <Receipt className="h-4 w-4 text-brand-yellow" />
+                    <span className="font-mono font-semibold text-brand-yellow">{quote.quote_reference}</span>
                   </div>
                   <div className="flex flex-wrap justify-end gap-1">
                     <Badge variant="outline" className={cfg.color}>{cfg.label}</Badge>

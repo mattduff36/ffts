@@ -35,7 +35,7 @@ const ERROR_ANALYSIS_PATH = resolve(process.cwd(), 'docs_private', 'error-analys
 const ERROR_FIX_LOG_PATH = resolve(process.cwd(), 'docs_private', 'error-fix-log.md');
 
 // Admin email to filter out (matches /debug page default)
-const ADMIN_EMAIL = 'admin@mpdee.co.uk';
+const ADMIN_EMAIL = 'template-admin@example.com';
 
 // ─── Types ───────────────────────────────────────────────────────────
 

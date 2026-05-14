@@ -129,8 +129,8 @@ export default function CustomerHistoryPage({ params }: PageProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-avs-yellow/10">
-            <Building2 className="h-6 w-6 text-avs-yellow" />
+          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-brand-yellow/10">
+            <Building2 className="h-6 w-6 text-brand-yellow" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -147,7 +147,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
             <Pencil className="h-4 w-4 mr-1" /> Edit
           </Button>
           <Link href={`/quotes?customer_id=${customer.id}`}>
-            <Button className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold">
+            <Button className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold">
               <Receipt className="h-4 w-4 mr-1" /> View Quotes
             </Button>
           </Link>
@@ -177,7 +177,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 mb-1">
-              <Receipt className="h-4 w-4 text-avs-yellow" />
+              <Receipt className="h-4 w-4 text-brand-yellow" />
               <p className="text-xs text-muted-foreground font-medium">Total Value</p>
             </div>
             <p className="text-2xl font-bold text-white">
@@ -214,7 +214,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
             {customer.contact_email && (
               <div className="flex items-center gap-2 text-slate-300">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <a href={`mailto:${customer.contact_email}`} className="hover:text-avs-yellow transition-colors">{customer.contact_email}</a>
+                <a href={`mailto:${customer.contact_email}`} className="hover:text-brand-yellow transition-colors">{customer.contact_email}</a>
               </div>
             )}
             {customer.contact_phone && (
@@ -253,7 +253,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
       <Card className="bg-slate-800/50 border-slate-700">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-avs-yellow" /> Quote History
+            <Receipt className="h-5 w-5 text-brand-yellow" /> Quote History
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -268,7 +268,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
                 <Link key={q.id} href={`/quotes?customer_id=${customer.id}&quote_id=${q.id}`} className="block group">
                   <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 hover:bg-slate-700/50 border border-slate-700/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <span className="font-mono font-semibold text-avs-yellow text-sm">{q.quote_reference}</span>
+                      <span className="font-mono font-semibold text-brand-yellow text-sm">{q.quote_reference}</span>
                       <div>
                         <span className="text-sm text-slate-300 truncate max-w-[200px] block">{q.subject_line || 'Untitled'}</span>
                         <span className="text-xs text-muted-foreground">

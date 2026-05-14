@@ -3,7 +3,7 @@
 /* Tailwind v4: enable class-based dark variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* AVS Squires Brand Colors */
+/* Template Brand Colors */
 @layer base {
   :root {
     color-scheme: dark;
@@ -16,7 +16,7 @@
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
     
-    /* Primary - AVS Signature Yellow */
+    /* Primary - Brand Yellow */
     --primary: 48 87% 69%;
     --primary-foreground: 222 47% 11%;
     
@@ -94,10 +94,10 @@
     --ring: 48 87% 69%;
     --radius: 0.625rem;
     
-    /* AVS Yellow variants */
-    --avs-yellow: 48 87% 69%;
-    --avs-yellow-hover: 48 73% 56%;
-    --avs-yellow-light: 48 100% 94%;
+    /* Brand Yellow variants */
+    --brand-yellow: 48 87% 69%;
+    --brand-yellow-hover: 48 73% 56%;
+    --brand-yellow-light: 48 100% 94%;
   }
 
   .dark {
@@ -233,19 +233,19 @@
 
 /* Module-specific color utilities */
 @layer utilities {
-  .bg-avs-yellow {
+  .bg-brand-yellow {
     background-color: #F1D64A;
   }
   
-  .bg-avs-yellow-hover:hover {
+  .bg-brand-yellow-hover:hover {
     background-color: #d1b82f;
   }
   
-  .text-avs-yellow {
+  .text-brand-yellow {
     color: #F1D64A;
   }
   
-  .border-avs-yellow {
+  .border-brand-yellow {
     border-color: #F1D64A;
   }
   

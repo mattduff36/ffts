@@ -1,7 +1,7 @@
 /**
  * Add Manual History Entry for CP17 TKO
  * 
- * Creates a maintenance_history entry for Andy Hill's recent service date update
+ * Creates a maintenance_history entry for Example User Seven's recent service date update
  * that was missed due to the .single() bug.
  * 
  * Run with: npx tsx scripts/add-cp17-history-entry.ts
@@ -51,7 +51,7 @@ async function addHistoryEntry() {
       WHERE v.reg_number = 'CP17 TKO'
     `;
 
-    // Separate query to find Andy Hill's user ID
+    // Separate query to find Example User Seven's user ID
     const andyQuery = `
       SELECT id, full_name
       FROM profiles
@@ -68,7 +68,7 @@ async function addHistoryEntry() {
 
     const vehicle = rows[0];
     
-    // Find Andy Hill
+    // Find Example User Seven
     const { rows: andyRows } = await client.query(andyQuery);
     const andy = andyRows.length > 0 ? andyRows[0] : null;
     
@@ -79,7 +79,7 @@ async function addHistoryEntry() {
     console.log(`   User: ${andy ? andy.full_name : 'Unknown'}\n`);
 
     if (!andy) {
-      console.warn('⚠️  Warning: Andy Hill user not found, using generic name');
+      console.warn('⚠️  Warning: Example User Seven user not found, using generic name');
     }
 
     // Get the most recent update time from vehicle_maintenance
@@ -132,7 +132,7 @@ async function addHistoryEntry() {
       'mileage',
       'Service date updated (manually backfilled - exact previous value not recorded due to system issue)',
       andy ? andy.id : null,
-      andy ? andy.full_name : 'Andy Hill',
+      andy ? andy.full_name : 'Example User Seven',
       updateTime
     ]);
 

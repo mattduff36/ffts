@@ -59,7 +59,7 @@ describeWithAuth('Maintenance reminders API validation (manager auth)', () => {
   beforeAll(async () => {
     supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
-    const email = process.env.TESTSUITE_MANAGER_EMAIL || 'testsuite-manager@squiresapp.test';
+    const email = process.env.TESTSUITE_MANAGER_EMAIL || 'testsuite-manager@example.test';
     const password = process.env.TESTSUITE_PASSWORD || 'TestSuite2026!Secure';
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 

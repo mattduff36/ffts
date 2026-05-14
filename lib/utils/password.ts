@@ -25,8 +25,8 @@ function shuffleCharacters(characters: string[]): string[] {
 
 /**
  * Generate a secure random password
- * Format: AVS + 5 random characters (e.g., "AVSfeh5J")
- * - Always starts with "AVS"
+ * Format: TMP + 5 random characters (e.g., "TMPfeh5J")
+ * - Always starts with "TMP"
  * - Always contains at least one lowercase letter and one number
  * - Followed by 5 random letters (upper/lower) and numbers
  * - Total length: 8 characters
@@ -44,7 +44,7 @@ export function generateSecurePassword(): string {
     pickRandomCharacter(mixedCharacters),
   ];
 
-  return `AVS${shuffleCharacters(requiredCharacters).join('')}`;
+  return `TMP${shuffleCharacters(requiredCharacters).join('')}`;
 }
 
 /**

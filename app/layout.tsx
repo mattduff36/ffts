@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { AppProviders } from "@/lib/providers/app-providers";
+import { templateConfig } from "@/lib/config/template-config";
 import "./globals.css";
 
 // Force dynamic rendering to prevent build-time static generation errors
@@ -12,8 +13,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Squires - A&V Squires Plant Co. Ltd.",
-  description: "Digital forms management system for timesheets and van inspections",
+  title: templateConfig.branding.appName,
+  description: `${templateConfig.branding.companyName} digital field operations system`,
   manifest: "/manifest.json",
   icons: {
     apple: [
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Squires",
+    title: templateConfig.branding.shortAppName,
   },
 };
 
@@ -35,7 +36,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#F1D64A",
+  themeColor: templateConfig.branding.brandColor,
 };
 
 export default function RootLayout({

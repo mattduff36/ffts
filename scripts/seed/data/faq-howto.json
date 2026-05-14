@@ -80,16 +80,16 @@
     {
       "category_slug": "getting-started",
       "slug": "what-is-squires-app",
-      "title": "What is the Squires App?",
-      "summary": "Overview of the Squires digital forms management system.",
-      "content_md": "# What is the Squires App?\n\nThe Squires App is a custom-built digital forms management system designed for A&V Squires Plant Co. Ltd. It replaces paper-based forms with a modern, mobile-first Progressive Web Application (PWA) accessible from any device.\n\n## Key Features\n\n- **Employee Timesheets** - Digital weekly timesheets with automatic hour calculations\n- **Vehicle Inspections** - Dynamic safety checklists based on vehicle type (Vans get 14 items, Trucks/Artics/Trailers get 26 items)\n- **RAMS Documents** - Risk Assessment & Method Statement management with visitor signatures\n- **Absence Management** - Request and track annual leave with calendar view\n- **Fleet Management** - Track MOT, tax, service schedules, and manage vehicles\n- **Workshop Tasks** - Manage vehicle repairs with categories, status tracking, and comments\n- **Approvals** - Manager review and approval workflows for timesheets and absences\n- **Reports** - Export data as PDF or Excel files\n\n## Access\n\nThe app is available at: https://avsworklog.mpdee.uk\n\nIt works on desktop, tablet, and mobile devices. For the best mobile experience, add it to your home screen as a PWA."
+      "title": "What is the FieldOps Template?",
+      "summary": "Overview of the template digital forms management system.",
+      "content_md": "# What is the FieldOps Template?\n\nThe FieldOps Template is a custom-built digital forms management system designed for Example Client Ltd It replaces paper-based forms with a modern, mobile-first Progressive Web Application (PWA) accessible from any device.\n\n## Key Features\n\n- **Employee Timesheets** - Digital weekly timesheets with automatic hour calculations\n- **Vehicle Inspections** - Dynamic safety checklists based on vehicle type (Vans get 14 items, Trucks/Artics/Trailers get 26 items)\n- **RAMS Documents** - Risk Assessment & Method Statement management with visitor signatures\n- **Absence Management** - Request and track annual leave with calendar view\n- **Fleet Management** - Track MOT, tax, service schedules, and manage vehicles\n- **Workshop Tasks** - Manage vehicle repairs with categories, status tracking, and comments\n- **Approvals** - Manager review and approval workflows for timesheets and absences\n- **Reports** - Export data as PDF or Excel files\n\n## Access\n\nThe app is available at: https://app.example.com\n\nIt works on desktop, tablet, and mobile devices. For the best mobile experience, add it to your home screen as a PWA."
     },
     {
       "category_slug": "getting-started",
       "slug": "how-to-login",
       "title": "How do I log in?",
       "summary": "Instructions for logging into the app.",
-      "content_md": "# How do I log in?\n\n1. Go to https://avsworklog.mpdee.uk\n2. Enter your email address\n3. Enter your password\n4. Click **Sign In**\n\n## First Time Login\n\nIf this is your first login, an admin will have created your account and sent you a temporary password by email. You'll be required to change this password on first login.\n\n## Forgot Password?\n\nContact your administrator to reset your password. They can generate a new temporary password from the User Management page."
+      "content_md": "# How do I log in?\n\n1. Go to https://app.example.com\n2. Enter your email address\n3. Enter your password\n4. Click **Sign In**\n\n## First Time Login\n\nIf this is your first login, an admin will have created your account and sent you a temporary password by email. You'll be required to change this password on first login.\n\n## Forgot Password?\n\nContact your administrator to reset your password. They can generate a new temporary password from the User Management page."
     },
     {
       "category_slug": "getting-started",
@@ -109,15 +109,15 @@
       "category_slug": "getting-started",
       "slug": "mobile-pwa-install",
       "title": "How to install the app on my phone",
-      "summary": "Add the Squires App to your home screen for the best mobile experience.",
-      "content_md": "# How to install the app on my phone\n\nThe Squires App is a Progressive Web App (PWA) that can be installed on your phone for an app-like experience.\n\n## iPhone (Safari)\n\n1. Open Safari and go to https://avsworklog.mpdee.uk\n2. Tap the **Share** button (square with arrow)\n3. Scroll down and tap **Add to Home Screen**\n4. Tap **Add** in the top right\n\n## Android (Chrome)\n\n1. Open Chrome and go to https://avsworklog.mpdee.uk\n2. Tap the **three dots** menu in the top right\n3. Tap **Add to Home screen**\n4. Tap **Add**\n\n## Benefits\n\n- Launch directly from your home screen\n- App-like full-screen experience\n- Works offline for viewing previously loaded data\n- Faster access without opening a browser"
+      "summary": "Add the FieldOps Template to your home screen for the best mobile experience.",
+      "content_md": "# How to install the app on my phone\n\nThe FieldOps Template is a Progressive Web App (PWA) that can be installed on your phone for an app-like experience.\n\n## iPhone (Safari)\n\n1. Open Safari and go to https://app.example.com\n2. Tap the **Share** button (square with arrow)\n3. Scroll down and tap **Add to Home Screen**\n4. Tap **Add** in the top right\n\n## Android (Chrome)\n\n1. Open Chrome and go to https://app.example.com\n2. Tap the **three dots** menu in the top right\n3. Tap **Add to Home screen**\n4. Tap **Add**\n\n## Benefits\n\n- Launch directly from your home screen\n- App-like full-screen experience\n- Works offline for viewing previously loaded data\n- Faster access without opening a browser"
     },
     {
       "category_slug": "getting-started",
       "slug": "user-roles-explained",
       "title": "What are the different user roles?",
       "summary": "Explanation of Employee, Manager, and Admin roles.",
-      "content_md": "# What are the different user roles?\n\nThe app has three main role types that determine what you can access:\n\n## Employee\n\n- Create and submit timesheets\n- Perform vehicle inspections\n- View and sign assigned RAMS documents\n- Request annual leave\n- View maintenance schedules\n- View assigned workshop tasks\n- Access the Help page\n\n## Manager\n\nEverything an Employee can do, plus:\n- Approve/reject timesheets and absences\n- View and manage Workshop Tasks\n- Send Toolbox Talks and Reminders\n- Download reports\n- Create timesheets/inspections on behalf of employees\n- View all employees' data\n- Manage suggestions\n\n## Admin\n\nEverything a Manager can do, plus:\n- Create, edit, and delete user accounts\n- Reset user passwords\n- Manage roles and permissions\n- Manage vehicle fleet and categories\n- Upload and manage RAMS documents\n- Edit FAQ content\n- Configure system settings\n\n## Super Admin\n\nA special protected account (admin@mpdee.co.uk) that cannot be locked out or modified by other admins. Has full system access and special developer tools."
+      "content_md": "# What are the different user roles?\n\nThe app has three main role types that determine what you can access:\n\n## Employee\n\n- Create and submit timesheets\n- Perform vehicle inspections\n- View and sign assigned RAMS documents\n- Request annual leave\n- View maintenance schedules\n- View assigned workshop tasks\n- Access the Help page\n\n## Manager\n\nEverything an Employee can do, plus:\n- Approve/reject timesheets and absences\n- View and manage Workshop Tasks\n- Send Toolbox Talks and Reminders\n- Download reports\n- Create timesheets/inspections on behalf of employees\n- View all employees' data\n- Manage suggestions\n\n## Admin\n\nEverything a Manager can do, plus:\n- Create, edit, and delete user accounts\n- Reset user passwords\n- Manage roles and permissions\n- Manage vehicle fleet and categories\n- Upload and manage RAMS documents\n- Edit FAQ content\n- Configure system settings\n\n## Super Admin\n\nA special protected account (template-admin@example.com) that cannot be locked out or modified by other admins. Has full system access and special developer tools."
     },
     {
       "category_slug": "timesheets",
@@ -425,7 +425,7 @@
       "slug": "reset-user-password",
       "title": "How do I reset a user's password?",
       "summary": "Generating a new password for a user.",
-      "content_md": "# How do I reset a user's password?\n\n**Note:** This is for Admins only.\n\n## Steps\n\n1. Go to **Users**\n2. Find the user in the list\n3. Click the **Reset Password** (key) icon\n4. Confirm the reset\n5. A new temporary password is:\n   - Generated automatically\n   - Emailed to the user\n   - Displayed to you to share manually if needed\n\n## After Reset\n\nThe user:\n- Receives an email with the new password\n- Must change the password on their next login\n\n## Super Admin\n\nThe super admin (admin@mpdee.co.uk) password cannot be reset by other admins."
+      "content_md": "# How do I reset a user's password?\n\n**Note:** This is for Admins only.\n\n## Steps\n\n1. Go to **Users**\n2. Find the user in the list\n3. Click the **Reset Password** (key) icon\n4. Confirm the reset\n5. A new temporary password is:\n   - Generated automatically\n   - Emailed to the user\n   - Displayed to you to share manually if needed\n\n## After Reset\n\nThe user:\n- Receives an email with the new password\n- Must change the password on their next login\n\n## Super Admin\n\nThe super admin (template-admin@example.com) password cannot be reset by other admins."
     },
     {
       "category_slug": "admin-users",
@@ -439,7 +439,7 @@
       "slug": "roles-overview",
       "title": "How do roles and permissions work?",
       "summary": "Understanding the role-based access control system.",
-      "content_md": "# How do roles and permissions work?\n\n## The System\n\nSquires uses Role-Based Access Control (RBAC):\n- **Roles** define job types (Admin, Manager, Employee-Civils, etc.)\n- **Permissions** control which modules each role can access\n\n## Module Permissions\n\nEach role can have access to these modules:\n- Timesheets\n- Inspections\n- RAMS\n- Absence\n- Maintenance\n- Workshop Tasks\n- Toolbox Talks (receiving)\n\n## Role Types\n\n### Manager/Admin Roles\n\nMarked with \"Is Manager/Admin\" flag:\n- Automatically have full access to all modules\n- Can access Approvals, Actions, Reports\n- Can create items on behalf of employees\n\n### Employee Roles\n\nAccess controlled by individual permissions:\n- Each module can be enabled/disabled\n- Different employee types can have different access"
+      "content_md": "# How do roles and permissions work?\n\n## The System\n\nThe template uses Role-Based Access Control (RBAC):\n- **Roles** define job types (Admin, Manager, Employee-Civils, etc.)\n- **Permissions** control which modules each role can access\n\n## Module Permissions\n\nEach role can have access to these modules:\n- Timesheets\n- Inspections\n- RAMS\n- Absence\n- Maintenance\n- Workshop Tasks\n- Toolbox Talks (receiving)\n\n## Role Types\n\n### Manager/Admin Roles\n\nMarked with \"Is Manager/Admin\" flag:\n- Automatically have full access to all modules\n- Can access Approvals, Actions, Reports\n- Can create items on behalf of employees\n\n### Employee Roles\n\nAccess controlled by individual permissions:\n- Each module can be enabled/disabled\n- Different employee types can have different access"
     },
     {
       "category_slug": "admin-roles",
@@ -453,7 +453,7 @@
       "slug": "protected-roles",
       "title": "What roles cannot be modified?",
       "summary": "Understanding protected system roles.",
-      "content_md": "# What roles cannot be modified?\n\n## Protected Roles\n\nSome roles have restrictions:\n\n### Super Admin\n\n- Cannot be edited or deleted\n- Only the account admin@mpdee.co.uk has this\n- Cannot be locked out by other admins\n- Has all permissions always\n\n### Admin & Manager\n\n- Core permissions cannot be disabled\n- Always have full module access\n- \"Is Manager/Admin\" flag cannot be removed\n\n## Deleting Roles\n\nA role cannot be deleted if:\n- Users are still assigned to it\n- It's a protected system role\n\nReassign users to another role first, then delete."
+      "content_md": "# What roles cannot be modified?\n\n## Protected Roles\n\nSome roles have restrictions:\n\n### Super Admin\n\n- Cannot be edited or deleted\n- Only the account template-admin@example.com has this\n- Cannot be locked out by other admins\n- Has all permissions always\n\n### Admin & Manager\n\n- Core permissions cannot be disabled\n- Always have full module access\n- \"Is Manager/Admin\" flag cannot be removed\n\n## Deleting Roles\n\nA role cannot be deleted if:\n- Users are still assigned to it\n- It's a protected system role\n\nReassign users to another role first, then delete."
     },
     {
       "category_slug": "notifications",

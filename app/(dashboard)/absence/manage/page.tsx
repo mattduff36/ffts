@@ -516,7 +516,10 @@ export default function AdminAbsencePage() {
   }, [searchParams, includeArchived, router]);
 
   const handlePasswordSubmit = useCallback(() => {
-    if (passwordInput === 'AVS-Access1') {
+    const unlockCode =
+      process.env.NEXT_PUBLIC_ABSENCE_MANAGE_UNLOCK_CODE || 'template-unlock-code';
+
+    if (passwordInput === unlockCode) {
       unlockProtectedTab(pendingProtectedTab);
     } else {
       setPasswordError('Incorrect password. Please try again.');

@@ -28,15 +28,21 @@ interface Manager {
   } | null;
 }
 
-const SUZANNE_EMAIL = 'suzanne@avsquires.co.uk';
+const PRIORITY_MANAGER_EMAIL =
+  process.env.NEXT_PUBLIC_PRIORITY_MANAGER_EMAIL?.trim().toLowerCase() ||
+  'priority.manager@example.com';
+
+function isPriorityManager(manager: Manager): boolean {
+  return manager.email?.trim().toLowerCase() === PRIORITY_MANAGER_EMAIL;
+}
 
 function compareManagers(a: Manager, b: Manager): number {
-  if (a.email === SUZANNE_EMAIL) return -1;
-  if (b.email === SUZANNE_EMAIL) return 1;
+  if (isPriorityManager(a)) return -1;
+  if (isPriorityManager(b)) return 1;
   return (a.full_name || '').localeCompare(b.full_name || '');
 }
 
-function sortManagersWithSuzanneFirst(managers: Manager[]): Manager[] {
+function sortManagersWithPriorityManagerFirst(managers: Manager[]): Manager[] {
   return [...managers].sort(compareManagers);
 }
 
@@ -109,8 +115,8 @@ export function TimesheetAdjustmentModal({
 
       const managersList = apiManagers ?? [];
 
-      // Ensure Suzanne Squires is always at the top of the list
-      const sortedManagers = sortManagersWithSuzanneFirst(managersList);
+      // Ensure Priority Manager is always at the top of the list
+      const sortedManagers = sortManagersWithPriorityManagerFirst(managersList);
 
       setManagers(sortedManagers);
       setFilteredManagers(sortedManagers);
@@ -263,7 +269,7 @@ export function TimesheetAdjustmentModal({
                       <div
                         key={manager.id}
                         className={`flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent/50 ${
-                          index === 0 && manager.email === 'suzanne@avsquires.co.uk'
+                          index === 0 && isPriorityManager(manager)
                             ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20'
                             : ''
                         }`}
@@ -279,7 +285,7 @@ export function TimesheetAdjustmentModal({
                           className="flex-1 text-sm font-medium cursor-pointer"
                         >
                           {manager.full_name}
-                          {index === 0 && manager.email === 'suzanne@avsquires.co.uk' && (
+                          {index === 0 && isPriorityManager(manager) && (
                             <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
                               (Recommended)
                             </span>

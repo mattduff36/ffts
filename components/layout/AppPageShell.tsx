@@ -52,7 +52,7 @@ export function AppPageHeader({
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-3">
           {icon ? (
-            <div className={cn('rounded-lg bg-avs-yellow/15 p-2 text-avs-yellow', iconContainerClassName)}>
+            <div className={cn('rounded-lg bg-brand-yellow/15 p-2 text-brand-yellow', iconContainerClassName)}>
               {icon}
             </div>
           ) : null}

@@ -23,35 +23,35 @@ const supabase = createClient(supabaseUrl!, supabaseServiceKey!, {
 // Sample employees
 const SAMPLE_EMPLOYEES = [
   {
-    email: 'john.smith@avsworklog.test',
+    email: 'john.smith@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'John Smith',
     employee_id: 'EMP101',
     role: 'employee'
   },
   {
-    email: 'sarah.jones@avsworklog.test',
+    email: 'sarah.jones@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'Sarah Jones',
     employee_id: 'EMP102',
     role: 'employee'
   },
   {
-    email: 'mike.wilson@avsworklog.test',
+    email: 'mike.wilson@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'Mike Wilson',
     employee_id: 'EMP103',
     role: 'employee'
   },
   {
-    email: 'emma.brown@avsworklog.test',
+    email: 'emma.brown@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'Emma Brown',
     employee_id: 'EMP104',
     role: 'employee'
   },
   {
-    email: 'david.taylor@avsworklog.test',
+    email: 'david.taylor@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'David Taylor',
     employee_id: 'EMP105',
@@ -446,9 +446,9 @@ async function seedData() {
     console.log(`   • 4 weeks of inspection data`);
     console.log(`   • Actions created for all defects`);
     console.log('\n💡 Login credentials:');
-    console.log('   Email: [employee-email]@avsworklog.test');
+    console.log('   Email: [employee-email]@fieldops-template.test');
     console.log('   Password: TestPass123!');
-    console.log('\n   For manager access, use: manager@avsworklog.test');
+    console.log('\n   For manager access, use: manager@fieldops-template.test');
     console.log('\n📋 Pages to test:');
     console.log('   • Reports - Download Excel reports');
     console.log('   • Approvals - Review timesheets & inspections');

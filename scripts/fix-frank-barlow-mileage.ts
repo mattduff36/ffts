@@ -1,7 +1,7 @@
 /**
- * Fix Frank Barlow's vehicle mileage issue
+ * Fix Example Vehicle's vehicle mileage issue
  * This script:
- * 1. Finds the vehicle FE24 TVV with nickname "Frank Barlow"
+ * 1. Finds the vehicle FE24 TVV with nickname "Example Vehicle"
  * 2. Checks current mileage and history
  * 3. Identifies any test inspections that corrupted the data
  * 4. Fixes the mileage to the correct value
@@ -24,15 +24,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function fixMileage() {
-  console.log('🔧 Fixing Frank Barlow vehicle mileage issue...\n');
+  console.log('🔧 Fixing Example Vehicle vehicle mileage issue...\n');
 
   try {
-    // 1. Find vehicle with registration FE24 TYV (Frank Barlow)
-    console.log('📋 Step 1: Finding vehicle FE24 TYV (Frank Barlow)...');
+    // 1. Find vehicle with registration AB12 CDE (Example Vehicle)
+    console.log('📋 Step 1: Finding vehicle AB12 CDE (Example Vehicle)...');
     const { data: vehicles, error: vehicleError } = await supabase
       .from('vans')
       .select('*')
-      .eq('reg_number', 'FE24 TYV');
+      .eq('reg_number', 'AB12 CDE');
 
     if (vehicleError || !vehicles || vehicles.length === 0) {
       console.log('❌ Vehicle not found. Trying variations...');

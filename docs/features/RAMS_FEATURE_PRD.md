@@ -950,7 +950,7 @@ CREATE POLICY "Users can download assigned RAMS" ON storage.objects FOR SELECT
 
 ## 📚 Related Documentation
 
-- `SQUIRES_APP_PROPOSAL.md` - Original PRD
+- `TEMPLATE_APP_PROPOSAL.md` - Original PRD
 - `PRD_IMPLEMENTATION_STATUS.md` - Overall implementation status
 - `OFFLINE_PWA_IMPLEMENTATION.md` - PWA and offline features
 - `types/database.ts` - Database types

@@ -61,7 +61,7 @@ const ACCOUNT_SWITCH_DISABLED_REASON = 'Temporarily disabled while issues are in
 function getNavItemActiveColors(href: string): { bg: string; text: string } {
   // Dashboard and Help use brand yellow (with dark text)
   if (href === '/dashboard' || href === '/help') {
-    return { bg: 'bg-avs-yellow', text: 'text-slate-900' };
+    return { bg: 'bg-brand-yellow', text: 'text-slate-900' };
   }
   // Timesheets - Blue
   if (href.startsWith('/timesheets')) {
@@ -101,21 +101,21 @@ function getNavItemActiveColors(href: string): { bg: string; text: string } {
   }
   // Reports - Brand yellow (management tool)
   if (href.startsWith('/reports')) {
-    return { bg: 'bg-avs-yellow', text: 'text-slate-900' };
+    return { bg: 'bg-brand-yellow', text: 'text-slate-900' };
   }
   // Inventory - Indigo
   if (href.startsWith('/inventory')) {
     return { bg: 'bg-inventory', text: 'text-white' };
   }
   // Default - Brand yellow
-  return { bg: 'bg-avs-yellow', text: 'text-slate-900' };
+  return { bg: 'bg-brand-yellow', text: 'text-slate-900' };
 }
 
 /**
  * Get module brand color for inactive icon state.
  */
 function getNavItemIconColor(href: string): string {
-  if (href === '/dashboard' || href === '/help') return 'text-avs-yellow';
+  if (href === '/dashboard' || href === '/help') return 'text-brand-yellow';
   if (href.startsWith('/timesheets')) return 'text-timesheet';
   if (href.startsWith('/van-inspections')) return 'text-inspection';
   if (href.startsWith('/plant-inspections')) return 'text-plant-inspection';
@@ -125,9 +125,9 @@ function getNavItemIconColor(href: string): string {
   if (href.startsWith('/maintenance')) return 'text-maintenance';
   if (href.startsWith('/fleet')) return 'text-fleet';
   if (href.startsWith('/workshop')) return 'text-workshop';
-  if (href.startsWith('/reports')) return 'text-avs-yellow';
+  if (href.startsWith('/reports')) return 'text-brand-yellow';
   if (href.startsWith('/inventory')) return 'text-inventory';
-  return 'text-avs-yellow';
+  return 'text-brand-yellow';
 }
 
 interface BeforeInstallPromptEvent extends Event {
@@ -151,7 +151,7 @@ const PIN_LENGTH = 4;
 const PIN_KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
 const PIN_KEY_INTERACTION_CLASS =
   'transition-colors duration-200 ease-out';
-const PIN_KEY_FLASH_CLASS = 'bg-avs-yellow text-slate-950';
+const PIN_KEY_FLASH_CLASS = 'bg-brand-yellow text-slate-950';
 const PIN_KEY_BUTTON_CLASS =
   `h-auto w-full aspect-[2/1] rounded-xl text-lg font-semibold bg-slate-950 text-white hover:bg-slate-900 sm:text-xl ${PIN_KEY_INTERACTION_CLASS}`;
 const PIN_ACTION_BUTTON_CLASS =
@@ -698,7 +698,7 @@ export function Navbar() {
       return;
     }
 
-    window.alert('Open your browser menu and tap "Install app" (or "Add to Home screen") to install SQUIRES.');
+    window.alert('Open your browser menu and tap "Install app" (or "Add to Home screen") to install TEMPLATE.');
   };
 
   // Helper function to check if a nav link is active
@@ -775,8 +775,8 @@ export function Navbar() {
         className="bg-slate-900/50 backdrop-blur-xl border-b border-border/50 sticky top-0 z-50"
         style={{ '--top-nav-h': '68px' } as React.CSSProperties}
       >
-        {/* AVS Yellow accent strip */}
-        <div className="h-1 bg-gradient-to-r from-avs-yellow via-avs-yellow to-avs-yellow-hover"></div>
+        {/* Brand Yellow accent strip */}
+        <div className="h-1 bg-gradient-to-r from-brand-yellow via-brand-yellow to-brand-yellow-hover"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {tabletModeEnabled ? (
             <div className="flex items-center h-16">
@@ -784,8 +784,8 @@ export function Navbar() {
                 href="/dashboard"
                 className="flex items-center group"
               >
-                <div className="text-xl font-bold text-white group-hover:text-avs-yellow transition-colors">
-                  SQUIRES
+                <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
+                  TEMPLATE
                 </div>
               </Link>
               <div className="ml-auto flex items-center gap-2">
@@ -815,8 +815,8 @@ export function Navbar() {
               className="md:hidden flex items-center mr-4 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <div className="text-xl font-bold text-white group-hover:text-avs-yellow transition-colors">
-                SQUIRES
+              <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
+                TEMPLATE
               </div>
             </Link>
 
@@ -903,13 +903,13 @@ export function Navbar() {
                       href="/profile"
                       className={`flex items-center px-3 py-2 text-lg font-medium rounded-md ${
                         isLinkActive('/profile')
-                          ? 'bg-avs-yellow text-slate-900'
+                          ? 'bg-brand-yellow text-slate-900'
                           : 'text-muted-foreground hover:bg-slate-800/50 hover:text-white'
                       }`}
                       onClick={() => setDesktopMenuOpen(false)}
                     >
                       <UserCircle2
-                        className={`w-6 h-6 mr-3 ${isLinkActive('/profile') ? 'text-slate-900' : 'text-avs-yellow'}`}
+                        className={`w-6 h-6 mr-3 ${isLinkActive('/profile') ? 'text-slate-900' : 'text-brand-yellow'}`}
                       />
                       Profile
                     </Link>
@@ -926,7 +926,7 @@ export function Navbar() {
                         title={accountSwitchDisabled ? ACCOUNT_SWITCH_DISABLED_REASON : undefined}
                         aria-disabled={accountSwitchDisabled}
                       >
-                        <Users className="w-6 h-6 mr-3 text-avs-yellow" />
+                        <Users className="w-6 h-6 mr-3 text-brand-yellow" />
                         {accountLockLabel}
                       </button>
                     ) : null}
@@ -940,7 +940,7 @@ export function Navbar() {
                         void fetchNotificationCount();
                       }}
                     >
-                      <Bell className="w-6 h-6 mr-3 text-avs-yellow" />
+                      <Bell className="w-6 h-6 mr-3 text-brand-yellow" />
                       Notifications
                       {unreadCount > 0 && (
                         <span
@@ -956,13 +956,13 @@ export function Navbar() {
                       href="/help"
                       className={`flex items-center px-3 py-2 text-lg font-medium rounded-md ${
                         isLinkActive('/help')
-                          ? 'bg-avs-yellow text-slate-900'
+                          ? 'bg-brand-yellow text-slate-900'
                           : 'text-muted-foreground hover:bg-slate-800/50 hover:text-white'
                       }`}
                       onClick={() => setDesktopMenuOpen(false)}
                     >
                       <HelpCircle
-                        className={`w-6 h-6 mr-3 ${isLinkActive('/help') ? 'text-slate-900' : 'text-avs-yellow'}`}
+                        className={`w-6 h-6 mr-3 ${isLinkActive('/help') ? 'text-slate-900' : 'text-brand-yellow'}`}
                       />
                       Help
                     </Link>
@@ -975,7 +975,7 @@ export function Navbar() {
                         toggleTabletMode();
                       }}
                     >
-                      <MonitorSmartphone className="w-6 h-6 mr-3 text-avs-yellow" />
+                      <MonitorSmartphone className="w-6 h-6 mr-3 text-brand-yellow" />
                       {tabletModeEnabled ? 'Disable Tablet Mode' : 'Enable Tablet Mode'}
                     </button>
 
@@ -1095,12 +1095,12 @@ export function Navbar() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center px-3 py-2 text-lg font-medium rounded-md ${
                       isLinkActive('/profile')
-                        ? 'bg-avs-yellow text-slate-900'
+                        ? 'bg-brand-yellow text-slate-900'
                         : 'text-muted-foreground hover:bg-slate-800/50 hover:text-white'
                     }`}
                   >
                     <UserCircle2
-                      className={`w-6 h-6 mr-3 ${isLinkActive('/profile') ? 'text-slate-900' : 'text-avs-yellow'}`}
+                      className={`w-6 h-6 mr-3 ${isLinkActive('/profile') ? 'text-slate-900' : 'text-brand-yellow'}`}
                     />
                     Profile
                   </Link>
@@ -1117,7 +1117,7 @@ export function Navbar() {
                       title={accountSwitchDisabled ? ACCOUNT_SWITCH_DISABLED_REASON : undefined}
                       aria-disabled={accountSwitchDisabled}
                     >
-                      <Users className="w-6 h-6 mr-3 text-avs-yellow" />
+                      <Users className="w-6 h-6 mr-3 text-brand-yellow" />
                       {accountLockLabel}
                     </button>
                   ) : null}
@@ -1131,7 +1131,7 @@ export function Navbar() {
                     }}
                     className="flex w-full items-center px-3 py-2 text-lg font-medium rounded-md text-muted-foreground hover:bg-slate-800/50 hover:text-white"
                   >
-                    <Bell className="w-6 h-6 mr-3 text-avs-yellow" />
+                    <Bell className="w-6 h-6 mr-3 text-brand-yellow" />
                     Notifications
                     {unreadCount > 0 && (
                       <span
@@ -1148,12 +1148,12 @@ export function Navbar() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center px-3 py-2 text-lg font-medium rounded-md ${
                       isLinkActive('/help')
-                        ? 'bg-avs-yellow text-slate-900'
+                        ? 'bg-brand-yellow text-slate-900'
                         : 'text-muted-foreground hover:bg-slate-800/50 hover:text-white'
                     }`}
                   >
                     <HelpCircle
-                      className={`w-6 h-6 mr-3 ${isLinkActive('/help') ? 'text-slate-900' : 'text-avs-yellow'}`}
+                      className={`w-6 h-6 mr-3 ${isLinkActive('/help') ? 'text-slate-900' : 'text-brand-yellow'}`}
                     />
                     Help
                   </Link>
@@ -1166,7 +1166,7 @@ export function Navbar() {
                       }}
                       className="flex w-full items-center px-3 py-2 text-lg font-medium rounded-md text-muted-foreground hover:bg-slate-800/50 hover:text-white"
                     >
-                      <Download className="w-6 h-6 mr-3 text-avs-yellow" />
+                      <Download className="w-6 h-6 mr-3 text-brand-yellow" />
                       Install App
                     </button>
                   ) : null}
@@ -1272,7 +1272,7 @@ export function Navbar() {
                     <span
                       key={`lock-setup-pin-slot-${index}`}
                       className={`h-3 w-3 rounded-full border ${
-                        isFilled ? 'border-avs-yellow bg-avs-yellow' : 'border-slate-600 bg-transparent'
+                        isFilled ? 'border-brand-yellow bg-brand-yellow' : 'border-slate-600 bg-transparent'
                       }`}
                     />
                   );
@@ -1326,7 +1326,7 @@ export function Navbar() {
                 type="button"
                 onClick={() => void handlePinSetupSubmit()}
                 disabled={!canSubmitPinSetup}
-                className="w-full h-12 text-base font-semibold bg-avs-yellow text-slate-900 hover:bg-avs-yellow-hover disabled:opacity-60"
+                className="w-full h-12 text-base font-semibold bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60"
               >
                 {pinSetupSubmitting
                   ? 'Saving...'

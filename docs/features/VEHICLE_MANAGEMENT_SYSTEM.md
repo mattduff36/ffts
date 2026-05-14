@@ -1,7 +1,7 @@
 # Vehicle Management System
 
 ## Overview
-A comprehensive vehicle management system for SquiresApp, allowing admins to manage fleet vehicles and categories, with employees able to add new vehicles during inspection creation.
+A comprehensive vehicle management system for TemplateApp, allowing admins to manage fleet vehicles and categories, with employees able to add new vehicles during inspection creation.
 
 ## Features Implemented
 

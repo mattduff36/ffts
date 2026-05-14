@@ -275,7 +275,7 @@ export default function QuoteWorkCalendarPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => void createManualEntry()} disabled={saving} className="w-full bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90">
+              <Button onClick={() => void createManualEntry()} disabled={saving} className="w-full bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
                 Add Entry
               </Button>
             </CardContent>

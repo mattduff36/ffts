@@ -3,6 +3,7 @@ import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@reac
 import { TRUCK_CHECKLIST_ITEMS } from '@/lib/checklists/vehicle-checklists';
 import { formatDate } from '@/lib/utils/date';
 import type { EnrichedDefectItem } from '@/lib/utils/hgvDefectWorkshopDetails';
+import { templateConfig } from '@/lib/config/template-config';
 
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 7, fontFamily: 'Helvetica' },
@@ -217,9 +218,9 @@ export function HgvInspectionPDF({ inspection, hgv, operator, items, defectsWith
         </View>
 
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>A. & V. SQUIRES PLANT COMPANY LTD</Text>
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
           <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
+            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
           </Text>
           <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
           <Text style={styles.registeredNo}>Registered in England No. 1000918</Text>

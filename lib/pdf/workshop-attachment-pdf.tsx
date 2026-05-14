@@ -2,8 +2,9 @@ import React from 'react';
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { formatAssetMeterReading, getAssetMeterLabel, type AssetMeterUnit } from '@/lib/workshop-tasks/asset-meter';
+import { templateConfig } from '@/lib/config/template-config';
 
-const BRAND_YELLOW = '#f2cc0c';
+const BRAND_YELLOW = templateConfig.branding.brandColor;
 const BRAND_YELLOW_LIGHT = '#fff6cc';
 const BRAND_TEXT = '#111827';
 
@@ -440,7 +441,7 @@ export function WorkshopAttachmentPDF({
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.companyName}>A&V SQUIRES Plant Co. Ltd.</Text>
+              <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
               <Text style={styles.title}>{templateName}</Text>
               {templateDescription && (
                 <Text style={styles.subtitle}>{templateDescription}</Text>

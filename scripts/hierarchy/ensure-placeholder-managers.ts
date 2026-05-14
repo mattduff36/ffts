@@ -6,14 +6,14 @@ config({ path: resolve(process.cwd(), '.env.local') });
 
 const PLACEHOLDER_MANAGERS = [
   {
-    key: 'rob-squires',
-    full_name: 'Rob Squires',
-    email: 'placeholder+rob-squires@avsworklog.local',
+    key: 'example-manager',
+    full_name: 'Example Manager',
+    email: 'placeholder+example-manager@example.local',
   },
   {
     key: 'tim-weaver',
-    full_name: 'Tim Weaver',
-    email: 'placeholder+tim-weaver@avsworklog.local',
+    full_name: 'Example User Five',
+    email: 'placeholder+tim-weaver@fieldops-template.local',
   },
 ] as const;
 

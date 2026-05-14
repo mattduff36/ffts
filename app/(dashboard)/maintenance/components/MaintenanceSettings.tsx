@@ -175,7 +175,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                           <Badge 
                             variant="outline" 
                             className={category.responsibility === 'office' 
-                              ? 'text-avs-yellow border-avs-yellow/50' 
+                              ? 'text-brand-yellow border-brand-yellow/50' 
                               : 'text-orange-400 border-orange-400/50'
                             }
                           >

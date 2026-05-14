@@ -378,7 +378,7 @@ describe('GET /api/dashboard/summary', () => {
     });
   });
 
-  it('returns error log badge counts for Charlotte debug access', async () => {
+  it('returns error log badge counts for additional debug access', async () => {
     const { createClient } = await import('@/lib/supabase/server');
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
@@ -388,7 +388,7 @@ describe('GET /api/dashboard/summary', () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       profile: {
         id: 'charlotte-id',
-        email: 'charlotte@avsquires.co.uk',
+        email: 'debug.user@example.com',
       },
       validation: {
         cookieValue: null,

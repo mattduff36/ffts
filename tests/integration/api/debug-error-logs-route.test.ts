@@ -99,7 +99,7 @@ describe('debug error logs route', () => {
     ]);
   });
 
-  it('returns enriched error logs for Charlotte debug access', async () => {
+  it('returns enriched error logs for additional debug access', async () => {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
 
@@ -131,7 +131,7 @@ describe('debug error logs route', () => {
     const selectProfiles = vi.fn(() => ({ in: inProfiles }));
 
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@avsquires.co.uk' },
+      profile: { id: 'charlotte-id', email: 'debug.user@example.com' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue({
       role_id: 'role-admin',

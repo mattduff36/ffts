@@ -8,7 +8,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const canAuth =
   Boolean(SUPABASE_URL) &&
   Boolean(SUPABASE_ANON_KEY) &&
-  Boolean(process.env.TEST_USER_EMAIL || process.env.TESTSUITE_EMPLOYEE_EMAIL || 'testsuite-employee@squiresapp.test');
+  Boolean(process.env.TEST_USER_EMAIL || process.env.TESTSUITE_EMPLOYEE_EMAIL || 'testsuite-employee@example.test');
 
 // SAFETY CHECK: Skip all tests when SUPABASE_URL is not localhost/staging
 const isLocalOrStaging = SUPABASE_URL && (SUPABASE_URL.includes('localhost') || SUPABASE_URL.includes('127.0.0.1') || SUPABASE_URL.includes('staging'));
@@ -65,7 +65,7 @@ describeWithAuth('Inspections API payload validation (authenticated)', () => {
 
   beforeAll(async () => {
     supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
-    const email = process.env.TESTSUITE_EMPLOYEE_EMAIL || process.env.TEST_USER_EMAIL || 'testsuite-employee@squiresapp.test';
+    const email = process.env.TESTSUITE_EMPLOYEE_EMAIL || process.env.TEST_USER_EMAIL || 'testsuite-employee@example.test';
     const password = process.env.TESTSUITE_PASSWORD || process.env.TEST_USER_PASSWORD || 'TestSuite2026!Secure';
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });

@@ -23,7 +23,7 @@ npm run test:reports
 Expected output:
 ```
 ╔════════════════════════════════════════════════╗
-║    Squires Reports System - Test Suite        ║
+║    Template Reports System - Test Suite        ║
 ╚════════════════════════════════════════════════╝
 
 ✓ PASS Excel Utilities
@@ -217,7 +217,7 @@ package.json                                          ← Added test script
 
 **Test failures:**
 - Ensure dev server is running (`npm run dev`)
-- Verify test user exists (`admin@avsworklog.test`)
+- Verify test user exists (`admin@example.test`)
 - Check BASE_URL in test script
 
 ---

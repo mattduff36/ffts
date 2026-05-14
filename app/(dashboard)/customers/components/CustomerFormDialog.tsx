@@ -267,7 +267,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
             <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="border-slate-600 text-muted-foreground">
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !form.company_name.trim()} className="bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold">
+            <Button type="submit" disabled={saving || !form.company_name.trim()} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold">
               {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : isEditing ? 'Update Customer' : 'Add Customer'}
             </Button>
           </DialogFooter>

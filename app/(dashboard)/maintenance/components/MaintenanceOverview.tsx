@@ -1306,7 +1306,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
                         <Button
                           size="sm"
                           variant="default"
-                          className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOfficeAction(vehicleId, vehicle, cardAlert);
@@ -1610,7 +1610,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
                 </div>
                 
                 <div className="flex items-start gap-2">
-                  <div className="w-6 h-6 rounded bg-avs-yellow flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-6 h-6 rounded bg-brand-yellow flex items-center justify-center flex-shrink-0 mt-0.5">
                     <Briefcase className="h-3.5 w-3.5 text-slate-900" />
                   </div>
                   <div>

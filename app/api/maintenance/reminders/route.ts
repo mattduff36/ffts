@@ -227,7 +227,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SendRemin
       if (recipientEmails.length > 0) {
         const emailResult = await sendMaintenanceReminderEmail({
           to: recipientEmails,
-          senderName: senderProfile.full_name || 'SquiresApp',
+          senderName: senderProfile.full_name || 'TemplateApp',
           subject,
           vehicleReg: vehicle.reg_number,
           categoryName: category.name,

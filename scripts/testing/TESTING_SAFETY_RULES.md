@@ -8,7 +8,7 @@ Test scripts in `scripts/testing/` use **hardcoded test values** that can corrup
 
 **Example:** `test-inspection-draft.ts` uses `current_mileage: 50000` which triggers database triggers that automatically update vehicle maintenance records.
 
-### Incident Report: Frank Barlow Vehicle (FE24 TYV)
+### Incident Report: Example Vehicle Vehicle (AB12 CDE)
 
 **Date:** January 16, 2026  
 **Issue:** Vehicle mileage incorrectly set to 50,000 miles  
@@ -124,5 +124,5 @@ if (supabaseUrl?.includes('your-production-domain')) {
 ---
 
 **Last Updated:** January 16, 2026  
-**Incident:** Frank Barlow mileage corruption  
+**Incident:** Example Vehicle mileage corruption  
 **Status:** Rules documented, scripts need updates

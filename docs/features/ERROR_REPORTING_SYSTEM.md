@@ -262,18 +262,18 @@ npx tsx scripts/run-error-reports-migration.ts
 
 ```bash
 # Test user error report submission
-curl -X POST https://squiresapp.com/api/errors/report \
+curl -X POST https://your-app.example.com/api/errors/report \
   -H "Content-Type: application/json" \
   -d '{"title":"Test Error","description":"Test description"}'
 
 # Test user reports list
-curl https://squiresapp.com/api/error-reports
+curl https://your-app.example.com/api/error-reports
 
 # Test admin reports list (requires admin auth)
-curl https://squiresapp.com/api/management/error-reports
+curl https://your-app.example.com/api/management/error-reports
 
 # Test admin update (requires admin auth)
-curl -X PATCH https://squiresapp.com/api/management/error-reports/[id] \
+curl -X PATCH https://your-app.example.com/api/management/error-reports/[id] \
   -H "Content-Type: application/json" \
   -d '{"status":"investigating","note":"Looking into this"}'
 ```
@@ -326,7 +326,7 @@ Potential improvements:
 
 ```bash
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL="AVS Worklog <noreply@squiresapp.com>"
+RESEND_FROM_EMAIL="FieldOps Template <noreply@your-app.example.com>"
 ```
 
 ### Admin Account Setup

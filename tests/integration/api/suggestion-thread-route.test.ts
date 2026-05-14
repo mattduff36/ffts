@@ -63,7 +63,7 @@ describe('GET /api/suggestions/[id]', () => {
     ];
     const profileRows = [
       { id: 'user-1', full_name: 'Richard User' },
-      { id: 'manager-1', full_name: 'Matt Duffill' },
+      { id: 'manager-1', full_name: 'Example Admin' },
     ];
 
     const suggestionsSingle = vi.fn().mockResolvedValue({ data: suggestionRow, error: null });
@@ -102,7 +102,7 @@ describe('GET /api/suggestions/[id]', () => {
     expect(payload.suggestion.title).toBe('Too small writing');
     expect(payload.suggestion.user).toEqual({ full_name: 'Richard User' });
     expect(payload.updates).toHaveLength(2);
-    expect(payload.updates[0].user).toEqual({ full_name: 'Matt Duffill' });
+    expect(payload.updates[0].user).toEqual({ full_name: 'Example Admin' });
     expect(payload.updates[1].user).toEqual({ full_name: 'Richard User' });
   });
 

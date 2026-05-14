@@ -11,7 +11,7 @@ CREATE POLICY "SuperAdmin can view all error logs" ON error_logs
   FOR SELECT
   TO authenticated
   USING (
-    (auth.jwt() ->> 'email') = 'admin@mpdee.co.uk'
+    (auth.jwt() ->> 'email') = 'template-admin@example.com'
   );
 
 -- Policy: All authenticated users can insert error logs
@@ -25,6 +25,6 @@ CREATE POLICY "SuperAdmin can delete error logs" ON error_logs
   FOR DELETE
   TO authenticated
   USING (
-    (auth.jwt() ->> 'email') = 'admin@mpdee.co.uk'
+    (auth.jwt() ->> 'email') = 'template-admin@example.com'
   );
 

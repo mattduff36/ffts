@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { templateConfig } from '@/lib/config/template-config';
+import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
+import { sendResendEmail } from '@/lib/server/resend';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 
 /**
@@ -24,7 +27,8 @@ export async function POST(
     }
 
     // Check if Resend is configured
-    const apiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getTemplateEmailConfig();
+    const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       return NextResponse.json(
         { error: 'Email service not configured' },
@@ -112,14 +116,10 @@ export async function POST(
     const fileBase64 = btoa(binary);
 
     // Send email via Resend
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'AVS Worklog <onboarding@resend.dev>',
+    const emailResponse = await sendResendEmail({
+      apiKey,
+      payload: {
+        from: emailConfig.primaryFromEmail,
         to: [userEmail],
         subject: `RAMS Document: ${doc.title}`,
         html: `
@@ -130,8 +130,8 @@ export async function POST(
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
             </head>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-                <h1 style="margin: 0; color: #252525;">SquiresApp</h1>
+              <div style="background-color: ${templateConfig.branding.brandColor}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
               </div>
               
               <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -141,7 +141,7 @@ export async function POST(
                 
                 <p>You have requested to receive the following RAMS document via email:</p>
                 
-                <div style="background-color: #fff; border: 2px solid #F1D64A; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <div style="background-color: #fff; border: 2px solid ${templateConfig.branding.brandColor}; border-radius: 8px; padding: 20px; margin: 20px 0;">
                   <h3 style="margin: 0 0 10px 0; color: #252525;">${doc.title}</h3>
                   ${doc.description ? `<p style="margin: 0; color: #666; font-size: 14px;">${doc.description}</p>` : ''}
                 </div>
@@ -150,7 +150,7 @@ export async function POST(
                 
                 <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
                   <p style="margin: 0; font-weight: bold; color: #1e40af;">📋 Next Steps</p>
-                  <p style="margin: 5px 0 0 0; color: #1e40af;">After reviewing the document, return to SquiresApp to sign and acknowledge that you have read and understood the safety requirements.</p>
+                  <p style="margin: 5px 0 0 0; color: #1e40af;">After reviewing the document, return to ${templateConfig.branding.appName} to sign and acknowledge that you have read and understood the safety requirements.</p>
                 </div>
                 
                 <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
@@ -159,7 +159,7 @@ export async function POST(
               </div>
               
               <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-                <p>© ${new Date().getFullYear()} A&V Squires Plant Co. Ltd. All rights reserved.</p>
+                <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
               </div>
             </body>
           </html>
@@ -169,8 +169,8 @@ export async function POST(
             filename: doc.file_name,
             content: fileBase64
           }
-        ]
-      })
+        ],
+      },
     });
 
     if (!emailResponse.ok) {

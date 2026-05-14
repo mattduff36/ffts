@@ -181,7 +181,7 @@ export function TimesheetTypeExceptionsCard() {
               type="button"
               onClick={handleAddUser}
               disabled={!selectedUserId || addingUser}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {addingUser ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
               Add User

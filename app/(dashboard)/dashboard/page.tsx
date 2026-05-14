@@ -26,6 +26,7 @@ import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { useRamsAssignmentSummary } from '@/lib/hooks/useNavMetrics';
 import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError, createStatusError } from '@/lib/utils/http-error';
 import { canAccessDebugConsole } from '@/lib/utils/debug-access';
+import { templateConfig } from '@/lib/config/template-config';
 
 type PendingApprovalCount = {
   type: 'timesheets' | 'absences';
@@ -374,8 +375,8 @@ export default function DashboardPage() {
                 height={36}
                 className="h-8 w-8 md:h-9 md:w-9"
               />
-              <span className="text-2xl md:text-3xl font-bold text-avs-yellow tracking-wide">
-                SquiresApp
+              <span className="text-2xl md:text-3xl font-bold text-brand-yellow tracking-wide">
+                {templateConfig.branding.appName}
               </span>
             </div>
           </div>
@@ -386,7 +387,7 @@ export default function DashboardPage() {
               <Link
                 href="/profile"
                 aria-label="Open profile page"
-                className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-full border border-slate-600 bg-slate-900/30 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-avs-yellow md:h-14 md:w-14"
+                className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-full border border-slate-600 bg-slate-900/30 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow md:h-14 md:w-14"
               >
                 {profile?.avatar_url ? (
                   <Image
@@ -398,7 +399,7 @@ export default function DashboardPage() {
                     className="object-cover"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-slate-800 text-sm font-semibold text-avs-yellow">
+                  <div className="flex h-full w-full items-center justify-center bg-slate-800 text-sm font-semibold text-brand-yellow">
                     {getInitials(profile?.full_name)}
                   </div>
                 )}
@@ -423,7 +424,7 @@ export default function DashboardPage() {
       <div>
         {(permissionsLoading || ramsLoading || !profile?.id) ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-avs-yellow" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
           </div>
         ) : (
           <TooltipProvider>
@@ -473,7 +474,7 @@ export default function DashboardPage() {
                 !badgesLoading &&
                 (maintenanceDueSoonCount > 0 || maintenanceOverdueCount > 0);
               // Yellow backgrounds need dark text for contrast
-              const needsDarkText = formType.color === 'avs-yellow';
+              const needsDarkText = formType.color === 'brand-yellow';
               const textColorClass = needsDarkText ? 'text-slate-900' : 'text-white';
               
               return (

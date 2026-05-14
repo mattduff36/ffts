@@ -9,6 +9,7 @@ import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/ut
 import { BlockingMessageModal } from './BlockingMessageModal';
 import { ReminderModal } from './ReminderModal';
 import { Loader2 } from 'lucide-react';
+import { templateConfig } from '@/lib/config/template-config';
 
 interface PendingToolboxTalk {
   id: string;
@@ -170,7 +171,7 @@ export function MessageBlockingCheck() {
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
         <div className="bg-white dark:bg-slate-900 rounded-lg p-6 flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading SquiresApp...</p>
+          <p className="text-sm text-muted-foreground">Loading {templateConfig.branding.appName}...</p>
         </div>
       </div>
     );

@@ -97,7 +97,7 @@ export function ProfileSettingsCard({
               type="button"
               onClick={onSaveBasicProfile}
               disabled={!canEditBasicFields || !hasBasicProfileChanges || isSavingBasicProfile}
-              className="bg-avs-yellow text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60"
+              className="bg-brand-yellow text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60"
             >
               {isSavingBasicProfile ? 'Saving...' : 'Save profile changes'}
             </Button>
@@ -112,7 +112,7 @@ export function ProfileSettingsCard({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-lg border border-[hsl(var(--avs-yellow)/0.3)] bg-[hsl(var(--avs-yellow)/0.08)] p-4">
+        <div className="space-y-4 rounded-lg border border-[hsl(var(--brand-yellow)/0.3)] bg-[hsl(var(--brand-yellow)/0.08)] p-4">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-foreground">Notification preferences</h3>
             <p className="text-xs text-muted-foreground">

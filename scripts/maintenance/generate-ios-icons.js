@@ -32,7 +32,7 @@ async function generateIcons() {
       await sharp(sourceIcon)
         .resize(icon.size, icon.size, {
           fit: 'contain',
-          background: { r: 241, g: 214, b: 74, alpha: 1 } // #F1D64A (AVS yellow)
+          background: { r: 241, g: 214, b: 74, alpha: 1 } // #F1D64A (brand yellow)
         })
         .png()
         .toFile(outputPath);

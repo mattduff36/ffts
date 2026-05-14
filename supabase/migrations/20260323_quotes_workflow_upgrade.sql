@@ -277,10 +277,10 @@ SELECT
   TRUE
 FROM (
   VALUES
-    ('GH', 40000, 'George', 'george@avsquires.co.uk'),
-    ('LC', 50000, 'Louis', 'louis@avsquires.co.uk'),
-    ('NF', 60000, 'Neil', 'neil@avsquires.co.uk'),
-    ('AH', 70000, 'Andy', 'andy@avsquires.co.uk')
+    ('GH', 40000, 'George', 'george@example.com'),
+    ('LC', 50000, 'Louis', 'louis@example.com'),
+    ('NF', 60000, 'Neil', 'neil@example.com'),
+    ('AH', 70000, 'Andy', 'andy@example.com')
 ) AS seed(initials, number_start, first_name, email)
 JOIN profiles p ON LOWER(COALESCE(p.full_name, '')) LIKE LOWER(seed.first_name || '%')
 ON CONFLICT (profile_id) DO UPDATE

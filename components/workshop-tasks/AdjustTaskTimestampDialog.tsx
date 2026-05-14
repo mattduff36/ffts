@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { formatDateTime } from '@/lib/utils/date';
 
-const PRIMARY_CTA_BUTTON_CLASS = 'bg-avs-yellow text-slate-900 hover:bg-avs-yellow-hover font-semibold disabled:opacity-60';
+const PRIMARY_CTA_BUTTON_CLASS = 'bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover font-semibold disabled:opacity-60';
 
 export interface AdjustTimestampTarget {
   itemType: 'created' | 'status_event' | 'comment';

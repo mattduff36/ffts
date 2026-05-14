@@ -62,11 +62,11 @@ export default function ToolboxTalksPage() {
             <MessageSquare className="h-4 w-4" />
             Create Toolbox Talk
           </TabsTrigger>
-          <TabsTrigger value="create-reminder" data-tab="reminder" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="create-reminder" data-tab="reminder" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <Bell className="h-4 w-4" />
             Create Reminder
           </TabsTrigger>
-          <TabsTrigger value="reports" data-tab="reports" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="reports" data-tab="reports" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <BarChart3 className="h-4 w-4" />
             Reports
           </TabsTrigger>

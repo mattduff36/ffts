@@ -65,8 +65,8 @@ export default function AdminSettingsPage() {
     <AppPageShell>
       <div className="bg-slate-900 rounded-lg p-6 border border-border">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-avs-yellow/20 rounded-lg">
-            <SlidersHorizontal className="h-6 w-6 text-avs-yellow" />
+          <div className="p-3 bg-brand-yellow/20 rounded-lg">
+            <SlidersHorizontal className="h-6 w-6 text-brand-yellow" />
           </div>
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Admin Settings</h1>

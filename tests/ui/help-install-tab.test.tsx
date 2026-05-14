@@ -66,7 +66,7 @@ describe('Help page install tab', () => {
     render(<HelpPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Install SQUIRES App')).toBeInTheDocument();
+      expect(screen.getByText('Install TEMPLATE App')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Quick Support Actions')).toBeInTheDocument();

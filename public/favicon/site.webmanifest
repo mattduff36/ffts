@@ -1,6 +1,6 @@
 {
-  "name": "A&V Squires Plant Company LTD",
-  "short_name": "A&V Squires",
+  "name": "FieldOps Template",
+  "short_name": "FieldOps",
   "icons": [
     {
       "src": "/images/favicon/android-chrome-192x192.png",
@@ -13,7 +13,7 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#fbbf24",
-  "background_color": "#ffffff",
+  "theme_color": "#F1D64A",
+  "background_color": "#0f172a",
   "display": "standalone"
 }

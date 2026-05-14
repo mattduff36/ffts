@@ -16,34 +16,34 @@ export const TEAM_LINE_MANAGERS: TeamLineManagerDefinition[] = [
   {
     teamId: 'accounts',
     teamName: 'Accounts',
-    primaryManagerName: 'Peter Woodward',
+    primaryManagerName: 'Example User Four',
   },
   {
     teamId: 'plant',
     teamName: 'Plant',
-    primaryManagerName: 'Tim Weaver',
+    primaryManagerName: 'Example User Five',
   },
   {
     teamId: 'transport',
     teamName: 'Transport',
-    primaryManagerName: 'Neil Frost',
+    primaryManagerName: 'Example User Six',
   },
   {
     teamId: 'workshop',
     teamName: 'Workshop',
-    // Andrew Hill in the organogram is the same user as Andy Hill in the system.
-    primaryManagerName: 'Andy Hill',
+    // Andrew Hill in the organogram is the same user as Example User Seven in the system.
+    primaryManagerName: 'Example User Seven',
   },
   {
     teamId: 'sheq',
     teamName: 'SHEQ',
-    primaryManagerName: 'Conway Evans',
+    primaryManagerName: 'Example User Three',
   },
   {
     teamId: 'civils',
     teamName: 'Civils',
-    primaryManagerName: 'George Healey',
-    secondaryManagerName: 'Louis Cree',
+    primaryManagerName: 'Example User One',
+    secondaryManagerName: 'Example User Two',
   },
   {
     teamId: 'test',

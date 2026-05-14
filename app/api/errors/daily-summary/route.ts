@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { templateConfig } from '@/lib/config/template-config';
+import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
+import { sendResendEmail } from '@/lib/server/resend';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 export const dynamic = 'force-dynamic';
@@ -207,7 +210,7 @@ export async function POST(request: NextRequest) {
 
     <!-- Action Button -->
     <div style="text-align: center; margin-top: 30px; padding-top: 30px; border-top: 2px solid #eee;">
-      <a href="https://www.squiresapp.com/debug" 
+      <a href="https://your-app.example.com/debug" 
          style="background: linear-gradient(135deg, #dc2626 0%, #ea580c 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);">
         🔍 View Full Error Log
       </a>
@@ -217,7 +220,7 @@ export async function POST(request: NextRequest) {
 
   <!-- Footer -->
   <div style="text-align: center; margin-top: 20px; padding: 20px; color: #666; font-size: 13px;">
-    <p style="margin: 0;">This is an automated daily error summary for SQUIRES WorkLog</p>
+    <p style="margin: 0;">This is an automated daily error summary for ${templateConfig.branding.appName}</p>
     <p style="margin: 5px 0 0 0;">Generated on ${new Date().toLocaleString('en-GB')}</p>
   </div>
 
@@ -226,25 +229,25 @@ export async function POST(request: NextRequest) {
     `.trim();
 
     // Send email using Resend API
-    const resendApiKey = process.env.RESEND_API_KEY;
+    const emailConfig = getTemplateEmailConfig();
+    const resendApiKey = emailConfig.primaryApiKey;
     
     if (!resendApiKey) {
       console.error('RESEND_API_KEY not configured');
       return NextResponse.json({ error: 'Email service not configured' }, { status: 500 });
     }
 
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'SQUIRES WorkLog <notifications@squiresapp.com>',
-        to: ['admin@mpdee.co.uk'],
+    const fromEmail = emailConfig.primaryFromEmail;
+    const adminEmail = emailConfig.adminEmail;
+
+    const emailResponse = await sendResendEmail({
+      apiKey: resendApiKey,
+      payload: {
+        from: fromEmail,
+        to: [adminEmail],
         subject: `🚨 Daily Error Summary - ${errors.length} errors on ${dateStr}`,
         html: emailHtml,
-      }),
+      },
     });
 
     if (!emailResponse.ok) {

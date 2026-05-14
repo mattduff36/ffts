@@ -200,7 +200,7 @@ function ReportActionCard({ report, dateFrom, dateTo, downloadingEndpoint, onDow
   const isDownloading = downloadingEndpoint === report.endpoint;
 
   return (
-    <Card className="border-border transition-colors hover:border-avs-yellow/40">
+    <Card className="border-border transition-colors hover:border-brand-yellow/40">
       <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
         <div className="space-y-2">
           <h3 className="text-lg font-semibold text-foreground">{report.title}</h3>
@@ -235,7 +235,7 @@ function ReportDateRangeCard({
     <Card className="border-border">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-foreground">
-          <Calendar className="h-5 w-5 text-avs-yellow" />
+          <Calendar className="h-5 w-5 text-brand-yellow" />
           Report Date Range
         </CardTitle>
         <CardDescription>
@@ -619,7 +619,7 @@ function ReportsContent() {
     <AppPageShell>
       <div className="rounded-lg border border-border bg-white p-6 dark:bg-slate-900">
         <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-avs-yellow/15 p-2 text-avs-yellow">
+          <div className="rounded-lg bg-brand-yellow/15 p-2 text-brand-yellow">
             <FileText className="h-5 w-5" />
           </div>
           <div className="space-y-1">
@@ -732,7 +732,7 @@ function ReportsContent() {
                 />
               ))}
 
-              <Card className="border-border transition-colors hover:border-avs-yellow/40">
+              <Card className="border-border transition-colors hover:border-brand-yellow/40">
                 <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
                   <div className="space-y-2">
                     <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -798,7 +798,7 @@ function ReportsContent() {
                   />
                 ))}
 
-                <Card className="border-border transition-colors hover:border-avs-yellow/40">
+                <Card className="border-border transition-colors hover:border-brand-yellow/40">
                   <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-2">
                       <h3 className="text-lg font-semibold text-foreground">Absence Weekly Print Sheet</h3>

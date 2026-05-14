@@ -272,7 +272,7 @@ describeOrSkip('Workshop Tasks RLS Policies', () => {
 
     it('should create inspection_defect actions with correct type', async () => {
       // Create a test inspection
-      // SAFETY: Using 27000 miles instead of 50000 to avoid Frank Barlow incident pattern
+      // SAFETY: Using 27000 miles instead of 50000 to avoid Example Vehicle incident pattern
       const { data: inspection } = await supabase
         .from('van_inspections')
         .insert({

@@ -52,7 +52,7 @@ const PIN_LENGTH = 4;
 const PIN_KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
 const PIN_KEY_INTERACTION_CLASS =
   'transition-colors duration-200 ease-out';
-const PIN_KEY_FLASH_CLASS = 'bg-avs-yellow text-slate-950';
+const PIN_KEY_FLASH_CLASS = 'bg-brand-yellow text-slate-950';
 const PIN_KEY_BUTTON_CLASS =
   `h-auto w-full aspect-[2/1] rounded-xl text-lg font-semibold bg-slate-950 text-white hover:bg-slate-900 sm:text-xl ${PIN_KEY_INTERACTION_CLASS}`;
 const PIN_ACTION_BUTTON_CLASS =
@@ -415,12 +415,12 @@ export default function LockPage() {
       <div className="relative flex min-h-screen items-center justify-center px-4 py-10">
         <div className="w-full max-w-5xl space-y-10">
           <div className="text-center space-y-4">
-            <div className="inline-flex items-center justify-center rounded-3xl bg-avs-yellow p-5 shadow-[0_20px_60px_rgba(241,214,74,0.18)]">
+            <div className="inline-flex items-center justify-center rounded-3xl bg-brand-yellow p-5 shadow-[0_20px_60px_rgba(241,214,74,0.18)]">
               <Lock className="h-10 w-10 text-slate-950" strokeWidth={2.5} />
             </div>
             <div className="space-y-2">
               <h1 className="text-5xl font-black tracking-tight text-white sm:text-6xl">
-                SQUIRESAPP
+                TEMPLATEAPP
               </h1>
               <p className="text-base text-slate-300 sm:text-xl">
                 Select a profile and enter your PIN to continue.
@@ -513,7 +513,7 @@ export default function LockPage() {
                 <div
                   key={index}
                   className={`h-3 w-3 rounded-full ${
-                    index < pinEntry.length ? 'bg-avs-yellow' : 'bg-slate-600'
+                    index < pinEntry.length ? 'bg-brand-yellow' : 'bg-slate-600'
                   }`}
                 />
               ))}

@@ -48,7 +48,7 @@ export function ProfileHelpShortcuts() {
               className="rounded-md border border-border p-3 transition-colors hover:bg-slate-800/30"
             >
               <div className="mb-2 flex items-center gap-2">
-                <Icon className="h-4 w-4 text-avs-yellow" />
+                <Icon className="h-4 w-4 text-brand-yellow" />
                 <p className="text-sm font-semibold text-foreground">{shortcut.title}</p>
               </div>
               <p className="text-xs text-muted-foreground">{shortcut.description}</p>

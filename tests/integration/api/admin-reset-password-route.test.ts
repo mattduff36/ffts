@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => {
   const sendPasswordEmail = vi.fn();
   const canEffectiveRoleAccessModule = vi.fn();
   const canEffectiveRoleAssignRole = vi.fn();
-  const generateSecurePassword = vi.fn(() => 'AVSa1B2');
+  const generateSecurePassword = vi.fn(() => 'TMPa1B2');
   const logServerError = vi.fn().mockResolvedValue(undefined);
 
   return {
@@ -130,11 +130,11 @@ describe('POST /api/admin/users/[id]/reset-password', () => {
 
     expect(response.status).toBe(200);
     expect(payload.success).toBe(true);
-    expect(payload.temporaryPassword).toBe('AVSa1B2');
+    expect(payload.temporaryPassword).toBe('TMPa1B2');
     expect(payload.emailSent).toBe(true);
 
     expect(mocks.updateUserById).toHaveBeenCalledWith('user-1', {
-      password: 'AVSa1B2',
+      password: 'TMPa1B2',
     });
     expect(mocks.profileUpdate).toHaveBeenCalledWith({
       must_change_password: true,
@@ -143,7 +143,7 @@ describe('POST /api/admin/users/[id]/reset-password', () => {
     expect(mocks.sendPasswordEmail).toHaveBeenCalledWith({
       to: 'user@example.com',
       userName: 'Example User',
-      temporaryPassword: 'AVSa1B2',
+      temporaryPassword: 'TMPa1B2',
       isReset: true,
     });
   });

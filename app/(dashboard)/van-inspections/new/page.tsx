@@ -2074,7 +2074,7 @@ function NewInspectionContent() {
                   <SelectValue placeholder="Select a van" />
                 </SelectTrigger>
                 <SelectContent className="border-border max-h-[300px] md:max-h-[400px] dark:text-slate-100 text-slate-900">
-                  <SelectItem value="add-new" className="text-avs-yellow font-semibold border-b border-border">
+                  <SelectItem value="add-new" className="text-brand-yellow font-semibold border-b border-border">
                     <div className="flex items-center gap-2">
                       <Plus className="h-4 w-4" />
                       Add New Van
@@ -2664,7 +2664,7 @@ function NewInspectionContent() {
             <Button
               onClick={handleAddVehicle}
               disabled={addingVehicle || !newVehicleReg.trim() || !newVehicleCategoryId}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900 font-semibold"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900 font-semibold"
             >
               {addingVehicle ? 'Adding...' : 'Add Van'}
             </Button>

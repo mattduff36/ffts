@@ -1,5 +1,5 @@
 /**
- * One-off script to seed 3 test error reports for admin@mpdee.co.uk
+ * One-off script to seed 3 test error reports for template-admin@example.com
  * and transition their statuses so in-app notifications are generated.
  *
  * Usage: npx tsx scripts/seed-test-error-reports.ts
@@ -22,7 +22,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const TARGET_EMAIL = 'admin@mpdee.co.uk';
+const TARGET_EMAIL = 'template-admin@example.com';
 
 const TEST_REPORTS = [
   {
@@ -166,7 +166,7 @@ async function run() {
     console.log(`  Status: ${oldLabel} → ${newLabel} | Notification sent`);
   }
 
-  console.log('\nDone. Check the notification bell for admin@mpdee.co.uk.');
+  console.log('\nDone. Check the notification bell for template-admin@example.com.');
 }
 
 run().catch(err => { console.error(err); process.exit(1); });

@@ -11,7 +11,7 @@
 1. Log into Resend dashboard
 2. Navigate to **API Keys** in the sidebar
 3. Click **"Create API Key"**
-4. Name it: `AVS Worklog Production` (or similar)
+4. Name it: `FieldOps Template Production` (or similar)
 5. Copy the API key (starts with `re_...`)
 6. **Important**: Save it securely - you won't see it again!
 
@@ -27,20 +27,20 @@ For testing/development only:
 For production use:
 1. In Resend dashboard, go to **Domains**
 2. Click **"Add Domain"**
-3. Enter your domain (e.g., `avsquires.com`)
+3. Enter your domain (e.g., `example.com`)
 4. Add the DNS records to your domain provider:
    - **TXT record** for verification
    - **MX records** for deliverability (optional but recommended)
    - **DKIM records** for authentication
 5. Wait for verification (usually 5-15 minutes)
-6. Once verified, you can use any email like: `noreply@avsquires.com`
+6. Once verified, you can use any email like: `noreply@example.com`
 
 ### Step 4: Update Environment Variables
 Edit your `.env.local` file:
 
 ```env
 # Add these lines (replace with your actual values)
-RESEND_API_KEY=re_your_actual_api_key_here
+RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL=noreply@yourdomain.com
 
 # Or use test domain:
@@ -126,7 +126,7 @@ npm run dev
 
 When adding your domain to Resend, you'll need to add these DNS records:
 
-### For Domain: `avsquires.com`
+### For Domain: `example.com`
 
 | Type | Name | Value | TTL |
 |------|------|-------|-----|
@@ -141,7 +141,7 @@ When adding your domain to Resend, you'll need to add these DNS records:
 ### Improve Inbox Placement
 1. **Use authenticated domain** - Don't use resend.dev in production
 2. **Set up SPF, DKIM, DMARC** - Resend handles this automatically
-3. **Use professional "from" address** - Like `noreply@avsquires.com`
+3. **Use professional "from" address** - Like `noreply@example.com`
 4. **Professional email content** - Already handled in templates
 5. **Avoid spam triggers** - Templates already optimized
 

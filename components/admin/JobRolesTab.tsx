@@ -285,7 +285,7 @@ export function JobRolesTab() {
             </div>
             <Button
               onClick={() => { resetForm(); setAddDialogOpen(true); }}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Role
@@ -498,7 +498,7 @@ export function JobRolesTab() {
             <Button variant="outline" onClick={() => { setAddDialogOpen(false); resetForm(); }} className="border-slate-600 text-white hover:bg-slate-800">
               Cancel
             </Button>
-            <Button onClick={handleAddRole} disabled={formLoading} className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900">
+            <Button onClick={handleAddRole} disabled={formLoading} className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900">
               {formLoading ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</>
               ) : (
@@ -595,7 +595,7 @@ export function JobRolesTab() {
             <Button variant="outline" onClick={() => { setEditDialogOpen(false); setSelectedRole(null); resetForm(); }} className="border-slate-600 text-white hover:bg-slate-800">
               Cancel
             </Button>
-            <Button onClick={handleEditRole} disabled={formLoading} className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900">
+            <Button onClick={handleEditRole} disabled={formLoading} className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900">
               {formLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : 'Save Changes'}
             </Button>
           </DialogFooter>

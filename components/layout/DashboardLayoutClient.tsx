@@ -258,7 +258,7 @@ function DashboardLayoutShell({
             <Button
               type="button"
               onClick={dismissTabletModeInfo}
-              className="w-full sm:w-auto min-h-12 text-base px-10 font-semibold bg-avs-yellow text-slate-900 hover:bg-avs-yellow-hover"
+              className="w-full sm:w-auto min-h-12 text-base px-10 font-semibold bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover"
             >
               OK
             </Button>

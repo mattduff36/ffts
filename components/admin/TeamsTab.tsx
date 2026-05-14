@@ -274,7 +274,7 @@ export function TeamsTab() {
                 setAddDialogOpen(true);
               }}
               disabled={!canMutateTeams}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Team
@@ -485,7 +485,7 @@ export function TeamsTab() {
             <Button
               onClick={handleCreateTeam}
               disabled={formLoading}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {formLoading ? (
                 <>
@@ -607,7 +607,7 @@ export function TeamsTab() {
             <Button
               onClick={handleEditTeam}
               disabled={formLoading}
-              className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >
               {formLoading ? (
                 <>

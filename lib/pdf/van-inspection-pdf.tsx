@@ -3,6 +3,7 @@ import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@reac
 import { VanInspection, InspectionItem } from '@/types/inspection';
 import { formatDate } from '@/lib/utils/date';
 import { buildInspectionPdfCommentsText } from '@/lib/utils/inspection-pdf-comments';
+import { templateConfig } from '@/lib/config/template-config';
 
 // Create styles for the PDF matching the Van inspection form
 const styles = StyleSheet.create({
@@ -297,9 +298,9 @@ export function VanInspectionPDF({ inspection, items, vehicleReg, employeeName }
 
         {/* Company Header */}
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>A&V SQUIRES Plant Co. Ltd.</Text>
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
           <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
+            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
           </Text>
           <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
           <Text style={styles.registeredNo}>Registered in England No. 1000918</Text>

@@ -19,7 +19,7 @@ const STATUS_CLASS: Record<ModalShowcaseEntry['status'], string> = {
   placeholder: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
   'blocked-by-context': 'bg-red-500/10 text-red-400 border-red-500/30',
 };
-const PRIMARY_CTA_CLASS = 'bg-avs-yellow text-slate-900 hover:bg-avs-yellow/90 font-semibold';
+const PRIMARY_CTA_CLASS = 'bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold';
 
 export function UIModalStylesDebugPanel() {
   const [query, setQuery] = useState('');

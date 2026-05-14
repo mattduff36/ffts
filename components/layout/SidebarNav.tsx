@@ -412,7 +412,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
           setDraftTeamId('');
         }}
         className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors ${
-          draftRoleId === '' && draftTeamId === '' ? 'bg-avs-yellow' : 'hover:bg-slate-800 hover:text-white'
+          draftRoleId === '' && draftTeamId === '' ? 'bg-brand-yellow' : 'hover:bg-slate-800 hover:text-white'
         }`}
         style={draftRoleId === '' && draftTeamId === '' ? { color: '#0f172a' } : { color: '#e2e8f0' }}
       >
@@ -443,7 +443,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                 type="button"
                 onClick={() => setDraftRoleId(role.id)}
                 className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors ${
-                  isActive ? 'bg-avs-yellow' : 'hover:bg-slate-800 hover:text-white'
+                  isActive ? 'bg-brand-yellow' : 'hover:bg-slate-800 hover:text-white'
                 }`}
                 style={isActive ? { color: '#0f172a' } : { color: '#e2e8f0' }}
               >
@@ -470,7 +470,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
             type="button"
             onClick={() => setDraftTeamId('')}
             className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors ${
-              draftTeamId === '' ? 'bg-avs-yellow' : 'hover:bg-slate-800 hover:text-white'
+              draftTeamId === '' ? 'bg-brand-yellow' : 'hover:bg-slate-800 hover:text-white'
             }`}
             style={draftTeamId === '' ? { color: '#0f172a' } : { color: '#e2e8f0' }}
           >
@@ -489,7 +489,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                 type="button"
                 onClick={() => setDraftTeamId(team.id)}
                 className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors ${
-                  isActive ? 'bg-avs-yellow' : 'hover:bg-slate-800 hover:text-white'
+                  isActive ? 'bg-brand-yellow' : 'hover:bg-slate-800 hover:text-white'
                 }`}
                 style={isActive ? { color: '#0f172a' } : { color: '#e2e8f0' }}
               >
@@ -643,7 +643,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                     onClick={handleNavLinkClick}
                     className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-avs-yellow text-slate-900'
+                        ? 'bg-brand-yellow text-slate-900'
                         : 'text-muted-foreground hover:bg-slate-800 hover:text-white'
                     }`}
                   >
@@ -692,7 +692,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                       onClick={handleNavLinkClick}
                       className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-avs-yellow text-slate-900 [&>svg]:text-slate-900'
+                          ? 'bg-brand-yellow text-slate-900 [&>svg]:text-slate-900'
                           : 'text-muted-foreground hover:bg-slate-800 hover:text-white'
                       }`}
                     >

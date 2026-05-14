@@ -3,7 +3,7 @@
 
 BASHRC="$HOME/.bashrc"
 BASH_PROFILE="$HOME/.bash_profile"
-PROJECT_BIN="/d/Websites/avsworklog/bin"
+PROJECT_BIN="<repo-path>/bin"
 
 echo "🔧 Setting up 'fixerrors' command..."
 
@@ -23,7 +23,7 @@ if grep -q "alias fixerrors=" "$CONFIG_FILE"; then
   echo "✅ Alias already exists in $CONFIG_FILE"
 else
   echo "" >> "$CONFIG_FILE"
-  echo "# AVS Worklog Project Commands" >> "$CONFIG_FILE"
+  echo "# FieldOps Template Project Commands" >> "$CONFIG_FILE"
   echo "alias fixerrors='$PROJECT_BIN/fixerrors'" >> "$CONFIG_FILE"
   echo "✅ Added alias to $CONFIG_FILE"
 fi

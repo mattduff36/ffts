@@ -20,10 +20,10 @@ describe('team line manager config', () => {
   it('prefers a real manager profile over a placeholder with the same name', () => {
     const resolved = resolveTeamLineManagerCandidate(
       [
-        { id: 'placeholder-tim', full_name: 'Tim Weaver', is_placeholder: true },
-        { id: 'real-tim', full_name: 'Tim Weaver', is_placeholder: false },
+        { id: 'placeholder-tim', full_name: 'Example User Five', is_placeholder: true },
+        { id: 'real-tim', full_name: 'Example User Five', is_placeholder: false },
       ],
-      'Tim Weaver'
+      'Example User Five'
     );
 
     expect(resolved?.id).toBe('real-tim');
@@ -33,11 +33,11 @@ describe('team line manager config', () => {
     expect(() =>
       resolveTeamLineManagerCandidate(
         [
-          { id: 'tim-1', full_name: 'Tim Weaver', is_placeholder: false },
-          { id: 'tim-2', full_name: 'Tim Weaver', is_placeholder: false },
+          { id: 'tim-1', full_name: 'Example User Five', is_placeholder: false },
+          { id: 'tim-2', full_name: 'Example User Five', is_placeholder: false },
         ],
-        'Tim Weaver'
+        'Example User Five'
       )
-    ).toThrow('Multiple non-placeholder profiles found for manager: Tim Weaver');
+    ).toThrow('Multiple non-placeholder profiles found for manager: Example User Five');
   });
 });

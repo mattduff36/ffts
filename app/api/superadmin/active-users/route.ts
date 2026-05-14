@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getTemplateSuperAdminEmail } from '@/lib/config/template-server-config';
 
 const ACTIVE_WINDOW_MINUTES = 5;
 const MAX_VISITS_TO_SCAN = 5000;
 const RECENT_USERS_LIMIT = 5;
-const EXCLUDED_ACTIVE_NOW_EMAIL = 'admin@mpdee.co.uk';
 
 interface ActiveUserSummary {
   userId: string;
@@ -91,6 +91,7 @@ function isSuperAdminProfile(profile: {
 }
 
 async function resolveExcludedUserId(admin: ReturnType<typeof createAdminClient>): Promise<string | null> {
+  const excludedEmail = getTemplateSuperAdminEmail();
   const perPage = 1000;
   let page = 1;
 
@@ -101,7 +102,7 @@ async function resolveExcludedUserId(admin: ReturnType<typeof createAdminClient>
       return null;
     }
 
-    const matchedUser = data.users.find((candidate) => candidate.email === EXCLUDED_ACTIVE_NOW_EMAIL);
+    const matchedUser = data.users.find((candidate) => candidate.email === excludedEmail);
     if (matchedUser?.id) {
       return matchedUser.id;
     }
@@ -148,7 +149,8 @@ export async function GET() {
     role?: { is_super_admin?: boolean | null } | null;
   };
 
-  const isActualSuperAdmin = isSuperAdminProfile(typedProfile) || user.email === EXCLUDED_ACTIVE_NOW_EMAIL;
+  const excludedEmail = getTemplateSuperAdminEmail();
+  const isActualSuperAdmin = isSuperAdminProfile(typedProfile) || user.email === excludedEmail;
   if (!isActualSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -176,7 +178,7 @@ export async function GET() {
   }
 
   const excludedUserIds = new Set<string>();
-  if (user.email === EXCLUDED_ACTIVE_NOW_EMAIL) {
+  if (user.email === excludedEmail) {
     excludedUserIds.add(user.id);
   }
 

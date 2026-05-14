@@ -22,21 +22,21 @@ const supabase = createClient(supabaseUrl!, supabaseServiceKey!, {
 
 const TEST_USERS = [
   {
-    email: 'admin@avsworklog.test',
+    email: 'admin@example.test',
     password: 'TestPass123!',
     full_name: 'Admin User',
     employee_id: 'ADM001',
     role: 'admin'
   },
   {
-    email: 'manager@avsworklog.test',
+    email: 'manager@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'Manager User',
     employee_id: 'MGR001',
     role: 'manager'
   },
   {
-    email: 'employee@avsworklog.test',
+    email: 'employee@fieldops-template.test',
     password: 'TestPass123!',
     full_name: 'Employee User',
     employee_id: 'EMP001',
@@ -136,17 +136,17 @@ async function createTestUsers() {
   console.log('├─────────────────────────────────────────────────┤');
   console.log('│                                                 │');
   console.log('│ 👨‍💼 ADMIN USER                                   │');
-  console.log('│   Email:    admin@avsworklog.test               │');
+  console.log('│   Email:    admin@example.test               │');
   console.log('│   Password: TestPass123!                        │');
   console.log('│   Access:   Full system access                  │');
   console.log('│                                                 │');
   console.log('│ 👔 MANAGER USER                                 │');
-  console.log('│   Email:    manager@avsworklog.test             │');
+  console.log('│   Email:    manager@fieldops-template.test             │');
   console.log('│   Password: TestPass123!                        │');
   console.log('│   Access:   View all, approve forms             │');
   console.log('│                                                 │');
   console.log('│ 👷 EMPLOYEE USER                                │');
-  console.log('│   Email:    employee@avsworklog.test            │');
+  console.log('│   Email:    employee@fieldops-template.test            │');
   console.log('│   Password: TestPass123!                        │');
   console.log('│   Access:   Own forms only                      │');
   console.log('│                                                 │');

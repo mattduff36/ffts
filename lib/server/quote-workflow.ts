@@ -1,8 +1,9 @@
 import pg from 'pg';
 import { renderToStream } from '@react-pdf/renderer';
 import { QuotePDF } from '@/lib/pdf/quote-pdf';
-import { loadSquiresLogoDataUrl } from '@/lib/pdf/squires-logo';
+import { loadTemplateLogoDataUrl } from '@/lib/pdf/template-logo';
 import { getQuotesCustomersEmailConfig } from '@/lib/server/quotes-customers-email-config';
+import { sendResendEmail } from '@/lib/server/resend';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
 import {
@@ -361,20 +362,16 @@ async function sendEmail(params: {
     return { success: false, error: 'Email service not configured' };
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const response = await sendResendEmail({
+    apiKey,
+    payload: {
       from: params.from || fromEmail,
       to: params.to,
       cc: params.cc,
       subject: params.subject,
       html: params.html,
       attachments: params.attachments,
-    }),
+    },
   });
 
   if (!response.ok) {
@@ -390,7 +387,7 @@ function getDefaultFromEmail(): string {
 }
 
 export async function renderQuotePdfAttachment(bundle: QuoteBundle): Promise<EmailAttachment> {
-  const logoSrc = await loadSquiresLogoDataUrl();
+  const logoSrc = await loadTemplateLogoDataUrl();
 
   const pdfDocument = QuotePDF({
     quoteReference: bundle.quote.quote_reference,
@@ -466,7 +463,7 @@ export async function sendQuoteToCustomerEmail(bundle: QuoteBundle, cc: string[]
   }
 
   const customerName = bundle.quote.attention_name || bundle.quote.customer?.contact_name || 'there';
-  const subject = `Quotation ${bundle.quote.quote_reference} - ${bundle.quote.subject_line || bundle.quote.customer?.company_name || 'A&V Squires'}`;
+  const subject = `Quotation ${bundle.quote.quote_reference} - ${bundle.quote.subject_line || bundle.quote.customer?.company_name || 'FieldOps Template'}`;
   const pricingCopy = bundle.quote.pricing_mode === 'attachments_only'
     ? '<p>Pricing and supporting details are included in the attached documents.</p>'
     : '';
@@ -479,7 +476,7 @@ export async function sendQuoteToCustomerEmail(bundle: QuoteBundle, cc: string[]
         <p>Please find attached our quotation for <strong>${bundle.quote.subject_line || 'the requested works'}</strong>.</p>
         ${pricingCopy}
         <p>If you have any queries, please reply to this email and we will be happy to help.</p>
-        <p>Kind regards,<br>${bundle.quote.signoff_name || 'A&V Squires'}${bundle.quote.signoff_title ? `<br>${bundle.quote.signoff_title}` : ''}</p>
+        <p>Kind regards,<br>${bundle.quote.signoff_name || 'FieldOps Template'}${bundle.quote.signoff_title ? `<br>${bundle.quote.signoff_title}` : ''}</p>
       </body>
     </html>
   `;
@@ -533,7 +530,7 @@ export async function sendQuoteRamsRequestEmail(params: {
   ramsComments?: string | null;
 }) {
   return sendEmail({
-    to: ['conway@avsquires.co.uk'],
+    to: ['conway@example.com'],
     subject: `RAMS required for ${params.quoteReference}`,
     html: `
       <!DOCTYPE html>

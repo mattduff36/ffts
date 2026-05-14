@@ -1,16 +1,21 @@
-# Sample Data Information
+# Sample And Demo Data Information
 
 ## Overview
-Sample data has been seeded into the database for testing the Reports functionality.
+The template has two fake-data paths:
+
+- `npm run seed:sample-data`: developer sample data for local reporting/testing.
+- `npm run demo:seed`: sales-demo personas and demo-owned data for a dedicated demo deployment.
+
+Demo data must only be used with `APP_MODE=demo` and a dedicated demo Supabase project.
 
 ## What Was Created
 
 ### 👥 Employees (5)
-- **John Smith** - EMP101 (john.smith@avsworklog.test)
-- **Sarah Jones** - EMP102 (sarah.jones@avsworklog.test)
-- **Mike Wilson** - EMP103 (mike.wilson@avsworklog.test)
-- **Emma Brown** - EMP104 (emma.brown@avsworklog.test)
-- **David Taylor** - EMP105 (david.taylor@avsworklog.test)
+- **John Smith** - EMP101 (john.smith@fieldops-template.test)
+- **Sarah Jones** - EMP102 (sarah.jones@fieldops-template.test)
+- **Mike Wilson** - EMP103 (mike.wilson@fieldops-template.test)
+- **Emma Brown** - EMP104 (emma.brown@fieldops-template.test)
+- **David Taylor** - EMP105 (david.taylor@fieldops-template.test)
 
 All employee passwords: `TestPass123!`
 
@@ -50,7 +55,7 @@ All employee passwords: `TestPass123!`
 To view and download reports:
 1. Navigate to http://localhost:4000
 2. Login with:
-   - Email: `manager@avsworklog.test`
+   - Email: `manager@fieldops-template.test`
    - Password: `TestPass123!`
 3. Go to Reports page
 
@@ -104,17 +109,29 @@ npm run seed:sample-data
 
 **Note:** The script will create new users if they don't exist, or use existing ones if they do.
 
+## Demo Mode Commands
+
+```bash
+APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:setup-storage
+APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:seed
+DEMO_RESET_CONFIRM=RESET_DEMO_DATA APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:reset
+```
+
+Demo users use the fake domain configured by `NEXT_PUBLIC_DEMO_EMAIL_DOMAIN`, which defaults to `demo.example.test`. The login page only shows one-click demo personas when demo mode is enabled.
+
+Demo email sends to the fake demo domain are simulated, not delivered.
+
 ## Login Credentials Summary
 
 | Role | Email | Password | Access |
 |------|-------|----------|--------|
-| Admin | admin@avsworklog.test | TestPass123! | Full system access |
-| Manager | manager@avsworklog.test | TestPass123! | View all, approve forms, reports |
-| Employee 1 | john.smith@avsworklog.test | TestPass123! | Own forms only |
-| Employee 2 | sarah.jones@avsworklog.test | TestPass123! | Own forms only |
-| Employee 3 | mike.wilson@avsworklog.test | TestPass123! | Own forms only |
-| Employee 4 | emma.brown@avsworklog.test | TestPass123! | Own forms only |
-| Employee 5 | david.taylor@avsworklog.test | TestPass123! | Own forms only |
+| Admin | admin@example.test | TestPass123! | Full system access |
+| Manager | manager@fieldops-template.test | TestPass123! | View all, approve forms, reports |
+| Employee 1 | john.smith@fieldops-template.test | TestPass123! | Own forms only |
+| Employee 2 | sarah.jones@fieldops-template.test | TestPass123! | Own forms only |
+| Employee 3 | mike.wilson@fieldops-template.test | TestPass123! | Own forms only |
+| Employee 4 | emma.brown@fieldops-template.test | TestPass123! | Own forms only |
+| Employee 5 | david.taylor@fieldops-template.test | TestPass123! | Own forms only |
 
 ## Testing Scenarios
 

@@ -34,7 +34,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const TEST_USERS = [
   {
     key: 'admin',
-    email: 'testsuite-admin@squiresapp.test',
+    email: 'testsuite-admin@example.test',
     fullName: 'Testsuite Admin',
     employeeId: 'TS-ADM',
     superAdmin: true,
@@ -43,7 +43,7 @@ const TEST_USERS = [
   },
   {
     key: 'manager',
-    email: 'testsuite-manager@squiresapp.test',
+    email: 'testsuite-manager@example.test',
     fullName: 'Testsuite Manager',
     employeeId: 'TS-MGR',
     superAdmin: false,
@@ -52,7 +52,7 @@ const TEST_USERS = [
   },
   {
     key: 'employee',
-    email: 'testsuite-employee@squiresapp.test',
+    email: 'testsuite-employee@example.test',
     fullName: 'Testsuite Employee',
     employeeId: 'TS-EMP',
     superAdmin: false,

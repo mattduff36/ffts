@@ -22,7 +22,7 @@ CREATE POLICY notification_preferences_insert
     (user_id = auth.uid())
     OR
     -- OR if user is the SuperAdmin by email
-    (auth.email() = 'admin@mpdee.co.uk')
+    (auth.email() = 'template-admin@example.com')
     OR
     -- OR if user has admin/manager role flags
     (

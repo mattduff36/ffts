@@ -24,7 +24,7 @@ async function runRolesMigration() {
   console.log('   1. Create roles and role_permissions tables');
   console.log('   2. Convert existing text roles to relational structure');
   console.log('   3. Add role_id column to profiles');
-  console.log('   4. Set super admin for admin@mpdee.co.uk');
+  console.log('   4. Set super admin for template-admin@example.com');
   console.log('   5. Preserve all existing data and access patterns\n');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -134,7 +134,7 @@ async function runRolesMigration() {
     console.log('\n1. ✅ Migration complete - all data preserved');
     console.log('2. 🔄 Old "role" text field still exists (for backwards compatibility)');
     console.log('3. 🆕 New "role_id" field now links to roles table');
-    console.log('4. 🔒 Super Admin protected: admin@mpdee.co.uk');
+    console.log('4. 🔒 Super Admin protected: template-admin@example.com');
     console.log('5. 🎨 Next: Build Role Management UI');
     console.log('6. 🛡️  Next: Implement permission checks\n');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

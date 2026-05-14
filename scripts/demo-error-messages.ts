@@ -15,8 +15,8 @@ class MockRequest {
     this.method = method;
     this.headers = new Map([
       ['user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/143.0.0.0'],
-      ['referer', 'https://www.squiresapp.com/rams'],
-      ['origin', 'https://www.squiresapp.com'],
+      ['referer', 'https://your-app.example.com/rams'],
+      ['origin', 'https://your-app.example.com'],
     ]);
   }
 
@@ -60,7 +60,7 @@ console.log('='.repeat(70) + '\n');
 // Example 1: RAMS API Error
 console.log('📍 Example 1: RAMS Document Not Found\n');
 const error1 = new Error('RAMS document not found in database');
-const req1 = new MockRequest('https://www.squiresapp.com/api/rams/abc123/email?notify=true', 'POST');
+const req1 = new MockRequest('https://your-app.example.com/api/rams/abc123/email?notify=true', 'POST');
 const ctx1 = extractRequestContext(req1);
 const msg1 = generateErrorDescription(error1, 'POST /api/rams/[id]/email', ctx1);
 console.log('MESSAGE:');
@@ -78,7 +78,7 @@ console.log('\n' + '-'.repeat(70) + '\n');
 // Example 2: Timesheet Approval Error
 console.log('📍 Example 2: Timesheet Approval Failed\n');
 const error2 = new TypeError('Cannot read property \'user_id\' of undefined');
-const req2 = new MockRequest('https://www.squiresapp.com/api/timesheets/xyz789/adjust', 'POST');
+const req2 = new MockRequest('https://your-app.example.com/api/timesheets/xyz789/adjust', 'POST');
 const ctx2 = extractRequestContext(req2);
 const msg2 = generateErrorDescription(error2, 'POST /api/timesheets/[id]/adjust', ctx2);
 console.log('MESSAGE:');
@@ -96,7 +96,7 @@ console.log('\n' + '-'.repeat(70) + '\n');
 // Example 3: Database Query Error
 console.log('📍 Example 3: Database Connection Error\n');
 const error3 = new Error('Connection to database failed');
-const req3 = new MockRequest('https://www.squiresapp.com/api/reports/timesheets/payroll?start_date=2025-01-01&end_date=2025-01-31', 'GET');
+const req3 = new MockRequest('https://your-app.example.com/api/reports/timesheets/payroll?start_date=2025-01-01&end_date=2025-01-31', 'GET');
 const ctx3 = extractRequestContext(req3);
 const msg3 = generateErrorDescription(error3, 'GET /api/reports/timesheets/payroll', ctx3);
 console.log('MESSAGE:');
@@ -121,12 +121,12 @@ console.log('MESSAGE:');
 console.log(`Uncaught Error: ${error4.message} at page.tsx:240:9`);
 console.log('\nADDITIONAL DATA:');
 console.log(JSON.stringify({
-  filename: 'https://www.squiresapp.com/_next/static/chunks/app/(dashboard)/debug/page.js',
+  filename: 'https://your-app.example.com/_next/static/chunks/app/(dashboard)/debug/page.js',
   lineno: 240,
   colno: 9,
   location: 'page.tsx:240:9',
   description: 'Unhandled JavaScript error thrown at runtime',
-  pageUrl: 'https://www.squiresapp.com/debug'
+  pageUrl: 'https://your-app.example.com/debug'
 }, null, 2));
 console.log('\nSTACK TRACE:');
 console.log(error4.stack);
@@ -142,7 +142,7 @@ console.log(JSON.stringify({
   reason: error5,
   reasonType: 'object',
   description: 'Promise was rejected but no .catch() handler was attached',
-  pageUrl: 'https://www.squiresapp.com/rams'
+  pageUrl: 'https://your-app.example.com/rams'
 }, null, 2));
 console.log('\n' + '-'.repeat(70) + '\n');
 

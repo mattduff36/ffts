@@ -1,20 +1,40 @@
-# 🚀 How To Run Database Migrations
+# How To Bootstrap And Validate The Database
 
-## TL;DR - Quick Start
+This template supports two database paths. Choose one deliberately before creating a customer project.
+
+## Path A: Fresh Customer Database
+
+Use this for a brand-new customer Supabase project that does not need historical branch context.
 
 ```bash
-# Run your migration script
-npx tsx scripts/run-<feature>-migration.ts
-
-# ⚠️ ALWAYS run this immediately after — catches broken triggers/columns before deploy
+npm run db:baseline
 npm run db:validate
 ```
 
-Both steps are required. The validate step **exits non-zero** if anything is broken, so it will block a push if you add it to a pre-push hook.
+`db:baseline` applies `supabase/schema.sql` using `POSTGRES_URL_NON_POOLING`. After it finishes, run `db:validate` before seeding data or deploying.
 
----
+## Path B: Preserved Migration History
 
-## 🚨 Why db:validate Is Mandatory
+Use this for ongoing development or when you need to replay the preserved product history.
+
+```bash
+# Apply migrations from supabase/migrations in timestamp order using your chosen Supabase workflow.
+npm run db:validate
+```
+
+Avoid older one-off migration runners unless you have checked the file path and SQL target. Several historical scripts exist for feature work and are not the recommended bootstrap path for new customers.
+
+## Required Environment
+
+Your `.env.local` file must include:
+
+```bash
+POSTGRES_URL_NON_POOLING="postgresql://postgres.[project-ref]:[password]@db.[project-ref].supabase.co:5432/postgres"
+```
+
+Get this from Supabase Dashboard -> Settings -> Database -> Connection string -> URI.
+
+## Why db:validate Is Mandatory
 
 PostgreSQL trigger functions store column names as plain text. When you rename a column (`vehicle_id → van_id`), **the trigger is not updated automatically** and PostgreSQL won't warn you — the error only appears when a user fires the trigger in production.
 
@@ -25,52 +45,7 @@ PostgreSQL trigger functions store column names as plain text. When you rename a
 
 **Rule:** If your migration renames a column, renames a table, or drops a column — run `npm run db:validate` before committing.
 
----
-
-## ✅ What You Need
-
-Your `.env.local` file must have:
-
-```bash
-POSTGRES_URL_NON_POOLING="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
-```
-
-**Where to get this:**
-1. Supabase Dashboard → Settings → Database
-2. Connection string → URI → Session mode
-3. Copy and paste into `.env.local`
-
----
-
-## 🔄 How It Works
-
-1. **Script reads** `.env.local` for database connection
-2. **Connects directly** to PostgreSQL via `pg` library  
-3. **Executes SQL** from `supabase/*.sql` file
-4. **Verifies** tables were created
-5. **Reports** success or error
-
----
-
-## 🎯 Why This Is Better
-
-### ❌ Old Way (Manual)
-1. Copy SQL from file
-2. Open Supabase Dashboard
-3. Navigate to SQL Editor
-4. Paste SQL
-5. Click Run
-6. Hope it worked
-7. No verification
-8. Repeat for each environment
-
-### ✅ New Way (Automated)
-1. Run: `npx tsx scripts/run-rams-migration.ts`
-2. Done.
-
----
-
-## 🐛 Common Issues
+## Common Issues
 
 ### "Missing database connection string"
 
@@ -82,19 +57,7 @@ POSTGRES_URL_NON_POOLING="postgresql://postgres.[project-ref]:[password]@aws-0-[
 
 ### "permission denied"
 
-**Fix:** Your database user needs permissions. Use service role key connection string.
+**Fix:** Use the direct database connection string for the project owner account.
 
----
-
-## 📚 More Details
-
-See `docs/MIGRATIONS_GUIDE.md` for:
-- Creating new migrations
-- Best practices
-- Advanced patterns
-- Troubleshooting
-
----
-
-**Remember:** Run migrations using `.env.local` variables, not manually in dashboard!
+Never apply migrations, baseline SQL, seeds, or demo reset commands against a customer production database without a backup and an explicit deployment plan.
 

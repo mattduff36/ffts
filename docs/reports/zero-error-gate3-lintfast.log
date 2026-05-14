@@ -1,6 +1,0 @@
-
-> avsworklog@0.1.0 lint:fast
-> oxlint . -A all
-
-Found 0 warnings and 0 errors.
-Finished in 52ms on 747 files with 0 rules using 28 threads.

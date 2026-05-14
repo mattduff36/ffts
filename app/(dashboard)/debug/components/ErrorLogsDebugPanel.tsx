@@ -407,7 +407,7 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
     }
 
     if (filterAdminAccount) {
-      filtered = filtered.filter((log) => log.user_email !== 'admin@mpdee.co.uk');
+      filtered = filtered.filter((log) => log.user_email !== 'template-admin@example.com');
     }
 
     if (filterErrorType !== 'all') {

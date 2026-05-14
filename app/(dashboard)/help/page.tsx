@@ -555,7 +555,7 @@ export default function HelpPage() {
               onClick={() => void handleRefreshAppNow()}
               disabled={isRefreshingApp}
               title="Refresh App Now"
-              className="h-16 w-24 md:h-[4.5rem] md:w-[6.75rem] flex-col items-center justify-center gap-1 border border-avs-yellow bg-avs-yellow p-1.5 text-slate-900 transition-colors hover:bg-avs-yellow-hover hover:text-slate-900 disabled:opacity-60"
+              className="h-16 w-24 md:h-[4.5rem] md:w-[6.75rem] flex-col items-center justify-center gap-1 border border-brand-yellow bg-brand-yellow p-1.5 text-slate-900 transition-colors hover:bg-brand-yellow-hover hover:text-slate-900 disabled:opacity-60"
             >
               {isRefreshingApp ? (
                 <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin" />
@@ -573,23 +573,23 @@ export default function HelpPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full max-w-4xl grid-cols-5 bg-slate-100 dark:bg-slate-800 p-0">
-          <TabsTrigger value="faq" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="faq" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <BookOpen className="h-4 w-4" />
             FAQ
           </TabsTrigger>
-          <TabsTrigger value="install" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="install" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <Download className="h-4 w-4" />
             Install App
           </TabsTrigger>
-          <TabsTrigger value="errors" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="errors" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <AlertTriangle className="h-4 w-4" />
             Errors
           </TabsTrigger>
-          <TabsTrigger value="suggest" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="suggest" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <Lightbulb className="h-4 w-4" />
             Suggest
           </TabsTrigger>
-          <TabsTrigger value="my-suggestions" className="gap-2 data-[state=active]:bg-avs-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger value="my-suggestions" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
             <CheckCircle2 className="h-4 w-4" />
             My Suggestions
           </TabsTrigger>
@@ -644,7 +644,7 @@ export default function HelpPage() {
           {/* FAQ Content */}
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-avs-yellow" />
+              <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
             </div>
           ) : filteredArticles.length === 0 ? (
             <Card className="">
@@ -667,7 +667,7 @@ export default function HelpPage() {
                     <Card key={category.id} className="">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-lg text-foreground flex items-center gap-2">
-                          <ChevronRight className="h-5 w-5 text-avs-yellow" />
+                          <ChevronRight className="h-5 w-5 text-brand-yellow" />
                           {category.name}
                         </CardTitle>
                         {category.description && (
@@ -680,7 +680,7 @@ export default function HelpPage() {
                         <Accordion type="single" collapsible className="w-full">
                           {catArticles.map((article) => (
                             <AccordionItem key={article.id} value={article.id}>
-                              <AccordionTrigger className="text-left text-foreground hover:text-avs-yellow">
+                              <AccordionTrigger className="text-left text-foreground hover:text-brand-yellow">
                                 {article.title}
                               </AccordionTrigger>
                               <AccordionContent>
@@ -707,7 +707,7 @@ export default function HelpPage() {
                     <Accordion type="single" collapsible className="w-full">
                       {filteredArticles.map((article) => (
                         <AccordionItem key={article.id} value={article.id}>
-                          <AccordionTrigger className="text-left text-foreground hover:text-avs-yellow">
+                          <AccordionTrigger className="text-left text-foreground hover:text-brand-yellow">
                             {article.title}
                           </AccordionTrigger>
                           <AccordionContent>
@@ -736,8 +736,8 @@ export default function HelpPage() {
           <Card className="">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-avs-yellow" />
-                Install SQUIRES App
+                <Smartphone className="h-5 w-5 text-brand-yellow" />
+                Install TEMPLATE App
               </CardTitle>
               <CardDescription className="text-muted-foreground">
                 Follow the steps for your device and browser. If the install prompt is available, use the button below.
@@ -748,7 +748,7 @@ export default function HelpPage() {
                 <Button
                   onClick={() => void handleInstallNow()}
                   disabled={isStandaloneApp || isTriggeringInstallPrompt}
-                  className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+                  className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
                 >
                   {isTriggeringInstallPrompt ? (
                     <>
@@ -784,7 +784,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open SQUIRES in Chrome and sign in.</li>
+                <li>Open TEMPLATE in Chrome and sign in.</li>
                 <li>Tap the three-dot menu in the top-right corner.</li>
                 <li>Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</li>
                 <li>Confirm by tapping <strong>Install</strong>.</li>
@@ -799,11 +799,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open SQUIRES in Firefox and sign in.</li>
+                <li>Open TEMPLATE in Firefox and sign in.</li>
                 <li>Tap the menu button (three dots).</li>
                 <li>Tap <strong>Install</strong> or <strong>Add to Home screen</strong>.</li>
                 <li>Confirm the prompt to add it to your home screen.</li>
-                <li>Launch SQUIRES from the new home screen icon.</li>
+                <li>Launch TEMPLATE from the new home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -814,11 +814,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open SQUIRES in Safari (not inside another browser tab view).</li>
+                <li>Open TEMPLATE in Safari (not inside another browser tab view).</li>
                 <li>Tap the <strong>Share</strong> button.</li>
                 <li>Scroll and tap <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> in the top-right corner.</li>
-                <li>Open SQUIRES from your home screen icon.</li>
+                <li>Open TEMPLATE from your home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -829,7 +829,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open SQUIRES in Chrome or Edge.</li>
+                <li>Open TEMPLATE in Chrome or Edge.</li>
                 <li>Use the browser menu and choose <strong>Open in Safari</strong>.</li>
                 <li>In Safari, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> to finish installation.</li>
@@ -840,13 +840,13 @@ export default function HelpPage() {
           <Card className="">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
-                <Monitor className="h-5 w-5 text-avs-yellow" />
+                <Monitor className="h-5 w-5 text-brand-yellow" />
                 Desktop - Chrome / Edge
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open SQUIRES in Chrome or Edge.</li>
+                <li>Open TEMPLATE in Chrome or Edge.</li>
                 <li>Look for the install icon in the address bar (usually a monitor + down arrow).</li>
                 <li>Click it and confirm <strong>Install</strong>.</li>
                 <li>You can also use browser menu options: <strong>Install app</strong> / <strong>Apps</strong>.</li>
@@ -1112,7 +1112,7 @@ export default function HelpPage() {
               <Button
                 onClick={handleSubmitSuggestion}
                 disabled={submittingSuggestion || !suggestionTitle.trim() || !suggestionBody.trim()}
-                className="bg-avs-yellow hover:bg-avs-yellow-hover text-slate-900"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
               >
                 {submittingSuggestion ? (
                   <>
@@ -1144,7 +1144,7 @@ export default function HelpPage() {
             <CardContent>
               {loadingSuggestions ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-avs-yellow" />
+                  <Loader2 className="h-6 w-6 animate-spin text-brand-yellow" />
                 </div>
               ) : mySuggestions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -1208,18 +1208,18 @@ export default function HelpPage() {
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Chrome</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Chrome and visit SQUIRES once.</li>
+                <li>Open Chrome and visit TEMPLATE once.</li>
                 <li>Tap the padlock/site icon in the address bar.</li>
                 <li>Open <strong>Site settings</strong>.</li>
                 <li>Tap <strong>Clear & reset</strong>, then confirm.</li>
-                <li>Reload SQUIRES and sign in again.</li>
+                <li>Reload TEMPLATE and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Firefox</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Firefox and go to SQUIRES.</li>
+                <li>Open Firefox and go to TEMPLATE.</li>
                 <li>Tap the site settings icon from the address bar/menu.</li>
                 <li>Clear site data/cookies for this site.</li>
                 <li>Close and reopen the tab, then sign in again.</li>
@@ -1231,15 +1231,15 @@ export default function HelpPage() {
               <ol className="list-decimal pl-5 space-y-1">
                 <li>Open iOS <strong>Settings</strong> app.</li>
                 <li>Go to <strong>Safari &gt; Advanced &gt; Website Data</strong>.</li>
-                <li>Search for SQUIRES domain and swipe/delete it.</li>
-                <li>Reopen Safari, load SQUIRES, and sign in again.</li>
+                <li>Search for TEMPLATE domain and swipe/delete it.</li>
+                <li>Reopen Safari, load TEMPLATE, and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Desktop - Chrome / Edge</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open SQUIRES in browser.</li>
+                <li>Open TEMPLATE in browser.</li>
                 <li>Click the padlock icon next to the URL.</li>
                 <li>Open site settings and clear stored data for this site.</li>
                 <li>Hard refresh the page and sign in again.</li>

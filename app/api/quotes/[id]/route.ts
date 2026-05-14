@@ -143,8 +143,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const emailResult = await sendQuoteToCustomerEmail(current, [
         current.quote.manager_email || '',
-        'rob@avsquires.co.uk',
-        'charlotte@avsquires.co.uk',
+        'rob@example.com',
+        'debug.user@example.com',
       ]);
 
       if (!emailResult.success) {
@@ -223,8 +223,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const emailResult = await sendQuoteToCustomerEmail(current, [
         current.quote.manager_email || '',
-        'rob@avsquires.co.uk',
-        'charlotte@avsquires.co.uk',
+        'rob@example.com',
+        'debug.user@example.com',
       ]);
 
       if (!emailResult.success) {

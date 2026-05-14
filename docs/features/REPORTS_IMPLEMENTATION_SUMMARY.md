@@ -8,7 +8,7 @@
 
 ## 🎉 Overview
 
-A comprehensive reporting system has been implemented for the Squires App, providing managers and admins with powerful tools to download, analyze, and manage timesheet and inspection data through Excel reports and real-time statistics.
+A comprehensive reporting system has been implemented for the FieldOps Template, providing managers and admins with powerful tools to download, analyze, and manage timesheet and inspection data through Excel reports and real-time statistics.
 
 ---
 
@@ -189,7 +189,7 @@ npm run test:reports
 
 **Test Configuration:**
 - Default URL: `http://localhost:4000`
-- Test user: `admin@avsworklog.test`
+- Test user: `admin@example.test`
 - Password: `TestPass123!`
 - Can be overridden with environment variables
 

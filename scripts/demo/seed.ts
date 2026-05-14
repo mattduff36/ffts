@@ -14,6 +14,7 @@ interface DemoUser {
   fullName: string;
   employeeId: string;
   roleName: string;
+  teamId: string;
   superAdmin: boolean;
 }
 
@@ -26,6 +27,16 @@ interface SeededVehicle {
   reg_number: string;
 }
 
+interface SeededHgv {
+  id: string;
+  reg_number: string;
+}
+
+interface SeededPlant {
+  id: string;
+  plant_id: string;
+}
+
 const demoDomain = process.env.NEXT_PUBLIC_DEMO_EMAIL_DOMAIN || 'demo.example.test';
 const password = process.env.DEMO_USER_PASSWORD || 'DemoPass123!';
 
@@ -36,6 +47,7 @@ const users: DemoUser[] = [
     fullName: 'Avery Stone',
     employeeId: 'DEMO-ADM',
     roleName: 'admin',
+    teamId: 'management',
     superAdmin: true,
   },
   {
@@ -44,6 +56,7 @@ const users: DemoUser[] = [
     fullName: 'Morgan Reid',
     employeeId: 'DEMO-MGR',
     roleName: 'manager',
+    teamId: 'transport',
     superAdmin: false,
   },
   {
@@ -52,6 +65,7 @@ const users: DemoUser[] = [
     fullName: 'Jamie Carter',
     employeeId: 'DEMO-EMP',
     roleName: 'employee',
+    teamId: 'civils',
     superAdmin: false,
   },
   {
@@ -60,11 +74,46 @@ const users: DemoUser[] = [
     fullName: 'Taylor Brooks',
     employeeId: 'DEMO-CON',
     roleName: 'employee',
+    teamId: 'plant',
     superAdmin: false,
   },
 ];
 
-const vans = [{ reg_number: 'DM24VAN', vehicle_type: 'Van', status: 'active' }];
+const vans = [
+  { reg_number: 'DM24VAN', vehicle_type: 'Van', status: 'active', nickname: 'Demo Service Van' },
+  { reg_number: 'DM24KIT', vehicle_type: 'Van', status: 'active', nickname: 'Demo Stores Van' },
+  { reg_number: 'DM24OPS', vehicle_type: 'Van', status: 'active', nickname: 'Demo Ops Van' },
+];
+
+const hgvs = [
+  { reg_number: 'DM24HGV', status: 'active', nickname: 'Demo Tipper', current_mileage: 84500 },
+  { reg_number: 'DM24ART', status: 'active', nickname: 'Demo Artic', current_mileage: 128900 },
+];
+
+const plantAssets = [
+  {
+    plant_id: 'DM-EX-001',
+    reg_number: 'DM24EXC',
+    nickname: 'Demo Excavator',
+    make: 'Hitachi',
+    model: 'ZX130',
+    serial_number: 'DEMOZX130001',
+    year: 2022,
+    current_hours: 1840,
+    status: 'active',
+  },
+  {
+    plant_id: 'DM-RL-002',
+    reg_number: 'DM24ROL',
+    nickname: 'Demo Roller',
+    make: 'Bomag',
+    model: 'BW120',
+    serial_number: 'DEMOBW120002',
+    year: 2021,
+    current_hours: 1265,
+    status: 'active',
+  },
+];
 
 function isoDate(daysFromToday: number): string {
   const date = new Date();
@@ -78,6 +127,62 @@ function weekEnding(weeksAgo: number): string {
   const day = date.getDay();
   date.setDate(date.getDate() + (day === 0 ? 0 : 7 - day));
   return date.toISOString().slice(0, 10);
+}
+
+function dateTime(daysFromToday: number, hour = 9): string {
+  const date = new Date(`${isoDate(daysFromToday)}T${String(hour).padStart(2, '0')}:00:00.000Z`);
+  return date.toISOString();
+}
+
+function normaliseInventoryNumber(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-');
+}
+
+async function deleteByIds(
+  supabase: ScriptSupabaseClient,
+  table: string,
+  ids: string[],
+  column = 'id'
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from(table).delete().in(column, ids);
+  if (error) throw error;
+}
+
+async function ensureVanCategory(
+  supabase: ScriptSupabaseClient,
+  name: string,
+  description: string,
+  appliesTo: string[]
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('van_categories')
+    .upsert(
+      {
+        name,
+        description,
+        applies_to: appliesTo,
+      },
+      { onConflict: 'name' }
+    )
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  if (!data?.id) throw new Error(`Unable to resolve category ${name}`);
+  return data.id;
+}
+
+async function ensureHgvCategory(supabase: ScriptSupabaseClient, name: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('hgv_categories')
+    .upsert({ name, description: `Demo ${name.toLowerCase()} category` }, { onConflict: 'name' })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  if (!data?.id) throw new Error(`Unable to resolve HGV category ${name}`);
+  return data.id;
 }
 
 async function runOptionalStep(label: string, step: () => Promise<void>): Promise<void> {
@@ -144,6 +249,21 @@ async function ensureDemoRoles(supabase: ScriptSupabaseClient): Promise<void> {
   if (error) throw error;
 }
 
+async function ensureDemoTeams(supabase: ScriptSupabaseClient): Promise<void> {
+  const { error } = await supabase.from('org_teams').upsert(
+    [
+      { id: 'management', name: 'Management', code: 'MGT', active: true, timesheet_type: 'civils' },
+      { id: 'transport', name: 'Transport', code: 'TRN', active: true, timesheet_type: 'civils' },
+      { id: 'civils', name: 'Civils', code: 'CIV', active: true, timesheet_type: 'civils' },
+      { id: 'plant', name: 'Plant', code: 'PLT', active: true, timesheet_type: 'plant' },
+      { id: 'workshop', name: 'Workshop', code: 'WRK', active: true, timesheet_type: 'civils' },
+    ],
+    { onConflict: 'id' }
+  );
+
+  if (error) throw error;
+}
+
 async function ensureDemoUsers(supabase: ScriptSupabaseClient): Promise<SeededProfile[]> {
   const { data: existingUsers } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
   const seededProfiles: SeededProfile[] = [];
@@ -186,7 +306,10 @@ async function ensureDemoUsers(supabase: ScriptSupabaseClient): Promise<SeededPr
         id: authUser.id,
         full_name: user.fullName,
         employee_id: user.employeeId,
+        role: user.roleName,
         role_id: roleId,
+        team_id: user.teamId,
+        phone_number: '01632 960123',
         super_admin: user.superAdmin,
         must_change_password: false,
       },
@@ -198,20 +321,33 @@ async function ensureDemoUsers(supabase: ScriptSupabaseClient): Promise<SeededPr
     console.log(`Ready: ${user.fullName} (${user.email})`);
   }
 
+  const manager = seededProfiles.find((profile) => profile.key === 'manager');
+  const admin = seededProfiles.find((profile) => profile.key === 'admin');
+  if (manager?.id || admin?.id) {
+    await supabase
+      .from('org_teams')
+      .update({
+        manager_1_profile_id: manager?.id || admin?.id,
+        manager_2_profile_id: admin?.id || null,
+      })
+      .in('id', ['transport', 'civils', 'plant', 'workshop']);
+  }
+
   return seededProfiles;
 }
 
 async function seedVehicles(supabase: ScriptSupabaseClient): Promise<SeededVehicle[]> {
-  const { data: category } = await supabase.from('van_categories').select('id').limit(1).maybeSingle();
-  if (!category?.id) {
-    console.warn('Vehicle seed skipped: no van category exists.');
-    return [];
-  }
+  const categoryId = await ensureVanCategory(
+    supabase,
+    'Demo Vans',
+    'Fictional vans used to demonstrate fleet, inspections, maintenance, and workshop workflows.',
+    ['vehicle', 'van']
+  );
 
   const { data, error } = await supabase
     .from('vans')
     .upsert(
-      vans.map((van) => ({ ...van, category_id: category.id })),
+      vans.map((van) => ({ ...van, category_id: categoryId })),
       { onConflict: 'reg_number' }
     )
     .select('id, reg_number');
@@ -221,6 +357,51 @@ async function seedVehicles(supabase: ScriptSupabaseClient): Promise<SeededVehic
   }
 
   console.log(`Ready: ${vans.length} demo fleet records`);
+  return data || [];
+}
+
+async function seedHgvs(supabase: ScriptSupabaseClient): Promise<SeededHgv[]> {
+  const categoryId = await ensureHgvCategory(supabase, 'Demo HGV');
+  const { data, error } = await supabase
+    .from('hgvs')
+    .upsert(
+      hgvs.map((hgv) => ({ ...hgv, category_id: categoryId })),
+      { onConflict: 'reg_number' }
+    )
+    .select('id, reg_number');
+
+  if (error) throw error;
+  console.log(`Ready: ${hgvs.length} demo HGV records`);
+  return data || [];
+}
+
+async function seedPlant(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<SeededPlant[]> {
+  const admin = profiles.find((profile) => profile.key === 'admin') || profiles[0];
+  const categoryId = await ensureVanCategory(
+    supabase,
+    'Demo Plant',
+    'Fictional plant machinery used in the public demo.',
+    ['plant']
+  );
+
+  const { data, error } = await supabase
+    .from('plant')
+    .upsert(
+      plantAssets.map((asset) => ({
+        ...asset,
+        category_id: categoryId,
+        created_by: admin.id,
+        updated_by: admin.id,
+        loler_due_date: isoDate(45),
+        loler_last_inspection_date: isoDate(-320),
+        loler_certificate_number: `LOLER-${asset.plant_id}`,
+      })),
+      { onConflict: 'plant_id' }
+    )
+    .select('id, plant_id');
+
+  if (error) throw error;
+  console.log(`Ready: ${plantAssets.length} demo plant records`);
   return data || [];
 }
 
@@ -353,6 +534,15 @@ async function seedCustomersAndQuotes(supabase: ScriptSupabaseClient, profiles: 
 async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
   const recipients = profiles.filter((profile) => profile.key === 'employee' || profile.key === 'contractor');
+  const { data: existingMessages } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('created_via', 'demo-seed')
+    .ilike('subject', 'Demo toolbox talk:%');
+  const messageIds = (existingMessages || []).map((message: { id: string }) => message.id);
+  await deleteByIds(supabase, 'message_recipients', messageIds, 'message_id');
+  await deleteByIds(supabase, 'messages', messageIds);
+
   const { data: message, error } = await supabase
     .from('messages')
     .insert({
@@ -404,45 +594,581 @@ async function seedAbsence(supabase: ScriptSupabaseClient, profiles: SeededProfi
     .from('absences')
     .delete()
     .eq('profile_id', employee.id)
-    .eq('notes', 'Fictional approved demo annual leave.');
+    .gte('date', isoDate(-7));
 
-  const { error } = await supabase.from('absences').insert({
-    profile_id: employee.id,
-    date: isoDate(14),
-    end_date: isoDate(18),
-    reason_id: reason.id,
-    duration_days: 5,
-    status: 'approved',
-    created_by: employee.id,
-    approved_by: manager.id,
-    approved_at: new Date().toISOString(),
-    notes: 'Fictional approved demo annual leave.',
-  });
+  const { data: sickReason, error: sickReasonError } = await supabase
+    .from('absence_reasons')
+    .upsert(
+      {
+        name: 'Training',
+        is_paid: true,
+        color: '#38bdf8',
+        is_active: true,
+      },
+      { onConflict: 'name' }
+    )
+    .select('id')
+    .single();
+  if (sickReasonError) throw sickReasonError;
+
+  const { error } = await supabase.from('absences').insert([
+    {
+      profile_id: employee.id,
+      date: isoDate(14),
+      end_date: isoDate(18),
+      reason_id: reason.id,
+      duration_days: 5,
+      status: 'approved',
+      created_by: employee.id,
+      approved_by: manager.id,
+      approved_at: new Date().toISOString(),
+      notes: 'Fictional demo approved annual leave.',
+    },
+    {
+      profile_id: employee.id,
+      date: isoDate(28),
+      end_date: isoDate(28),
+      reason_id: sickReason.id,
+      duration_days: 1,
+      status: 'pending',
+      created_by: employee.id,
+      notes: 'Fictional demo pending training day.',
+    },
+  ]);
 
   if (error) throw error;
+}
+
+async function seedInspections(
+  supabase: ScriptSupabaseClient,
+  profiles: SeededProfile[],
+  seededVehicles: SeededVehicle[],
+  seededHgvs: SeededHgv[],
+  seededPlant: SeededPlant[]
+): Promise<void> {
+  const employee = profiles.find((profile) => profile.key === 'employee') || profiles[0];
+  const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
+
+  for (const table of ['van_inspections', 'hgv_inspections', 'plant_inspections']) {
+    const { data: existing } = await supabase
+      .from(table)
+      .select('id')
+      .ilike('inspector_comments', 'Demo seed:%');
+    const ids = (existing || []).map((row: { id: string }) => row.id);
+    await deleteByIds(supabase, 'actions', ids, 'inspection_id');
+    await deleteByIds(supabase, 'inspection_items', ids, 'inspection_id');
+    await deleteByIds(supabase, 'inspection_daily_hours', ids, 'inspection_id');
+    await deleteByIds(supabase, table, ids);
+  }
+
+  const van = seededVehicles.find((item) => item.reg_number === 'DM24VAN') || seededVehicles[0];
+  const hgv = seededHgvs.find((item) => item.reg_number === 'DM24HGV') || seededHgvs[0];
+  const plant = seededPlant.find((item) => item.plant_id === 'DM-EX-001') || seededPlant[0];
+
+  async function insertInspection(table: string, payload: Record<string, unknown>) {
+    const { data, error } = await supabase.from(table).insert(payload).select('id').single();
+    if (error) throw error;
+    return data?.id ? { table, id: data.id as string } : null;
+  }
+
+  const inspections = (
+    await Promise.all([
+      van?.id
+        ? insertInspection('van_inspections', {
+            van_id: van.id,
+            user_id: employee.id,
+            week_ending: weekEnding(0),
+            inspection_date: isoDate(-1),
+            current_mileage: 48250,
+            checked_by: employee.fullName,
+            status: 'submitted',
+            submitted_at: dateTime(-1, 16),
+            reviewed_by: manager.id,
+            reviewed_at: dateTime(0, 9),
+            manager_comments: 'Demo review: marker light defect raised for workshop.',
+            inspector_comments: 'Demo seed: van daily check with one actionable defect.',
+            defects_comments: 'Nearside marker light not illuminating.',
+            signature_data: 'data:image/png;base64,demo',
+            signed_at: dateTime(-1, 16),
+          })
+        : Promise.resolve(null),
+      hgv?.id
+        ? insertInspection('hgv_inspections', {
+            hgv_id: hgv.id,
+            user_id: employee.id,
+            inspection_date: isoDate(-2),
+            current_mileage: 84520,
+            status: 'submitted',
+            submitted_at: dateTime(-2, 15),
+            reviewed_by: manager.id,
+            reviewed_at: dateTime(-1, 10),
+            manager_comments: 'Demo review: tyre pressure note monitored.',
+            inspector_comments: 'Demo seed: HGV daily check ready for manager review.',
+            signature_data: 'data:image/png;base64,demo',
+            signed_at: dateTime(-2, 15),
+          })
+        : Promise.resolve(null),
+      plant?.id
+        ? insertInspection('plant_inspections', {
+            plant_id: plant.id,
+            user_id: employee.id,
+            inspection_date: isoDate(-3),
+            current_mileage: 1848,
+            status: 'submitted',
+            submitted_at: dateTime(-3, 14),
+            reviewed_by: manager.id,
+            reviewed_at: dateTime(-2, 8),
+            manager_comments: 'Demo review: hydraulic hose observation logged.',
+            inspector_comments: 'Demo seed: plant daily check with service observation.',
+            signature_data: 'data:image/png;base64,demo',
+            signed_at: dateTime(-3, 14),
+          })
+        : Promise.resolve(null),
+    ])
+  ).filter(Boolean) as Array<{ table: string; id: string }>;
+  const items = inspections.flatMap((inspection) => [
+    {
+      inspection_id: inspection.id,
+      item_number: 1,
+      day_of_week: 1,
+      status: 'ok',
+      item_description: 'Lights and beacons checked',
+      comments: 'Demo pass item.',
+    },
+    {
+      inspection_id: inspection.id,
+      item_number: 2,
+      day_of_week: 1,
+      status: inspection.table === 'van_inspections' ? 'attention' : 'ok',
+      item_description: inspection.table === 'plant_inspections' ? 'Hydraulics and leaks' : 'Tyres and wheels',
+      comments: inspection.table === 'van_inspections' ? 'Marker light defect raised for workshop.' : 'No issue found.',
+    },
+    {
+      inspection_id: inspection.id,
+      item_number: 3,
+      day_of_week: 1,
+      status: 'na',
+      item_description: 'Ancillary equipment',
+      comments: 'Not applicable for this demo asset.',
+    },
+  ]);
+
+  if (items.length > 0) {
+    const { error } = await supabase.from('inspection_items').insert(items);
+    if (error) throw error;
+  }
+
+  console.log(`Ready: ${inspections.length} demo daily check records`);
 }
 
 async function seedWorkshopTasks(
   supabase: ScriptSupabaseClient,
   profiles: SeededProfile[],
-  seededVehicles: SeededVehicle[]
+  seededVehicles: SeededVehicle[],
+  seededHgvs: SeededHgv[],
+  seededPlant: SeededPlant[]
 ): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
   const vehicle = seededVehicles.find((item) => item.reg_number === 'DM24VAN') || seededVehicles[0];
-  if (!vehicle?.id) return;
+  const hgv = seededHgvs.find((item) => item.reg_number === 'DM24HGV') || seededHgvs[0];
+  const plant = seededPlant.find((item) => item.plant_id === 'DM-EX-001') || seededPlant[0];
 
-  const { error } = await supabase.from('actions').insert({
-    title: 'Demo defect: replace nearside marker light',
-    description: 'Fictional workshop task created from a demo inspection defect.',
-    priority: 'medium',
-    status: 'pending',
-    action_type: 'workshop_vehicle_task',
-    van_id: vehicle.id,
-    created_by: manager.id,
-    workshop_comments: 'Seeded demo task for workshop workflow previews.',
-  });
+  const { data: existingCategory } = await supabase
+    .from('workshop_task_categories')
+    .select('id')
+    .eq('slug', 'demo-repairs')
+    .maybeSingle();
+
+  const categoryQuery = existingCategory?.id
+    ? supabase
+        .from('workshop_task_categories')
+        .update({
+          applies_to: 'van',
+          name: 'Demo Repairs',
+          is_active: true,
+          sort_order: 1,
+          ui_color: '#f97316',
+          requires_subcategories: true,
+        })
+        .eq('id', existingCategory.id)
+    : supabase.from('workshop_task_categories').insert({
+        applies_to: 'van',
+        name: 'Demo Repairs',
+        slug: 'demo-repairs',
+        is_active: true,
+        sort_order: 1,
+        ui_color: '#f97316',
+        created_by: manager.id,
+        requires_subcategories: true,
+      });
+
+  const { data: category, error: categoryError } = await categoryQuery.select('id').single();
+  if (categoryError) throw categoryError;
+  if (!category?.id) return;
+
+  const { data: existingTasks } = await supabase
+    .from('actions')
+    .select('id')
+    .like('title', 'Demo workshop:%');
+  const existingTaskIds = (existingTasks || []).map((task: { id: string }) => task.id);
+  await deleteByIds(supabase, 'workshop_task_comments', existingTaskIds, 'task_id');
+  await deleteByIds(supabase, 'actions', existingTaskIds);
+
+  const { error: deleteSubcategoriesError } = await supabase
+    .from('workshop_task_subcategories')
+    .delete()
+    .eq('category_id', category.id);
+  if (deleteSubcategoriesError) throw deleteSubcategoriesError;
+
+  const { data: subcategories, error: subcategoryError } = await supabase
+    .from('workshop_task_subcategories')
+    .insert([
+      { category_id: category.id, name: 'Electrical', slug: 'demo-electrical', sort_order: 1, created_by: manager.id },
+      { category_id: category.id, name: 'Hydraulics', slug: 'demo-hydraulics', sort_order: 2, created_by: manager.id },
+      { category_id: category.id, name: 'Service', slug: 'demo-service', sort_order: 3, created_by: manager.id },
+    ])
+    .select('id, slug');
+  if (subcategoryError) throw subcategoryError;
+
+  const subcategoryId =
+    subcategories?.find((item: { slug: string }) => item.slug === 'demo-electrical')?.id || subcategories?.[0]?.id;
+
+  const tasks = [
+    vehicle?.id && {
+      title: 'Demo workshop: replace nearside marker light',
+      description: 'Fictional van defect created from a daily check.',
+      priority: 'medium',
+      status: 'pending',
+      action_type: 'workshop_vehicle_task',
+      van_id: vehicle.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: subcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Seeded demo task for workshop workflow previews.',
+    },
+    hgv?.id && {
+      title: 'Demo workshop: inspect tyre pressure report',
+      description: 'Follow-up task for an HGV daily check observation.',
+      priority: 'low',
+      status: 'in_progress',
+      action_type: 'workshop_vehicle_task',
+      hgv_id: hgv.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: subcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Technician assigned for afternoon check.',
+    },
+    plant?.id && {
+      title: 'Demo workshop: hydraulic hose service',
+      description: 'Plant service observation requiring planned maintenance.',
+      priority: 'high',
+      status: 'on_hold',
+      action_type: 'workshop_vehicle_task',
+      plant_id: plant.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: subcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Awaiting replacement hose from supplier.',
+    },
+  ].filter(Boolean);
+
+  const { data: insertedTasks, error } = await supabase.from('actions').insert(tasks).select('id');
+  if (error) throw error;
+
+  if (insertedTasks?.length) {
+    await supabase.from('workshop_task_comments').insert(
+      insertedTasks.map((task: { id: string }, index: number) => ({
+        task_id: task.id,
+        author_id: manager.id,
+        body: index === 0 ? 'Demo comment: part ordered and task ready to schedule.' : 'Demo comment: progress updated.',
+      }))
+    );
+  }
+
+  console.log(`Ready: ${tasks.length} demo workshop tasks`);
+}
+
+async function seedMaintenance(
+  supabase: ScriptSupabaseClient,
+  profiles: SeededProfile[],
+  seededVehicles: SeededVehicle[],
+  seededHgvs: SeededHgv[],
+  seededPlant: SeededPlant[]
+): Promise<void> {
+  const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
+
+  for (const [index, van] of seededVehicles.entries()) {
+    await supabase.from('vehicle_maintenance').upsert(
+      {
+        van_id: van.id,
+        current_mileage: 48000 + index * 1200,
+        last_service_mileage: 42000 + index * 1000,
+        next_service_mileage: 54000 + index * 1200,
+        mot_due_date: isoDate(30 + index * 20),
+        tax_due_date: isoDate(90 + index * 15),
+        notes: 'Demo maintenance record for van fleet overview.',
+        last_updated_by: manager.id,
+      },
+      { onConflict: 'van_id' }
+    );
+  }
+
+  for (const [index, hgv] of seededHgvs.entries()) {
+    await supabase.from('vehicle_maintenance').upsert(
+      {
+        hgv_id: hgv.id,
+        current_mileage: 84500 + index * 18000,
+        last_service_mileage: 78000 + index * 15000,
+        next_service_mileage: 90000 + index * 18000,
+        six_weekly_inspection_due_date: isoDate(12 + index * 7),
+        taco_calibration_due_date: isoDate(120 + index * 30),
+        notes: 'Demo HGV service and compliance record.',
+        last_updated_by: manager.id,
+      },
+      { onConflict: 'hgv_id' }
+    );
+  }
+
+  for (const [index, plant] of seededPlant.entries()) {
+    await supabase.from('vehicle_maintenance').upsert(
+      {
+        plant_id: plant.id,
+        current_hours: 1800 + index * 300,
+        last_service_hours: 1500 + index * 250,
+        next_service_hours: 2000 + index * 300,
+        six_weekly_inspection_due_date: isoDate(18 + index * 14),
+        notes: 'Demo plant service schedule record.',
+        last_updated_by: manager.id,
+      },
+      { onConflict: 'plant_id' }
+    );
+  }
+
+  await supabase.from('maintenance_history').delete().like('comment', 'Demo maintenance:%');
+
+  const historyRows = [
+    seededVehicles[0]?.id && {
+      van_id: seededVehicles[0].id,
+      field_name: 'mot_due_date',
+      old_value: isoDate(7),
+      new_value: isoDate(30),
+      value_type: 'date',
+      comment: 'Demo maintenance: MOT date updated after booking.',
+      updated_by: manager.id,
+      updated_by_name: manager.fullName,
+    },
+    seededHgvs[0]?.id && {
+      hgv_id: seededHgvs[0].id,
+      field_name: 'six_weekly_inspection_due_date',
+      old_value: isoDate(5),
+      new_value: isoDate(12),
+      value_type: 'date',
+      comment: 'Demo maintenance: six-weekly inspection rescheduled.',
+      updated_by: manager.id,
+      updated_by_name: manager.fullName,
+    },
+    seededPlant[0]?.id && {
+      plant_id: seededPlant[0].id,
+      field_name: 'next_service_hours',
+      old_value: '1900',
+      new_value: '2000',
+      value_type: 'mileage',
+      comment: 'Demo maintenance: service interval confirmed.',
+      updated_by: manager.id,
+      updated_by_name: manager.fullName,
+    },
+  ].filter(Boolean);
+
+  if (historyRows.length) {
+    const { error } = await supabase.from('maintenance_history').insert(historyRows);
+    if (error) throw error;
+  }
+
+  console.log('Ready: demo maintenance schedules and history');
+}
+
+async function seedProjects(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
+  const admin = profiles.find((profile) => profile.key === 'admin') || profiles[0];
+  const employees = profiles.filter((profile) => profile.key !== 'admin');
+  const { data: documentType, error: typeError } = await supabase
+    .from('project_document_types')
+    .upsert(
+      {
+        name: 'Demo Project Pack',
+        description: 'Fictional document type for DigiDocs demonstrations',
+        required_signature: true,
+        is_active: true,
+        sort_order: 2,
+        created_by: admin.id,
+      },
+      { onConflict: 'name' }
+    )
+    .select('id')
+    .single();
+
+  if (typeError) throw typeError;
+  if (!documentType?.id) return;
+
+  const { data: existingDocs } = await supabase
+    .from('rams_documents')
+    .select('id')
+    .in('title', ['Demo A47 Resurfacing RAMS', 'Demo Yard Drainage Method Statement']);
+  const existingDocIds = (existingDocs || []).map((doc: { id: string }) => doc.id);
+  await deleteByIds(supabase, 'project_favourites', existingDocIds, 'document_id');
+  await deleteByIds(supabase, 'rams_assignments', existingDocIds, 'rams_document_id');
+  await deleteByIds(supabase, 'rams_documents', existingDocIds);
+
+  const { data: docs, error } = await supabase
+    .from('rams_documents')
+    .insert([
+      {
+        title: 'Demo A47 Resurfacing RAMS',
+        description: 'Fictional risk assessment and method statement for resurfacing works.',
+        file_name: 'demo-a47-resurfacing-rams.pdf',
+        file_path: 'demo/project-documents/demo-a47-resurfacing-rams.pdf',
+        file_size: 842000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Yard Drainage Method Statement',
+        description: 'Fictional project document showing assignment and signature states.',
+        file_name: 'demo-yard-drainage-method-statement.pdf',
+        file_path: 'demo/project-documents/demo-yard-drainage-method-statement.pdf',
+        file_size: 616000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+    ])
+    .select('id');
 
   if (error) throw error;
+  const assignments = (docs || []).flatMap((doc: { id: string }, docIndex: number) =>
+    employees.map((employee, employeeIndex) => ({
+      rams_document_id: doc.id,
+      employee_id: employee.id,
+      assigned_by: admin.id,
+      status: docIndex === 0 && employeeIndex === 0 ? 'signed' : employeeIndex === 1 ? 'read' : 'pending',
+      read_at: employeeIndex <= 1 ? dateTime(-1, 10) : null,
+      signed_at: docIndex === 0 && employeeIndex === 0 ? dateTime(-1, 11) : null,
+      signature_data: docIndex === 0 && employeeIndex === 0 ? 'data:image/png;base64,demo' : null,
+      comments: 'Demo project assignment.',
+    }))
+  );
+
+  if (assignments.length) {
+    const { error: assignmentsError } = await supabase.from('rams_assignments').insert(assignments);
+    if (assignmentsError) throw assignmentsError;
+  }
+
+  if (docs?.[0]?.id) {
+    await supabase.from('project_favourites').upsert(
+      { document_id: docs[0].id, user_id: admin.id },
+      { onConflict: 'document_id,user_id' }
+    );
+  }
+
+  console.log(`Ready: ${docs?.length || 0} demo project documents`);
+}
+
+async function upsertInventoryLocation(
+  supabase: ScriptSupabaseClient,
+  payload: Record<string, unknown>
+): Promise<string> {
+  const { data: existing } = await supabase
+    .from('inventory_locations')
+    .select('id')
+    .eq('name', payload.name)
+    .maybeSingle();
+
+  const query = existing?.id
+    ? supabase.from('inventory_locations').update(payload).eq('id', existing.id)
+    : supabase.from('inventory_locations').insert(payload);
+
+  const { data, error } = await query.select('id').single();
+  if (error) throw error;
+  if (!data?.id) throw new Error(`Unable to seed inventory location ${payload.name}`);
+  return data.id;
+}
+
+async function seedInventory(
+  supabase: ScriptSupabaseClient,
+  profiles: SeededProfile[],
+  seededVehicles: SeededVehicle[],
+  seededPlant: SeededPlant[]
+): Promise<void> {
+  const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
+  const yardLocationId = await upsertInventoryLocation(supabase, {
+    name: 'Demo Main Yard',
+    description: 'Central stores location for demo inventory.',
+    is_active: true,
+    created_by: manager.id,
+    updated_by: manager.id,
+  });
+  const vanLocationId = seededVehicles[0]?.id
+    ? await upsertInventoryLocation(supabase, {
+        name: 'Demo Service Van Stores',
+        description: 'Mobile stock held on the demo service van.',
+        is_active: true,
+        linked_van_id: seededVehicles[0].id,
+        created_by: manager.id,
+        updated_by: manager.id,
+      })
+    : yardLocationId;
+  const plantLocationId = seededPlant[0]?.id
+    ? await upsertInventoryLocation(supabase, {
+        name: 'Demo Plant Container',
+        description: 'Small tools and equipment assigned to demo plant operations.',
+        is_active: true,
+        linked_plant_id: seededPlant[0].id,
+        created_by: manager.id,
+        updated_by: manager.id,
+      })
+    : yardLocationId;
+
+  const inventoryItems = [
+    { item_number: 'DD-001', name: 'Laser Level Kit', category: 'tools', location_id: yardLocationId },
+    { item_number: 'DD-002', name: 'Temporary Road Signs Pack', category: 'signs', location_id: vanLocationId },
+    { item_number: 'DD-003', name: 'Portable Generator', category: 'equipment', location_id: plantLocationId },
+    { item_number: 'DD-004', name: 'Hydraulic Breaker Attachment', category: 'hired_plant', location_id: plantLocationId },
+  ];
+
+  const { data: items, error } = await supabase
+    .from('inventory_items')
+    .upsert(
+      inventoryItems.map((item) => ({
+        ...item,
+        item_number_normalized: normaliseInventoryNumber(item.item_number),
+        last_checked_at: isoDate(-2),
+        status: 'active',
+        source: 'demo-seed',
+        source_reference: 'DigiDocs demo inventory',
+        created_by: manager.id,
+        updated_by: manager.id,
+      })),
+      { onConflict: 'item_number_normalized' }
+    )
+    .select('id, location_id');
+
+  if (error) throw error;
+  await supabase.from('inventory_item_movements').delete().like('note', 'Demo inventory:%');
+  if (items?.length) {
+    const { error: movementError } = await supabase.from('inventory_item_movements').insert(
+      items.map((item: { id: string; location_id: string }) => ({
+        item_id: item.id,
+        to_location_id: item.location_id,
+        moved_by: manager.id,
+        note: 'Demo inventory: seeded opening stock position.',
+      }))
+    );
+    if (movementError) throw movementError;
+  }
+
+  console.log(`Ready: ${items?.length || 0} demo inventory items`);
 }
 
 async function main() {
@@ -460,13 +1186,26 @@ async function main() {
   });
 
   await ensureDemoRoles(supabase);
+  await ensureDemoTeams(supabase);
   const profiles = await ensureDemoUsers(supabase);
   const seededVehicles = await seedVehicles(supabase);
+  const seededHgvs = await seedHgvs(supabase);
+  const seededPlant = await seedPlant(supabase, profiles);
   await runOptionalStep('demo timesheets and entries', () => seedTimesheets(supabase, profiles));
+  await runOptionalStep('demo daily inspections', () =>
+    seedInspections(supabase, profiles, seededVehicles, seededHgvs, seededPlant)
+  );
+  await runOptionalStep('demo maintenance and service schedules', () =>
+    seedMaintenance(supabase, profiles, seededVehicles, seededHgvs, seededPlant)
+  );
+  await runOptionalStep('demo project documents', () => seedProjects(supabase, profiles));
+  await runOptionalStep('demo inventory', () => seedInventory(supabase, profiles, seededVehicles, seededPlant));
   await runOptionalStep('demo customer and quote', () => seedCustomersAndQuotes(supabase, profiles));
   await runOptionalStep('demo toolbox message', () => seedMessages(supabase, profiles));
   await runOptionalStep('demo absence request', () => seedAbsence(supabase, profiles));
-  await runOptionalStep('demo workshop task', () => seedWorkshopTasks(supabase, profiles, seededVehicles));
+  await runOptionalStep('demo workshop task', () =>
+    seedWorkshopTasks(supabase, profiles, seededVehicles, seededHgvs, seededPlant)
+  );
 
   console.log('Demo seed complete. Login personas use password DemoPass123!');
 }

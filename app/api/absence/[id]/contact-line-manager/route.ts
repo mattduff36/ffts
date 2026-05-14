@@ -136,7 +136,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const bookingRange = formatAbsenceRange(absence.date, absence.end_date);
     const subject = `Leave cancellation request from ${employeeName}`;
     const body = [
-      `${employeeName} tried to cancel a leave booking in FieldOps Template.`,
+      `${employeeName} tried to cancel a leave booking in DigiDocs.`,
       '',
       `Type: ${reasonName}`,
       `Booking: ${bookingRange}`,

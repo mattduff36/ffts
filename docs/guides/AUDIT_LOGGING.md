@@ -2,7 +2,7 @@
 
 ## Overview
 
-The FieldOps Template application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
+The DigiDocs application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
 
 ## Features
 

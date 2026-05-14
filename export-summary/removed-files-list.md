@@ -18,7 +18,7 @@ The following files/directories were removed during the template sanitisation pa
 - `.cursor/rules/template-app.mdc`
 - `.cursor/settings.json`
 - `.cursorrules`
-- `fieldops-template@0.1.0`
+- `digidocs@0.1.0`
 - `backups/`
 - `backups/database-backup-2025-11-21T14-43-14.sql`
 - `build-output.log`

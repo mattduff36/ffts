@@ -64,9 +64,9 @@ export const templateConfig: TemplatePublicConfig = {
   isDemoMode: mode === appModes.demo,
   demoEmailDomain,
   branding: {
-    appName: readPublicEnv('NEXT_PUBLIC_APP_NAME', 'FieldOps Template'),
-    shortAppName: readPublicEnv('NEXT_PUBLIC_SHORT_APP_NAME', 'FieldOps'),
-    companyName: readPublicEnv('NEXT_PUBLIC_COMPANY_NAME', 'Example Client Ltd'),
+    appName: readPublicEnv('NEXT_PUBLIC_APP_NAME', 'DigiDocs'),
+    shortAppName: readPublicEnv('NEXT_PUBLIC_SHORT_APP_NAME', 'DigiDocs'),
+    companyName: readPublicEnv('NEXT_PUBLIC_COMPANY_NAME', 'DigiDocs Demo Ltd'),
     registeredAddress: readPublicEnv(
       'NEXT_PUBLIC_COMPANY_ADDRESS',
       'Example House, Template Street, Example Town'

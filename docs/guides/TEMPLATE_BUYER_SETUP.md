@@ -1,6 +1,6 @@
 # Buyer Setup Guide
 
-Use this guide when creating a new customer project from the FieldOps template.
+Use this guide when creating a new customer project from the DigiDocs template.
 
 ## 1. Run The Local Setup Wizard
 

@@ -2,7 +2,7 @@
 
 ## Plain-English Summary
 
-The repository has been cleaned and is now a strong starting point for a reusable FieldOps-style template. It still needs productisation before it can be handed to a new customer or sold as a polished template product.
+The repository has been cleaned and is now a strong starting point for a reusable DigiDocs-style template. It still needs productisation before it can be handed to a new customer or sold as a polished template product.
 
 There are two separate goals:
 

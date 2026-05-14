@@ -11,11 +11,11 @@ Demo data must only be used with `APP_MODE=demo` and a dedicated demo Supabase p
 ## What Was Created
 
 ### 👥 Employees (5)
-- **John Smith** - EMP101 (john.smith@fieldops-template.test)
-- **Sarah Jones** - EMP102 (sarah.jones@fieldops-template.test)
-- **Mike Wilson** - EMP103 (mike.wilson@fieldops-template.test)
-- **Emma Brown** - EMP104 (emma.brown@fieldops-template.test)
-- **David Taylor** - EMP105 (david.taylor@fieldops-template.test)
+- **John Smith** - EMP101 (john.smith@digidocs-demo.test)
+- **Sarah Jones** - EMP102 (sarah.jones@digidocs-demo.test)
+- **Mike Wilson** - EMP103 (mike.wilson@digidocs-demo.test)
+- **Emma Brown** - EMP104 (emma.brown@digidocs-demo.test)
+- **David Taylor** - EMP105 (david.taylor@digidocs-demo.test)
 
 All employee passwords: `TestPass123!`
 
@@ -55,7 +55,7 @@ All employee passwords: `TestPass123!`
 To view and download reports:
 1. Navigate to http://localhost:4000
 2. Login with:
-   - Email: `manager@fieldops-template.test`
+   - Email: `manager@digidocs-demo.test`
    - Password: `TestPass123!`
 3. Go to Reports page
 
@@ -126,12 +126,12 @@ Demo email sends to the fake demo domain are simulated, not delivered.
 | Role | Email | Password | Access |
 |------|-------|----------|--------|
 | Admin | admin@example.test | TestPass123! | Full system access |
-| Manager | manager@fieldops-template.test | TestPass123! | View all, approve forms, reports |
-| Employee 1 | john.smith@fieldops-template.test | TestPass123! | Own forms only |
-| Employee 2 | sarah.jones@fieldops-template.test | TestPass123! | Own forms only |
-| Employee 3 | mike.wilson@fieldops-template.test | TestPass123! | Own forms only |
-| Employee 4 | emma.brown@fieldops-template.test | TestPass123! | Own forms only |
-| Employee 5 | david.taylor@fieldops-template.test | TestPass123! | Own forms only |
+| Manager | manager@digidocs-demo.test | TestPass123! | View all, approve forms, reports |
+| Employee 1 | john.smith@digidocs-demo.test | TestPass123! | Own forms only |
+| Employee 2 | sarah.jones@digidocs-demo.test | TestPass123! | Own forms only |
+| Employee 3 | mike.wilson@digidocs-demo.test | TestPass123! | Own forms only |
+| Employee 4 | emma.brown@digidocs-demo.test | TestPass123! | Own forms only |
+| Employee 5 | david.taylor@digidocs-demo.test | TestPass123! | Own forms only |
 
 ## Testing Scenarios
 

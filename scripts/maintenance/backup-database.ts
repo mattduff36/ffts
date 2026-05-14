@@ -41,7 +41,7 @@ async function backupDatabase() {
     const backupPath = resolve(process.cwd(), 'backups', backupFileName);
 
     let backupSQL = `-- ========================================\n`;
-    backupSQL += `-- FIELDOPS TEMPLATE DATABASE BACKUP\n`;
+    backupSQL += `-- DIGIDOCS DATABASE BACKUP\n`;
     backupSQL += `-- Created: ${new Date().toISOString()}\n`;
     backupSQL += `-- ========================================\n\n`;
 

@@ -31,8 +31,8 @@ function createSecret(): string {
 function buildDefaultState(): TemplateSetupState {
   return templateSetupSchema.parse({
     companyName: getArgValue('company') || 'Example Client Ltd',
-    appName: getArgValue('app-name') || 'FieldOps Template',
-    shortAppName: getArgValue('short-name') || 'FieldOps',
+    appName: getArgValue('app-name') || 'DigiDocs',
+    shortAppName: getArgValue('short-name') || 'DigiDocs',
     registeredAddress: getArgValue('address') || 'Example House, Template Street, Example Town',
     mainAdminEmail: getArgValue('admin-email') || 'template-admin@example.com',
     supportEmail: getArgValue('support-email') || 'support@example.test',

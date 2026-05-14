@@ -463,7 +463,7 @@ export async function sendQuoteToCustomerEmail(bundle: QuoteBundle, cc: string[]
   }
 
   const customerName = bundle.quote.attention_name || bundle.quote.customer?.contact_name || 'there';
-  const subject = `Quotation ${bundle.quote.quote_reference} - ${bundle.quote.subject_line || bundle.quote.customer?.company_name || 'FieldOps Template'}`;
+  const subject = `Quotation ${bundle.quote.quote_reference} - ${bundle.quote.subject_line || bundle.quote.customer?.company_name || 'DigiDocs'}`;
   const pricingCopy = bundle.quote.pricing_mode === 'attachments_only'
     ? '<p>Pricing and supporting details are included in the attached documents.</p>'
     : '';
@@ -476,7 +476,7 @@ export async function sendQuoteToCustomerEmail(bundle: QuoteBundle, cc: string[]
         <p>Please find attached our quotation for <strong>${bundle.quote.subject_line || 'the requested works'}</strong>.</p>
         ${pricingCopy}
         <p>If you have any queries, please reply to this email and we will be happy to help.</p>
-        <p>Kind regards,<br>${bundle.quote.signoff_name || 'FieldOps Template'}${bundle.quote.signoff_title ? `<br>${bundle.quote.signoff_title}` : ''}</p>
+        <p>Kind regards,<br>${bundle.quote.signoff_name || 'DigiDocs'}${bundle.quote.signoff_title ? `<br>${bundle.quote.signoff_title}` : ''}</p>
       </body>
     </html>
   `;

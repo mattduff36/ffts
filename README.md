@@ -1,4 +1,4 @@
-# FieldOps Template
+# DigiDocs
 
 A reusable Next.js App Router starter for field operations, workforce workflows, inspections, maintenance, messaging, reporting, and role-based administration. This repository is a sanitised template copy: client data, production links, credentials, generated reports, and customer-specific branding have been removed or replaced with placeholders.
 

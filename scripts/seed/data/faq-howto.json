@@ -79,10 +79,10 @@
   "articles": [
     {
       "category_slug": "getting-started",
-      "slug": "what-is-fieldops-template",
-      "title": "What is the FieldOps Template?",
+      "slug": "what-is-digidocs",
+      "title": "What is DigiDocs?",
       "summary": "Overview of the template digital forms management system.",
-      "content_md": "# What is the FieldOps Template?\n\nThe FieldOps Template is a custom-built digital forms management system designed for Example Client Ltd It replaces paper-based forms with a modern, mobile-first Progressive Web Application (PWA) accessible from any device.\n\n## Key Features\n\n- **Employee Timesheets** - Digital weekly timesheets with automatic hour calculations\n- **Vehicle Inspections** - Dynamic safety checklists based on vehicle type (Vans get 14 items, Trucks/Artics/Trailers get 26 items)\n- **RAMS Documents** - Risk Assessment & Method Statement management with visitor signatures\n- **Absence Management** - Request and track annual leave with calendar view\n- **Fleet Management** - Track MOT, tax, service schedules, and manage vehicles\n- **Workshop Tasks** - Manage vehicle repairs with categories, status tracking, and comments\n- **Approvals** - Manager review and approval workflows for timesheets and absences\n- **Reports** - Export data as PDF or Excel files\n\n## Access\n\nThe app is available at: https://app.example.com\n\nIt works on desktop, tablet, and mobile devices. For the best mobile experience, add it to your home screen as a PWA."
+      "content_md": "# What is DigiDocs?\n\nDigiDocs is a custom-built digital forms management system designed for DigiDocs Demo Ltd. It replaces paper-based forms with a modern, mobile-first Progressive Web Application (PWA) accessible from any device.\n\n## Key Features\n\n- **Employee Timesheets** - Digital weekly timesheets with automatic hour calculations\n- **Vehicle Inspections** - Dynamic safety checklists based on vehicle type (Vans get 14 items, Trucks/Artics/Trailers get 26 items)\n- **RAMS Documents** - Risk Assessment & Method Statement management with visitor signatures\n- **Absence Management** - Request and track annual leave with calendar view\n- **Fleet Management** - Track MOT, tax, service schedules, and manage vehicles\n- **Workshop Tasks** - Manage vehicle repairs with categories, status tracking, and comments\n- **Approvals** - Manager review and approval workflows for timesheets and absences\n- **Reports** - Export data as PDF or Excel files\n\n## Access\n\nThe app is available at: https://app.example.com\n\nIt works on desktop, tablet, and mobile devices. For the best mobile experience, add it to your home screen as a PWA."
     },
     {
       "category_slug": "getting-started",
@@ -109,8 +109,8 @@
       "category_slug": "getting-started",
       "slug": "mobile-pwa-install",
       "title": "How to install the app on my phone",
-      "summary": "Add the FieldOps Template to your home screen for the best mobile experience.",
-      "content_md": "# How to install the app on my phone\n\nThe FieldOps Template is a Progressive Web App (PWA) that can be installed on your phone for an app-like experience.\n\n## iPhone (Safari)\n\n1. Open Safari and go to https://app.example.com\n2. Tap the **Share** button (square with arrow)\n3. Scroll down and tap **Add to Home Screen**\n4. Tap **Add** in the top right\n\n## Android (Chrome)\n\n1. Open Chrome and go to https://app.example.com\n2. Tap the **three dots** menu in the top right\n3. Tap **Add to Home screen**\n4. Tap **Add**\n\n## Benefits\n\n- Launch directly from your home screen\n- App-like full-screen experience\n- Works offline for viewing previously loaded data\n- Faster access without opening a browser"
+      "summary": "Add DigiDocs to your home screen for the best mobile experience.",
+      "content_md": "# How to install the app on my phone\n\nDigiDocs is a Progressive Web App (PWA) that can be installed on your phone for an app-like experience.\n\n## iPhone (Safari)\n\n1. Open Safari and go to https://app.example.com\n2. Tap the **Share** button (square with arrow)\n3. Scroll down and tap **Add to Home Screen**\n4. Tap **Add** in the top right\n\n## Android (Chrome)\n\n1. Open Chrome and go to https://app.example.com\n2. Tap the **three dots** menu in the top right\n3. Tap **Add to Home screen**\n4. Tap **Add**\n\n## Benefits\n\n- Launch directly from your home screen\n- App-like full-screen experience\n- Works offline for viewing previously loaded data\n- Faster access without opening a browser"
     },
     {
       "category_slug": "getting-started",

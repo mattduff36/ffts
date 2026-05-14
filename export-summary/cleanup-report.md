@@ -2,12 +2,12 @@
 
 ## Scope
 
-Converted the copied repository into a reusable FieldOps Template starter while preserving the Next.js app structure, Supabase schema/migrations, API routes, UI modules, tests, scripts, deployment config, and workflow architecture.
+Converted the copied repository into a reusable DigiDocs starter while preserving the Next.js app structure, Supabase schema/migrations, API routes, UI modules, tests, scripts, deployment config, and workflow architecture.
 
 ## Main Changes
 
 - Removed private/generated artifacts: local data exports, backups, private docs, generated reports, tablet screenshots, TestSprite generated files, cache/build outputs, local editor rules, `node_modules`, `.next`, TypeScript cache, and one-off Supabase SQL fix files outside the reusable schema/migration set.
-- Replaced client-specific branding with FieldOps Template placeholders across app metadata, PWA manifests, UI labels, PDFs, emails, tests, seed data, and docs.
+- Replaced client-specific branding with DigiDocs placeholders across app metadata, PWA manifests, UI labels, PDFs, emails, tests, seed data, and docs.
 - Replaced real domains, production URLs, customer emails, staff names, and registered office details with `example.com`, `example.test`, `your-app.example.com`, and sample address placeholders.
 - Removed hardcoded email-service credentials and changed sample email routes/scripts to require environment variables.
 - Kept reusable database architecture in `supabase/schema.sql` and `supabase/migrations/`.

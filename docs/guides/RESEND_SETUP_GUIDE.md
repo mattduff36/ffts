@@ -11,7 +11,7 @@
 1. Log into Resend dashboard
 2. Navigate to **API Keys** in the sidebar
 3. Click **"Create API Key"**
-4. Name it: `FieldOps Template Production` (or similar)
+4. Name it: `DigiDocs Production` (or similar)
 5. Copy the API key (starts with `re_...`)
 6. **Important**: Save it securely - you won't see it again!
 

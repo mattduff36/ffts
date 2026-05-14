@@ -29,14 +29,14 @@ const TEST_USERS = [
     role: 'admin'
   },
   {
-    email: 'manager@fieldops-template.test',
+    email: 'manager@digidocs-demo.test',
     password: 'TestPass123!',
     full_name: 'Manager User',
     employee_id: 'MGR001',
     role: 'manager'
   },
   {
-    email: 'employee@fieldops-template.test',
+    email: 'employee@digidocs-demo.test',
     password: 'TestPass123!',
     full_name: 'Employee User',
     employee_id: 'EMP001',
@@ -141,12 +141,12 @@ async function createTestUsers() {
   console.log('│   Access:   Full system access                  │');
   console.log('│                                                 │');
   console.log('│ 👔 MANAGER USER                                 │');
-  console.log('│   Email:    manager@fieldops-template.test             │');
+  console.log('│   Email:    manager@digidocs-demo.test                 │');
   console.log('│   Password: TestPass123!                        │');
   console.log('│   Access:   View all, approve forms             │');
   console.log('│                                                 │');
   console.log('│ 👷 EMPLOYEE USER                                │');
-  console.log('│   Email:    employee@fieldops-template.test            │');
+  console.log('│   Email:    employee@digidocs-demo.test                │');
   console.log('│   Password: TestPass123!                        │');
   console.log('│   Access:   Own forms only                      │');
   console.log('│                                                 │');

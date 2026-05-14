@@ -132,7 +132,7 @@ RESEND_API_KEY=your_resend_api_key
 ### Email Configuration
 ```javascript
 {
-  from: 'FieldOps Template <notifications@your-app.example.com>',
+  from: 'DigiDocs <notifications@your-app.example.com>',
   to: ['template-admin@example.com'],
   subject: '🚨 Daily Error Summary - {count} errors on {date}',
   html: '...' // Formatted HTML email

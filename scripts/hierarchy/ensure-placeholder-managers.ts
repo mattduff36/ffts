@@ -13,7 +13,7 @@ const PLACEHOLDER_MANAGERS = [
   {
     key: 'tim-weaver',
     full_name: 'Example User Five',
-    email: 'placeholder+tim-weaver@fieldops-template.local',
+    email: 'placeholder+tim-weaver@digidocs.local',
   },
 ] as const;
 

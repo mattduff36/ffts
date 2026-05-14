@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
 
   <!-- Footer -->
   <div style="text-align: center; margin-top: 20px; padding: 20px; color: #666; font-size: 13px;">
-    <p style="margin: 0;">This is a SAMPLE automated daily error summary for FieldOps Template</p>
+    <p style="margin: 0;">This is a SAMPLE automated daily error summary for DigiDocs</p>
     <p style="margin: 5px 0 0 0;">Generated on ${new Date().toLocaleString('en-GB')}</p>
   </div>
 

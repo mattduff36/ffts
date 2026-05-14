@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FieldOps icon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DigiDocs icon">
   <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <path d="M18 18h28v8H28v8h15v8H28v14H18V18Z" fill="#F1D64A"/>
+  <path d="M16 14h20c9 0 16 7 16 18s-7 18-16 18H16V14Zm10 9v18h9c4 0 7-4 7-9s-3-9-7-9h-9Z" fill="#F1D64A"/>
   <path d="M38 10h16v16h-8v-8h-8v-8Z" fill="#38bdf8"/>
 </svg>

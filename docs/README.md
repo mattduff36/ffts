@@ -1,6 +1,6 @@
 # Template Documentation
 
-This documentation folder keeps reusable technical guides for the FieldOps Template. Historical client reports, generated screenshots, production incident notes, proposals, and private deployment records were removed during sanitisation.
+This documentation folder keeps reusable technical guides for DigiDocs. Historical client reports, generated screenshots, production incident notes, proposals, and private deployment records were removed during sanitisation.
 
 ## Kept Documentation
 

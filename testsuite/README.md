@@ -1,6 +1,6 @@
 # Testsuite
 
-Comprehensive test suite for TemplateApp (FieldOps Template). Converted from the legacy `testsprite_tests/` Python scripts into Playwright (TypeScript) for UI workflows and Vitest for API/integration checks.
+Comprehensive test suite for DigiDocs. Converted from the legacy `testsprite_tests/` Python scripts into Playwright (TypeScript) for UI workflows and Vitest for API/integration checks.
 
 ## Data Safety
 

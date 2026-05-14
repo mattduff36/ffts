@@ -49,7 +49,7 @@ const patterns: Array<{ name: string; regex: RegExp; severity: AuditFinding['sev
   { name: 'Resend API key', regex: /re_[A-Za-z0-9]{20,}/, severity: 'critical' },
   {
     name: 'Likely real email domain',
-    regex: /[A-Z0-9._%+-]+@(?!example\.com|example\.test|example\.local|demo\.example\.test|fieldops-template\.test|test\.com|your-app\.example\.com)[A-Z0-9.-]+\.[A-Z]{2,}/i,
+    regex: /[A-Z0-9._%+-]+@(?!example\.com|example\.test|example\.local|demo\.example\.test|digidocs-demo\.test|test\.com|your-app\.example\.com)[A-Z0-9.-]+\.[A-Z]{2,}/i,
     severity: 'review',
   },
   { name: 'Placeholder app URL', regex: /your-app\.example\.com/i, severity: 'review' },

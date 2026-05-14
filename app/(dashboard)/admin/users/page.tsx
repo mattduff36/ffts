@@ -94,9 +94,11 @@ type ProfileWithRole = Omit<Profile, 'role'> & {
   is_placeholder?: boolean | null;
 };
 interface UserActivitySummary {
+  id?: string;
   email?: string;
   last_sign_in_at?: string | null;
   last_active_at?: string | null;
+  profile?: ProfileWithRole | null;
 }
 type ProfileWithEmail = ProfileWithRole & UserActivitySummary;
 
@@ -480,7 +482,9 @@ export default function UsersAdminPage() {
       `)
       .order('full_name', { ascending: true });
 
-    if (profilesError) throw profilesError;
+    if (profilesError) {
+      console.warn('Browser profile query failed; falling back to admin users API profiles:', profilesError);
+    }
 
     // Fetch auth users to get emails (via API route)
     const response = await fetch('/api/admin/users/list-with-emails');
@@ -490,13 +494,24 @@ export default function UsersAdminPage() {
     }
     const { users: authUsers } = await response.json();
 
+    const typedAuthUsers = (authUsers || []) as Array<UserActivitySummary & { id: string }>;
     // Create a map of auth details by user id.
     const authUserMap = new Map<string, UserActivitySummary & { id: string }>(
-      authUsers?.map((u: UserActivitySummary & { id: string }) => [u.id, u]) || []
+      typedAuthUsers.map((u) => [u.id, u])
     );
+    const profileMap = new Map<string, ProfileWithRole>();
+    const browserProfiles = profilesError ? [] : ((profiles as unknown as ProfileWithRole[]) || []);
+    browserProfiles.forEach((profile) => {
+      profileMap.set(profile.id, profile);
+    });
+    typedAuthUsers.forEach((authUser) => {
+      if (authUser.profile && !profileMap.has(authUser.profile.id)) {
+        profileMap.set(authUser.profile.id, authUser.profile);
+      }
+    });
 
-    // Merge profiles with emails
-    return (profiles as unknown as ProfileWithRole[])?.map(profile => ({
+    // Merge profiles with emails. The API profile fallback keeps this page useful if browser RLS hides profiles.
+    return Array.from(profileMap.values()).map(profile => ({
       ...profile,
       email: authUserMap.get(profile.id)?.email || '',
       last_sign_in_at: authUserMap.get(profile.id)?.last_sign_in_at || null,

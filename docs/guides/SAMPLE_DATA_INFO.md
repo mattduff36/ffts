@@ -1,113 +1,26 @@
 # Sample And Demo Data Information
 
 ## Overview
+
 The template has two fake-data paths:
 
 - `npm run seed:sample-data`: developer sample data for local reporting/testing.
 - `npm run demo:seed`: sales-demo personas and demo-owned data for a dedicated demo deployment.
 
-Demo data must only be used with `APP_MODE=demo` and a dedicated demo Supabase project.
+Demo data must only be used with `APP_MODE=demo`, `NEXT_PUBLIC_APP_MODE=demo`, and a dedicated demo Supabase project.
 
-## What Was Created
+## Hosted Demo Target
 
-### 👥 Employees (5)
-- **John Smith** - EMP101 (john.smith@digidocs-demo.test)
-- **Sarah Jones** - EMP102 (sarah.jones@digidocs-demo.test)
-- **Mike Wilson** - EMP103 (mike.wilson@digidocs-demo.test)
-- **Emma Brown** - EMP104 (emma.brown@digidocs-demo.test)
-- **David Taylor** - EMP105 (david.taylor@digidocs-demo.test)
+The rich demo seed is designed to make `https://digidocs.mpdee.co.uk/` feel like a live mid-sized contractor over a six-month period. It should include:
 
-All employee passwords: `TestPass123!`
+- 1 hidden owner superadmin: `admin@mpdee.co.uk`.
+- 2 visible Admin users.
+- 4 Managers.
+- 20 Employees/contractors split across teams.
+- 20-30 vans, HGVs, and plant assets.
+- Six months of timesheets, absence/leave, inspections, maintenance, workshop tasks, inventory, RAMS/project documents, messages, customers, quotes, and reportable history.
 
-### 🚗 Vehicles (5)
-- YX21ABC (Truck)
-- YX22DEF (Artic)
-- YX23GHI (Trailer)
-- YX24JKL (Truck)
-- YX25MNO (Van)
-
-### 📅 Timesheets
-- **Total:** 20 timesheets (5 employees × 4 weeks)
-- **Entries:** 106 daily entries
-- **Status:** Most approved, some submitted
-- **Features:**
-  - Random job codes (JOB001-JOB005, YARD)
-  - Mix of regular work and yard work
-  - Realistic working hours (8-10 hours/day)
-  - Some days off (particularly weekends)
-  - 4-7 working days per week per employee
-
-### 🔍 Vehicle Inspections
-- **Total:** 31 inspections
-- **Defects:** 20 defect items found
-- **Actions:** 16 actions created from defects
-- **Features:**
-  - Each employee performed 1-2 inspections per week
-  - 26 inspection items per inspection (standard checklist)
-  - ~30% of inspections contain defects
-  - Random mileage readings
-  - Most inspections approved
-  - Actions automatically created for each defect with random priority levels
-
-## Testing the Reports
-
-### Login as Manager
-To view and download reports:
-1. Navigate to http://localhost:4000
-2. Login with:
-   - Email: `manager@digidocs-demo.test`
-   - Password: `TestPass123!`
-3. Go to Reports page
-
-### Available Reports
-
-#### 📊 Weekly Timesheet Summary
-- Shows all timesheets with daily hours breakdown
-- **NEW:** Includes Job Numbers column
-- Shows status, submission dates
-- Totals for approved timesheets
-
-#### 💰 Payroll Report
-- Approved timesheets only
-- Regular hours vs. overtime (40hr week standard)
-- Total hours summary
-
-#### ✅ Inspection Compliance Report
-- All inspections with status
-- Compliance rate statistics
-- Submission tracking
-
-#### 🔧 Defects Report
-- Lists all inspection items marked as defects
-- Vehicle details and inspector information
-- Defect comments included
-
-### 📋 Actions Page
-The Actions page displays defects that require attention:
-- **16 Actions** created from inspection defects
-- Priority levels: Low, Medium, High, Urgent
-- Status tracking: Pending, In Progress, Completed
-- Checkbox to mark actions as completed
-- Links back to source inspection
-- Filters to show pending vs completed actions
-
-## Date Range for Testing
-
-The sample data covers the last 4 weeks from today:
-- Week 1: Most recent week ending on the last Sunday
-- Week 2-4: Previous 3 weeks
-
-Use the date picker in the Reports page to filter data.
-
-## Re-running the Seed Script
-
-To add more sample data or recreate it:
-
-```bash
-npm run seed:sample-data
-```
-
-**Note:** The script will create new users if they don't exist, or use existing ones if they do.
+All fictional users use the fake demo domain configured by `NEXT_PUBLIC_DEMO_EMAIL_DOMAIN`, which defaults to `demo.example.test`, except the hidden owner superadmin and any real accounts manually created during a demo.
 
 ## Demo Mode Commands
 
@@ -117,48 +30,54 @@ APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:seed
 DEMO_RESET_CONFIRM=RESET_DEMO_DATA APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:reset
 ```
 
-Demo users use the fake domain configured by `NEXT_PUBLIC_DEMO_EMAIL_DOMAIN`, which defaults to `demo.example.test`. The login page only shows one-click demo personas when demo mode is enabled.
+Create or repair the hidden owner superadmin with:
 
-Demo email sends to the fake demo domain are simulated, not delivered.
+```bash
+DEMO_SUPERADMIN_EMAIL=admin@mpdee.co.uk DEMO_SUPERADMIN_PASSWORD=<temporary-password> APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:bootstrap-superadmin
+```
+
+## Approved Fresh Demo State
+
+After the live demo has been manually checked, capture a private approved snapshot:
+
+```bash
+DEMO_SNAPSHOT_CONFIRM=CAPTURE_APPROVED_DEMO DEMO_SNAPSHOT_PATH=<private-path>/approved-demo.dump APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:snapshot:capture
+```
+
+Restore that approved snapshot when the public demo needs to return to the official fresh state:
+
+```bash
+DEMO_SNAPSHOT_CONFIRM=RESTORE_APPROVED_DEMO DEMO_SNAPSHOT_PATH=<private-path>/approved-demo.dump APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:snapshot:restore
+```
+
+Do not commit snapshots, dumps, or temporary passwords.
 
 ## Login Credentials Summary
 
-| Role | Email | Password | Access |
-|------|-------|----------|--------|
-| Admin | admin@example.test | TestPass123! | Full system access |
-| Manager | manager@digidocs-demo.test | TestPass123! | View all, approve forms, reports |
-| Employee 1 | john.smith@digidocs-demo.test | TestPass123! | Own forms only |
-| Employee 2 | sarah.jones@digidocs-demo.test | TestPass123! | Own forms only |
-| Employee 3 | mike.wilson@digidocs-demo.test | TestPass123! | Own forms only |
-| Employee 4 | emma.brown@digidocs-demo.test | TestPass123! | Own forms only |
-| Employee 5 | david.taylor@digidocs-demo.test | TestPass123! | Own forms only |
+The public login screen shows only demo personas in demo mode:
 
-## Testing Scenarios
+| Role | Email | Access |
+| --- | --- | --- |
+| Admin | `avery.stone@demo.example.test` | Admin controls, reports, and setup screens |
+| Manager | `morgan.reid@demo.example.test` | Team oversight, approvals, reports |
+| Employee | `jamie.carter@demo.example.test` | Timesheets, inspections, messages |
+| Contractor | `taylor.brooks@demo.example.test` | Limited worker-style access |
 
-### 1. Test Timesheet Reports
-- Login as manager
-- Go to Reports
-- Select last month's date range
-- Download "Weekly Timesheet Summary"
-- Verify Job Numbers column is present
+The hidden superadmin account is `admin@mpdee.co.uk`; it is intentionally not shown as a login persona.
 
-### 2. Test Payroll Calculation
-- Download "Payroll Report"
-- Check that overtime is calculated correctly (hours > 40)
+## Email Safety
 
-### 3. Test Inspection Reports
-- Download "Inspection Compliance Report"
-- Check compliance rate calculation
-- Download "Defects Report"
-- Verify defect items are listed with details
+Demo emails to fake demo/sample users are simulated and not delivered. Real accounts manually created during a demo may receive real Resend emails if the hosted demo has a demo-owned verified Resend sender configured.
 
-### 4. Test Filtering
-- Use different date ranges
-- Verify data is filtered correctly
+## Verification Scenarios
 
-## Notes
-- All timesheets have realistic working hours (6-8 AM start, 8-10 hour days)
-- Job codes are randomly assigned from a pool of 6 codes
-- Defects are randomly distributed across inspections (~30% have defects)
-- Vehicles are randomly assigned to employees each week
+Before approving the snapshot, check:
+
+- Admin > Users shows the visible admins, managers, employees, teams, and roles.
+- Dashboard and reports show non-empty six-month data.
+- Fleet, maintenance, workshop, inspections, inventory, timesheets, absence, RAMS/projects, messages, customers, and quotes all have believable fictional records.
+- PDFs/exports use DigiDocs demo branding and dummy data only.
+- Demo persona login works after a reset.
+- Hidden superadmin login works and can access protected operator/admin functions.
+- Fake demo recipients are simulated; real newly created demo accounts can receive email when Resend is configured.
 

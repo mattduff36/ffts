@@ -65,6 +65,7 @@ agent-tools/
 
 # database backups
 /backups
+/demo-snapshots
 
 # private documentation and sensitive materials
 /docs_private

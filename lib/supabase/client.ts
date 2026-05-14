@@ -116,10 +116,20 @@ export function createClient(): BrowserSupabaseClient {
     return client
   }
 
-  // During build/prerendering, environment variables may not be available
-  // This is only used in client components, so we can safely skip during build
   if (typeof window === 'undefined') {
-    throw new Error('createClient() can only be used in the browser')
+    // Client components still render once on the server in production. Return an inert
+    // client so hooks can initialise; React Query work runs after hydration in the browser.
+    return createSupabaseClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'demo-anon-key',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+      }
+    )
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

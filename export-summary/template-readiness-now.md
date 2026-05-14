@@ -15,6 +15,8 @@ These two goals should share the same core app, but they should not be treated a
 
 The codebase is already cleaned of known customer branding, real production links, private data exports, build artifacts, logs, and generated files. The app structure, UI, workflows, APIs, Supabase schema, migrations, tests, scripts, and deployment configuration have been preserved.
 
+The hosted DigiDocs demo is now being treated as a separate production demo environment, not as a normal customer production deployment. That means it must run in demo mode, use a dedicated Supabase project, use fictional data, simulate fake-user email delivery, and restore from a private approved snapshot after the live demo state has been manually checked.
+
 The template is not yet fully ready to sell or reuse without technical help because:
 
 - A setup wizard now exists, but it still needs to stay aligned with the final customer handover flow.
@@ -23,6 +25,18 @@ The template is not yet fully ready to sell or reuse without technical help beca
 - Branding has a central config layer and should continue to be routed through it as new PDFs, emails, and pages are added.
 - The demo data story now has a seed/reset foundation, but it still needs richer fictional module coverage for a polished sales demo.
 - External services such as Supabase, Resend, Vercel, DNS, MapTiler, DVLA/MOT, and FleetSmart still need customer-owned accounts and keys.
+
+## Hosted Demo Completion Scope
+
+The current completion target for `https://digidocs.mpdee.co.uk/` is:
+
+- Vercel Production environment uses `APP_MODE=demo` and `NEXT_PUBLIC_APP_MODE=demo`.
+- `DEMO_SUPABASE_PROJECT_REF` matches the dedicated demo Supabase project.
+- The hidden superadmin account is `admin@mpdee.co.uk`; it is not shown on the login screen.
+- Avery Stone and other visible demo accounts are normal demo roles, not true superadmins.
+- The demo database contains a realistic six-month fictional company dataset: roughly 20 employees, 4 managers, 2 visible admins, multiple teams, 20-30 fleet assets across vans/HGVs/plant, and enough records across timesheets, absence, inspections, maintenance, workshop, inventory, RAMS/projects, messages, quotes, and reports to make the product feel populated.
+- Fake demo/sample recipients are simulated in email flows; real accounts created during a demo may receive real Resend emails when Resend is configured.
+- Once manually approved, the live demo state is captured as a private snapshot outside the repository and used as the official restore point.
 
 ## Goal 1: Reusable Starter Template With Setup Wizard
 

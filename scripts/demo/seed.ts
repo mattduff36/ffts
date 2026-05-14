@@ -9,13 +9,14 @@ config({ path: resolve(process.cwd(), '.env.local') });
 type ScriptSupabaseClient = ReturnType<typeof createClient<any>>;
 
 interface DemoUser {
-  key: 'admin' | 'manager' | 'employee' | 'contractor';
+  key: string;
   email: string;
   fullName: string;
   employeeId: string;
   roleName: string;
   teamId: string;
   superAdmin: boolean;
+  phoneNumber?: string;
 }
 
 interface SeededProfile extends DemoUser {
@@ -40,43 +41,100 @@ interface SeededPlant {
 const demoDomain = process.env.NEXT_PUBLIC_DEMO_EMAIL_DOMAIN || 'demo.example.test';
 const password = process.env.DEMO_USER_PASSWORD || 'DemoPass123!';
 
-const users: DemoUser[] = [
-  {
-    key: 'admin',
-    email: `avery.stone@${demoDomain}`,
-    fullName: 'Avery Stone',
-    employeeId: 'DEMO-ADM',
-    roleName: 'admin',
-    teamId: 'management',
-    superAdmin: true,
-  },
+const demoManagers: DemoUser[] = [
   {
     key: 'manager',
     email: `morgan.reid@${demoDomain}`,
     fullName: 'Morgan Reid',
-    employeeId: 'DEMO-MGR',
+    employeeId: 'DEMO-MGR-01',
     roleName: 'manager',
     teamId: 'transport',
     superAdmin: false,
   },
   {
-    key: 'employee',
-    email: `jamie.carter@${demoDomain}`,
-    fullName: 'Jamie Carter',
-    employeeId: 'DEMO-EMP',
-    roleName: 'employee',
+    key: 'manager-02',
+    email: `harper.evans@${demoDomain}`,
+    fullName: 'Harper Evans',
+    employeeId: 'DEMO-MGR-02',
+    roleName: 'manager',
     teamId: 'civils',
     superAdmin: false,
   },
   {
-    key: 'contractor',
-    email: `taylor.brooks@${demoDomain}`,
-    fullName: 'Taylor Brooks',
-    employeeId: 'DEMO-CON',
-    roleName: 'employee',
+    key: 'manager-03',
+    email: `casey.turner@${demoDomain}`,
+    fullName: 'Casey Turner',
+    employeeId: 'DEMO-MGR-03',
+    roleName: 'manager',
     teamId: 'plant',
     superAdmin: false,
   },
+  {
+    key: 'manager-04',
+    email: `elliot.hughes@${demoDomain}`,
+    fullName: 'Elliot Hughes',
+    employeeId: 'DEMO-MGR-04',
+    roleName: 'manager',
+    teamId: 'workshop',
+    superAdmin: false,
+  },
+];
+
+const demoEmployees: DemoUser[] = [
+  ['employee', 'Jamie Carter', 'civils'],
+  ['contractor', 'Taylor Brooks', 'plant'],
+  ['employee-03', 'Alex Parker', 'transport'],
+  ['employee-04', 'Bailey Morris', 'civils'],
+  ['employee-05', 'Charlie Bennett', 'surfacing'],
+  ['employee-06', 'Drew Campbell', 'drainage'],
+  ['employee-07', 'Emery Foster', 'traffic'],
+  ['employee-08', 'Finley Ward', 'transport'],
+  ['employee-09', 'Gray Ellis', 'plant'],
+  ['employee-10', 'Hayden Price', 'workshop'],
+  ['employee-11', 'Indigo Kelly', 'surfacing'],
+  ['employee-12', 'Jules Morgan', 'drainage'],
+  ['employee-13', 'Kai Richardson', 'traffic'],
+  ['employee-14', 'Logan Bell', 'civils'],
+  ['employee-15', 'Marley Brooks', 'plant'],
+  ['employee-16', 'Nico James', 'transport'],
+  ['employee-17', 'Oakley Cooper', 'surfacing'],
+  ['employee-18', 'Peyton Wood', 'drainage'],
+  ['employee-19', 'Quinn Edwards', 'workshop'],
+  ['employee-20', 'Rowan Hayes', 'traffic'],
+].map(([key, fullName, teamId], index) => {
+  const emailName = fullName.toLowerCase().replace(/\s+/g, '.');
+  return {
+    key,
+    email: `${emailName}@${demoDomain}`,
+    fullName,
+    employeeId: `DEMO-EMP-${String(index + 1).padStart(2, '0')}`,
+    roleName: 'employee',
+    teamId,
+    superAdmin: false,
+  };
+});
+
+const users: DemoUser[] = [
+  {
+    key: 'admin',
+    email: `avery.stone@${demoDomain}`,
+    fullName: 'Avery Stone',
+    employeeId: 'DEMO-ADM-01',
+    roleName: 'admin',
+    teamId: 'management',
+    superAdmin: false,
+  },
+  {
+    key: 'admin-02',
+    email: `riley.cooper@${demoDomain}`,
+    fullName: 'Riley Cooper',
+    employeeId: 'DEMO-ADM-02',
+    roleName: 'admin',
+    teamId: 'management',
+    superAdmin: false,
+  },
+  ...demoManagers,
+  ...demoEmployees,
 ];
 
 const vans = [
@@ -86,6 +144,16 @@ const vans = [
   { reg_number: 'DM24SUP', vehicle_type: 'Van', status: 'active', nickname: 'Demo Supervisor Van' },
   { reg_number: 'DM24TMP', vehicle_type: 'Van', status: 'active', nickname: 'Demo Traffic Van' },
   { reg_number: 'DM24SPR', vehicle_type: 'Van', status: 'maintenance', nickname: 'Demo Spare Van' },
+  { reg_number: 'DM24CIV', vehicle_type: 'Van', status: 'active', nickname: 'Demo Civils Van' },
+  { reg_number: 'DM24DRN', vehicle_type: 'Van', status: 'active', nickname: 'Demo Drainage Van' },
+  { reg_number: 'DM24SRF', vehicle_type: 'Van', status: 'active', nickname: 'Demo Surfacing Van' },
+  { reg_number: 'DM24TM1', vehicle_type: 'Van', status: 'active', nickname: 'Demo Traffic Support 1' },
+  { reg_number: 'DM24TM2', vehicle_type: 'Van', status: 'active', nickname: 'Demo Traffic Support 2' },
+  { reg_number: 'DM24WRK', vehicle_type: 'Van', status: 'active', nickname: 'Demo Workshop Van' },
+  { reg_number: 'DM24FLT', vehicle_type: 'Van', status: 'maintenance', nickname: 'Demo Fleet Loan Van' },
+  { reg_number: 'DM24YRD', vehicle_type: 'Van', status: 'active', nickname: 'Demo Yard Van' },
+  { reg_number: 'DM24SUR', vehicle_type: 'Van', status: 'active', nickname: 'Demo Survey Van' },
+  { reg_number: 'DM24PAV', vehicle_type: 'Van', status: 'active', nickname: 'Demo Paving Van' },
 ];
 
 const hgvs = [
@@ -93,6 +161,8 @@ const hgvs = [
   { reg_number: 'DM24ART', status: 'active', nickname: 'Demo Artic', current_mileage: 128900 },
   { reg_number: 'DM24SKP', status: 'active', nickname: 'Demo Skip Lorry', current_mileage: 97600 },
   { reg_number: 'DM24LOW', status: 'maintenance', nickname: 'Demo Low Loader', current_mileage: 154200 },
+  { reg_number: 'DM24GRB', status: 'active', nickname: 'Demo Grab Lorry', current_mileage: 110450 },
+  { reg_number: 'DM24WAG', status: 'active', nickname: 'Demo Wagon and Drag', current_mileage: 139300 },
 ];
 
 const plantAssets = [
@@ -139,6 +209,50 @@ const plantAssets = [
     year: 2020,
     current_hours: 2150,
     status: 'maintenance',
+  },
+  {
+    plant_id: 'DM-ME-005',
+    reg_number: 'DM24MEX',
+    nickname: 'Demo Mini Excavator',
+    make: 'Kubota',
+    model: 'KX027',
+    serial_number: 'DEMOKX027005',
+    year: 2022,
+    current_hours: 980,
+    status: 'active',
+  },
+  {
+    plant_id: 'DM-CP-006',
+    reg_number: 'DM24CMP',
+    nickname: 'Demo Compactor',
+    make: 'Ammann',
+    model: 'ASC70',
+    serial_number: 'DEMOASC70006',
+    year: 2019,
+    current_hours: 2485,
+    status: 'active',
+  },
+  {
+    plant_id: 'DM-LT-007',
+    reg_number: 'DM24LGT',
+    nickname: 'Demo Lighting Tower',
+    make: 'Trime',
+    model: 'X-ECO',
+    serial_number: 'DEMOTRIME007',
+    year: 2023,
+    current_hours: 410,
+    status: 'active',
+  },
+  {
+    plant_id: 'DM-BR-008',
+    reg_number: 'DM24BRK',
+    nickname: 'Demo Breaker Pack',
+    make: 'Atlas Copco',
+    model: 'LP13',
+    serial_number: 'DEMOACLP13008',
+    year: 2021,
+    current_hours: 1340,
+    status: 'active',
   },
 ];
 
@@ -251,7 +365,16 @@ async function ensureDemoRoles(supabase: ScriptSupabaseClient): Promise<void> {
       {
         name: 'admin',
         display_name: 'Administrator',
-        description: 'Demo administrator with full system access',
+        description: 'Demo administrator with admin controls but not owner superadmin access',
+        role_class: 'admin',
+        is_super_admin: false,
+        is_manager_admin: true,
+      },
+      {
+        name: 'superadmin',
+        display_name: 'Super Administrator',
+        description: 'Hidden owner-only superadmin role for the hosted demo operator',
+        role_class: 'admin',
         is_super_admin: true,
         is_manager_admin: true,
       },
@@ -259,6 +382,7 @@ async function ensureDemoRoles(supabase: ScriptSupabaseClient): Promise<void> {
         name: 'manager',
         display_name: 'Manager',
         description: 'Demo manager with team oversight and approval access',
+        role_class: 'manager',
         is_super_admin: false,
         is_manager_admin: true,
       },
@@ -266,6 +390,7 @@ async function ensureDemoRoles(supabase: ScriptSupabaseClient): Promise<void> {
         name: 'employee',
         display_name: 'Employee',
         description: 'Demo employee profile',
+        role_class: 'employee',
         is_super_admin: false,
         is_manager_admin: false,
       },
@@ -284,6 +409,9 @@ async function ensureDemoTeams(supabase: ScriptSupabaseClient): Promise<void> {
       { id: 'civils', name: 'Civils', code: 'CIV', active: true, timesheet_type: 'civils' },
       { id: 'plant', name: 'Plant', code: 'PLT', active: true, timesheet_type: 'plant' },
       { id: 'workshop', name: 'Workshop', code: 'WRK', active: true, timesheet_type: 'civils' },
+      { id: 'surfacing', name: 'Surfacing', code: 'SRF', active: true, timesheet_type: 'civils' },
+      { id: 'drainage', name: 'Drainage', code: 'DRN', active: true, timesheet_type: 'civils' },
+      { id: 'traffic', name: 'Traffic Management', code: 'TMG', active: true, timesheet_type: 'civils' },
     ],
     { onConflict: 'id' }
   );
@@ -336,7 +464,7 @@ async function ensureDemoUsers(supabase: ScriptSupabaseClient): Promise<SeededPr
         role: user.roleName,
         role_id: roleId,
         team_id: user.teamId,
-        phone_number: '01632 960123',
+        phone_number: user.phoneNumber || `01632 960${String(seededProfiles.length + 101).padStart(3, '0')}`,
         super_admin: user.superAdmin,
         must_change_password: false,
       },
@@ -350,14 +478,22 @@ async function ensureDemoUsers(supabase: ScriptSupabaseClient): Promise<SeededPr
 
   const manager = seededProfiles.find((profile) => profile.key === 'manager');
   const admin = seededProfiles.find((profile) => profile.key === 'admin');
+  const managerByTeam = new Map<string, SeededProfile>();
+  for (const profile of seededProfiles) {
+    if (profile.roleName === 'manager') managerByTeam.set(profile.teamId, profile);
+  }
+
   if (manager?.id || admin?.id) {
-    await supabase
-      .from('org_teams')
-      .update({
-        manager_1_profile_id: manager?.id || admin?.id,
-        manager_2_profile_id: admin?.id || null,
-      })
-      .in('id', ['transport', 'civils', 'plant', 'workshop']);
+    for (const teamId of ['transport', 'civils', 'plant', 'workshop', 'surfacing', 'drainage', 'traffic']) {
+      const primaryManager = managerByTeam.get(teamId) || manager;
+      await supabase
+        .from('org_teams')
+        .update({
+          manager_1_profile_id: primaryManager?.id || admin?.id,
+          manager_2_profile_id: admin?.id || null,
+        })
+        .eq('id', teamId);
+    }
   }
 
   return seededProfiles;
@@ -434,11 +570,11 @@ async function seedPlant(supabase: ScriptSupabaseClient, profiles: SeededProfile
 
 async function seedTimesheets(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
-  const timesheetProfiles = profiles.filter((profile) => profile.key !== 'admin');
+  const timesheetProfiles = profiles.filter((profile) => profile.roleName !== 'admin');
   const regNumbers = ['DM24VAN', 'DM24HGV', 'DM24OPS', 'DM24KIT', 'DM24ART', 'DM24TMP'];
   const statuses = ['submitted', 'approved', 'draft', 'approved', 'submitted', 'rejected'];
   const timesheetRows = timesheetProfiles.flatMap((profile) =>
-    [0, 1].map((weekOffset) => ({
+    Array.from({ length: 26 }, (_, weekOffset) => ({
       profile,
       weekOffset,
     }))
@@ -559,6 +695,111 @@ async function seedCustomersAndQuotes(supabase: ScriptSupabaseClient, profiles: 
         ],
       },
     },
+    {
+      customer: {
+        company_name: 'Demo Rail Access Ltd',
+        short_name: 'Demo Rail',
+        contact_name: 'Ari Patel',
+        city: 'Eastfield',
+        postcode: 'DR1 4MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6004-AS',
+        base_quote_reference: 'DEMO-6004',
+        subject_line: 'Demo possession support crew',
+        project_description: 'Fictional weekend support package for a rail-adjacent works demo.',
+        status: 'sent',
+        sent_at: dateTime(-14, 10),
+        lines: [
+          ['Weekend supervisor and crew', 2, 'shifts', 2650],
+          ['Small tools and welfare allowance', 1, 'item', 680],
+        ],
+      },
+    },
+    {
+      customer: {
+        company_name: 'Demo Retail Estates',
+        short_name: 'Demo Retail',
+        contact_name: 'Samira Khan',
+        city: 'Westhaven',
+        postcode: 'DE9 1MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6005-RC',
+        base_quote_reference: 'DEMO-6005',
+        subject_line: 'Demo car park patch repairs',
+        project_description: 'Fictional small works quote for patching and lining repairs.',
+        status: 'approved',
+        sent_at: dateTime(-21, 13),
+        lines: [
+          ['Patch repair crew', 3, 'days', 1250],
+          ['Line marking refresh', 1, 'item', 950],
+        ],
+      },
+    },
+    {
+      customer: {
+        company_name: 'Demo County Council',
+        short_name: 'Demo Council',
+        contact_name: 'Noah Green',
+        city: 'Hillford',
+        postcode: 'DC2 5MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6006-RC',
+        base_quote_reference: 'DEMO-6006',
+        subject_line: 'Demo footway reconstruction phase 2',
+        project_description: 'Fictional follow-on works quote with a won status.',
+        status: 'won',
+        sent_at: dateTime(-35, 8),
+        lines: [
+          ['Footway reconstruction', 180, 'm2', 92],
+          ['Pedestrian management', 5, 'days', 475],
+        ],
+      },
+    },
+    {
+      customer: {
+        company_name: 'Demo Water Networks',
+        short_name: 'Demo Water',
+        contact_name: 'Mika Stone',
+        city: 'Rivergate',
+        postcode: 'DW6 2MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6007-AS',
+        base_quote_reference: 'DEMO-6007',
+        subject_line: 'Demo reinstatement framework call-off',
+        project_description: 'Fictional framework-style quote for reporting and lifecycle demonstrations.',
+        status: 'in_progress',
+        sent_at: dateTime(-52, 9),
+        lines: [
+          ['Reactive reinstatement gang', 10, 'days', 1325],
+          ['Plant and materials allowance', 1, 'item', 4200],
+        ],
+      },
+    },
+    {
+      customer: {
+        company_name: 'Demo Housing Group',
+        short_name: 'Demo Housing',
+        contact_name: 'Devon Clarke',
+        city: 'Meadowbank',
+        postcode: 'DH3 7MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6008-RC',
+        base_quote_reference: 'DEMO-6008',
+        subject_line: 'Demo estate drainage remediation',
+        project_description: 'Fictional quote with close-out and invoice-ready states.',
+        status: 'ready_to_invoice',
+        sent_at: dateTime(-72, 15),
+        lines: [
+          ['Drainage remediation works', 1, 'item', 18400],
+          ['CCTV validation report', 1, 'item', 1250],
+        ],
+      },
+    },
   ];
 
   for (const item of customerQuotes) {
@@ -644,7 +885,7 @@ async function seedCustomersAndQuotes(supabase: ScriptSupabaseClient, profiles: 
 
 async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
-  const recipients = profiles.filter((profile) => profile.key === 'employee' || profile.key === 'contractor');
+  const recipients = profiles.filter((profile) => profile.roleName === 'employee');
   const { data: existingMessages } = await supabase
     .from('messages')
     .select('id')
@@ -678,6 +919,46 @@ async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProf
       sender_id: manager.id,
       created_via: 'demo-seed',
     },
+    {
+      type: 'TOOLBOX_TALK',
+      subject: 'Demo toolbox talk: service strike prevention',
+      body: 'Fictional utilities safety briefing with mixed acknowledgement states.',
+      priority: 'HIGH',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+    {
+      type: 'NOTIFICATION',
+      subject: 'Demo notification: revised depot opening hours',
+      body: 'Fictional operational notice for demonstrating notification history.',
+      priority: 'LOW',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+    {
+      type: 'REMINDER',
+      subject: 'Demo reminder: submit Friday timesheets',
+      body: 'Fictional recurring reminder used by managers before payroll close.',
+      priority: 'HIGH',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+    {
+      type: 'TOOLBOX_TALK',
+      subject: 'Demo toolbox talk: winter working',
+      body: 'Fictional seasonal briefing for cold weather and low-light work.',
+      priority: 'LOW',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+    {
+      type: 'NOTIFICATION',
+      subject: 'Demo notification: PPE audit next week',
+      body: 'Fictional audit notice to populate manager and employee inboxes.',
+      priority: 'LOW',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
   ];
 
   const { data: messages, error } = await supabase
@@ -704,9 +985,8 @@ async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProf
 }
 
 async function seedAbsence(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
-  const employee = profiles.find((profile) => profile.key === 'employee') || profiles[0];
-  const contractor = profiles.find((profile) => profile.key === 'contractor') || employee;
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
+  const absenceProfiles = profiles.filter((profile) => profile.roleName === 'employee');
 
   async function ensureAbsenceReason(name: string, color: string): Promise<string> {
     const { data, error } = await supabase
@@ -732,46 +1012,55 @@ async function seedAbsence(supabase: ScriptSupabaseClient, profiles: SeededProfi
   const trainingReasonId = await ensureAbsenceReason('Training', '#38bdf8');
   const medicalReasonId = await ensureAbsenceReason('Medical Appointment', '#f97316');
 
-  const demoProfiles = [employee, contractor, manager].filter(Boolean);
-  await supabase
+  const demoProfiles = [...absenceProfiles, manager].filter(Boolean);
+  const { error: deleteAbsenceError } = await supabase
     .from('absences')
     .delete()
     .in('profile_id', demoProfiles.map((profile) => profile.id))
-    .gte('date', isoDate(-14));
+    .gte('date', isoDate(-30));
+  if (deleteAbsenceError) throw deleteAbsenceError;
 
-  const { error } = await supabase.from('absences').insert([
+  const absenceRows = absenceProfiles.flatMap((profile, index) => [
     {
-      profile_id: employee.id,
-      date: isoDate(14),
-      end_date: isoDate(18),
+      profile_id: profile.id,
+      date: isoDate(14 + (index % 8) * 4),
+      end_date: isoDate(16 + (index % 8) * 4),
       reason_id: annualLeaveReasonId,
-      duration_days: 5,
-      status: 'approved',
-      created_by: employee.id,
-      approved_by: manager.id,
-      approved_at: dateTime(-1, 10),
-      notes: 'Fictional demo approved annual leave.',
+      duration_days: 3,
+      status: index % 5 === 0 ? 'pending' : 'approved',
+      created_by: profile.id,
+      approved_by: index % 5 === 0 ? null : manager.id,
+      approved_at: index % 5 === 0 ? null : dateTime(-index, 10),
+      notes: 'Fictional demo annual leave request.',
     },
     {
-      profile_id: employee.id,
-      date: isoDate(28),
-      end_date: isoDate(28),
+      profile_id: profile.id,
+      date: isoDate(60 + index * 3),
+      end_date: isoDate(60 + index * 3),
       reason_id: trainingReasonId,
       duration_days: 1,
-      status: 'pending',
-      created_by: employee.id,
-      notes: 'Fictional demo pending training day.',
+      status: 'approved',
+      created_by: profile.id,
+      approved_by: manager.id,
+      approved_at: dateTime(-index, 9),
+      notes: 'Fictional demo completed training day.',
     },
     {
-      profile_id: contractor.id,
-      date: isoDate(7),
-      end_date: isoDate(8),
+      profile_id: profile.id,
+      date: isoDate(120 + index),
+      end_date: isoDate(120 + index),
       reason_id: medicalReasonId,
-      duration_days: 2,
-      status: 'pending',
-      created_by: contractor.id,
+      duration_days: 0.5,
+      status: index % 4 === 0 ? 'rejected' : 'approved',
+      created_by: profile.id,
+      approved_by: manager.id,
+      approved_at: dateTime(-index, 11),
       notes: 'Fictional demo medical appointment request.',
     },
+  ]);
+
+  const { error } = await supabase.from('absences').insert([
+    ...absenceRows,
     {
       profile_id: manager.id,
       date: isoDate(-5),
@@ -787,7 +1076,7 @@ async function seedAbsence(supabase: ScriptSupabaseClient, profiles: SeededProfi
   ]);
 
   if (error) throw error;
-  console.log('Ready: 4 demo absence records');
+  console.log(`Ready: ${absenceRows.length + 1} demo absence records`);
 }
 
 async function seedInspections(
@@ -812,6 +1101,10 @@ async function seedInspections(
     await deleteByIds(supabase, table, ids);
   }
 
+  await deleteByIds(supabase, 'vehicle_maintenance', seededVehicles.map((vehicle) => vehicle.id), 'van_id');
+  await deleteByIds(supabase, 'vehicle_maintenance', seededHgvs.map((hgv) => hgv.id), 'hgv_id');
+  await deleteByIds(supabase, 'vehicle_maintenance', seededPlant.map((plant) => plant.id), 'plant_id');
+
   async function insertInspection(table: string, payload: Record<string, unknown>) {
     const { data, error } = await supabase.from(table).insert(payload).select('id').single();
     if (error) throw error;
@@ -819,57 +1112,69 @@ async function seedInspections(
   }
 
   const inspectionRequests = [
-    ...seededVehicles.slice(0, 4).map((van, index) =>
+    ...seededVehicles.map((van, assetIndex) => {
+        const monthIndex = assetIndex % 6;
+        const index = assetIndex;
+        return (
       insertInspection('van_inspections', {
         van_id: van.id,
         user_id: employee.id,
-        week_ending: weekEnding(index),
-        inspection_date: isoDate(-1 - index),
+        week_ending: weekEnding(monthIndex * 4),
+        inspection_date: isoDate(-1 - monthIndex * 28 - (assetIndex % 6)),
         current_mileage: 48250 + index * 410,
         checked_by: employee.fullName,
-        status: index === 3 ? 'draft' : 'submitted',
-        submitted_at: index === 3 ? null : dateTime(-1 - index, 16),
-        reviewed_by: index === 3 ? null : manager.id,
-        reviewed_at: index === 3 ? null : dateTime(-index, 9),
+        status: index % 11 === 0 ? 'draft' : 'submitted',
+        submitted_at: index % 11 === 0 ? null : dateTime(-1 - monthIndex * 28 - (assetIndex % 6), 16),
+        reviewed_by: index % 11 === 0 ? null : manager.id,
+        reviewed_at: index % 11 === 0 ? null : dateTime(-monthIndex * 28 - (assetIndex % 6), 9),
         manager_comments: index === 0 ? 'Demo review: marker light defect raised for workshop.' : 'Demo review complete.',
         inspector_comments: `Demo seed: van daily check ${index + 1}.`,
         defects_comments: index === 0 ? 'Nearside marker light not illuminating.' : null,
-        signature_data: index === 3 ? null : 'data:image/png;base64,demo',
-        signed_at: index === 3 ? null : dateTime(-1 - index, 16),
+        signature_data: index % 11 === 0 ? null : 'data:image/png;base64,demo',
+        signed_at: index % 11 === 0 ? null : dateTime(-1 - monthIndex * 28 - (assetIndex % 6), 16),
       })
-    ),
-    ...seededHgvs.slice(0, 3).map((hgv, index) =>
+        );
+      }),
+    ...seededHgvs.map((hgv, assetIndex) => {
+        const monthIndex = assetIndex % 6;
+        const index = seededVehicles.length + assetIndex;
+        return (
       insertInspection('hgv_inspections', {
         hgv_id: hgv.id,
         user_id: employee.id,
-        inspection_date: isoDate(-2 - index),
+        inspection_date: isoDate(-2 - monthIndex * 28 - (assetIndex % 5)),
         current_mileage: 84520 + index * 920,
         status: 'submitted',
-        submitted_at: dateTime(-2 - index, 15),
+        submitted_at: dateTime(-2 - monthIndex * 28 - (assetIndex % 5), 15),
         reviewed_by: manager.id,
-        reviewed_at: dateTime(-1 - index, 10),
+        reviewed_at: dateTime(-1 - monthIndex * 28 - (assetIndex % 5), 10),
         manager_comments: index === 0 ? 'Demo review: tyre pressure note monitored.' : 'Demo review complete.',
         inspector_comments: `Demo seed: HGV daily check ${index + 1}.`,
         signature_data: 'data:image/png;base64,demo',
-        signed_at: dateTime(-2 - index, 15),
+        signed_at: dateTime(-2 - monthIndex * 28 - (assetIndex % 5), 15),
       })
-    ),
-    ...seededPlant.slice(0, 3).map((plant, index) =>
+        );
+      }),
+    ...seededPlant.map((plant, assetIndex) => {
+        const monthIndex = assetIndex % 6;
+        const index = seededVehicles.length + seededHgvs.length + assetIndex;
+        return (
       insertInspection('plant_inspections', {
         plant_id: plant.id,
         user_id: employee.id,
-        inspection_date: isoDate(-3 - index),
+        inspection_date: isoDate(-3 - monthIndex * 28 - (assetIndex % 4)),
         current_mileage: 1848 + index * 55,
         status: 'submitted',
-        submitted_at: dateTime(-3 - index, 14),
+        submitted_at: dateTime(-3 - monthIndex * 28 - (assetIndex % 4), 14),
         reviewed_by: manager.id,
-        reviewed_at: dateTime(-2 - index, 8),
+        reviewed_at: dateTime(-2 - monthIndex * 28 - (assetIndex % 4), 8),
         manager_comments: index === 0 ? 'Demo review: hydraulic hose observation logged.' : 'Demo review complete.',
         inspector_comments: `Demo seed: plant daily check ${index + 1}.`,
         signature_data: 'data:image/png;base64,demo',
-        signed_at: dateTime(-3 - index, 14),
+        signed_at: dateTime(-3 - monthIndex * 28 - (assetIndex % 4), 14),
       })
-    ),
+        );
+      }),
   ];
 
   const inspections = (await Promise.all(inspectionRequests)).filter(Boolean) as Array<{ table: string; id: string }>;
@@ -1064,6 +1369,42 @@ async function seedWorkshopTasks(
       created_by: manager.id,
       workshop_comments: 'Planned inspection before next hire.',
     },
+    ...seededVehicles.slice(3, 12).map((vehicle, index) => ({
+      title: `Demo workshop: van fleet service ${index + 1}`,
+      description: 'Generated six-month demo service and repair task for the van fleet.',
+      priority: index % 3 === 0 ? 'high' : index % 3 === 1 ? 'medium' : 'low',
+      status: ['pending', 'in_progress', 'completed'][index % 3],
+      action_type: 'workshop_vehicle_task',
+      van_id: vehicle.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: index % 2 === 0 ? serviceSubcategoryId : electricalSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Generated demo workshop history for the approved sales dataset.',
+    })),
+    ...seededHgvs.slice(2).map((hgv, index) => ({
+      title: `Demo workshop: HGV compliance task ${index + 1}`,
+      description: 'Generated HGV workshop compliance task for six-month demo history.',
+      priority: index % 2 === 0 ? 'medium' : 'high',
+      status: index % 2 === 0 ? 'pending' : 'completed',
+      action_type: 'workshop_vehicle_task',
+      hgv_id: hgv.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: serviceSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Generated HGV workshop task for demo reports and filtering.',
+    })),
+    ...seededPlant.slice(2).map((plant, index) => ({
+      title: `Demo workshop: plant service task ${index + 1}`,
+      description: 'Generated plant maintenance task for six-month demo history.',
+      priority: index % 2 === 0 ? 'medium' : 'low',
+      status: ['pending', 'in_progress', 'on_hold'][index % 3],
+      action_type: 'workshop_vehicle_task',
+      plant_id: plant.id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: hydraulicSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Generated plant workshop task for demo reports and history.',
+    })),
   ].filter(Boolean);
 
   const { data: insertedTasks, error } = await supabase.from('actions').insert(tasks).select('id');
@@ -1211,6 +1552,10 @@ async function seedProjects(supabase: ScriptSupabaseClient, profiles: SeededProf
       'Demo Yard Drainage Method Statement',
       'Demo Emergency Reinstatement Pack',
       'Demo Plant Lift Plan',
+      'Demo Night Works Briefing Pack',
+      'Demo Traffic Management Plan',
+      'Demo Excavation Permit Pack',
+      'Demo Framework Induction Pack',
     ]);
   const existingDocIds = (existingDocs || []).map((doc: { id: string }) => doc.id);
   await deleteByIds(supabase, 'project_favourites', existingDocIds, 'document_id');
@@ -1259,6 +1604,50 @@ async function seedProjects(supabase: ScriptSupabaseClient, profiles: SeededProf
         file_name: 'demo-plant-lift-plan.pdf',
         file_path: 'demo/project-documents/demo-plant-lift-plan.pdf',
         file_size: 538000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Night Works Briefing Pack',
+        description: 'Fictional briefing pack for night shift and possession work.',
+        file_name: 'demo-night-works-briefing-pack.pdf',
+        file_path: 'demo/project-documents/demo-night-works-briefing-pack.pdf',
+        file_size: 674000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Traffic Management Plan',
+        description: 'Fictional traffic management plan for lane closure demonstrations.',
+        file_name: 'demo-traffic-management-plan.pdf',
+        file_path: 'demo/project-documents/demo-traffic-management-plan.pdf',
+        file_size: 782000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Excavation Permit Pack',
+        description: 'Fictional excavation permit pack for utilities and drainage scenarios.',
+        file_name: 'demo-excavation-permit-pack.pdf',
+        file_path: 'demo/project-documents/demo-excavation-permit-pack.pdf',
+        file_size: 594000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Framework Induction Pack',
+        description: 'Fictional induction document for onboarding and signature workflows.',
+        file_name: 'demo-framework-induction-pack.pdf',
+        file_path: 'demo/project-documents/demo-framework-induction-pack.pdf',
+        file_size: 455000,
         file_type: 'application/pdf',
         uploaded_by: admin.id,
         document_type_id: documentType.id,
@@ -1364,6 +1753,18 @@ async function seedInventory(
     { item_number: 'DD-010', name: 'Stihl Saw Kit', category: 'tools', location_id: vanLocationId },
     { item_number: 'DD-011', name: 'Trench Box Pins Set', category: 'equipment', location_id: plantLocationId },
     { item_number: 'DD-012', name: 'Portable Lighting Tower', category: 'hired_plant', location_id: yardLocationId },
+    { item_number: 'DD-013', name: 'Drainage Laser Tripod', category: 'tools', location_id: yardLocationId },
+    { item_number: 'DD-014', name: 'Chapter 8 Cone Set', category: 'signs', location_id: vanLocationId },
+    { item_number: 'DD-015', name: 'Portable Welfare Unit Keys', category: 'equipment', location_id: yardLocationId },
+    { item_number: 'DD-016', name: 'Vibrating Poker Set', category: 'equipment', location_id: plantLocationId },
+    { item_number: 'DD-017', name: 'Temporary Barrier Clips', category: 'signs', location_id: yardLocationId },
+    { item_number: 'DD-018', name: 'Cable Avoidance Tool Spare Battery', category: 'tools', location_id: vanLocationId },
+    { item_number: 'DD-019', name: 'Manhole Lifting Keys', category: 'tools', location_id: plantLocationId },
+    { item_number: 'DD-020', name: 'Road Closure Sign Pack', category: 'signs', location_id: vanLocationId },
+    { item_number: 'DD-021', name: 'Portable Pump', category: 'equipment', location_id: plantLocationId },
+    { item_number: 'DD-022', name: 'Thermal Lance Guard Kit', category: 'equipment', location_id: yardLocationId },
+    { item_number: 'DD-023', name: 'Survey Tablet', category: 'tools', location_id: vanLocationId },
+    { item_number: 'DD-024', name: 'Demo Hired Compressor', category: 'hired_plant', location_id: plantLocationId },
   ];
 
   const { data: items, error } = await supabase

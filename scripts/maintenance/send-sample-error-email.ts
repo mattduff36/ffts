@@ -3,6 +3,8 @@
  * Run with: npx tsx scripts/send-sample-error-email.ts
  */
 
+import { inspectDemoEmailRecipients } from '@/lib/utils/demo-email';
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'TemplateApp <no-reply@your-app.example.com>';
 const TO_EMAIL = process.env.ADMIN_EMAIL || 'template-admin@example.com';
@@ -53,6 +55,12 @@ async function sendSampleEmail() {
   console.log(`   To: ${TO_EMAIL}\n`);
 
   try {
+    const demoCheck = inspectDemoEmailRecipients([TO_EMAIL]);
+    if (demoCheck.shouldSimulate && demoCheck.realRecipients.length === 0) {
+      console.log(`Demo email simulated for ${demoCheck.demoRecipients.join(', ')}. No email was sent.`);
+      return;
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {

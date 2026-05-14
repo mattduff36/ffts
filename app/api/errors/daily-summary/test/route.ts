@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sendResendEmail } from '@/lib/server/resend';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 export const dynamic = 'force-dynamic';
@@ -305,18 +306,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'RESEND_API_KEY is not configured' }, { status: 500 });
     }
 
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const emailResponse = await sendResendEmail({
+      apiKey: resendApiKey,
+      payload: {
         from: fromEmail,
         to: [adminEmail],
-        subject: `🚨 SAMPLE - Daily Error Summary - ${sampleErrors.length} errors on ${dateStr}`,
+        subject: `SAMPLE - Daily Error Summary - ${sampleErrors.length} errors on ${dateStr}`,
         html: emailHtml,
-      }),
+      },
     });
 
     if (!emailResponse.ok) {

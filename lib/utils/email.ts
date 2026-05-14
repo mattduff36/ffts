@@ -5,6 +5,7 @@
 
 import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
+import { sendResendEmail, type ResendEmailPayload } from '@/lib/server/resend';
 import { inspectDemoEmailRecipients } from '@/lib/utils/demo-email';
 
 function getPrimaryEmailSettings() {
@@ -14,11 +15,16 @@ function getPrimaryEmailSettings() {
 function shouldSimulateEmail(to: string | string[], context: string): boolean {
   const demoCheck = inspectDemoEmailRecipients(to);
   if (!demoCheck.shouldSimulate) return false;
+  if (demoCheck.realRecipients.length > 0) return false;
 
   console.info(
     `Demo ${context} email simulated for ${demoCheck.demoRecipients.join(', ')}. No email was sent.`
   );
   return true;
+}
+
+function sendDemoAwareResendEmail(apiKey: string, payload: ResendEmailPayload): Promise<Response> {
+  return sendResendEmail({ apiKey, payload });
 }
 
 interface SendPasswordEmailParams {
@@ -482,19 +488,12 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
 
       try {
         // Send emails for this batch
-        const promises = batch.map(email => 
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              from: emailConfig.primaryFromEmail,
-              to: [email],
-              subject: `New Toolbox Talk: ${subject}`,
-              html: htmlContent
-            })
+        const promises = batch.map(email =>
+          sendDemoAwareResendEmail(apiKey, {
+            from: emailConfig.primaryFromEmail,
+            to: [email],
+            subject: `New Toolbox Talk: ${subject}`,
+            html: htmlContent,
           })
         );
 
@@ -661,19 +660,12 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
 
       try {
         // Send emails for this batch
-        const promises = batch.map(email => 
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              from: emailConfig.primaryFromEmail,
-              to: [email],
-              subject: `Maintenance Reminder: ${vehicleReg} - ${categoryName}`,
-              html: htmlContent
-            })
+        const promises = batch.map(email =>
+          sendDemoAwareResendEmail(apiKey, {
+            from: emailConfig.primaryFromEmail,
+            to: [email],
+            subject: `Maintenance Reminder: ${vehicleReg} - ${categoryName}`,
+            html: htmlContent,
           })
         );
 
@@ -1190,18 +1182,11 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
       
       try {
         const promises = batch.map(email =>
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              from: emailConfig.primaryFromEmail,
-              to: [email],
-              subject,
-              html: htmlContent
-            })
+          sendDemoAwareResendEmail(apiKey, {
+            from: emailConfig.primaryFromEmail,
+            to: [email],
+            subject,
+            html: htmlContent,
           })
         );
 

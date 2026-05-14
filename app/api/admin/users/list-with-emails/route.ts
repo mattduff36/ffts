@@ -22,6 +22,26 @@ interface AuthUserActivityRow {
   last_active_at: string | null;
 }
 
+interface AdminProfileSummary {
+  id: string;
+  full_name: string | null;
+  phone_number: string | null;
+  employee_id: string | null;
+  created_at: string | null;
+  role_id: string | null;
+  line_manager_id: string | null;
+  secondary_manager_id: string | null;
+  team_id: string | null;
+  is_placeholder: boolean | null;
+  role?: {
+    name: string | null;
+    display_name: string | null;
+    role_class: 'admin' | 'manager' | 'employee' | null;
+    is_super_admin: boolean | null;
+    is_manager_admin: boolean | null;
+  } | null;
+}
+
 async function fetchLastActiveByUserId(userIds: string[]): Promise<Map<string, string | null>> {
   const activityMap = new Map<string, string | null>();
 
@@ -84,6 +104,7 @@ export async function GET() {
       email: string | undefined;
       last_sign_in_at: string | null;
       last_active_at: string | null;
+      profile?: AdminProfileSummary | null;
     }> = [];
     let page = 1;
     const perPage = 1000;
@@ -113,12 +134,44 @@ export async function GET() {
     }
 
     const lastActiveByUserId = await fetchLastActiveByUserId(authUsers.map((user) => user.id));
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select(`
+        id,
+        full_name,
+        phone_number,
+        employee_id,
+        created_at,
+        role_id,
+        line_manager_id,
+        secondary_manager_id,
+        team_id,
+        is_placeholder,
+        role:roles(
+          name,
+          display_name,
+          role_class,
+          is_super_admin,
+          is_manager_admin
+        )
+      `)
+      .in('id', authUsers.map((user) => user.id));
+
+    if (profilesError) {
+      console.warn('Unable to fetch profile summaries for admin users list:', profilesError);
+    }
+
+    const profileById = new Map<string, AdminProfileSummary>(
+      ((profiles || []) as unknown as AdminProfileSummary[]).map((profile) => [profile.id, profile])
+    );
+
     for (const user of authUsers) {
       allUsers.push({
         id: user.id,
         email: user.email,
         last_sign_in_at: user.last_sign_in_at || null,
         last_active_at: lastActiveByUserId.get(user.id) || null,
+        profile: profileById.get(user.id) || null,
       });
     }
 

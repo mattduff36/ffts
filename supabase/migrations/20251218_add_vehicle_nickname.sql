@@ -8,6 +8,14 @@ ADD COLUMN IF NOT EXISTS nickname TEXT;
 -- Create index for faster nickname searches
 CREATE INDEX IF NOT EXISTS idx_vehicles_nickname ON vehicles(nickname);
 
+-- Compatibility for fresh template bootstraps before later inspection migrations.
+ALTER TABLE vehicle_inspections
+ADD COLUMN IF NOT EXISTS inspection_date DATE;
+
+UPDATE vehicle_inspections
+SET inspection_date = COALESCE(inspection_date, week_ending)
+WHERE inspection_date IS NULL;
+
 -- Backfill nickname data:
 -- 1. For vehicles with inspections, use the last inspector's name
 -- 2. For vehicles without inspections, use 'ChangeMe'

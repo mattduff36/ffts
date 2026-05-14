@@ -18,6 +18,7 @@ const expectedScriptFiles = [
   'scripts/demo/setup-storage.ts',
   'scripts/demo/seed.ts',
   'scripts/demo/reset.ts',
+  'scripts/demo/wipe-database.ts',
   'scripts/migrations/apply-baseline.ts',
 ];
 
@@ -36,7 +37,33 @@ function checkEnv(): ValidationIssue[] {
     }
   }
 
-  for (const key of ['SUPABASE_SERVICE_ROLE_KEY', 'POSTGRES_URL_NON_POOLING', 'RESEND_API_KEY']) {
+  const appMode = env.get('APP_MODE');
+  const publicAppMode = env.get('NEXT_PUBLIC_APP_MODE');
+  const appUrl = env.get('NEXT_PUBLIC_APP_URL');
+
+  if (appMode !== publicAppMode) {
+    issues.push({ level: 'error', message: 'APP_MODE and NEXT_PUBLIC_APP_MODE must match.' });
+  }
+
+  if (!env.get('POSTGRES_URL_NON_POOLING')) {
+    issues.push({ level: 'error', message: 'POSTGRES_URL_NON_POOLING is required for db:baseline and db:validate.' });
+  }
+
+  if ((appMode === 'demo' || publicAppMode === 'demo') && !env.get('DEMO_SUPABASE_PROJECT_REF')) {
+    issues.push({ level: 'error', message: 'DEMO_SUPABASE_PROJECT_REF is required in demo mode for reset safety.' });
+  }
+
+  if ((appMode === 'demo' || publicAppMode === 'demo') && appUrl?.includes('localhost')) {
+    issues.push({ level: 'warning', message: 'NEXT_PUBLIC_APP_URL is localhost while app mode is demo.' });
+  }
+
+  for (const key of [
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'POSTGRES_URL_NON_POOLING',
+    'RESEND_API_KEY',
+    'APP_SESSION_SECRET',
+    'APP_SESSION_HASH_SECRET',
+  ]) {
     const value = env.get(key);
     if (value && value.length < 20) {
       issues.push({ level: 'warning', message: `${key} is set but looks shorter than expected.` });

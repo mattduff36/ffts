@@ -79,7 +79,7 @@
   "articles": [
     {
       "category_slug": "getting-started",
-      "slug": "what-is-squires-app",
+      "slug": "what-is-fieldops-template",
       "title": "What is the FieldOps Template?",
       "summary": "Overview of the template digital forms management system.",
       "content_md": "# What is the FieldOps Template?\n\nThe FieldOps Template is a custom-built digital forms management system designed for Example Client Ltd It replaces paper-based forms with a modern, mobile-first Progressive Web Application (PWA) accessible from any device.\n\n## Key Features\n\n- **Employee Timesheets** - Digital weekly timesheets with automatic hour calculations\n- **Vehicle Inspections** - Dynamic safety checklists based on vehicle type (Vans get 14 items, Trucks/Artics/Trailers get 26 items)\n- **RAMS Documents** - Risk Assessment & Method Statement management with visitor signatures\n- **Absence Management** - Request and track annual leave with calendar view\n- **Fleet Management** - Track MOT, tax, service schedules, and manage vehicles\n- **Workshop Tasks** - Manage vehicle repairs with categories, status tracking, and comments\n- **Approvals** - Manager review and approval workflows for timesheets and absences\n- **Reports** - Export data as PDF or Excel files\n\n## Access\n\nThe app is available at: https://app.example.com\n\nIt works on desktop, tablet, and mobile devices. For the best mobile experience, add it to your home screen as a PWA."

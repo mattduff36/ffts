@@ -17,11 +17,11 @@ The codebase is already cleaned of known customer branding, real production link
 
 The template is not yet fully ready to sell or reuse without technical help because:
 
-- There is no setup wizard yet.
-- Some setup commands and script paths need checking and fixing before they can be trusted.
-- The database setup path needs simplifying for new customer projects.
-- Branding is still spread across several places and should be centralised.
-- The demo data story exists in parts, but there is no polished one-command demo setup.
+- A setup wizard now exists, but it still needs to stay aligned with the final customer handover flow.
+- Setup, demo, validation, and database commands need to be kept under test before they can be trusted for each sale.
+- The database setup path now uses a baseline/foundation/migration bootstrap, but it still needs validating against a clean Supabase project.
+- Branding has a central config layer and should continue to be routed through it as new PDFs, emails, and pages are added.
+- The demo data story now has a seed/reset foundation, but it still needs richer fictional module coverage for a polished sales demo.
 - External services such as Supabase, Resend, Vercel, DNS, MapTiler, DVLA/MOT, and FleetSmart still need customer-owned accounts and keys.
 
 ## Goal 1: Reusable Starter Template With Setup Wizard
@@ -112,7 +112,7 @@ The wizard can still help by linking to the correct dashboards and showing exact
 
 These are the main jobs needed before the template is easy to reuse:
 
-1. **Fix setup script reliability**
+1. **Keep setup script reliability verified**
 
    Some `package.json` scripts appear to point at old paths. For example, a script may call a file at the repo root while the actual file now lives in `scripts/seed/` or `scripts/maintenance/`.
 
@@ -122,7 +122,7 @@ These are the main jobs needed before the template is easy to reuse:
    - Fix any command that points to the wrong file.
    - Add clear command names such as `template:setup`, `template:validate`, `demo:seed`, and `demo:reset`.
 
-2. **Choose one clean database bootstrap path**
+2. **Validate one clean database bootstrap path**
 
    The template currently preserves the full Supabase migration history. That is useful for architecture, but it may be confusing for a brand-new customer database.
 
@@ -141,9 +141,9 @@ These are the main jobs needed before the template is easy to reuse:
    - Add one central place for app name, company name, address, support email, sender email, brand colours, logo paths, and public URL.
    - Update PDFs, emails, app metadata, PWA manifests, and UI headers to read from that config.
 
-4. **Build the setup wizard**
+4. **Maintain the setup wizard**
 
-   The first version can be simple. It does not need to create every service automatically.
+   The first version exists. It should remain simple and should not pretend to create every third-party service automatically.
 
    Required now:
 

@@ -7,6 +7,15 @@
 --
 -- This migration is idempotent: it skips inspections already converted (where dates match).
 
+ALTER TABLE vehicle_inspections
+ADD COLUMN IF NOT EXISTS inspection_end_date DATE;
+
+ALTER TABLE vehicle_inspections
+ADD COLUMN IF NOT EXISTS manager_comments TEXT,
+ADD COLUMN IF NOT EXISTS inspector_comments TEXT,
+ADD COLUMN IF NOT EXISTS signature_data TEXT,
+ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ;
+
 DO $$
 DECLARE
   rec RECORD;

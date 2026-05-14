@@ -2,7 +2,7 @@
 
 This template supports two database paths. Choose one deliberately before creating a customer project.
 
-## Path A: Fresh Customer Database
+## Path A: Fresh Demo Or Customer Database
 
 Use this for a brand-new customer Supabase project that does not need historical branch context.
 
@@ -11,18 +11,24 @@ npm run db:baseline
 npm run db:validate
 ```
 
-`db:baseline` applies `supabase/schema.sql` using `POSTGRES_URL_NON_POOLING`. After it finishes, run `db:validate` before seeding data or deploying.
+`db:baseline` uses `POSTGRES_URL_NON_POOLING` and applies:
+
+1. `supabase/schema.sql`
+2. foundation SQL files in `supabase/baseline/`
+3. every SQL migration in `supabase/migrations/` in filename order
+
+After it finishes, run `db:validate` before seeding data or deploying.
 
 ## Path B: Preserved Migration History
 
-Use this for ongoing development or when you need to replay the preserved product history.
+Use this for ongoing development after a database has already been bootstrapped.
 
 ```bash
-# Apply migrations from supabase/migrations in timestamp order using your chosen Supabase workflow.
+# Apply only new migration files introduced by your branch using your chosen Supabase workflow.
 npm run db:validate
 ```
 
-Avoid older one-off migration runners unless you have checked the file path and SQL target. Several historical scripts exist for feature work and are not the recommended bootstrap path for new customers.
+Avoid older one-off migration runners unless you have checked the file path and SQL target. `npm run migrate` delegates to `db:baseline` for fresh installs.
 
 ## Required Environment
 

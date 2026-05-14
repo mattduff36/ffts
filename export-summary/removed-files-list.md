@@ -554,7 +554,7 @@ The following files/directories were removed during the template sanitisation pa
 - `docs_private/unsure/user-guide-screenshots/09-inspections-list.png`
 - `docs_private/unsure/user-guide-screenshots/12-rams-documents.png`
 - `docs_private/unsure/user-guide-screenshots/14-absence-calendar.png`
-- `lib/pdf/squires-logo.ts`
+- `lib/pdf/legacy-client-logo.ts`
 - `plans/`
 - `plans/CODEBASE_CLEANUP_REMAINING.md`
 - `plans/FEATURES_ALIGNMENT_ANALYSIS.md`

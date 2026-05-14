@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" role="img" aria-label="FieldOps Template logo">
+  <rect width="320" height="96" rx="18" fill="#0f172a"/>
+  <g transform="translate(24 20)">
+    <rect width="56" height="56" rx="12" fill="#F1D64A"/>
+    <path d="M17 14h26v8H27v7h14v8H27v15H17V14Z" fill="#0f172a"/>
+    <path d="M39 6h13v13h-7v-6h-6V6Z" fill="#38bdf8"/>
+  </g>
+  <text x="96" y="43" fill="#f8fafc" font-family="Arial, sans-serif" font-size="24" font-weight="700">FieldOps</text>
+  <text x="96" y="66" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="14">Digital operations template</text>
+</svg>

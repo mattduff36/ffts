@@ -1,8 +1,8 @@
 # Recommended Follow-Up Actions
 
 - Add a commercial template licence and terms before selling the repository.
-- Create a concise buyer setup guide that explains Supabase project creation, migration order, environment variables, Vercel deployment, and branding replacement.
-- Consider extracting brand/company details into a single config module so each client project can be customised without searching through PDF and email templates.
+- Keep the buyer setup guide current as the Supabase/Vercel setup flow changes.
+- Continue routing brand/company details through the central config modules so each client project can be customised without searching through PDF and email templates.
 - Create a fresh-demo seed package with fictional users, vehicles, assets, inspections, timesheets, and quotes.
-- Add an automated `template:audit` script for future exports that scans for private domains, common secret formats, generated files, and client-specific names.
-- Consider consolidating the preserved migration history into a clean baseline migration for template customers who do not need historical branch context.
+- Expand `template:audit` over time with any new private domains, generated files, or client-specific strings discovered during exports.
+- Consider consolidating the restored foundation SQL plus preserved migration history into a generated single-file baseline once a clean demo database has been validated.

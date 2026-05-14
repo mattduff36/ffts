@@ -16,7 +16,9 @@ BEGIN
     AND is_active = true;
   
   IF repair_category_id IS NULL THEN
-    RAISE EXCEPTION 'Repair category not found - please create it first';
+    INSERT INTO workshop_task_categories (name, applies_to, is_active, sort_order)
+    VALUES ('Repair', 'vehicle', true, 10)
+    RETURNING id INTO repair_category_id;
   END IF;
   
   RAISE NOTICE 'Found Repair category: %', repair_category_id;

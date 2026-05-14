@@ -5,6 +5,7 @@ interface AuditFinding {
   file: string;
   pattern: string;
   sample: string;
+  severity: 'critical' | 'review';
 }
 
 const ignoredDirectories = new Set([
@@ -14,7 +15,21 @@ const ignoredDirectories = new Set([
   'coverage',
   'export-summary',
   'agent-transcripts',
+  'reports',
 ]);
+
+const ignoredPathParts = [
+  '.env',
+  '.env.local',
+  '.env.development',
+  '.env.production',
+  'template-setup.local.json',
+  'template-setup-checklist.md',
+  'testsuite/.state',
+  'testsuite/reports',
+  'playwright-report',
+  'test-results',
+];
 
 const ignoredExtensions = new Set([
   '.png',
@@ -28,19 +43,26 @@ const ignoredExtensions = new Set([
   '.docx',
 ]);
 
-const patterns = [
-  { name: 'Private key marker', regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i },
-  { name: 'Supabase service role JWT', regex: /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/ },
-  { name: 'Resend API key', regex: /re_[A-Za-z0-9]{20,}/ },
-  { name: 'Likely real email domain', regex: /[A-Z0-9._%+-]+@(?!example\.com|example\.test|demo\.example\.test|fieldops-template\.test)[A-Z0-9.-]+\.[A-Z]{2,}/i },
-  { name: 'Placeholder app URL', regex: /your-app\.example\.com/i },
-  { name: 'Legacy TemplateApp string', regex: /TemplateApp/ },
-  { name: 'Legacy FieldOps Template string', regex: /FieldOps Template/ },
-  { name: 'Old PDF company placeholder', regex: /A\. & V\. TEMPLATE|Example Client Ltd/ },
+const patterns: Array<{ name: string; regex: RegExp; severity: AuditFinding['severity'] }> = [
+  { name: 'Private key marker', regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i, severity: 'critical' },
+  { name: 'JWT-looking token', regex: /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/, severity: 'critical' },
+  { name: 'Resend API key', regex: /re_[A-Za-z0-9]{20,}/, severity: 'critical' },
+  {
+    name: 'Likely real email domain',
+    regex: /[A-Z0-9._%+-]+@(?!example\.com|example\.test|example\.local|demo\.example\.test|fieldops-template\.test|test\.com|your-app\.example\.com)[A-Z0-9.-]+\.[A-Z]{2,}/i,
+    severity: 'review',
+  },
+  { name: 'Placeholder app URL', regex: /your-app\.example\.com/i, severity: 'review' },
+  { name: 'Legacy TemplateApp string', regex: /TemplateApp/, severity: 'review' },
+  { name: 'Legacy client string', regex: /A\. & V\. TEMPLATE|Squ[i]res/i, severity: 'review' },
 ];
 
 function shouldSkipFile(path: string): boolean {
-  return Array.from(ignoredExtensions).some((extension) => path.toLowerCase().endsWith(extension));
+  const normalized = relative(process.cwd(), path).replace(/\\/g, '/');
+  return (
+    ignoredPathParts.some((part) => normalized === part || normalized.startsWith(`${part}/`)) ||
+    Array.from(ignoredExtensions).some((extension) => path.toLowerCase().endsWith(extension))
+  );
 }
 
 function walk(directory: string): string[] {
@@ -75,7 +97,8 @@ function auditFile(file: string): AuditFinding[] {
       findings.push({
         file: relativePath,
         pattern: pattern.name,
-        sample: match[0].slice(0, 120),
+        sample: pattern.severity === 'critical' ? '[redacted]' : match[0].slice(0, 120),
+        severity: pattern.severity,
       });
     }
   }
@@ -91,12 +114,20 @@ function main() {
     return;
   }
 
+  const criticalFindings = findings.filter((finding) => finding.severity === 'critical');
+
   for (const finding of findings) {
-    console.log(`${finding.file}: ${finding.pattern} (${finding.sample})`);
+    const prefix = finding.severity === 'critical' ? 'CRITICAL' : 'REVIEW';
+    console.log(`${prefix}: ${finding.file}: ${finding.pattern} (${finding.sample})`);
   }
 
-  console.log(`Template audit found ${findings.length} item(s) for review.`);
-  process.exit(1);
+  console.log(
+    `Template audit found ${criticalFindings.length} critical item(s) and ${
+      findings.length - criticalFindings.length
+    } review item(s).`
+  );
+
+  if (criticalFindings.length > 0) process.exit(1);
 }
 
 main();

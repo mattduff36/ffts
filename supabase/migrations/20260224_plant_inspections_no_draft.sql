@@ -5,6 +5,10 @@
 
 BEGIN;
 
+ALTER TABLE inspection_items
+ADD COLUMN IF NOT EXISTS item_description TEXT,
+ADD COLUMN IF NOT EXISTS comments TEXT;
+
 -- ============================================================
 -- STEP 1: Backfill missing inspection_items with status='na'
 -- for all draft plant inspections (22 checklist items each)

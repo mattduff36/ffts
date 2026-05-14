@@ -45,7 +45,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_BRAND_COLOR_HOVER: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   NEXT_PUBLIC_PWA_BACKGROUND_COLOR: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   NEXT_PUBLIC_DEMO_EMAIL_DOMAIN: z.string().min(1).optional(),
+  DEMO_SUPABASE_PROJECT_REF: z.string().min(1).optional(),
   DEMO_RESET_CONFIRM: z.string().optional(),
+  APP_SESSION_SECRET: z.string().min(1).optional(),
+  APP_SESSION_HASH_SECRET: z.string().min(1).optional(),
   
   // Vercel Analytics (Optional)
   NEXT_PUBLIC_VERCEL_ANALYTICS_ID: z.string().optional(),

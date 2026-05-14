@@ -38,10 +38,10 @@ Set `APP_MODE` and `NEXT_PUBLIC_APP_MODE` explicitly per environment.
 
 ## Database
 
-There are two supported bootstrap paths:
+There are two database paths:
 
-- Fresh customer install: apply the clean baseline with `npm run db:baseline`, then run `npm run db:validate`.
-- Ongoing development or existing deployment: apply the preserved migrations in `supabase/migrations/`, then run `npm run db:validate`.
+- Fresh demo/customer install: run `npm run db:baseline`, then `npm run db:validate`. This applies the starter schema, the restored foundation SQL in `supabase/baseline/`, and every preserved migration in `supabase/migrations/` in filename order.
+- Ongoing development or an existing deployment: apply only the new migration files introduced by your branch, then run `npm run db:validate`.
 
 Before running migrations, read `docs/guides/HOW_TO_RUN_MIGRATIONS.md`.
 
@@ -50,12 +50,15 @@ Before running migrations, read `docs/guides/HOW_TO_RUN_MIGRATIONS.md`.
 Demo mode must use its own Supabase project, Vercel project, and fake data only.
 
 ```bash
+DEMO_RESET_CONFIRM=RESET_DEMO_DATABASE APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:wipe-database
+npm run db:baseline
+npm run db:validate
 APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:setup-storage
 APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:seed
 DEMO_RESET_CONFIRM=RESET_DEMO_DATA APP_MODE=demo NEXT_PUBLIC_APP_MODE=demo npm run demo:reset
 ```
 
-The reset command refuses to run unless the app is in demo mode, the confirmation flag is set, and the Supabase URL looks like a demo/local project.
+The wipe and reset commands refuse to run unless the app is in demo mode, the confirmation flag is set, and `DEMO_SUPABASE_PROJECT_REF` matches the Supabase URL project ref.
 
 ## Template Audit
 

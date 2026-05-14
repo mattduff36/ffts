@@ -1,6 +1,7 @@
 import { createInterface } from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 import { existsSync, writeFileSync } from 'fs';
+import { randomBytes } from 'crypto';
 import {
   buildChecklist,
   checklistPath,
@@ -23,6 +24,10 @@ function getArgValue(name: string): string | undefined {
   return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 }
 
+function createSecret(): string {
+  return randomBytes(32).toString('hex');
+}
+
 function buildDefaultState(): TemplateSetupState {
   return templateSetupSchema.parse({
     companyName: getArgValue('company') || 'Example Client Ltd',
@@ -41,8 +46,13 @@ function buildDefaultState(): TemplateSetupState {
     supabaseAnonKey: getArgValue('supabase-anon-key'),
     supabaseServiceRoleKey: getArgValue('supabase-service-role-key'),
     databaseConnectionString: getArgValue('database-url'),
+    demoSupabaseProjectRef: getArgValue('demo-project-ref'),
     resendSenderEmail: getArgValue('resend-from'),
     resendApiKey: getArgValue('resend-api-key'),
+    resendSenderEmail2: getArgValue('resend-from-2'),
+    resendApiKey2: getArgValue('resend-api-key-2'),
+    appSessionSecret: getArgValue('app-session-secret') || createSecret(),
+    appSessionHashSecret: getArgValue('app-session-hash-secret') || createSecret(),
     maptilerKey: getArgValue('maptiler-key'),
     dvlaApiKey: getArgValue('dvla-api-key'),
     fleetsmartApiKey: getArgValue('fleetsmart-api-key'),

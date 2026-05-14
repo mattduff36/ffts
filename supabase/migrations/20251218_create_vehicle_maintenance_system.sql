@@ -191,6 +191,9 @@ COMMENT ON COLUMN vehicle_archive.maintenance_data IS 'Full maintenance record a
 -- ============================================================================
 -- Automatically updates vehicle_maintenance.current_mileage when inspection is created/updated
 
+ALTER TABLE vehicle_inspections
+ADD COLUMN IF NOT EXISTS current_mileage INTEGER;
+
 CREATE OR REPLACE FUNCTION update_vehicle_maintenance_mileage()
 RETURNS TRIGGER AS $$
 BEGIN

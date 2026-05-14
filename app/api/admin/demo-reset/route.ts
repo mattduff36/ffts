@@ -5,6 +5,19 @@ import { createClient } from '@/lib/supabase/server';
 import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateSuperAdminEmail } from '@/lib/config/template-server-config';
 
+function getProjectRef(supabaseUrl: string): string | null {
+  return supabaseUrl.match(/^https:\/\/([^.]+)\.supabase\.co$/)?.[1] ?? null;
+}
+
+function isDemoProjectAllowed(): boolean {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const expectedProjectRef = process.env.DEMO_SUPABASE_PROJECT_REF || '';
+  const actualProjectRef = getProjectRef(supabaseUrl);
+  const isLocalProject = supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1');
+
+  return isLocalProject || (!!actualProjectRef && actualProjectRef === expectedProjectRef);
+}
+
 async function isSuperAdmin(userId: string, email?: string | null): Promise<boolean> {
   if (email && email === getTemplateSuperAdminEmail()) return true;
 
@@ -25,6 +38,10 @@ async function isSuperAdmin(userId: string, email?: string | null): Promise<bool
 export async function POST() {
   if (!templateConfig.isDemoMode) {
     return NextResponse.json({ error: 'Demo reset is only available in demo mode.' }, { status: 404 });
+  }
+
+  if (!isDemoProjectAllowed()) {
+    return NextResponse.json({ error: 'Demo reset project guard is not configured.' }, { status: 403 });
   }
 
   const supabase = await createClient();

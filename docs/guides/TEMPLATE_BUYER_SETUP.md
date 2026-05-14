@@ -33,7 +33,7 @@ npm run db:baseline
 npm run db:validate
 ```
 
-For an existing deployment or ongoing product branch, apply `supabase/migrations/` in timestamp order and then run:
+`db:baseline` applies the starter schema, foundation SQL, and preserved migrations in order. For an existing deployment or ongoing product branch, apply only the new migration files introduced by that branch and then run:
 
 ```bash
 npm run db:validate
@@ -60,6 +60,8 @@ In demo mode, emails sent to `NEXT_PUBLIC_DEMO_EMAIL_DOMAIN` are simulated so pr
 ## 6. Deploy To Vercel
 
 Create or link a Vercel project, add the production environment variables, and deploy from the customer-owned repository. Keep demo and production as separate Vercel projects connected to separate Supabase projects.
+
+For demo deployments, set `APP_MODE=demo`, `NEXT_PUBLIC_APP_MODE=demo`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL`, and `DEMO_SUPABASE_PROJECT_REF` in Vercel. Do not connect demo deployments to a real customer database or real third-party side-effect credentials.
 
 ## 7. Final Checks
 

@@ -27,7 +27,7 @@ test.describe('@critical Help & FAQ', () => {
     await page.goto('/help?tab=install');
     await waitForAppReady(page);
     const hasInstallContent = await page
-      .getByText(/install squires app|quick support actions|install app/i)
+      .getByText(/install fieldops template|quick support actions|install app/i)
       .first()
       .isVisible({ timeout: 5_000 })
       .catch(() => false);

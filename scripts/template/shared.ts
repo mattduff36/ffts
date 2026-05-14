@@ -23,8 +23,13 @@ export const templateSetupSchema = z.object({
   supabaseAnonKey: z.string().optional(),
   supabaseServiceRoleKey: z.string().optional(),
   databaseConnectionString: z.string().optional(),
+  demoSupabaseProjectRef: z.string().optional(),
   resendSenderEmail: z.string().optional(),
   resendApiKey: z.string().optional(),
+  resendSenderEmail2: z.string().optional(),
+  resendApiKey2: z.string().optional(),
+  appSessionSecret: z.string().optional(),
+  appSessionHashSecret: z.string().optional(),
   maptilerKey: z.string().optional(),
   dvlaApiKey: z.string().optional(),
   fleetsmartApiKey: z.string().optional(),
@@ -69,6 +74,8 @@ export function ensureDirectoryForFile(path: string): void {
 
 export function setupStateToEnv(state: TemplateSetupState): Map<string, string> {
   const env = readEnvFile(envExamplePath);
+  const derivedDemoProjectRef =
+    state.demoSupabaseProjectRef || state.supabaseUrl?.match(/^https:\/\/([^.]+)\.supabase\.co$/)?.[1] || '';
 
   env.set('APP_MODE', state.appMode);
   env.set('NEXT_PUBLIC_APP_MODE', state.appMode);
@@ -90,8 +97,13 @@ export function setupStateToEnv(state: TemplateSetupState): Map<string, string> 
   env.set('NEXT_PUBLIC_SUPABASE_ANON_KEY', state.supabaseAnonKey || '');
   env.set('SUPABASE_SERVICE_ROLE_KEY', state.supabaseServiceRoleKey || '');
   env.set('POSTGRES_URL_NON_POOLING', state.databaseConnectionString || '');
+  env.set('DEMO_SUPABASE_PROJECT_REF', state.appMode === 'demo' ? derivedDemoProjectRef : '');
   env.set('RESEND_FROM_EMAIL', state.resendSenderEmail || '');
   env.set('RESEND_API_KEY', state.resendApiKey || '');
+  env.set('RESEND_FROM_EMAIL_2', state.resendSenderEmail2 || '');
+  env.set('RESEND_API_KEY_2', state.resendApiKey2 || '');
+  env.set('APP_SESSION_SECRET', state.appSessionSecret || '');
+  env.set('APP_SESSION_HASH_SECRET', state.appSessionHashSecret || '');
   env.set('NEXT_PUBLIC_MAPTILER_API_KEY', state.maptilerKey || '');
   env.set('DVLA_API_KEY', state.dvlaApiKey || '');
   env.set('FLEETSMART_API_KEY', state.fleetsmartApiKey || '');
@@ -111,6 +123,8 @@ export function getRequiredEnvKeys(): string[] {
     'NEXT_PUBLIC_COMPANY_ADDRESS',
     'NEXT_PUBLIC_APP_URL',
     'ADMIN_EMAIL',
+    'APP_SESSION_SECRET',
+    'APP_SESSION_HASH_SECRET',
   ];
 }
 
@@ -131,7 +145,9 @@ Generated for ${state.companyName}.
 - Apply the clean baseline SQL for fresh installs or the preserved migration history for ongoing deployments.
 - Run npm run db:validate after database setup.
 - Create required Supabase storage buckets with npm run setup:storage.
+- If dummy data was requested, run the seed command after database and storage validation.
 - Verify the Resend sending domain and add RESEND_API_KEY / RESEND_FROM_EMAIL.
+- Add RESEND_API_KEY_2 / RESEND_FROM_EMAIL_2 if quote/customer emails use a separate sender.
 - Link the repository to a customer-owned Vercel project.
 - Add production environment variables in Vercel.
 - Configure DNS for ${state.publicAppUrl}.

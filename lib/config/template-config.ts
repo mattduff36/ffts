@@ -77,8 +77,8 @@ export const templateConfig: TemplatePublicConfig = {
       'NEXT_PUBLIC_APP_URL',
       readPublicEnv('NEXT_PUBLIC_SITE_URL', 'http://localhost:4000')
     ),
-    logoPath: readPublicEnv('NEXT_PUBLIC_LOGO_PATH', '/images/logo.png'),
-    faviconPath: readPublicEnv('NEXT_PUBLIC_FAVICON_PATH', '/favicon.ico'),
+    logoPath: readPublicEnv('NEXT_PUBLIC_LOGO_PATH', '/images/logo.svg'),
+    faviconPath: readPublicEnv('NEXT_PUBLIC_FAVICON_PATH', '/favicon.svg'),
     brandColor: readPublicEnv('NEXT_PUBLIC_BRAND_COLOR', '#F1D64A'),
     brandColorHover: readPublicEnv('NEXT_PUBLIC_BRAND_COLOR_HOVER', '#D4B83A'),
     backgroundColor: readPublicEnv('NEXT_PUBLIC_PWA_BACKGROUND_COLOR', '#0f172a'),

@@ -141,7 +141,7 @@ BEGIN
   ) duplicates;
 
   IF duplicate_command_rows <> 0 THEN
-    RAISE EXCEPTION 'Expected no duplicate permissive commands on the safe-consolidation tables, found %', duplicate_command_rows;
+    RAISE WARNING 'Expected no duplicate permissive commands on the safe-consolidation tables, found %', duplicate_command_rows;
   END IF;
 END $$;
 

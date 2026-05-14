@@ -9,10 +9,17 @@ config({ path: resolve(process.cwd(), '.env.local') });
 const demoDomain = process.env.NEXT_PUBLIC_DEMO_EMAIL_DOMAIN || 'demo.example.test';
 type ScriptSupabaseClient = ReturnType<typeof createClient<any>>;
 
+function getProjectRef(supabaseUrl: string): string | null {
+  return supabaseUrl.match(/^https:\/\/([^.]+)\.supabase\.co$/)?.[1] ?? null;
+}
+
 function assertResetAllowed() {
   const appMode = process.env.APP_MODE || process.env.NEXT_PUBLIC_APP_MODE;
   const confirmed = process.env.DEMO_RESET_CONFIRM === 'RESET_DEMO_DATA';
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const expectedProjectRef = process.env.DEMO_SUPABASE_PROJECT_REF || '';
+  const actualProjectRef = getProjectRef(supabaseUrl);
+  const isLocalProject = supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1');
 
   if (appMode !== 'demo') {
     throw new Error('demo:reset can only run when APP_MODE or NEXT_PUBLIC_APP_MODE is set to demo.');
@@ -22,8 +29,8 @@ function assertResetAllowed() {
     throw new Error('Set DEMO_RESET_CONFIRM=RESET_DEMO_DATA to confirm this destructive demo reset.');
   }
 
-  if (!supabaseUrl.includes('demo') && !supabaseUrl.includes('localhost')) {
-    throw new Error('Refusing demo reset because NEXT_PUBLIC_SUPABASE_URL is not clearly a demo/local project.');
+  if (!isLocalProject && (!actualProjectRef || actualProjectRef !== expectedProjectRef)) {
+    throw new Error('Refusing demo reset because DEMO_SUPABASE_PROJECT_REF does not match NEXT_PUBLIC_SUPABASE_URL.');
   }
 }
 
@@ -79,6 +86,11 @@ async function main() {
 
   console.log(`Found ${demoUsers.length} demo user(s) for ${demoDomain}.`);
 
+  await supabase.from('quotes').delete().like('quote_reference', 'DEMO-%');
+  await supabase.from('customers').delete().eq('company_name', 'Demo Civil Engineering Ltd');
+  await supabase.from('messages').delete().eq('created_via', 'demo-seed');
+  await supabase.from('actions').delete().like('title', 'Demo %');
+
   for (const [table, column] of [
     ['timesheet_entries', 'user_id'],
     ['timesheets', 'user_id'],
@@ -86,7 +98,7 @@ async function main() {
     ['inspection_photos', 'uploaded_by'],
     ['absences', 'user_id'],
     ['rams_assignments', 'profile_id'],
-    ['message_recipients', 'recipient_id'],
+    ['message_recipients', 'user_id'],
     ['actions', 'created_by'],
     ['audit_log', 'user_id'],
     ['user_page_visits', 'user_id'],

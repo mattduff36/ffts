@@ -1,6 +1,5 @@
 'use client';
 
-import { Analytics } from '@vercel/analytics/react';
 import dynamic from 'next/dynamic';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/lib/providers/auth-provider';
@@ -19,7 +18,6 @@ const DeploymentVersionChecker = dynamic(
 
 interface AppProvidersProps {
   children: React.ReactNode;
-  shouldLoadAnalytics: boolean;
 }
 
 function hasPublicSupabaseConfig(): boolean {
@@ -52,7 +50,7 @@ function MissingSupabaseConfigScreen() {
   );
 }
 
-export function AppProviders({ children, shouldLoadAnalytics }: AppProvidersProps) {
+export function AppProviders({ children }: AppProvidersProps) {
   if (!hasPublicSupabaseConfig()) {
     return <MissingSupabaseConfigScreen />;
   }
@@ -65,7 +63,6 @@ export function AppProviders({ children, shouldLoadAnalytics }: AppProvidersProp
         <AuthProvider>
           {children}
           <Toaster />
-          {shouldLoadAnalytics ? <Analytics /> : null}
         </AuthProvider>
       </QueryProvider>
     </>

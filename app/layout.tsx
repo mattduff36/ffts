@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { AppProviders } from "@/lib/providers/app-providers";
 import { templateConfig } from "@/lib/config/template-config";
 import "./globals.css";
@@ -17,11 +18,10 @@ export const metadata: Metadata = {
   description: `${templateConfig.branding.companyName} digital field operations system`,
   manifest: "/manifest.json",
   icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     apple: [
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-      { url: "/apple-touch-icon-180x180.png", sizes: "180x180", type: "image/png" },
-      { url: "/apple-touch-icon-152x152.png", sizes: "152x152", type: "image/png" },
-      { url: "/apple-touch-icon-167x167.png", sizes: "167x167", type: "image/png" },
     ],
   },
   appleWebApp: {
@@ -44,8 +44,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const shouldLoadAnalytics = process.env.NODE_ENV === 'production' && process.env.VERCEL === '1';
-
   return (
     <html
       lang="en"
@@ -58,7 +56,8 @@ export default function RootLayout({
         <meta name="color-scheme" content="dark" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AppProviders shouldLoadAnalytics={shouldLoadAnalytics}>{children}</AppProviders>
+        <AppProviders>{children}</AppProviders>
+        <Analytics />
       </body>
     </html>
   );

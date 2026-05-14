@@ -23,6 +23,29 @@ INSERT INTO roles (
   is_manager_admin,
   timesheet_type
 )
+VALUES
+  ('admin', 'Administrator', 'Template administrator role.', 'admin', 999, TRUE, TRUE, 'civils'),
+  ('manager', 'Manager', 'Template manager role.', 'manager', 4, FALSE, TRUE, 'civils'),
+  ('employee', 'Employee', 'Template employee role.', 'employee', 2, FALSE, FALSE, 'civils')
+ON CONFLICT (name) DO UPDATE
+SET
+  display_name = EXCLUDED.display_name,
+  description = EXCLUDED.description,
+  role_class = EXCLUDED.role_class,
+  hierarchy_rank = EXCLUDED.hierarchy_rank,
+  is_manager_admin = EXCLUDED.is_manager_admin,
+  timesheet_type = EXCLUDED.timesheet_type;
+
+INSERT INTO roles (
+  name,
+  display_name,
+  description,
+  role_class,
+  hierarchy_rank,
+  is_super_admin,
+  is_manager_admin,
+  timesheet_type
+)
 SELECT
   'supervisor',
   'Supervisor',
@@ -36,6 +59,31 @@ WHERE NOT EXISTS (
   SELECT 1
   FROM roles
   WHERE name = 'supervisor'
+);
+
+INSERT INTO roles (
+  name,
+  display_name,
+  description,
+  role_class,
+  hierarchy_rank,
+  is_super_admin,
+  is_manager_admin,
+  timesheet_type
+)
+SELECT
+  'contractor',
+  'Contractor',
+  'Contractor role for limited module access.',
+  'employee',
+  1,
+  FALSE,
+  FALSE,
+  'civils'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM roles
+  WHERE name = 'contractor'
 );
 
 UPDATE roles
@@ -165,6 +213,17 @@ CREATE POLICY "Only admins can manage team module permissions"
         AND (r.is_super_admin = TRUE OR r.name = 'admin')
     )
   );
+
+INSERT INTO org_teams (id, name, code, active)
+VALUES
+  ('civils', 'Civils', 'CIV', TRUE),
+  ('plant', 'Plant', 'PLT', TRUE),
+  ('transport', 'Transport', 'TRN', TRUE),
+  ('workshop', 'Workshop', 'WRK', TRUE),
+  ('accounts', 'Accounts', 'ACC', TRUE),
+  ('sheq', 'SHEQ', 'SHEQ', TRUE),
+  ('management', 'Management', 'MGT', TRUE)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO team_module_permissions (team_id, module_name, enabled)
 VALUES

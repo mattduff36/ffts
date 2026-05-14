@@ -12,6 +12,7 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
 });
+const shouldRenderAnalytics = process.env.VERCEL === '1';
 
 export const metadata: Metadata = {
   title: templateConfig.branding.appName,
@@ -57,7 +58,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <AppProviders>{children}</AppProviders>
-        <Analytics />
+        {shouldRenderAnalytics ? <Analytics /> : null}
       </body>
     </html>
   );

@@ -33,10 +33,22 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 const TEST_USERS = [
   {
+    key: 'default',
+    email: 'test@example.com',
+    password: 'test123456',
+    fullName: 'Default Integration Test User',
+    employeeId: 'TS-DEFAULT',
+    teamId: 'management',
+    superAdmin: false,
+    roleMatcher: { is_manager_admin: true, name: 'manager' },
+    roleFallback: { is_manager_admin: true },
+  },
+  {
     key: 'admin',
     email: 'testsuite-admin@example.test',
     fullName: 'Testsuite Admin',
     employeeId: 'TS-ADM',
+    teamId: 'management',
     superAdmin: true,
     roleMatcher: { is_manager_admin: true, is_super_admin: false, name: 'admin' },
     roleFallback: { is_manager_admin: true },
@@ -46,6 +58,7 @@ const TEST_USERS = [
     email: 'testsuite-manager@example.test',
     fullName: 'Testsuite Manager',
     employeeId: 'TS-MGR',
+    teamId: 'management',
     superAdmin: false,
     roleMatcher: { is_manager_admin: true, name: 'manager' },
     roleFallback: { is_manager_admin: true },
@@ -55,6 +68,7 @@ const TEST_USERS = [
     email: 'testsuite-employee@example.test',
     fullName: 'Testsuite Employee',
     employeeId: 'TS-EMP',
+    teamId: 'civils',
     superAdmin: false,
     roleMatcher: { is_manager_admin: false, name: 'employee' },
     roleFallback: { is_manager_admin: false },
@@ -85,6 +99,7 @@ async function findRoleId(matcher: Record<string, unknown>, fallback: Record<str
 
 async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: string; password: string; userId: string; role: string }> {
   const roleId = await findRoleId(userDef.roleMatcher, userDef.roleFallback);
+  const password = userDef.password || PASSWORD;
   console.log(`  Role for ${userDef.key}: ${roleId}`);
 
   // Check if user already exists by email
@@ -97,14 +112,14 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
     userId = existing.id;
     console.log(`  User ${userDef.email} already exists (${userId}), updating password...`);
     await supabase.auth.admin.updateUserById(userId, {
-      password: PASSWORD,
+      password,
       email_confirm: true,
     });
   } else {
     console.log(`  Creating user ${userDef.email}...`);
     const { data: newUser, error } = await supabase.auth.admin.createUser({
       email: userDef.email,
-      password: PASSWORD,
+      password,
       email_confirm: true,
       user_metadata: {
         full_name: userDef.fullName,
@@ -127,6 +142,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
       id: userId,
       full_name: userDef.fullName,
       employee_id: userDef.employeeId,
+      team_id: userDef.teamId,
       role_id: roleId,
       super_admin: userDef.superAdmin,
       must_change_password: false,
@@ -138,6 +154,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
     .update({
       must_change_password: false,
       super_admin: userDef.superAdmin,
+      team_id: userDef.teamId,
     })
     .eq('id', userId);
 
@@ -145,7 +162,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
     console.warn(`  Warning: profile upsert for ${userDef.email}: ${profileError.message}`);
   }
 
-  return { email: userDef.email, password: PASSWORD, userId, role: userDef.key };
+  return { email: userDef.email, password, userId, role: userDef.key };
 }
 
 async function main() {

@@ -64,7 +64,7 @@ BEGIN
       DECLARE
         action_type TEXT := 'updated';
       BEGIN
-        IF field_name = 'status' THEN
+        IF changes_json ? 'status' THEN
           IF new_data->>'status' = 'submitted' THEN
             action_type := 'submitted';
           ELSIF new_data->>'status' = 'approved' THEN

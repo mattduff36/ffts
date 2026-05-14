@@ -1,6 +1,7 @@
 export const APP_SESSION_COOKIE_LOGICAL_NAME = 'avs_app_session';
+const shouldUseSecureHostCookie = process.env.NODE_ENV === 'production' && process.env.VERCEL === '1';
 export const APP_SESSION_COOKIE_NAME =
-  process.env.NODE_ENV === 'production'
+  shouldUseSecureHostCookie
     ? `__Host-${APP_SESSION_COOKIE_LOGICAL_NAME}`
     : APP_SESSION_COOKIE_LOGICAL_NAME;
 

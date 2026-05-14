@@ -66,7 +66,13 @@ async function getCurrentAuthSessionResponse(): Promise<ClientAuthSessionRespons
   }
 }
 
-async function getDataToken(): Promise<string> {
+async function getDataToken(dataTokenAvailable = true): Promise<string> {
+  if (!dataTokenAvailable) {
+    cachedDataToken = null
+    lastDataTokenFailureStatus = null
+    return ''
+  }
+
   if (cachedDataToken && cachedDataToken.expiresAt * 1000 > Date.now() + 30_000) {
     return cachedDataToken.token
   }
@@ -128,7 +134,12 @@ export function createClient(): BrowserSupabaseClient {
     supabaseAnonKey,
     {
       accessToken: async () => {
-        const token = await getDataToken()
+        const sessionResponse = await getCurrentAuthSessionResponse()
+        if (!sessionResponse.authenticated || sessionResponse.locked) {
+          return ''
+        }
+
+        const token = await getDataToken(sessionResponse.data_token_available !== false)
         if (token) {
           baseClient.realtime.setAuth(token)
         }
@@ -182,7 +193,7 @@ export function createClient(): BrowserSupabaseClient {
         }
       }
 
-      const token = await getDataToken()
+      const token = await getDataToken(sessionResponse.data_token_available !== false)
       const expiresAt = cachedDataToken?.expiresAt ?? Math.floor(Date.now() / 1000)
       return {
         data: {

@@ -60,8 +60,12 @@ async function wipePublicSchema(connectionString: string): Promise<void> {
       GRANT ALL ON SCHEMA public TO postgres, service_role;
 
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, service_role;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO authenticated;
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres, service_role;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
     `);
   } finally {
     await client.end();
@@ -73,11 +77,10 @@ async function deleteAuthUsers(supabaseUrl: string, serviceRoleKey: string): Pro
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  let page = 1;
   let deleted = 0;
 
   while (true) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (error) throw error;
     if (data.users.length === 0) break;
 
@@ -88,7 +91,6 @@ async function deleteAuthUsers(supabaseUrl: string, serviceRoleKey: string): Pro
     }
 
     if (data.users.length < 1000) break;
-    page += 1;
   }
 
   console.log(`Deleted ${deleted} auth user(s).`);

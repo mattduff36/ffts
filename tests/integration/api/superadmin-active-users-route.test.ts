@@ -1,9 +1,13 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-import { GET } from '@/app/api/superadmin/active-users/route';
-
+vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/server');
 vi.mock('@/lib/supabase/admin');
+
+async function getActiveUsersRoute() {
+  const { GET } = await import('@/app/api/superadmin/active-users/route');
+  return GET;
+}
 
 interface MockVisitRow {
   user_id: string;
@@ -157,6 +161,7 @@ describe('GET /api/superadmin/active-users', () => {
       ]) as never
     );
 
+    const GET = await getActiveUsersRoute();
     const response = await GET();
     const payload = await response.json();
 
@@ -215,6 +220,7 @@ describe('GET /api/superadmin/active-users', () => {
       ]) as never
     );
 
+    const GET = await getActiveUsersRoute();
     const response = await GET();
     const payload = await response.json();
 
@@ -239,6 +245,7 @@ describe('GET /api/superadmin/active-users', () => {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     vi.mocked(createAdminClient).mockReturnValue(createAdminClientMock([], false) as never);
 
+    const GET = await getActiveUsersRoute();
     const response = await GET();
     const payload = await response.json();
 

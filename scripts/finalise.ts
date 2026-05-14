@@ -6,6 +6,10 @@ import pg from 'pg';
 
 config({ path: path.resolve(process.cwd(), '.env.local') });
 
+if (process.env.NODE_ENV === 'development') {
+  Reflect.deleteProperty(process.env, 'NODE_ENV');
+}
+
 const { Client } = pg;
 const REPO_ROOT = process.cwd();
 const NEXT_BUILD_DIR = path.join(REPO_ROOT, '.next');
@@ -641,6 +645,8 @@ async function main(): Promise<void> {
 
   if (options.full) {
     console.log('\n==> Run full automated test suite');
+    console.log('Preparing test users...');
+    runCommand('npm', ['run', 'setup:test-users']);
     runCommand('npm', ['run', 'test:run']);
     console.log(`Starting local production server on port ${DEV_SERVER_PORT} for testsuite...`);
     const testServer = startManagedProcess(

@@ -5,9 +5,12 @@ import { templateConfig } from '@/lib/config/template-config';
 
 export async function loadTemplateLogoDataUrl(): Promise<string | null> {
   try {
-    const logoPath = resolve(process.cwd(), 'public', templateConfig.branding.logoPath.replace(/^\//, ''));
+    const configuredLogoPath = resolve(process.cwd(), 'public', templateConfig.branding.logoPath.replace(/^\//, ''));
+    const configuredExtension = extname(configuredLogoPath).toLowerCase();
+    const logoPath = configuredExtension === '.svg' ? configuredLogoPath.replace(/\.svg$/i, '.png') : configuredLogoPath;
     const logoBuffer = await readFile(logoPath);
-    const mimeType = extname(logoPath).toLowerCase() === '.svg' ? 'image/svg+xml' : 'image/png';
+    const logoExtension = extname(logoPath).toLowerCase();
+    const mimeType = logoExtension === '.jpg' || logoExtension === '.jpeg' ? 'image/jpeg' : 'image/png';
     return `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
   } catch {
     return null;

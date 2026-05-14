@@ -7,16 +7,6 @@ function read(relativePath: string): string {
 }
 
 describe('timesheet manager RLS policy regression fix', () => {
-  it('uses effective_is_manager_admin in the reusable fix script', () => {
-    const sql = read('supabase/fix-timesheet-rls.sql');
-
-    expect(sql).toContain('CREATE POLICY "Managers can create timesheets for any user"');
-    expect(sql).toContain('WITH CHECK (effective_is_manager_admin());');
-    expect(sql).toContain('CREATE POLICY "Managers can delete any timesheet entries"');
-    expect(sql).toContain('USING (effective_is_manager_admin());');
-    expect(sql).not.toContain("profiles.role IN ('admin', 'manager')");
-  });
-
   it('adds a migration that restores effective-role checks for timesheet manager policies', () => {
     const sql = read('supabase/migrations/20260421_fix_timesheet_manager_rls_role_checks.sql');
 

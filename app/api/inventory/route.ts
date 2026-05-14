@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
 import ExcelJS from 'exceljs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeInventoryItemNumber, requireInventoryAccess } from '@/lib/server/inventory-auth';
@@ -46,8 +47,11 @@ function compactLocation(value: string): string {
 }
 
 async function readCompleteListLocationHints(): Promise<Map<string, SourceLocationHint>> {
+  const filePath = resolve(process.cwd(), completeListPath);
+  if (!existsSync(filePath)) return new Map();
+
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(resolve(process.cwd(), completeListPath));
+  await workbook.xlsx.readFile(filePath);
   const worksheet = workbook.getWorksheet('COMPLETE');
   if (!worksheet) return new Map();
 

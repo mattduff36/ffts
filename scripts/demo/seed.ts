@@ -83,11 +83,16 @@ const vans = [
   { reg_number: 'DM24VAN', vehicle_type: 'Van', status: 'active', nickname: 'Demo Service Van' },
   { reg_number: 'DM24KIT', vehicle_type: 'Van', status: 'active', nickname: 'Demo Stores Van' },
   { reg_number: 'DM24OPS', vehicle_type: 'Van', status: 'active', nickname: 'Demo Ops Van' },
+  { reg_number: 'DM24SUP', vehicle_type: 'Van', status: 'active', nickname: 'Demo Supervisor Van' },
+  { reg_number: 'DM24TMP', vehicle_type: 'Van', status: 'active', nickname: 'Demo Traffic Van' },
+  { reg_number: 'DM24SPR', vehicle_type: 'Van', status: 'maintenance', nickname: 'Demo Spare Van' },
 ];
 
 const hgvs = [
   { reg_number: 'DM24HGV', status: 'active', nickname: 'Demo Tipper', current_mileage: 84500 },
   { reg_number: 'DM24ART', status: 'active', nickname: 'Demo Artic', current_mileage: 128900 },
+  { reg_number: 'DM24SKP', status: 'active', nickname: 'Demo Skip Lorry', current_mileage: 97600 },
+  { reg_number: 'DM24LOW', status: 'maintenance', nickname: 'Demo Low Loader', current_mileage: 154200 },
 ];
 
 const plantAssets = [
@@ -112,6 +117,28 @@ const plantAssets = [
     year: 2021,
     current_hours: 1265,
     status: 'active',
+  },
+  {
+    plant_id: 'DM-DM-003',
+    reg_number: 'DM24DMP',
+    nickname: 'Demo Dumper',
+    make: 'Thwaites',
+    model: '6T',
+    serial_number: 'DEMOTW6T003',
+    year: 2023,
+    current_hours: 740,
+    status: 'active',
+  },
+  {
+    plant_id: 'DM-TL-004',
+    reg_number: 'DM24TEL',
+    nickname: 'Demo Telehandler',
+    make: 'JCB',
+    model: '540-140',
+    serial_number: 'DEMOJCB540004',
+    year: 2020,
+    current_hours: 2150,
+    status: 'maintenance',
   },
 ];
 
@@ -407,21 +434,37 @@ async function seedPlant(supabase: ScriptSupabaseClient, profiles: SeededProfile
 
 async function seedTimesheets(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
-  const employees = profiles.filter((profile) => profile.key === 'employee' || profile.key === 'contractor');
+  const timesheetProfiles = profiles.filter((profile) => profile.key !== 'admin');
+  const regNumbers = ['DM24VAN', 'DM24HGV', 'DM24OPS', 'DM24KIT', 'DM24ART', 'DM24TMP'];
+  const statuses = ['submitted', 'approved', 'draft', 'approved', 'submitted', 'rejected'];
+  const timesheetRows = timesheetProfiles.flatMap((profile) =>
+    [0, 1].map((weekOffset) => ({
+      profile,
+      weekOffset,
+    }))
+  );
 
-  for (const [index, employee] of employees.entries()) {
+  for (const [index, row] of timesheetRows.entries()) {
+    const employee = row.profile;
+    const weekOffset = row.weekOffset;
+    const status = statuses[index % statuses.length];
     const { data: timesheet, error } = await supabase
       .from('timesheets')
       .upsert(
         {
           user_id: employee.id,
-          reg_number: index === 0 ? 'DM24VAN' : 'DM24HGV',
-          week_ending: weekEnding(index),
-          status: index === 0 ? 'submitted' : 'approved',
-          submitted_at: new Date().toISOString(),
-          reviewed_by: index === 0 ? null : manager.id,
-          reviewed_at: index === 0 ? null : new Date().toISOString(),
-          manager_comments: index === 0 ? null : 'Demo approval for a completed week.',
+          reg_number: regNumbers[index % regNumbers.length],
+          week_ending: weekEnding(weekOffset),
+          status,
+          submitted_at: status === 'draft' ? null : dateTime(-index, 16),
+          reviewed_by: status === 'approved' || status === 'rejected' ? manager.id : null,
+          reviewed_at: status === 'approved' || status === 'rejected' ? dateTime(-index, 17) : null,
+          manager_comments:
+            status === 'approved'
+              ? 'Demo approval for a completed week.'
+              : status === 'rejected'
+                ? 'Demo rejection: missing site reference on Wednesday.'
+                : null,
         },
         { onConflict: 'user_id,week_ending' }
       )
@@ -446,89 +489,157 @@ async function seedTimesheets(supabase: ScriptSupabaseClient, profiles: SeededPr
     });
     if (entriesError) throw entriesError;
   }
+
+  console.log(`Ready: ${timesheetRows.length} demo timesheets`);
 }
 
 async function seedCustomersAndQuotes(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const admin = profiles.find((profile) => profile.key === 'admin') || profiles[0];
-  const customerPayload = {
-    company_name: 'Demo Civil Engineering Ltd',
-    short_name: 'Demo Civils',
-    contact_name: 'Casey Morgan',
-    contact_email: `casey.morgan@${demoDomain}`,
-    contact_phone: '01632 960000',
-    city: 'Exampletown',
-    postcode: 'DE1 2MO',
-    status: 'active',
-    notes: 'Fictional customer for the public demo.',
-    created_by: admin.id,
-    updated_by: admin.id,
-  };
-
-  const { data: existingCustomer } = await supabase
-    .from('customers')
-    .select('id')
-    .eq('company_name', customerPayload.company_name)
-    .maybeSingle();
-
-  const customerQuery = existingCustomer?.id
-    ? supabase.from('customers').update(customerPayload).eq('id', existingCustomer.id)
-    : supabase.from('customers').insert(customerPayload);
-
-  const { data: customer, error: customerError } = await customerQuery.select('id').single();
-
-  if (customerError) throw customerError;
-  if (!customer?.id) return;
-
-  const { data: existingQuote } = await supabase
-    .from('quotes')
-    .select('id, quote_thread_id')
-    .eq('quote_reference', 'DEMO-6001-AS')
-    .maybeSingle();
-  const quoteId = existingQuote?.id || randomUUID();
-
-  const quotePayload = {
-    id: quoteId,
-    quote_reference: 'DEMO-6001-AS',
-    base_quote_reference: 'DEMO-6001',
-    quote_thread_id: existingQuote?.quote_thread_id || quoteId,
-    customer_id: customer.id,
-    requester_id: admin.id,
-    requester_initials: 'AS',
-    attention_name: 'Casey Morgan',
-    attention_email: `casey.morgan@${demoDomain}`,
-    subject_line: 'Demo yard resurfacing works',
-    project_description: 'Fictional resurfacing and drainage works used for product demonstrations.',
-    subtotal: 12500,
-    total: 12500,
-    status: 'sent',
-    created_by: admin.id,
-    updated_by: admin.id,
-    sent_at: new Date().toISOString(),
-  };
-
-  const quoteQuery = existingQuote?.id
-    ? supabase.from('quotes').update(quotePayload).eq('id', existingQuote.id)
-    : supabase.from('quotes').insert(quotePayload);
-
-  const { data: quote, error: quoteError } = await quoteQuery.select('id').single();
-
-  if (quoteError) throw quoteError;
-  if (!quote?.id) return;
-
-  await supabase.from('quote_line_items').delete().eq('quote_id', quote.id);
-
-  const { error: lineItemError } = await supabase.from('quote_line_items').insert([
+  const customerQuotes = [
     {
-      quote_id: quote.id,
-      description: 'Demo labour, plant, and materials package',
-      quantity: 1,
-      unit: 'item',
-      unit_rate: 12500,
-      line_total: 12500,
-      sort_order: 1,
+      customer: {
+        company_name: 'Demo Civil Engineering Ltd',
+        short_name: 'Demo Civils',
+        contact_name: 'Casey Morgan',
+        city: 'Exampletown',
+        postcode: 'DE1 2MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6001-AS',
+        base_quote_reference: 'DEMO-6001',
+        subject_line: 'Demo yard resurfacing works',
+        project_description: 'Fictional resurfacing and drainage works used for product demonstrations.',
+        status: 'sent',
+        sent_at: dateTime(-3, 9),
+        lines: [
+          ['Demo labour, plant, and materials package', 1, 'item', 12500],
+          ['Traffic management setup', 2, 'days', 850],
+        ],
+      },
     },
-  ]);
-  if (lineItemError && !lineItemError.message.includes('duplicate')) throw lineItemError;
+    {
+      customer: {
+        company_name: 'Demo Utilities Partnership',
+        short_name: 'Demo Utilities',
+        contact_name: 'Jordan Ellis',
+        city: 'Northbridge',
+        postcode: 'DU4 8MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6002-AS',
+        base_quote_reference: 'DEMO-6002',
+        subject_line: 'Demo emergency reinstatement package',
+        project_description: 'Fictional quotation showing urgent reactive works and approval states.',
+        status: 'won',
+        sent_at: dateTime(-8, 11),
+        lines: [
+          ['Emergency call-out crew', 1, 'shift', 1750],
+          ['Reinstatement materials', 12, 'tonnes', 145],
+        ],
+      },
+    },
+    {
+      customer: {
+        company_name: 'Demo Highways Authority',
+        short_name: 'Demo Highways',
+        contact_name: 'Riley Shaw',
+        city: 'Southford',
+        postcode: 'DH7 3MO',
+      },
+      quote: {
+        quote_reference: 'DEMO-6003-AS',
+        base_quote_reference: 'DEMO-6003',
+        subject_line: 'Demo drainage survey and remedials',
+        project_description: 'Fictional quote in draft for demonstrating quote editing and PDF generation.',
+        status: 'draft',
+        sent_at: null,
+        lines: [
+          ['CCTV drainage survey', 1, 'item', 2150],
+          ['Provisional remedial works allowance', 1, 'item', 4800],
+        ],
+      },
+    },
+  ];
+
+  for (const item of customerQuotes) {
+    const contactSlug = item.customer.contact_name.toLowerCase().replace(/\s+/g, '.');
+    const customerPayload = {
+      ...item.customer,
+      contact_email: `${contactSlug}@${demoDomain}`,
+      contact_phone: '01632 960000',
+      status: 'active',
+      notes: 'Fictional customer for the public demo.',
+      created_by: admin.id,
+      updated_by: admin.id,
+    };
+
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('company_name', customerPayload.company_name)
+      .maybeSingle();
+
+    const customerQuery = existingCustomer?.id
+      ? supabase.from('customers').update(customerPayload).eq('id', existingCustomer.id)
+      : supabase.from('customers').insert(customerPayload);
+
+    const { data: customer, error: customerError } = await customerQuery.select('id').single();
+    if (customerError) throw customerError;
+    if (!customer?.id) continue;
+
+    const { data: existingQuote } = await supabase
+      .from('quotes')
+      .select('id, quote_thread_id')
+      .eq('quote_reference', item.quote.quote_reference)
+      .maybeSingle();
+    const quoteId = existingQuote?.id || randomUUID();
+    const subtotal = item.quote.lines.reduce((total, [, quantity, , unitRate]) => total + Number(quantity) * Number(unitRate), 0);
+
+    const quotePayload = {
+      id: quoteId,
+      quote_reference: item.quote.quote_reference,
+      base_quote_reference: item.quote.base_quote_reference,
+      quote_thread_id: existingQuote?.quote_thread_id || quoteId,
+      customer_id: customer.id,
+      requester_id: admin.id,
+      requester_initials: 'AS',
+      attention_name: item.customer.contact_name,
+      attention_email: `${contactSlug}@${demoDomain}`,
+      subject_line: item.quote.subject_line,
+      project_description: item.quote.project_description,
+      subtotal,
+      total: subtotal,
+      status: item.quote.status,
+      created_by: admin.id,
+      updated_by: admin.id,
+      sent_at: item.quote.sent_at,
+    };
+
+    const quoteQuery = existingQuote?.id
+      ? supabase.from('quotes').update(quotePayload).eq('id', existingQuote.id)
+      : supabase.from('quotes').insert(quotePayload);
+
+    const { data: quote, error: quoteError } = await quoteQuery.select('id').single();
+    if (quoteError) throw quoteError;
+    if (!quote?.id) continue;
+
+    await supabase.from('quote_line_items').delete().eq('quote_id', quote.id);
+
+    const { error: lineItemError } = await supabase.from('quote_line_items').insert(
+      item.quote.lines.map(([description, quantity, unit, unitRate], index) => ({
+        quote_id: quote.id,
+        description,
+        quantity,
+        unit,
+        unit_rate: unitRate,
+        line_total: Number(quantity) * Number(unitRate),
+        sort_order: index + 1,
+      }))
+    );
+    if (lineItemError && !lineItemError.message.includes('duplicate')) throw lineItemError;
+  }
+
+  console.log(`Ready: ${customerQuotes.length} demo customers and quotes`);
 }
 
 async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
@@ -537,106 +648,146 @@ async function seedMessages(supabase: ScriptSupabaseClient, profiles: SeededProf
   const { data: existingMessages } = await supabase
     .from('messages')
     .select('id')
-    .eq('created_via', 'demo-seed')
-    .ilike('subject', 'Demo toolbox talk:%');
+    .eq('created_via', 'demo-seed');
   const messageIds = (existingMessages || []).map((message: { id: string }) => message.id);
   await deleteByIds(supabase, 'message_recipients', messageIds, 'message_id');
   await deleteByIds(supabase, 'messages', messageIds);
 
-  const { data: message, error } = await supabase
-    .from('messages')
-    .insert({
+  const messagePayloads = [
+    {
       type: 'TOOLBOX_TALK',
       subject: 'Demo toolbox talk: site access',
       body: 'This is a fictional toolbox talk used to demonstrate message acknowledgement workflows.',
       priority: 'LOW',
       sender_id: manager.id,
       created_via: 'demo-seed',
-    })
-    .select('id')
-    .single();
+    },
+    {
+      type: 'NOTIFICATION',
+      subject: 'Demo notice: weekend possession confirmed',
+      body: 'Fictional operations notice showing a higher priority site update for the demo team.',
+      priority: 'HIGH',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+    {
+      type: 'REMINDER',
+      subject: 'Demo message: plant handover reminder',
+      body: 'Fictional reminder used to demonstrate read and signed recipient states.',
+      priority: 'LOW',
+      sender_id: manager.id,
+      created_via: 'demo-seed',
+    },
+  ];
+
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .insert(messagePayloads)
+    .select('id');
 
   if (error) throw error;
-  if (!message?.id) return;
+  if (!messages?.length) return;
 
   const { error: recipientsError } = await supabase.from('message_recipients').insert(
-    recipients.map((recipient) => ({
-      message_id: message.id,
-      user_id: recipient.id,
-      status: recipient.key === 'employee' ? 'PENDING' : 'SIGNED',
-      signed_at: recipient.key === 'contractor' ? new Date().toISOString() : null,
-    }))
+    messages.flatMap((message: { id: string }, messageIndex: number) =>
+      recipients.map((recipient, recipientIndex) => ({
+        message_id: message.id,
+        user_id: recipient.id,
+        status: messageIndex === 0 && recipientIndex === 0 ? 'PENDING' : 'SIGNED',
+        signed_at: messageIndex === 0 && recipientIndex === 0 ? null : dateTime(-messageIndex, 12),
+      }))
+    )
   );
   if (recipientsError) throw recipientsError;
+
+  console.log(`Ready: ${messages.length} demo messages`);
 }
 
 async function seedAbsence(supabase: ScriptSupabaseClient, profiles: SeededProfile[]): Promise<void> {
   const employee = profiles.find((profile) => profile.key === 'employee') || profiles[0];
+  const contractor = profiles.find((profile) => profile.key === 'contractor') || employee;
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
-  const { data: reason, error: reasonError } = await supabase
-    .from('absence_reasons')
-    .upsert(
-      {
-        name: 'Annual Leave',
-        is_paid: true,
-        color: '#22c55e',
-        is_active: true,
-      },
-      { onConflict: 'name' }
-    )
-    .select('id')
-    .single();
 
-  if (reasonError) throw reasonError;
-  if (!reason?.id) return;
+  async function ensureAbsenceReason(name: string, color: string): Promise<string> {
+    const { data, error } = await supabase
+      .from('absence_reasons')
+      .upsert(
+        {
+          name,
+          is_paid: true,
+          color,
+          is_active: true,
+        },
+        { onConflict: 'name' }
+      )
+      .select('id')
+      .single();
 
+    if (error) throw error;
+    if (!data?.id) throw new Error(`Unable to resolve absence reason ${name}`);
+    return data.id;
+  }
+
+  const annualLeaveReasonId = await ensureAbsenceReason('Annual Leave', '#22c55e');
+  const trainingReasonId = await ensureAbsenceReason('Training', '#38bdf8');
+  const medicalReasonId = await ensureAbsenceReason('Medical Appointment', '#f97316');
+
+  const demoProfiles = [employee, contractor, manager].filter(Boolean);
   await supabase
     .from('absences')
     .delete()
-    .eq('profile_id', employee.id)
-    .gte('date', isoDate(-7));
-
-  const { data: sickReason, error: sickReasonError } = await supabase
-    .from('absence_reasons')
-    .upsert(
-      {
-        name: 'Training',
-        is_paid: true,
-        color: '#38bdf8',
-        is_active: true,
-      },
-      { onConflict: 'name' }
-    )
-    .select('id')
-    .single();
-  if (sickReasonError) throw sickReasonError;
+    .in('profile_id', demoProfiles.map((profile) => profile.id))
+    .gte('date', isoDate(-14));
 
   const { error } = await supabase.from('absences').insert([
     {
       profile_id: employee.id,
       date: isoDate(14),
       end_date: isoDate(18),
-      reason_id: reason.id,
+      reason_id: annualLeaveReasonId,
       duration_days: 5,
       status: 'approved',
       created_by: employee.id,
       approved_by: manager.id,
-      approved_at: new Date().toISOString(),
+      approved_at: dateTime(-1, 10),
       notes: 'Fictional demo approved annual leave.',
     },
     {
       profile_id: employee.id,
       date: isoDate(28),
       end_date: isoDate(28),
-      reason_id: sickReason.id,
+      reason_id: trainingReasonId,
       duration_days: 1,
       status: 'pending',
       created_by: employee.id,
       notes: 'Fictional demo pending training day.',
     },
+    {
+      profile_id: contractor.id,
+      date: isoDate(7),
+      end_date: isoDate(8),
+      reason_id: medicalReasonId,
+      duration_days: 2,
+      status: 'pending',
+      created_by: contractor.id,
+      notes: 'Fictional demo medical appointment request.',
+    },
+    {
+      profile_id: manager.id,
+      date: isoDate(-5),
+      end_date: isoDate(-5),
+      reason_id: trainingReasonId,
+      duration_days: 1,
+      status: 'approved',
+      created_by: manager.id,
+      approved_by: manager.id,
+      approved_at: dateTime(-10, 9),
+      notes: 'Fictional demo completed training day.',
+    },
   ]);
 
   if (error) throw error;
+  console.log('Ready: 4 demo absence records');
 }
 
 async function seedInspections(
@@ -661,72 +812,68 @@ async function seedInspections(
     await deleteByIds(supabase, table, ids);
   }
 
-  const van = seededVehicles.find((item) => item.reg_number === 'DM24VAN') || seededVehicles[0];
-  const hgv = seededHgvs.find((item) => item.reg_number === 'DM24HGV') || seededHgvs[0];
-  const plant = seededPlant.find((item) => item.plant_id === 'DM-EX-001') || seededPlant[0];
-
   async function insertInspection(table: string, payload: Record<string, unknown>) {
     const { data, error } = await supabase.from(table).insert(payload).select('id').single();
     if (error) throw error;
     return data?.id ? { table, id: data.id as string } : null;
   }
 
-  const inspections = (
-    await Promise.all([
-      van?.id
-        ? insertInspection('van_inspections', {
-            van_id: van.id,
-            user_id: employee.id,
-            week_ending: weekEnding(0),
-            inspection_date: isoDate(-1),
-            current_mileage: 48250,
-            checked_by: employee.fullName,
-            status: 'submitted',
-            submitted_at: dateTime(-1, 16),
-            reviewed_by: manager.id,
-            reviewed_at: dateTime(0, 9),
-            manager_comments: 'Demo review: marker light defect raised for workshop.',
-            inspector_comments: 'Demo seed: van daily check with one actionable defect.',
-            defects_comments: 'Nearside marker light not illuminating.',
-            signature_data: 'data:image/png;base64,demo',
-            signed_at: dateTime(-1, 16),
-          })
-        : Promise.resolve(null),
-      hgv?.id
-        ? insertInspection('hgv_inspections', {
-            hgv_id: hgv.id,
-            user_id: employee.id,
-            inspection_date: isoDate(-2),
-            current_mileage: 84520,
-            status: 'submitted',
-            submitted_at: dateTime(-2, 15),
-            reviewed_by: manager.id,
-            reviewed_at: dateTime(-1, 10),
-            manager_comments: 'Demo review: tyre pressure note monitored.',
-            inspector_comments: 'Demo seed: HGV daily check ready for manager review.',
-            signature_data: 'data:image/png;base64,demo',
-            signed_at: dateTime(-2, 15),
-          })
-        : Promise.resolve(null),
-      plant?.id
-        ? insertInspection('plant_inspections', {
-            plant_id: plant.id,
-            user_id: employee.id,
-            inspection_date: isoDate(-3),
-            current_mileage: 1848,
-            status: 'submitted',
-            submitted_at: dateTime(-3, 14),
-            reviewed_by: manager.id,
-            reviewed_at: dateTime(-2, 8),
-            manager_comments: 'Demo review: hydraulic hose observation logged.',
-            inspector_comments: 'Demo seed: plant daily check with service observation.',
-            signature_data: 'data:image/png;base64,demo',
-            signed_at: dateTime(-3, 14),
-          })
-        : Promise.resolve(null),
-    ])
-  ).filter(Boolean) as Array<{ table: string; id: string }>;
-  const items = inspections.flatMap((inspection) => [
+  const inspectionRequests = [
+    ...seededVehicles.slice(0, 4).map((van, index) =>
+      insertInspection('van_inspections', {
+        van_id: van.id,
+        user_id: employee.id,
+        week_ending: weekEnding(index),
+        inspection_date: isoDate(-1 - index),
+        current_mileage: 48250 + index * 410,
+        checked_by: employee.fullName,
+        status: index === 3 ? 'draft' : 'submitted',
+        submitted_at: index === 3 ? null : dateTime(-1 - index, 16),
+        reviewed_by: index === 3 ? null : manager.id,
+        reviewed_at: index === 3 ? null : dateTime(-index, 9),
+        manager_comments: index === 0 ? 'Demo review: marker light defect raised for workshop.' : 'Demo review complete.',
+        inspector_comments: `Demo seed: van daily check ${index + 1}.`,
+        defects_comments: index === 0 ? 'Nearside marker light not illuminating.' : null,
+        signature_data: index === 3 ? null : 'data:image/png;base64,demo',
+        signed_at: index === 3 ? null : dateTime(-1 - index, 16),
+      })
+    ),
+    ...seededHgvs.slice(0, 3).map((hgv, index) =>
+      insertInspection('hgv_inspections', {
+        hgv_id: hgv.id,
+        user_id: employee.id,
+        inspection_date: isoDate(-2 - index),
+        current_mileage: 84520 + index * 920,
+        status: 'submitted',
+        submitted_at: dateTime(-2 - index, 15),
+        reviewed_by: manager.id,
+        reviewed_at: dateTime(-1 - index, 10),
+        manager_comments: index === 0 ? 'Demo review: tyre pressure note monitored.' : 'Demo review complete.',
+        inspector_comments: `Demo seed: HGV daily check ${index + 1}.`,
+        signature_data: 'data:image/png;base64,demo',
+        signed_at: dateTime(-2 - index, 15),
+      })
+    ),
+    ...seededPlant.slice(0, 3).map((plant, index) =>
+      insertInspection('plant_inspections', {
+        plant_id: plant.id,
+        user_id: employee.id,
+        inspection_date: isoDate(-3 - index),
+        current_mileage: 1848 + index * 55,
+        status: 'submitted',
+        submitted_at: dateTime(-3 - index, 14),
+        reviewed_by: manager.id,
+        reviewed_at: dateTime(-2 - index, 8),
+        manager_comments: index === 0 ? 'Demo review: hydraulic hose observation logged.' : 'Demo review complete.',
+        inspector_comments: `Demo seed: plant daily check ${index + 1}.`,
+        signature_data: 'data:image/png;base64,demo',
+        signed_at: dateTime(-3 - index, 14),
+      })
+    ),
+  ];
+
+  const inspections = (await Promise.all(inspectionRequests)).filter(Boolean) as Array<{ table: string; id: string }>;
+  const items = inspections.flatMap((inspection, inspectionIndex) => [
     {
       inspection_id: inspection.id,
       item_number: 1,
@@ -739,9 +886,9 @@ async function seedInspections(
       inspection_id: inspection.id,
       item_number: 2,
       day_of_week: 1,
-      status: inspection.table === 'van_inspections' ? 'attention' : 'ok',
+      status: inspectionIndex % 4 === 0 ? 'attention' : 'ok',
       item_description: inspection.table === 'plant_inspections' ? 'Hydraulics and leaks' : 'Tyres and wheels',
-      comments: inspection.table === 'van_inspections' ? 'Marker light defect raised for workshop.' : 'No issue found.',
+      comments: inspectionIndex % 4 === 0 ? 'Demo observation raised for follow-up.' : 'No issue found.',
     },
     {
       inspection_id: inspection.id,
@@ -769,9 +916,6 @@ async function seedWorkshopTasks(
   seededPlant: SeededPlant[]
 ): Promise<void> {
   const manager = profiles.find((profile) => profile.key === 'manager') || profiles[0];
-  const vehicle = seededVehicles.find((item) => item.reg_number === 'DM24VAN') || seededVehicles[0];
-  const hgv = seededHgvs.find((item) => item.reg_number === 'DM24HGV') || seededHgvs[0];
-  const plant = seededPlant.find((item) => item.plant_id === 'DM-EX-001') || seededPlant[0];
 
   const { data: existingCategory } = await supabase
     .from('workshop_task_categories')
@@ -830,45 +974,95 @@ async function seedWorkshopTasks(
     .select('id, slug');
   if (subcategoryError) throw subcategoryError;
 
-  const subcategoryId =
-    subcategories?.find((item: { slug: string }) => item.slug === 'demo-electrical')?.id || subcategories?.[0]?.id;
+  const subcategoryBySlug = new Map((subcategories || []).map((item: { id: string; slug: string }) => [item.slug, item.id]));
+  const electricalSubcategoryId = subcategoryBySlug.get('demo-electrical') || subcategories?.[0]?.id;
+  const hydraulicSubcategoryId = subcategoryBySlug.get('demo-hydraulics') || electricalSubcategoryId;
+  const serviceSubcategoryId = subcategoryBySlug.get('demo-service') || electricalSubcategoryId;
 
   const tasks = [
-    vehicle?.id && {
+    seededVehicles[0]?.id && {
       title: 'Demo workshop: replace nearside marker light',
       description: 'Fictional van defect created from a daily check.',
       priority: 'medium',
       status: 'pending',
       action_type: 'workshop_vehicle_task',
-      van_id: vehicle.id,
+      van_id: seededVehicles[0].id,
       workshop_category_id: category.id,
-      workshop_subcategory_id: subcategoryId,
+      workshop_subcategory_id: electricalSubcategoryId,
       created_by: manager.id,
       workshop_comments: 'Seeded demo task for workshop workflow previews.',
     },
-    hgv?.id && {
+    seededVehicles[1]?.id && {
+      title: 'Demo workshop: service van brake inspection',
+      description: 'Preventative maintenance task for a demo service van.',
+      priority: 'high',
+      status: 'in_progress',
+      action_type: 'workshop_vehicle_task',
+      van_id: seededVehicles[1].id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: serviceSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Brake inspection started by workshop team.',
+    },
+    seededVehicles[2]?.id && {
+      title: 'Demo workshop: repair damaged cone rack',
+      description: 'Fictional minor repair for demo van equipment.',
+      priority: 'low',
+      status: 'completed',
+      action_type: 'workshop_vehicle_task',
+      van_id: seededVehicles[2].id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: serviceSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Completed demo repair for historical workflow state.',
+    },
+    seededHgvs[0]?.id && {
       title: 'Demo workshop: inspect tyre pressure report',
       description: 'Follow-up task for an HGV daily check observation.',
       priority: 'low',
       status: 'in_progress',
       action_type: 'workshop_vehicle_task',
-      hgv_id: hgv.id,
+      hgv_id: seededHgvs[0].id,
       workshop_category_id: category.id,
-      workshop_subcategory_id: subcategoryId,
+      workshop_subcategory_id: serviceSubcategoryId,
       created_by: manager.id,
       workshop_comments: 'Technician assigned for afternoon check.',
     },
-    plant?.id && {
+    seededHgvs[1]?.id && {
+      title: 'Demo workshop: six-weekly inspection preparation',
+      description: 'Fictional HGV compliance preparation task.',
+      priority: 'medium',
+      status: 'pending',
+      action_type: 'workshop_vehicle_task',
+      hgv_id: seededHgvs[1].id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: serviceSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Awaiting workshop bay allocation.',
+    },
+    seededPlant[0]?.id && {
       title: 'Demo workshop: hydraulic hose service',
       description: 'Plant service observation requiring planned maintenance.',
       priority: 'high',
       status: 'on_hold',
       action_type: 'workshop_vehicle_task',
-      plant_id: plant.id,
+      plant_id: seededPlant[0].id,
       workshop_category_id: category.id,
-      workshop_subcategory_id: subcategoryId,
+      workshop_subcategory_id: hydraulicSubcategoryId,
       created_by: manager.id,
       workshop_comments: 'Awaiting replacement hose from supplier.',
+    },
+    seededPlant[1]?.id && {
+      title: 'Demo workshop: roller vibration check',
+      description: 'Follow-up task for a fictional plant operator observation.',
+      priority: 'medium',
+      status: 'pending',
+      action_type: 'workshop_vehicle_task',
+      plant_id: seededPlant[1].id,
+      workshop_category_id: category.id,
+      workshop_subcategory_id: hydraulicSubcategoryId,
+      created_by: manager.id,
+      workshop_comments: 'Planned inspection before next hire.',
     },
   ].filter(Boolean);
 
@@ -1012,7 +1206,12 @@ async function seedProjects(supabase: ScriptSupabaseClient, profiles: SeededProf
   const { data: existingDocs } = await supabase
     .from('rams_documents')
     .select('id')
-    .in('title', ['Demo A47 Resurfacing RAMS', 'Demo Yard Drainage Method Statement']);
+    .in('title', [
+      'Demo A47 Resurfacing RAMS',
+      'Demo Yard Drainage Method Statement',
+      'Demo Emergency Reinstatement Pack',
+      'Demo Plant Lift Plan',
+    ]);
   const existingDocIds = (existingDocs || []).map((doc: { id: string }) => doc.id);
   await deleteByIds(supabase, 'project_favourites', existingDocIds, 'document_id');
   await deleteByIds(supabase, 'rams_assignments', existingDocIds, 'rams_document_id');
@@ -1038,6 +1237,28 @@ async function seedProjects(supabase: ScriptSupabaseClient, profiles: SeededProf
         file_name: 'demo-yard-drainage-method-statement.pdf',
         file_path: 'demo/project-documents/demo-yard-drainage-method-statement.pdf',
         file_size: 616000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Emergency Reinstatement Pack',
+        description: 'Fictional urgent works pack with mixed assignment states.',
+        file_name: 'demo-emergency-reinstatement-pack.pdf',
+        file_path: 'demo/project-documents/demo-emergency-reinstatement-pack.pdf',
+        file_size: 724000,
+        file_type: 'application/pdf',
+        uploaded_by: admin.id,
+        document_type_id: documentType.id,
+        is_active: true,
+      },
+      {
+        title: 'Demo Plant Lift Plan',
+        description: 'Fictional plant lift plan for demonstrating project document libraries.',
+        file_name: 'demo-plant-lift-plan.pdf',
+        file_path: 'demo/project-documents/demo-plant-lift-plan.pdf',
+        file_size: 538000,
         file_type: 'application/pdf',
         uploaded_by: admin.id,
         document_type_id: documentType.id,
@@ -1135,6 +1356,14 @@ async function seedInventory(
     { item_number: 'DD-002', name: 'Temporary Road Signs Pack', category: 'signs', location_id: vanLocationId },
     { item_number: 'DD-003', name: 'Portable Generator', category: 'equipment', location_id: plantLocationId },
     { item_number: 'DD-004', name: 'Hydraulic Breaker Attachment', category: 'hired_plant', location_id: plantLocationId },
+    { item_number: 'DD-005', name: 'CAT Scanner and Genny', category: 'tools', location_id: yardLocationId },
+    { item_number: 'DD-006', name: 'Pedestrian Barrier Set', category: 'signs', location_id: yardLocationId },
+    { item_number: 'DD-007', name: 'Confined Space Gas Monitor', category: 'equipment', location_id: vanLocationId },
+    { item_number: 'DD-008', name: 'Plate Compactor', category: 'equipment', location_id: plantLocationId },
+    { item_number: 'DD-009', name: 'Road Plate Lifting Chains', category: 'tools', location_id: yardLocationId },
+    { item_number: 'DD-010', name: 'Stihl Saw Kit', category: 'tools', location_id: vanLocationId },
+    { item_number: 'DD-011', name: 'Trench Box Pins Set', category: 'equipment', location_id: plantLocationId },
+    { item_number: 'DD-012', name: 'Portable Lighting Tower', category: 'hired_plant', location_id: yardLocationId },
   ];
 
   const { data: items, error } = await supabase

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { isHiddenUserManagementUser } from '@/lib/utils/hidden-superadmin';
 
 // Helper to create admin client with service role key
 function getSupabaseAdmin() {
@@ -175,7 +176,12 @@ export async function GET() {
       });
     }
 
-    const usersWithEmails = allUsers;
+    const hiddenSuperadminEmails = [
+      process.env.DEMO_SUPERADMIN_EMAIL,
+      process.env.TEMPLATE_SUPERADMIN_EMAIL,
+      'admin@mpdee.co.uk',
+    ].filter(Boolean) as string[];
+    const usersWithEmails = allUsers.filter((user) => !isHiddenUserManagementUser(user, hiddenSuperadminEmails));
 
     return NextResponse.json({ users: usersWithEmails });
   } catch (error) {

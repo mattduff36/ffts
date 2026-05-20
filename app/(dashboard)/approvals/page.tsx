@@ -491,7 +491,7 @@ function ApprovalsContent() {
       setLoading(true);
       const timesheetStatuses = getApprovalsTimesheetStatuses(timesheetFilter);
       
-      // Build a lightweight list first; entry details are fetched only for rows currently visible.
+      // Build a lightweight list first; entry details are fetched for all filtered rows (table pagination is UI-only).
       let timesheetQuery = supabase
         .from('timesheets')
         .select(`
@@ -538,15 +538,15 @@ function ApprovalsContent() {
         leave_days: undefined,
       }));
 
-      const visibleTimesheets = getCurrentFilteredTimesheets(timesheetsWithLeaveTotals).slice(0, visibleTimesheetCount);
-      const visibleTimesheetIds = visibleTimesheets.map((timesheet) => timesheet.id);
-      const userIds = [...new Set(visibleTimesheets.map((timesheet) => timesheet.user_id).filter(Boolean))];
-      if (visibleTimesheetIds.length === 0 || userIds.length === 0) {
+      const timesheetsToEnrich = getCurrentFilteredTimesheets(timesheetsWithLeaveTotals);
+      const timesheetIdsToEnrich = timesheetsToEnrich.map((timesheet) => timesheet.id);
+      const userIds = [...new Set(timesheetsToEnrich.map((timesheet) => timesheet.user_id).filter(Boolean))];
+      if (timesheetIdsToEnrich.length === 0 || userIds.length === 0) {
         setTimesheets(timesheetsWithLeaveTotals);
         return;
       }
 
-      const weekBounds = visibleTimesheets.map((timesheet) => {
+      const weekBounds = timesheetsToEnrich.map((timesheet) => {
         const { startIso, endIso } = getTimesheetWeekIsoBounds(timesheet.week_ending);
         return {
           timesheetId: timesheet.id,
@@ -560,8 +560,11 @@ function ApprovalsContent() {
       const minStartIso = weekBounds.reduce((min, row) => (row.startIso < min ? row.startIso : min), weekBounds[0].startIso);
       const maxEndIso = weekBounds.reduce((max, row) => (row.endIso > max ? row.endIso : max), weekBounds[0].endIso);
 
-      const [entriesResult, absencesResult] = await Promise.all([
-        supabase
+      const ENTRY_FETCH_CHUNK_SIZE = 150;
+      const entryRows: TimesheetEntryWithTimesheetId[] = [];
+      for (let offset = 0; offset < timesheetIdsToEnrich.length; offset += ENTRY_FETCH_CHUNK_SIZE) {
+        const chunkIds = timesheetIdsToEnrich.slice(offset, offset + ENTRY_FETCH_CHUNK_SIZE);
+        const { data: chunkEntries, error: chunkEntriesError } = await supabase
           .from('timesheet_entries')
           .select(`
             timesheet_id,
@@ -575,21 +578,24 @@ function ApprovalsContent() {
             working_in_yard,
             did_not_work
           `)
-          .in('timesheet_id', visibleTimesheetIds),
-        supabase
-          .from('absences')
-          .select('profile_id, date, end_date, status, is_half_day, half_day_session, allow_timesheet_work_on_leave, absence_reasons(name,color,is_paid)')
-          .in('profile_id', userIds)
-          .in('status', ['pending', 'approved', 'processed'])
-          .lte('date', maxEndIso)
-          .or(`end_date.gte.${minStartIso},and(end_date.is.null,date.gte.${minStartIso})`),
-      ]);
+          .in('timesheet_id', chunkIds);
 
-      if (entriesResult.error) throw entriesResult.error;
+        if (chunkEntriesError) throw chunkEntriesError;
+        entryRows.push(...((chunkEntries || []) as TimesheetEntryWithTimesheetId[]));
+      }
+
+      const absencesResult = await supabase
+        .from('absences')
+        .select('profile_id, date, end_date, status, is_half_day, half_day_session, allow_timesheet_work_on_leave, absence_reasons(name,color,is_paid)')
+        .in('profile_id', userIds)
+        .in('status', ['pending', 'approved', 'processed'])
+        .lte('date', maxEndIso)
+        .or(`end_date.gte.${minStartIso},and(end_date.is.null,date.gte.${minStartIso})`);
+
       if (absencesResult.error) throw absencesResult.error;
 
       const entriesByTimesheet = new Map<string, TimesheetEntry[]>();
-      ((entriesResult.data || []) as TimesheetEntryWithTimesheetId[]).forEach(({ timesheet_id, ...entry }) => {
+      entryRows.forEach(({ timesheet_id, ...entry }) => {
         const existing = entriesByTimesheet.get(timesheet_id) || [];
         existing.push(entry);
         entriesByTimesheet.set(timesheet_id, existing);
@@ -606,7 +612,7 @@ function ApprovalsContent() {
         absencesByProfile.set(absence.profile_id, existing);
       });
 
-      const enrichedVisibleTimesheets = visibleTimesheets.map((timesheet) => {
+      const enrichedTimesheets = timesheetsToEnrich.map((timesheet) => {
         const { startIso, endIso } = getTimesheetWeekIsoBounds(timesheet.week_ending);
         const employeeAbsences = absencesByProfile.get(timesheet.user_id) || [];
         const weekAbsences = employeeAbsences.filter((absence) => {
@@ -626,7 +632,7 @@ function ApprovalsContent() {
         };
       });
 
-      const enrichedById = new Map(enrichedVisibleTimesheets.map((timesheet) => [timesheet.id, timesheet]));
+      const enrichedById = new Map(enrichedTimesheets.map((timesheet) => [timesheet.id, timesheet]));
       setTimesheets(timesheetsWithLeaveTotals.map((timesheet) => enrichedById.get(timesheet.id) || timesheet));
     } catch (error) {
       const errorContextId = 'approvals-fetch-list-error';
@@ -650,7 +656,6 @@ function ApprovalsContent() {
     selectedEmployeeId,
     supabase,
     timesheetFilter,
-    visibleTimesheetCount,
   ]);
 
   useEffect(() => {

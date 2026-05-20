@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import HelpPage from '@/app/(dashboard)/help/page';
 
@@ -36,6 +37,22 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 describe('Help page install tab', () => {
+  function renderHelpPage() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <HelpPage />
+      </QueryClientProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -63,10 +80,10 @@ describe('Help page install tab', () => {
   });
 
   it('shows install tab content from tab query param', async () => {
-    render(<HelpPage />);
+    renderHelpPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Install TEMPLATE App')).toBeInTheDocument();
+      expect(screen.getByText('Install DigiDocs App')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Quick Support Actions')).toBeInTheDocument();

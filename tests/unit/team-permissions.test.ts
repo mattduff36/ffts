@@ -7,7 +7,7 @@ import {
   isFullAccessRole,
   resolveModulesForRoleRank,
 } from '@/lib/server/team-permissions';
-import { ALL_MODULES, type PermissionModuleMatrixColumn, type PermissionTierRole } from '@/types/roles';
+import { ALL_MODULES, type ModuleName, type PermissionModuleMatrixColumn, type PermissionTierRole } from '@/types/roles';
 
 const roles: PermissionTierRole[] = [
   {
@@ -158,6 +158,20 @@ describe('team permission helpers', () => {
         enabledByModule: new Map(),
       }).size
     ).toBeGreaterThan(modules.length);
+  });
+
+  it('keeps demo admin access independent of a sparse management team matrix', () => {
+    const disabledManagementModules = new Map<ModuleName, boolean>(
+      modules.map((module) => [module.module_name, false])
+    );
+
+    expect(
+      resolveModulesForRoleRank({
+        role: { name: 'admin', role_class: 'admin', is_super_admin: false, hierarchy_rank: 999 },
+        modules,
+        enabledByModule: disabledManagementModules,
+      })
+    ).toEqual(new Set(ALL_MODULES));
   });
 
   it('preserves full access for admin users without a team assignment', async () => {

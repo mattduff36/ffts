@@ -7,7 +7,7 @@
 const testRoutes = [
   '/dashboard',
   '/timesheets',
-  '/inspections',
+  '/van-inspections',
   '/absence',
   '/reports',
   '/admin/users',

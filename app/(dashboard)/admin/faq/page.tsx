@@ -45,6 +45,21 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FAQCategory, FAQArticleWithCategory } from '@/types/faq';
+import { ALL_MODULES, MODULE_DISPLAY_NAMES, type ModuleName } from '@/types/roles';
+
+const PUBLIC_CATEGORY_GATE = 'public';
+
+interface CategoryFormState {
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
+  module_name: ModuleName | typeof PUBLIC_CATEGORY_GATE;
+}
+
+function getModuleGateLabel(moduleName: ModuleName | null): string {
+  return moduleName ? MODULE_DISPLAY_NAMES[moduleName] : 'Public';
+}
 
 export default function FAQEditorPage() {
   const router = useRouter();
@@ -81,11 +96,12 @@ export default function FAQEditorPage() {
   // Category dialog
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<FAQCategory | null>(null);
-  const [categoryForm, setCategoryForm] = useState({
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>({
     name: '',
     slug: '',
     description: '',
     sort_order: 0,
+    module_name: PUBLIC_CATEGORY_GATE,
   });
   const [savingCategory, setSavingCategory] = useState(false);
   
@@ -173,7 +189,13 @@ export default function FAQEditorPage() {
   // Category handlers
   const openAddCategory = () => {
     setEditingCategory(null);
-    setCategoryForm({ name: '', slug: '', description: '', sort_order: categories.length });
+    setCategoryForm({
+      name: '',
+      slug: '',
+      description: '',
+      sort_order: categories.length,
+      module_name: PUBLIC_CATEGORY_GATE,
+    });
     setCategoryDialogOpen(true);
   };
 
@@ -184,6 +206,7 @@ export default function FAQEditorPage() {
       slug: category.slug,
       description: category.description || '',
       sort_order: category.sort_order,
+      module_name: category.module_name || PUBLIC_CATEGORY_GATE,
     });
     setCategoryDialogOpen(true);
   };
@@ -200,11 +223,15 @@ export default function FAQEditorPage() {
       const url = editingCategory 
         ? `/api/admin/faq/categories/${editingCategory.id}`
         : '/api/admin/faq/categories';
+      const categoryPayload = {
+        ...categoryForm,
+        module_name: categoryForm.module_name === PUBLIC_CATEGORY_GATE ? null : categoryForm.module_name,
+      };
       
       const response = await fetch(url, {
         method: editingCategory ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(categoryForm),
+        body: JSON.stringify(categoryPayload),
       });
 
       const data = await response.json();
@@ -437,6 +464,9 @@ export default function FAQEditorPage() {
                           <Badge variant="secondary" className="text-xs">
                             {category.article_count} articles
                           </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {getModuleGateLabel(category.module_name)}
+                          </Badge>
                           {!category.is_active && (
                             <Badge variant="outline" className="text-xs text-muted-foreground">
                               Inactive
@@ -630,6 +660,34 @@ export default function FAQEditorPage() {
                 rows={2}
                 className="bg-slate-50 dark:bg-slate-800 dark:text-slate-100 text-slate-900"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-700 dark:text-muted-foreground">Module Gate</Label>
+              <Select
+                value={categoryForm.module_name}
+                onValueChange={(value) => {
+                  setCategoryForm({
+                    ...categoryForm,
+                    module_name: value as CategoryFormState['module_name'],
+                  });
+                }}
+              >
+                <SelectTrigger className="bg-slate-50 dark:bg-slate-800 dark:text-slate-100 text-slate-900">
+                  <SelectValue placeholder="Select module gate" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PUBLIC_CATEGORY_GATE}>Public - all signed-in users</SelectItem>
+                  {ALL_MODULES.map((moduleName) => (
+                    <SelectItem key={moduleName} value={moduleName}>
+                      {MODULE_DISPLAY_NAMES[moduleName]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Restricted categories are only returned to users with the selected module permission.
+              </p>
             </div>
             
             <div className="space-y-2">

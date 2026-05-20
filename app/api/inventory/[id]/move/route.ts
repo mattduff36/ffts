@@ -46,6 +46,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Item is already in this location' }, { status: 400 });
     }
 
+    const { data: batch, error: batchError } = await admin
+      .from('inventory_item_movement_batches')
+      .insert({
+        move_scope: 'single',
+        destination_location_id: destinationLocationId,
+        note: body.note?.trim() || null,
+        moved_by: access.userId,
+      })
+      .select('id')
+      .single();
+
+    if (batchError || !batch?.id) {
+      throw batchError || new Error('Failed to create inventory movement batch');
+    }
+
     const { data: updatedItem, error: updateError } = await admin
       .from('inventory_items')
       .update({
@@ -69,6 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         to_location_id: destinationLocationId,
         note: body.note?.trim() || null,
         moved_by: access.userId,
+        movement_batch_id: batch.id,
       });
 
     if (movementError) throw movementError;

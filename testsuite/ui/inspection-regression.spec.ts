@@ -48,17 +48,17 @@ test.describe('Regression Smoke — Core Pages', () => {
   }
 });
 
-test.describe('Regression — Old Inspection Routes', () => {
-  test('/inspections redirects or shows content (not 500)', async ({ page }) => {
+test.describe('Regression — Inspection Routes', () => {
+  test('/van-inspections loads without 404 or 500', async ({ page }) => {
     let response: Awaited<ReturnType<typeof page.goto>> | null = null;
     try {
-      response = await page.goto('/inspections');
+      response = await page.goto('/van-inspections');
     } catch (error) {
       const message = error instanceof Error ? error.message.toLowerCase() : '';
-      test.skip(message.includes('timeout'), '/inspections route timed out in this environment');
+      test.skip(message.includes('timeout'), '/van-inspections route timed out in this environment');
       throw error;
     }
-    // Old route should either redirect to /van-inspections or 404 (not 500)
+    expect(response?.status()).not.toBe(404);
     expect(response?.status()).not.toBe(500);
   });
 });

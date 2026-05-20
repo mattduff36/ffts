@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { normalizeInventoryItemNumber, requireInventoryAccess } from '@/lib/server/inventory-auth';
+import { normalizeInventoryItemNumber, requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
 import type { InventoryCategory, InventoryStatus } from '@/app/(dashboard)/inventory/types';
 
 interface RouteParams {
@@ -13,6 +13,7 @@ interface InventoryItemUpdateBody {
   category?: InventoryCategory;
   location_id?: string;
   last_checked_at?: string | null;
+  check_interval_days?: number | null;
   status?: InventoryStatus;
 }
 
@@ -23,7 +24,7 @@ function cleanOptionalDate(value: string | null | undefined): string | null {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const access = await requireInventoryAccess();
+    const access = await requireInventoryManagerAccess();
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
@@ -50,8 +51,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       update.name = name;
     }
     if (body.category !== undefined) update.category = body.category;
-    if (body.location_id !== undefined) update.location_id = body.location_id;
+    if (body.location_id !== undefined) update.location_id = body.location_id?.trim() || null;
     if (body.last_checked_at !== undefined) update.last_checked_at = cleanOptionalDate(body.last_checked_at);
+    if (body.check_interval_days !== undefined) {
+      update.check_interval_days = body.check_interval_days || null;
+    }
     if (body.status !== undefined) update.status = body.status;
 
     const { data, error } = await createAdminClient()
@@ -83,7 +87,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
-    const access = await requireInventoryAccess();
+    const access = await requireInventoryManagerAccess();
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }

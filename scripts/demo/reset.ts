@@ -50,6 +50,47 @@ async function deleteFromTable(
   }
 }
 
+async function clearDemoInspections(supabase: ScriptSupabaseClient): Promise<void> {
+  for (const table of ['van_inspections', 'hgv_inspections', 'plant_inspections']) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('id')
+      .ilike('inspector_comments', 'Demo seed:%');
+
+    if (error) {
+      console.warn(`Skipped ${table} lookup: ${error.message}`);
+      continue;
+    }
+
+    const ids = (data || []).map((row: { id: string }) => row.id);
+    if (ids.length === 0) continue;
+
+    await deleteFromTable(supabase, 'actions', 'inspection_id', ids);
+    await deleteFromTable(supabase, 'inspection_items', 'inspection_id', ids);
+    await deleteFromTable(supabase, 'inspection_daily_hours', 'inspection_id', ids);
+    await deleteFromTable(supabase, 'inspection_photos', 'inspection_id', ids);
+    await deleteFromTable(supabase, table, 'id', ids);
+  }
+}
+
+async function clearDemoTimesheets(supabase: ScriptSupabaseClient, demoUserIds: string[]): Promise<void> {
+  if (demoUserIds.length === 0) return;
+
+  const { data, error } = await supabase
+    .from('timesheets')
+    .select('id')
+    .in('user_id', demoUserIds);
+
+  if (error) {
+    console.warn(`Skipped demo timesheet lookup: ${error.message}`);
+    return;
+  }
+
+  const timesheetIds = (data || []).map((row: { id: string }) => row.id);
+  await deleteFromTable(supabase, 'timesheet_entries', 'timesheet_id', timesheetIds);
+  await deleteFromTable(supabase, 'timesheets', 'id', timesheetIds);
+}
+
 async function runSeed(): Promise<void> {
   await new Promise<void>((resolvePromise, reject) => {
     const child = spawn('npm', ['run', 'demo:seed'], {
@@ -87,30 +128,32 @@ async function main() {
   console.log(`Found ${demoUsers.length} demo user(s) for ${demoDomain}.`);
 
   await supabase.from('quotes').delete().like('quote_reference', 'DEMO-%');
-  await supabase.from('customers').delete().eq('company_name', 'Demo Civil Engineering Ltd');
+  await supabase.from('customers').delete().ilike('company_name', 'Demo %');
   await supabase.from('messages').delete().eq('created_via', 'demo-seed');
   await supabase.from('actions').delete().like('title', 'Demo %');
+  await clearDemoInspections(supabase);
+  await clearDemoTimesheets(supabase, demoUserIds);
 
   for (const [table, column] of [
-    ['timesheet_entries', 'user_id'],
-    ['timesheets', 'user_id'],
-    ['van_inspections', 'user_id'],
-    ['inspection_photos', 'uploaded_by'],
-    ['absences', 'user_id'],
-    ['rams_assignments', 'profile_id'],
+    ['rams_assignments', 'employee_id'],
     ['message_recipients', 'user_id'],
+    ['project_favourites', 'user_id'],
     ['actions', 'created_by'],
     ['audit_log', 'user_id'],
     ['user_page_visits', 'user_id'],
-    ['profiles', 'id'],
   ] as const) {
     await deleteFromTable(supabase, table, column, demoUserIds);
   }
 
-  for (const user of demoUsers) {
-    const { error } = await supabase.auth.admin.deleteUser(user.id);
-    if (error) console.warn(`Failed to delete auth user ${user.email}: ${error.message}`);
-    else console.log(`Deleted auth user ${user.email}.`);
+  const { error: absencesError } = await supabase
+    .from('absences')
+    .delete()
+    .in('profile_id', demoUserIds)
+    .gte('date', new Date().toISOString().slice(0, 10));
+  if (absencesError) {
+    console.warn(`Skipped future demo absences: ${absencesError.message}`);
+  } else {
+    console.log('Cleared future demo absences.');
   }
 
   await supabase.from('vans').delete().like('reg_number', 'DM24%');

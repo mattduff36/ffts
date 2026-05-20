@@ -25,6 +25,7 @@ import {
   INVENTORY_CATEGORY_LABELS,
   type InventoryCategory,
   type InventoryItem,
+  type InventoryItemCategory,
   type InventoryItemFormData,
   type InventoryLocation,
   type InventoryStatus,
@@ -34,16 +35,16 @@ interface InventoryItemDialogProps {
   open: boolean;
   item?: InventoryItem | null;
   locations: InventoryLocation[];
+  categories: InventoryItemCategory[];
   onClose: () => void;
   onSubmit: (data: InventoryItemFormData) => Promise<void>;
 }
-
-const categoryOptions = Object.entries(INVENTORY_CATEGORY_LABELS) as Array<[InventoryCategory, string]>;
 
 export function InventoryItemDialog({
   open,
   item,
   locations,
+  categories,
   onClose,
   onSubmit,
 }: InventoryItemDialogProps) {
@@ -57,8 +58,9 @@ export function InventoryItemDialog({
         item_number: item.item_number,
         name: item.name,
         category: item.category,
-        location_id: item.location_id,
+        location_id: item.location_id || '',
         last_checked_at: item.last_checked_at || '',
+        check_interval_days: item.check_interval_days ? String(item.check_interval_days) : '',
         status: item.status,
       });
       return;
@@ -66,9 +68,18 @@ export function InventoryItemDialog({
 
     setForm({
       ...EMPTY_INVENTORY_ITEM_FORM,
-      location_id: locations[0]?.id || '',
+      category: categories[0]?.slug || EMPTY_INVENTORY_ITEM_FORM.category,
     });
-  }, [item, locations, open]);
+  }, [categories, item, locations, open]);
+
+  const categoryOptions = categories.length > 0
+    ? [...categories]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((category) => [
+        category.slug,
+        category.name,
+      ] as const)
+    : (Object.entries(INVENTORY_CATEGORY_LABELS) as Array<[InventoryCategory, string]>);
 
   function updateField<K extends keyof InventoryItemFormData>(key: K, value: InventoryItemFormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -97,6 +108,10 @@ export function InventoryItemDialog({
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            <div className="rounded-md border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100">
+              Fleet Plant guidance: anything with an engine, valued over £1000, or too large for a standard van should normally be added to Fleet Plant instead of Inventory. This is guidance only for this phase.
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="item_number">ID Number *</Label>
@@ -139,15 +154,16 @@ export function InventoryItemDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>Location *</Label>
+                <Label>Location</Label>
                 <Select
-                  value={form.location_id}
-                  onValueChange={(value) => updateField('location_id', value)}
+                  value={form.location_id || 'unassigned'}
+                  onValueChange={(value) => updateField('location_id', value === 'unassigned' ? '' : value)}
                 >
                   <SelectTrigger className="bg-slate-800 border-slate-600">
                     <SelectValue placeholder="Select location" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="unassigned" className="text-muted-foreground">No location assigned</SelectItem>
                     {locations.map((location) => (
                       <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
                     ))}
@@ -167,6 +183,22 @@ export function InventoryItemDialog({
                   className="bg-slate-800 border-slate-600"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="check_interval_days">Check Interval Days</Label>
+                <Input
+                  id="check_interval_days"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={form.check_interval_days}
+                  onChange={(event) => updateField('check_interval_days', event.target.value)}
+                  placeholder="Default 42"
+                  className="bg-slate-800 border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select

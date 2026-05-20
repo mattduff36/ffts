@@ -4,10 +4,16 @@ import type { InventoryCheckStatus, InventoryItem } from './types';
 export const CHECK_INTERVAL_DAYS = 42;
 export const DUE_SOON_DAYS = 7;
 
-export function getInventoryCheckStatus(item: Pick<InventoryItem, 'last_checked_at'>): InventoryCheckStatus {
+export function getInventoryCheckIntervalDays(item: Pick<InventoryItem, 'check_interval_days'>): number {
+  return item.check_interval_days || CHECK_INTERVAL_DAYS;
+}
+
+export function getInventoryCheckStatus(
+  item: Pick<InventoryItem, 'last_checked_at'> & Partial<Pick<InventoryItem, 'check_interval_days'>>
+): InventoryCheckStatus {
   if (!item.last_checked_at) return 'needs_check';
 
-  const dueDate = addDays(new Date(`${item.last_checked_at}T00:00:00`), CHECK_INTERVAL_DAYS);
+  const dueDate = addDays(new Date(`${item.last_checked_at}T00:00:00`), item.check_interval_days || CHECK_INTERVAL_DAYS);
   const daysUntilDue = differenceInCalendarDays(dueDate, new Date());
 
   if (daysUntilDue < 0) return 'overdue';
@@ -15,9 +21,9 @@ export function getInventoryCheckStatus(item: Pick<InventoryItem, 'last_checked_
   return 'ok';
 }
 
-export function getInventoryDueDate(lastCheckedAt: string | null): string {
+export function getInventoryDueDate(lastCheckedAt: string | null, intervalDays = CHECK_INTERVAL_DAYS): string {
   if (!lastCheckedAt) return 'Not checked';
-  return format(addDays(new Date(`${lastCheckedAt}T00:00:00`), CHECK_INTERVAL_DAYS), 'dd MMM yyyy');
+  return format(addDays(new Date(`${lastCheckedAt}T00:00:00`), intervalDays), 'dd MMM yyyy');
 }
 
 export function formatInventoryDate(value: string | null): string {

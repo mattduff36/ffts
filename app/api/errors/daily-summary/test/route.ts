@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         error_message: 'Failed to fetch inspection data',
         error_stack: 'Error: Failed to fetch inspection data\n    at fetchInspection (page.tsx:89)',
         component_name: 'Inspections Page',
-        page_url: 'https://your-app.example.com/inspections/abc-123',
+        page_url: 'https://your-app.example.com/van-inspections/abc-123',
         user_id: 'user-456',
         user_email: 'nathan@example.com',
         user_agent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Mobile Safari/537.36',

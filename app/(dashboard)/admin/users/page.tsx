@@ -58,6 +58,7 @@ import { getRoleSortPriority } from '@/lib/config/roles-core';
 import { calculateNewUserRemainingLeaveDefault, roundToNearestHalfDay } from '@/lib/utils/absence-onboarding';
 import { isClientSessionPausedError } from '@/lib/app-auth/session-error';
 import { formatDateTime } from '@/lib/utils/date';
+import { isHiddenUserManagementUser } from '@/lib/utils/hidden-superadmin';
 import {
   computeQuickEditFloatingPosition,
   type FloatingPositionResult,
@@ -511,12 +512,14 @@ export default function UsersAdminPage() {
     });
 
     // Merge profiles with emails. The API profile fallback keeps this page useful if browser RLS hides profiles.
-    return Array.from(profileMap.values()).map(profile => ({
-      ...profile,
-      email: authUserMap.get(profile.id)?.email || '',
-      last_sign_in_at: authUserMap.get(profile.id)?.last_sign_in_at || null,
-      last_active_at: authUserMap.get(profile.id)?.last_active_at || null,
-    })) || [] as ProfileWithEmail[];
+    return Array.from(profileMap.values())
+      .map(profile => ({
+        ...profile,
+        email: authUserMap.get(profile.id)?.email || '',
+        last_sign_in_at: authUserMap.get(profile.id)?.last_sign_in_at || null,
+        last_active_at: authUserMap.get(profile.id)?.last_active_at || null,
+      }))
+      .filter(user => !isHiddenUserManagementUser(user)) || [] as ProfileWithEmail[];
   }
 
   // Fetch available roles

@@ -1796,6 +1796,7 @@ export type Database = {
           description: string
           sort_order: number
           is_active: boolean
+          module_name: string | null
           created_at: string
           updated_at: string
         }
@@ -1806,6 +1807,7 @@ export type Database = {
           description?: string | null
           sort_order?: number | null
           is_active?: boolean | null
+          module_name?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -1816,6 +1818,7 @@ export type Database = {
           description?: string | null
           sort_order?: number | null
           is_active?: boolean | null
+          module_name?: string | null
           created_at?: string | null
           updated_at?: string | null
         }

@@ -227,7 +227,7 @@ export function getPageUrl(value: string): string {
     'projects-list': '/projects',
     'projects-manage': '/projects/manage',
     'projects-view': '/projects/[id]',
-    'projects-read': '/projects/read/[id]',
+    'projects-read': '/projects/[id]/read',
     'projects-settings': '/projects/settings',
     
     // Absence
@@ -241,8 +241,8 @@ export function getPageUrl(value: string): string {
     
     // Workshop Tasks
     'workshop-tasks-list': '/workshop-tasks',
-    'workshop-tasks-new': '/workshop-tasks/new',
-    'workshop-tasks-view': '/workshop-tasks/[id]',
+    'workshop-tasks-new': '/workshop-tasks',
+    'workshop-tasks-view': '/workshop-tasks',
     
     // Approvals
     'approvals-list': '/approvals',
@@ -254,8 +254,8 @@ export function getPageUrl(value: string): string {
     
     // Reports
     'reports-list': '/reports',
-    'reports-timesheets': '/reports/timesheets',
-    'reports-absence': '/reports/absence',
+    'reports-timesheets': '/reports?tab=timesheets',
+    'reports-absence': '/reports?tab=absence-leave',
 
     // Suggestions / FAQ / Error Reports
     'suggestions-manage': '/suggestions/manage',
@@ -265,15 +265,16 @@ export function getPageUrl(value: string): string {
     
     // Toolbox Talks
     'toolbox-talks-list': '/toolbox-talks',
-    'toolbox-talks-new': '/toolbox-talks/new',
+    'toolbox-talks-new': '/toolbox-talks',
     
     // Admin - Users
     'admin-users-list': '/admin/users',
-    'admin-users-roles': '/admin/roles',
+    'admin-users-roles': '/admin/users?tab=roles',
     
     // Admin - Vans
-    'admin-vans-list': '/admin/vans',
-    'admin-vans-new': '/admin/vans/new',
+    'admin-vans-list': '/fleet?tab=vans',
+    'admin-vans-new': '/fleet?tab=vans',
+    'admin-vans-history': '/fleet?tab=vans',
 
     // Inventory
     'inventory-overview': '/inventory',
@@ -281,7 +282,7 @@ export function getPageUrl(value: string): string {
     
     // Admin - FAQ
     'admin-faq-list': '/admin/faq',
-    'admin-faq-categories': '/admin/faq/categories',
+    'admin-faq-categories': '/admin/faq?tab=categories',
     
     // Other
     'dashboard': '/dashboard',

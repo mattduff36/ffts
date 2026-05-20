@@ -117,7 +117,7 @@ export function getParentHref(
   if (normalizedPath === '/admin/users') {
     return '/dashboard';
   }
-  if (normalizedPath === '/admin/vans') {
+  if (normalizedPath === '/admin/vehicles') {
     return '/dashboard';
   }
   

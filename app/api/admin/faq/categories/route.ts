@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase/server';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type { FAQCategory, CreateFAQCategoryRequest } from '@/types/faq';
+import { ALL_MODULES, type ModuleName } from '@/types/roles';
+
+const MODULE_NAMES = new Set<ModuleName>(ALL_MODULES);
+
+function normalizeModuleName(moduleName: CreateFAQCategoryRequest['module_name']): ModuleName | null {
+  if (!moduleName) return null;
+  if (!MODULE_NAMES.has(moduleName)) {
+    throw new Error('Invalid FAQ category module gate');
+  }
+  return moduleName;
+}
 
 /**
  * GET /api/admin/faq/categories
@@ -84,11 +95,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CreateFAQCategoryRequest = await request.json();
+    let moduleName: ModuleName | null;
 
     // Validate required fields
     if (!body.name?.trim() || !body.slug?.trim()) {
       return NextResponse.json({ 
         error: 'Name and slug are required' 
+      }, { status: 400 });
+    }
+
+    try {
+      moduleName = normalizeModuleName(body.module_name);
+    } catch (error) {
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : 'Invalid FAQ category module gate',
       }, { status: 400 });
     }
 
@@ -101,6 +121,7 @@ export async function POST(request: NextRequest) {
         slug: body.slug.trim().toLowerCase().replace(/\s+/g, '-'),
         description: body.description?.trim() || null,
         sort_order: body.sort_order || 0,
+        module_name: moduleName,
         is_active: true,
       })
       .select()

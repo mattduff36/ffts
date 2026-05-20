@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
 import pg from 'pg';
+import { ALL_MODULES, type ModuleName } from '../../types/roles';
 
 const { Client } = pg;
 
@@ -9,10 +10,18 @@ const { Client } = pg;
 config({ path: resolve(process.cwd(), '.env.local') });
 
 const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
+const targetProjectRef = process.env.DEMO_SUPABASE_PROJECT_REF || process.env.SUPABASE_PROJECT_REF;
+const validModules = new Set<ModuleName>(ALL_MODULES);
 
 if (!connectionString) {
   console.error('❌ Missing database connection string');
   console.error('Please ensure POSTGRES_URL_NON_POOLING or POSTGRES_URL is set in .env.local');
+  process.exit(1);
+}
+
+if (targetProjectRef && !connectionString.includes(targetProjectRef)) {
+  console.error('❌ Database connection string does not target the approved Supabase project.');
+  console.error(`Expected project ref: ${targetProjectRef}`);
   process.exit(1);
 }
 
@@ -24,6 +33,7 @@ interface FAQCategory {
   name: string;
   sort_order: number;
   description?: string;
+  module_name?: ModuleName | null;
 }
 
 interface FAQArticle {
@@ -32,6 +42,7 @@ interface FAQArticle {
   title: string;
   summary: string;
   content_md: string;
+  sort_order?: number;
 }
 
 interface FAQData {
@@ -64,6 +75,7 @@ async function seedFAQ() {
     // Load FAQ data
     const faqDataPath = resolve(process.cwd(), 'scripts/seed/data/faq-howto.json');
     const faqData: FAQData = JSON.parse(readFileSync(faqDataPath, 'utf-8'));
+    validateFAQData(faqData);
     
     console.log(`📚 Found ${faqData.categories.length} categories and ${faqData.articles.length} articles\n`);
 
@@ -73,16 +85,24 @@ async function seedFAQ() {
     
     for (const category of faqData.categories) {
       const result = await client.query(`
-        INSERT INTO faq_categories (name, slug, description, sort_order, is_active)
-        VALUES ($1, $2, $3, $4, TRUE)
+        INSERT INTO faq_categories (name, slug, description, sort_order, module_name, is_active)
+        VALUES ($1, $2, $3, $4, $5, TRUE)
         ON CONFLICT (slug) 
         DO UPDATE SET 
           name = EXCLUDED.name,
           description = EXCLUDED.description,
           sort_order = EXCLUDED.sort_order,
+          module_name = EXCLUDED.module_name,
+          is_active = TRUE,
           updated_at = NOW()
         RETURNING id
-      `, [category.name, category.slug, category.description || null, category.sort_order]);
+      `, [
+        category.name,
+        category.slug,
+        category.description || null,
+        category.sort_order,
+        category.module_name || null,
+      ]);
       
       categoryIdMap[category.slug] = result.rows[0].id;
       console.log(`   ✅ ${category.name}`);
@@ -108,8 +128,16 @@ async function seedFAQ() {
           title = EXCLUDED.title,
           summary = EXCLUDED.summary,
           content_md = EXCLUDED.content_md,
+          sort_order = EXCLUDED.sort_order,
           updated_at = NOW()
-      `, [categoryId, article.title, article.slug, article.summary, article.content_md, articleCount]);
+      `, [
+        categoryId,
+        article.title,
+        article.slug,
+        article.summary,
+        article.content_md,
+        article.sort_order ?? articleCount,
+      ]);
       
       articleCount++;
     }
@@ -148,6 +176,40 @@ async function seedFAQ() {
     process.exit(1);
   } finally {
     await client.end();
+  }
+}
+
+function validateFAQData(faqData: FAQData): void {
+  const categorySlugs = new Set<string>();
+
+  for (const category of faqData.categories) {
+    if (!category.slug || !category.name) {
+      throw new Error('Each FAQ category must include a slug and name.');
+    }
+    if (categorySlugs.has(category.slug)) {
+      throw new Error(`Duplicate FAQ category slug: ${category.slug}`);
+    }
+    categorySlugs.add(category.slug);
+
+    if (category.module_name && !validModules.has(category.module_name)) {
+      throw new Error(`Invalid module_name "${category.module_name}" for FAQ category "${category.slug}".`);
+    }
+  }
+
+  const articleKeys = new Set<string>();
+  for (const article of faqData.articles) {
+    if (!categorySlugs.has(article.category_slug)) {
+      throw new Error(`FAQ article "${article.slug}" references missing category "${article.category_slug}".`);
+    }
+    if (!article.slug || !article.title || !article.content_md) {
+      throw new Error(`FAQ article in category "${article.category_slug}" is missing slug, title, or content.`);
+    }
+
+    const articleKey = `${article.category_slug}:${article.slug}`;
+    if (articleKeys.has(articleKey)) {
+      throw new Error(`Duplicate FAQ article slug in category: ${articleKey}`);
+    }
+    articleKeys.add(articleKey);
   }
 }
 

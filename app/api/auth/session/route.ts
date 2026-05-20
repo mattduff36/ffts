@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { canEditOwnBasicProfileFields } from '@/lib/profile/permissions';
 import { applyValidationCookieIfNeeded } from '@/lib/server/app-auth/response';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
+import { canIssueSupabaseDataToken } from '@/lib/server/app-auth/supabase-token';
 
 export async function GET() {
   const current = await getCurrentAuthenticatedProfile({ allowLocked: true, includeEmail: true });
@@ -12,7 +13,7 @@ export async function GET() {
         locked: false,
         user: null,
         profile: null,
-        data_token_available: Boolean(process.env.SUPABASE_JWT_SECRET),
+        data_token_available: canIssueSupabaseDataToken(null),
       },
       { status: 401 }
     );
@@ -27,7 +28,7 @@ export async function GET() {
     },
     profile: current.profile,
     can_edit_basic_fields: canEditOwnBasicProfileFields(current.profile),
-    data_token_available: Boolean(process.env.SUPABASE_JWT_SECRET),
+    data_token_available: canIssueSupabaseDataToken(current.profile.email),
   });
   applyValidationCookieIfNeeded(response, current.validation);
   return response;

@@ -75,7 +75,13 @@ export async function GET(request: NextRequest) {
         category:faq_categories(
           id,
           name,
-          slug
+          slug,
+          description,
+          sort_order,
+          is_active,
+          module_name,
+          created_at,
+          updated_at
         )
       `)
       .order('sort_order', { ascending: true });
@@ -171,7 +177,13 @@ export async function POST(request: NextRequest) {
         category:faq_categories(
           id,
           name,
-          slug
+          slug,
+          description,
+          sort_order,
+          is_active,
+          module_name,
+          created_at,
+          updated_at
         )
       `)
       .single();

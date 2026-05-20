@@ -22,8 +22,8 @@ export const ALL_PAGES = [
   { path: '/timesheets/new', name: 'New Timesheet', requiresAuth: true },
   
   // Inspections
-  { path: '/inspections', name: 'Inspections List', requiresAuth: true },
-  { path: '/inspections/new', name: 'New Inspection', requiresAuth: true },
+  { path: '/van-inspections', name: 'Van Inspections List', requiresAuth: true },
+  { path: '/van-inspections/new', name: 'New Van Inspection', requiresAuth: true },
   
   // RAMS
   { path: '/rams', name: 'RAMS List', requiresAuth: true },

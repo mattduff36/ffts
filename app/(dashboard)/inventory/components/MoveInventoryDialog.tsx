@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
 import type { InventoryItem, InventoryLocation, InventoryMovePayload } from '../types';
 
@@ -47,19 +48,27 @@ export function MoveInventoryDialog({
 }: MoveInventoryDialogProps) {
   const [locationId, setLocationId] = useState('');
   const [note, setNote] = useState('');
+  const [moveScope, setMoveScope] = useState<'single' | 'group'>('single');
   const [saving, setSaving] = useState(false);
   const isBulkMove = items.length > 1;
+  const group = !isBulkMove ? items[0]?.group : null;
 
   useEffect(() => {
     setLocationId('');
     setNote('');
+    setMoveScope('single');
   }, [open]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     try {
-      await onSubmit({ location_id: locationId, note });
+      await onSubmit({
+        location_id: locationId,
+        note,
+        scope: group && moveScope === 'group' ? 'group' : isBulkMove ? 'bulk' : 'single',
+        group_id: group && moveScope === 'group' ? group.id : null,
+      });
       onClose();
     } finally {
       setSaving(false);
@@ -82,6 +91,26 @@ export function MoveInventoryDialog({
               <div className="rounded-md border border-slate-700 bg-slate-800/60 p-3 text-sm">
                 <div className="font-medium text-white">{items[0].name}</div>
                 <div className="text-muted-foreground">{items[0].item_number}</div>
+              </div>
+            ) : null}
+
+            {group ? (
+              <div className="rounded-md border border-purple-500/25 bg-purple-500/10 p-3 text-sm">
+                <div className="font-medium text-purple-100">This item belongs to the group “{group.name}”.</div>
+                <RadioGroup
+                  value={moveScope}
+                  onValueChange={(value) => setMoveScope(value as 'single' | 'group')}
+                  className="mt-3 space-y-2"
+                >
+                  <label className="flex items-center gap-2 text-slate-200">
+                    <RadioGroupItem value="single" />
+                    Move only this item
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-200">
+                    <RadioGroupItem value="group" />
+                    Move the entire group
+                  </label>
+                </RadioGroup>
               </div>
             ) : null}
 

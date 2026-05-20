@@ -150,39 +150,7 @@ export const FORM_TYPES: FormType[] = [
     color: 'brand-yellow', // Brand yellow color
     enabled: true,
   },
-  // Future forms - uncomment and configure as needed:
-  /*
-  {
-    id: 'incident',
-    title: 'Incident Report',
-    description: 'Safety incidents & near-misses',
-    icon: AlertTriangle,
-    href: '/incidents/new',
-    listHref: '/incidents',
-    color: 'incident', // Add --incident-primary to globals.css
-    enabled: false,
-  },
-  {
-    id: 'delivery',
-    title: 'Delivery Note',
-    description: 'Material deliveries',
-    icon: PackageCheck,
-    href: '/deliveries/new',
-    listHref: '/deliveries',
-    color: 'delivery',
-    enabled: false,
-  },
-  {
-    id: 'site-diary',
-    title: 'Site Diary',
-    description: 'Daily site progress',
-    icon: Clipboard,
-    href: '/site-diary/new',
-    listHref: '/site-diary',
-    color: 'diary',
-    enabled: false,
-  },
-  */
+  // Add future form types here only after their app routes exist.
 ];
 
 /**

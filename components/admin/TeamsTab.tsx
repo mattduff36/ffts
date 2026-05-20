@@ -106,9 +106,10 @@ export function TeamsTab() {
   }, [fetchTeams]);
 
   const filteredTeams = useMemo(() => {
-    if (!search.trim()) return teams;
+    const activeTeams = teams.filter((team) => team.active);
+    if (!search.trim()) return activeTeams;
     const query = search.toLowerCase();
-    return teams.filter(
+    return activeTeams.filter(
       (team) =>
         team.name.toLowerCase().includes(query) ||
         team.id.toLowerCase().includes(query) ||
@@ -117,10 +118,13 @@ export function TeamsTab() {
   }, [search, teams]);
 
   const stats = useMemo(
-    () => ({
-      total: teams.length,
-      members: teams.reduce((sum, team) => sum + team.member_count, 0),
-    }),
+    () => {
+      const activeTeams = teams.filter((team) => team.active);
+      return {
+        total: activeTeams.length,
+        members: activeTeams.reduce((sum, team) => sum + team.member_count, 0),
+      };
+    },
     [teams]
   );
 

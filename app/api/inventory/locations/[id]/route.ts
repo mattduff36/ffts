@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireInventoryAccess } from '@/lib/server/inventory-auth';
+import { requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
 import type { FleetAssetLinkType } from '@/app/(dashboard)/inventory/types';
 
 interface RouteParams {
@@ -29,7 +29,7 @@ function buildLinkedAssetColumns(body: LocationUpdateBody) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const access = await requireInventoryAccess();
+    const access = await requireInventoryManagerAccess();
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
-    const access = await requireInventoryAccess();
+    const access = await requireInventoryManagerAccess();
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
@@ -108,6 +108,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       .eq('id', id);
 
     if (error) throw error;
+
+    const { error: userLocationError } = await admin
+      .from('inventory_user_locations')
+      .delete()
+      .eq('location_id', id);
+
+    if (userLocationError) throw userLocationError;
 
     return NextResponse.json({ success: true });
   } catch (error) {

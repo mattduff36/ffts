@@ -194,7 +194,7 @@ test.describe('UI Contrast Tests', () => {
   });
 
   test('Inspection Form - Input fields have sufficient contrast', async ({ page }) => {
-    await page.goto('http://localhost:4000/inspections/new');
+    await page.goto('http://localhost:4000/van-inspections/new');
     await page.waitForLoadState('networkidle');
     
     // Check a few visible inputs/textareas directly (avoid brittle nth-of-type selectors)

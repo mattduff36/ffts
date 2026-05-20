@@ -22,8 +22,8 @@ const PROTECTED_ROUTES = [
   // Employee pages
   '/timesheets',
   '/timesheets/new',
-  '/inspections',
-  '/inspections/new',
+  '/van-inspections',
+  '/van-inspections/new',
   '/absence',
   '/absence/manage',
   '/absence/archive-report',

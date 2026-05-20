@@ -1,5 +1,7 @@
 // FAQ and Suggestions Types
 
+import type { ModuleName } from './roles';
+
 export interface FAQCategory {
   id: string;
   name: string;
@@ -7,7 +9,7 @@ export interface FAQCategory {
   description: string | null;
   sort_order: number;
   is_active: boolean;
-  module_name?: string | null; // Maps to ModuleName for permission filtering
+  module_name: ModuleName | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +95,7 @@ export interface CreateFAQCategoryRequest {
   slug: string;
   description?: string;
   sort_order?: number;
+  module_name?: ModuleName | null;
 }
 
 export interface UpdateFAQCategoryRequest {
@@ -101,6 +104,7 @@ export interface UpdateFAQCategoryRequest {
   description?: string;
   sort_order?: number;
   is_active?: boolean;
+  module_name?: ModuleName | null;
 }
 
 export interface CreateFAQArticleRequest {

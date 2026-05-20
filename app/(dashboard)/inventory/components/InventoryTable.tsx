@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,6 +11,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   ChevronDown,
   ChevronUp,
@@ -25,18 +32,23 @@ import {
   getInventoryCheckStatus,
   getInventoryDueDate,
 } from '../utils';
-import { INVENTORY_CATEGORY_LABELS, type InventoryCheckStatus, type InventoryItem } from '../types';
+import { formatInventoryCategoryLabel, type InventoryCheckStatus, type InventoryItem, type InventoryLocation } from '../types';
 
 type InventoryFilter = 'all' | InventoryCheckStatus | 'yard' | 'noloc';
 type SortField = 'item_number' | 'name' | 'location' | 'last_checked_at';
 type SortDir = 'asc' | 'desc';
+const ALL_LOCATIONS_FILTER = 'all';
+const INVENTORY_TABLE_PAGE_SIZE = 50;
 
 interface InventoryTableProps {
   items: InventoryItem[];
   selectedItemIds: Set<string>;
   onSelectedItemIdsChange: (selectedItemIds: Set<string>) => void;
-  onEdit: (item: InventoryItem) => void;
+  onEdit?: (item: InventoryItem) => void;
   onMove: (items: InventoryItem[]) => void;
+  onOpenDetails?: (item: InventoryItem) => void;
+  locationFilterLocations?: InventoryLocation[];
+  categoryLabels?: Record<string, string>;
 }
 
 const filters: Array<{ value: InventoryFilter; label: string }> = [
@@ -45,7 +57,7 @@ const filters: Array<{ value: InventoryFilter; label: string }> = [
   { value: 'overdue', label: 'Overdue' },
   { value: 'needs_check', label: 'Needs Check' },
   { value: 'yard', label: 'Yard' },
-  { value: 'noloc', label: 'NoLocation' },
+  { value: 'noloc', label: 'No Location' },
 ];
 
 function getStatusBadgeClass(status: InventoryCheckStatus): string {
@@ -56,17 +68,20 @@ function getStatusBadgeClass(status: InventoryCheckStatus): string {
 }
 
 function isNoLocationItem(item: InventoryItem): boolean {
-  return (item.location?.name || '').toLowerCase() === 'nolocation';
+  return !item.location_id;
 }
 
 function renderLocationWithHint(item: InventoryItem) {
-  const locationName = item.location?.name || 'NoLocation';
-  if (!isNoLocationItem(item) || !item.source_location_hint) return locationName;
+  const isUnassigned = !item.location_id;
+  const locationName = item.location?.name || 'No location assigned';
+  if (!isNoLocationItem(item) || !item.source_location_hint) {
+    return isUnassigned ? <span className="italic text-slate-400">{locationName}</span> : locationName;
+  }
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="cursor-help underline decoration-slate-500 decoration-dotted underline-offset-4">
+        <span className={`cursor-help underline decoration-slate-500 decoration-dotted underline-offset-4 ${isUnassigned ? 'italic text-slate-400' : ''}`}>
           {locationName}
         </span>
       </TooltipTrigger>
@@ -81,33 +96,62 @@ function renderLocationWithHint(item: InventoryItem) {
   );
 }
 
+function getVanLocationNickname(item: InventoryItem): string | null {
+  if (item.location?.linked_asset_type !== 'van') return null;
+  return item.location.linked_asset_nickname?.trim() || null;
+}
+
+function renderLocationDetails(item: InventoryItem) {
+  const linkedVanNickname = getVanLocationNickname(item);
+
+  return (
+    <div>
+      <div>{renderLocationWithHint(item)}</div>
+      {linkedVanNickname ? (
+        <div className="text-xs text-muted-foreground">{linkedVanNickname}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export function InventoryTable({
   items,
   selectedItemIds,
   onSelectedItemIdsChange,
   onEdit,
   onMove,
+  onOpenDetails,
+  locationFilterLocations,
+  categoryLabels,
 }: InventoryTableProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<InventoryFilter>('all');
+  const [locationFilterId, setLocationFilterId] = useState(ALL_LOCATIONS_FILTER);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [pagination, setPagination] = useState({ key: '', limit: INVENTORY_TABLE_PAGE_SIZE });
+  const showLocationFilter = Boolean(locationFilterLocations?.length);
+  const paginationKey = `${filter}:${locationFilterId}:${search.trim()}:${sortField}:${sortDir}:${items.length}`;
+  const visibleItemLimit = pagination.key === paginationKey ? pagination.limit : INVENTORY_TABLE_PAGE_SIZE;
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = items.filter((item) => {
       const locationName = item.location?.name || '';
+      const linkedVanNickname = getVanLocationNickname(item) || '';
       const checkStatus = getInventoryCheckStatus(item);
 
+      if (locationFilterId !== ALL_LOCATIONS_FILTER && item.location_id !== locationFilterId) return false;
       if (filter === 'yard' && locationName.toLowerCase() !== 'yard') return false;
-      if (filter === 'noloc' && locationName.toLowerCase() !== 'nolocation') return false;
+      if (filter === 'noloc' && item.location_id) return false;
       if (filter !== 'all' && filter !== 'yard' && filter !== 'noloc' && checkStatus !== filter) return false;
 
       if (!query) return true;
       return (
         item.item_number.toLowerCase().includes(query) ||
         item.name.toLowerCase().includes(query) ||
-        locationName.toLowerCase().includes(query)
+        locationName.toLowerCase().includes(query) ||
+        linkedVanNickname.toLowerCase().includes(query)
       );
     });
 
@@ -117,12 +161,28 @@ export function InventoryTable({
       const compare = String(aValue).localeCompare(String(bValue), undefined, { sensitivity: 'base' });
       return sortDir === 'asc' ? compare : -compare;
     });
-  }, [filter, items, search, sortDir, sortField]);
+  }, [filter, items, locationFilterId, search, sortDir, sortField]);
+
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleItemLimit),
+    [filteredItems, visibleItemLimit]
+  );
 
   const selectedItems = useMemo(
-    () => items.filter((item) => selectedItemIds.has(item.id)),
-    [items, selectedItemIds]
+    () => visibleItems.filter((item) => selectedItemIds.has(item.id)),
+    [visibleItems, selectedItemIds]
   );
+
+  useEffect(() => {
+    const visibleItemIds = new Set(visibleItems.map((item) => item.id));
+    const nextSelectedItemIds = new Set(
+      Array.from(selectedItemIds).filter((itemId) => visibleItemIds.has(itemId))
+    );
+
+    if (nextSelectedItemIds.size !== selectedItemIds.size) {
+      onSelectedItemIdsChange(nextSelectedItemIds);
+    }
+  }, [onSelectedItemIdsChange, selectedItemIds, visibleItems]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -150,14 +210,15 @@ export function InventoryTable({
 
   function toggleVisibleItems(checked: boolean) {
     const next = new Set(selectedItemIds);
-    filteredItems.forEach((item) => {
+    visibleItems.forEach((item) => {
       if (checked) next.add(item.id);
       else next.delete(item.id);
     });
     onSelectedItemIdsChange(next);
   }
 
-  const allVisibleSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedItemIds.has(item.id));
+  const allVisibleSelected = visibleItems.length > 0 && visibleItems.every((item) => selectedItemIds.has(item.id));
+  const hasMoreItems = visibleItemLimit < filteredItems.length;
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -185,24 +246,45 @@ export function InventoryTable({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Inventory Filters</p>
-        <div className="flex flex-wrap gap-2">
-          {filters.map((filterOption) => (
-            <Button
-              key={filterOption.value}
-              variant={filter === filterOption.value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter(filterOption.value)}
-              className={filter === filterOption.value
-                ? 'bg-inventory text-white hover:bg-inventory-dark'
-                : 'border-slate-600 text-muted-foreground hover:bg-slate-700/50'
-              }
-            >
-              {filterOption.label}
-            </Button>
-          ))}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Inventory Filters</p>
+          <div className="flex flex-wrap gap-2">
+            {filters.map((filterOption) => (
+              <Button
+                key={filterOption.value}
+                variant={filter === filterOption.value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter(filterOption.value)}
+                className={filter === filterOption.value
+                  ? 'bg-inventory text-white hover:bg-inventory-dark'
+                  : 'border-slate-600 text-muted-foreground hover:bg-slate-700/50'
+                }
+              >
+                {filterOption.label}
+              </Button>
+            ))}
+          </div>
         </div>
+
+        {showLocationFilter ? (
+          <div className="w-full space-y-2 lg:w-72">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Select Location Bin</p>
+            <Select value={locationFilterId} onValueChange={setLocationFilterId}>
+              <SelectTrigger className="border-slate-600 bg-slate-800 text-white">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_LOCATIONS_FILTER}>All</SelectItem>
+                {(locationFilterLocations || []).map((location) => (
+                  <SelectItem key={location.id} value={location.id}>
+                    {location.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       <div className="hidden overflow-hidden rounded-lg border border-slate-700 md:block">
@@ -240,13 +322,18 @@ export function InventoryTable({
                 </td>
               </tr>
             ) : (
-              filteredItems.map((item) => {
+              visibleItems.map((item) => {
                 const checkStatus = getInventoryCheckStatus(item);
                 return (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-800/50">
+                  <tr
+                    key={item.id}
+                    className={onOpenDetails ? 'cursor-pointer transition-colors hover:bg-slate-800/50' : 'transition-colors hover:bg-slate-800/50'}
+                    onClick={() => onOpenDetails?.(item)}
+                  >
                     <td className="px-4 py-3">
                       <Checkbox
                         checked={selectedItemIds.has(item.id)}
+                        onClick={(event) => event.stopPropagation()}
                         onCheckedChange={(checked) => toggleSelected(item.id, checked === true)}
                         aria-label={`Select ${item.name}`}
                       />
@@ -254,12 +341,17 @@ export function InventoryTable({
                     <td className="px-4 py-3 font-medium text-white">{item.item_number}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-white">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{INVENTORY_CATEGORY_LABELS[item.category]}</div>
+                      <div className="text-xs text-muted-foreground">{formatInventoryCategoryLabel(item.category, categoryLabels)}</div>
+                      {item.group ? (
+                        <Badge variant="outline" className="mt-1 border-purple-500/30 bg-purple-500/10 text-purple-200">
+                          Group: {item.group.name}
+                        </Badge>
+                      ) : null}
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{renderLocationWithHint(item)}</td>
+                    <td className="px-4 py-3 text-slate-300">{renderLocationDetails(item)}</td>
                     <td className="px-4 py-3 text-slate-300">
                       <div>{formatInventoryDate(item.last_checked_at)}</div>
-                      <div className="text-xs text-muted-foreground">Due {getInventoryDueDate(item.last_checked_at)}</div>
+                      <div className="text-xs text-muted-foreground">Due {getInventoryDueDate(item.last_checked_at, item.check_interval_days || undefined)}</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className={getStatusBadgeClass(checkStatus)}>
@@ -268,12 +360,14 @@ export function InventoryTable({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => onMove([item])} className="border-slate-600">
+                        <Button size="sm" variant="outline" onClick={(event) => { event.stopPropagation(); onMove([item]); }} className="border-slate-600">
                           Move
                         </Button>
-                        <Button size="sm" onClick={() => onEdit(item)} className="bg-inventory text-white hover:bg-inventory-dark">
-                          Edit
-                        </Button>
+                        {onEdit ? (
+                          <Button size="sm" onClick={(event) => { event.stopPropagation(); onEdit(item); }} className="bg-inventory text-white hover:bg-inventory-dark">
+                            Edit
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -290,14 +384,19 @@ export function InventoryTable({
             {search ? 'No inventory items match your search.' : 'No inventory items found.'}
           </div>
         ) : (
-          filteredItems.map((item) => {
+          visibleItems.map((item) => {
             const checkStatus = getInventoryCheckStatus(item);
             return (
-              <div key={item.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div
+                key={item.id}
+                className={onOpenDetails ? 'cursor-pointer rounded-lg border border-slate-700 bg-slate-800/50 p-4' : 'rounded-lg border border-slate-700 bg-slate-800/50 p-4'}
+                onClick={() => onOpenDetails?.(item)}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
                     <Checkbox
                       checked={selectedItemIds.has(item.id)}
+                      onClick={(event) => event.stopPropagation()}
                       onCheckedChange={(checked) => toggleSelected(item.id, checked === true)}
                       aria-label={`Select ${item.name}`}
                     />
@@ -307,6 +406,11 @@ export function InventoryTable({
                         {item.name}
                       </div>
                       <div className="text-xs text-muted-foreground">{item.item_number}</div>
+                      {item.group ? (
+                        <Badge variant="outline" className="mt-1 border-purple-500/30 bg-purple-500/10 text-purple-200">
+                          Group: {item.group.name}
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                   <Badge variant="outline" className={getStatusBadgeClass(checkStatus)}>
@@ -314,23 +418,48 @@ export function InventoryTable({
                   </Badge>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {renderLocationWithHint(item)}</span>
+                  <div className="flex items-start gap-1">
+                    <MapPin className="mt-0.5 h-3 w-3" />
+                    {renderLocationDetails(item)}
+                  </div>
                   <span>Last: {formatInventoryDate(item.last_checked_at)}</span>
-                  <span>Due: {getInventoryDueDate(item.last_checked_at)}</span>
+                  <span>Due: {getInventoryDueDate(item.last_checked_at, item.check_interval_days || undefined)}</span>
                 </div>
                 <div className="mt-4 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => onMove([item])} className="flex-1 border-slate-600">
+                  <Button size="sm" variant="outline" onClick={(event) => { event.stopPropagation(); onMove([item]); }} className="flex-1 border-slate-600">
                     Move
                   </Button>
-                  <Button size="sm" onClick={() => onEdit(item)} className="flex-1 bg-inventory text-white hover:bg-inventory-dark">
-                    Edit
-                  </Button>
+                  {onEdit ? (
+                    <Button size="sm" onClick={(event) => { event.stopPropagation(); onEdit(item); }} className="flex-1 bg-inventory text-white hover:bg-inventory-dark">
+                      Edit
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      {hasMoreItems ? (
+        <div className="flex flex-col items-center gap-2 border-t border-slate-700/60 pt-4">
+          <p className="text-xs text-muted-foreground">
+            Showing {visibleItems.length} of {filteredItems.length} inventory items
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPagination({ key: paginationKey, limit: visibleItemLimit + INVENTORY_TABLE_PAGE_SIZE })}
+            className="border-slate-600 text-white hover:bg-slate-800"
+          >
+            Show More
+          </Button>
+        </div>
+      ) : filteredItems.length > INVENTORY_TABLE_PAGE_SIZE ? (
+        <p className="border-t border-slate-700/60 pt-4 text-center text-xs text-muted-foreground">
+          Showing all {filteredItems.length} inventory items
+        </p>
+      ) : null}
     </div>
     </TooltipProvider>
   );

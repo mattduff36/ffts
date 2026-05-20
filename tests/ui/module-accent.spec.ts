@@ -76,7 +76,7 @@ test.describe('Module accent theming', () => {
   });
 
   test('Inspections uses inspections accent', async ({ page }) => {
-    await page.goto('/inspections');
+    await page.goto('/van-inspections');
     const vars = await getAccentVars(page);
     expect(vars).not.toBeNull();
     expect(vars!.accent).toBe('inspections');

@@ -61,6 +61,7 @@ export async function GET() {
   const { data: teamsData, error: teamsError } = await supabaseAdmin
     .from('org_teams')
     .select('id, name, code, timesheet_type, active, manager_1_profile_id, manager_2_profile_id')
+    .eq('active', true)
     .order('name', { ascending: true });
 
   if (teamsError) {

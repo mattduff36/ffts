@@ -3,9 +3,20 @@ import { createClient } from '@/lib/supabase/server';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type { UpdateFAQCategoryRequest } from '@/types/faq';
+import { ALL_MODULES, type ModuleName } from '@/types/roles';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+const MODULE_NAMES = new Set<ModuleName>(ALL_MODULES);
+
+function normalizeModuleName(moduleName: UpdateFAQCategoryRequest['module_name']): ModuleName | null {
+  if (!moduleName) return null;
+  if (!MODULE_NAMES.has(moduleName)) {
+    throw new Error('Invalid FAQ category module gate');
+  }
+  return moduleName;
 }
 
 /**
@@ -84,6 +95,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body: UpdateFAQCategoryRequest = await request.json();
+    let moduleName: ModuleName | null | undefined;
+
+    if (body.module_name !== undefined) {
+      try {
+        moduleName = normalizeModuleName(body.module_name);
+      } catch (error) {
+        return NextResponse.json({
+          error: error instanceof Error ? error.message : 'Invalid FAQ category module gate',
+        }, { status: 400 });
+      }
+    }
 
     // Prepare update data
     const updateData: Record<string, unknown> = {};
@@ -92,6 +114,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.description !== undefined) updateData.description = body.description?.trim() || null;
     if (body.sort_order !== undefined) updateData.sort_order = body.sort_order;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    if (body.module_name !== undefined) updateData.module_name = moduleName;
 
     // Note: faq_categories table added by migration - types will update after migration runs
     const { data: category, error } = await supabase

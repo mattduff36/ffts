@@ -48,7 +48,7 @@ export async function GET() {
       { data: vanInspections, error: vanInspectionsError },
       { data: plantInspections, error: plantInspectionsError },
       { data: hgvInspections, error: hgvInspectionsError },
-      { data: annualLeaveReason, error: annualLeaveReasonError },
+      { data: annualLeaveReasons, error: annualLeaveReasonsError },
       { data: visits, error: visitsError },
       carryoverByProfile,
     ] = await Promise.all([
@@ -104,7 +104,7 @@ export async function GET() {
         .from('absence_reasons')
         .select('id')
         .ilike('name', 'annual leave')
-        .maybeSingle(),
+        .order('name', { ascending: true }),
       admin
         .from('user_page_visits')
         .select('path, visited_at')
@@ -121,7 +121,7 @@ export async function GET() {
     if (vanInspectionsError) throw vanInspectionsError;
     if (plantInspectionsError) throw plantInspectionsError;
     if (hgvInspectionsError) throw hgvInspectionsError;
-    if (annualLeaveReasonError) throw annualLeaveReasonError;
+    if (annualLeaveReasonsError) throw annualLeaveReasonsError;
     if (visitsError) throw visitsError;
 
     const profileRow = (profile || {}) as Record<string, unknown>;
@@ -144,13 +144,15 @@ export async function GET() {
       carryoverByProfile.get(user.id) || 0
     );
 
-    const annualLeaveReasonId = annualLeaveReason?.id || null;
-    const annualRows = annualLeaveReasonId
+    const annualLeaveReasonIds = ((annualLeaveReasons || []) as Array<{ id?: string | null }>)
+      .map((reason) => reason.id)
+      .filter((id): id is string => Boolean(id));
+    const annualRows = annualLeaveReasonIds.length > 0
       ? await admin
           .from('absences')
           .select('status, duration_days')
           .eq('profile_id', user.id)
-          .eq('reason_id', annualLeaveReasonId)
+          .in('reason_id', annualLeaveReasonIds)
           .gte('date', startIso)
           .lte('date', endIso)
       : { data: [], error: null };

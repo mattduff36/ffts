@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireInventoryAccess } from '@/lib/server/inventory-auth';
+import { requireInventoryAccess, requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
 import type { FleetAssetLinkType } from '@/app/(dashboard)/inventory/types';
 
 interface LocationRequestBody {
@@ -58,6 +58,7 @@ export async function GET() {
 
     const countByLocationId = new Map<string, number>();
     (itemsResult.data || []).forEach((item) => {
+      if (!item.location_id) return;
       countByLocationId.set(item.location_id, (countByLocationId.get(item.location_id) || 0) + 1);
     });
     const vanById = new Map((vansResult.data || []).map((van) => [van.id, van]));
@@ -123,7 +124,7 @@ function getLinkedAssetDisplay(
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await requireInventoryAccess();
+    const access = await requireInventoryManagerAccess();
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }

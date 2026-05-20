@@ -30,9 +30,9 @@ describe('Module system — admin-vans replaces admin-vehicles', () => {
 });
 
 describe('Module pages — fleet routes use vans', () => {
-  it('admin-vans-list page points to /admin/vans', () => {
+  it('admin-vans-list page points to the fleet vans tab', () => {
     const url = getPageUrl('admin-vans-list');
-    expect(url).toBe('/admin/vans');
+    expect(url).toBe('/fleet?tab=vans');
   });
 
   it('no module page points to /admin/vehicles', () => {

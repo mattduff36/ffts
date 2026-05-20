@@ -1,9 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { sendErrorReportEmailToAdmins } from '@/lib/utils/email';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import {
+  ERROR_REPORT_SCREENSHOT_BUCKET,
+  MAX_ERROR_REPORT_SCREENSHOT_SIZE_BYTES,
+  MAX_ERROR_REPORT_SCREENSHOTS,
+  isAllowedErrorReportScreenshot,
+  mergeAdditionalContextWithScreenshots,
+  type ErrorReportScreenshot,
+} from '@/lib/utils/error-report-screenshots';
 import type { CreateErrorReportResponse } from '@/types/error-reports';
+
+interface ParsedErrorReportPayload {
+  title: string | null;
+  description: string | null;
+  error_code?: string;
+  page_url?: string;
+  user_agent?: string;
+  additional_context?: unknown;
+  screenshots: File[];
+}
+
+function getOptionalFormValue(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  if (typeof value !== 'string') return undefined;
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
+function parseAdditionalContext(value: string | undefined): unknown {
+  if (!value) return undefined;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { raw_context: value };
+  }
+}
+
+function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/[^a-z0-9_.-]/gi, '_').slice(0, 120) || 'screenshot';
+}
+
+async function parseErrorReportPayload(request: NextRequest): Promise<ParsedErrorReportPayload> {
+  const contentType = request.headers.get('content-type') || '';
+
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await request.formData();
+    const title = getOptionalFormValue(formData, 'title') || getOptionalFormValue(formData, 'error_message') || null;
+    const description = getOptionalFormValue(formData, 'description') || getOptionalFormValue(formData, 'error_message') || null;
+    const screenshots = formData
+      .getAll('screenshots')
+      .filter((value): value is File => value instanceof File && value.size > 0);
+
+    return {
+      title,
+      description,
+      error_code: getOptionalFormValue(formData, 'error_code'),
+      page_url: getOptionalFormValue(formData, 'page_url'),
+      user_agent: getOptionalFormValue(formData, 'user_agent'),
+      additional_context: parseAdditionalContext(getOptionalFormValue(formData, 'additional_context')),
+      screenshots,
+    };
+  }
+
+  const body = await request.json();
+
+  return {
+    title: body.title || body.error_message || null,
+    description: body.description || body.error_message || null,
+    error_code: body.error_code,
+    page_url: body.page_url,
+    user_agent: body.user_agent,
+    additional_context: body.additional_context,
+    screenshots: [],
+  };
+}
+
+function validateScreenshotFiles(files: File[]): string | null {
+  if (files.length > MAX_ERROR_REPORT_SCREENSHOTS) {
+    return `You can attach up to ${MAX_ERROR_REPORT_SCREENSHOTS} screenshots.`;
+  }
+
+  const oversizedFile = files.find((file) => file.size > MAX_ERROR_REPORT_SCREENSHOT_SIZE_BYTES);
+  if (oversizedFile) {
+    return `${oversizedFile.name} is too large. Screenshots must be 5MB or smaller.`;
+  }
+
+  const unsupportedFile = files.find((file) => !isAllowedErrorReportScreenshot(file));
+  if (unsupportedFile) {
+    return `${unsupportedFile.name} is not a supported image file.`;
+  }
+
+  return null;
+}
 
 /**
  * POST /api/errors/report
@@ -28,17 +121,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Use service role client for database operations to bypass RLS
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    // Use service role client for database/storage operations to bypass RLS on trusted server code.
+    const supabase = createAdminClient();
 
     // Get user's profile
     const { data: profile } = await supabase
@@ -47,22 +131,63 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    const body = await request.json();
-    
-    // Support both legacy and new formats
-    const title = body.title || body.error_message;
-    const description = body.description || body.error_message;
-    const { error_code, page_url, user_agent, additional_context } = body;
+    const payload = await parseErrorReportPayload(request);
+    const { title, description, error_code, page_url, user_agent } = payload;
 
     if (!title || !description) {
       return NextResponse.json({ error: 'Missing title or description' }, { status: 400 });
     }
 
-    // 1. Persist error report to database FIRST
-    // Error reports should always be saved regardless of notification availability
+    const screenshotValidationError = validateScreenshotFiles(payload.screenshots);
+    if (screenshotValidationError) {
+      return NextResponse.json({ error: screenshotValidationError }, { status: 400 });
+    }
+
+    const reportId = crypto.randomUUID();
+    const uploadedScreenshots: ErrorReportScreenshot[] = [];
+
+    try {
+      for (const file of payload.screenshots) {
+        const filePath = `${user.id}/${reportId}/${Date.now()}_${crypto.randomUUID()}_${sanitizeFileName(file.name)}`;
+        const fileBuffer = await file.arrayBuffer();
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(ERROR_REPORT_SCREENSHOT_BUCKET)
+          .upload(filePath, fileBuffer, {
+            contentType: file.type,
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        uploadedScreenshots.push({
+          id: crypto.randomUUID(),
+          file_name: file.name,
+          file_path: uploadData.path,
+          content_type: file.type || null,
+          file_size: file.size,
+        });
+      }
+    } catch (uploadError) {
+      if (uploadedScreenshots.length > 0) {
+        await supabase.storage
+          .from(ERROR_REPORT_SCREENSHOT_BUCKET)
+          .remove(uploadedScreenshots.map((screenshot) => screenshot.file_path));
+      }
+
+      console.error('Error uploading error report screenshots:', uploadError);
+      return NextResponse.json({ error: 'Failed to upload screenshots' }, { status: 500 });
+    }
+
+    const additional_context = mergeAdditionalContextWithScreenshots(
+      payload.additional_context,
+      uploadedScreenshots
+    );
+
+    // 1. Persist the validated report. Notification failures below must not block creation.
     const { data: errorReport, error: reportError } = await supabase
       .from('error_reports')
       .insert({
+        id: reportId,
         created_by: user.id,
         title: title.substring(0, 500), // Limit title length
         description,
@@ -76,6 +201,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (reportError || !errorReport) {
+      if (uploadedScreenshots.length > 0) {
+        await supabase.storage
+          .from(ERROR_REPORT_SCREENSHOT_BUCKET)
+          .remove(uploadedScreenshots.map((screenshot) => screenshot.file_path));
+      }
+
       console.error('Error creating error report:', reportError);
       return NextResponse.json({ 
         error: 'Failed to save error report' 
@@ -235,7 +366,7 @@ ${additional_context ? `**Additional Context:**\n${JSON.stringify(additional_con
                   userEmail: user.email || 'Unknown',
                   pageUrl: page_url,
                   userAgent: user_agent,
-                  additionalContext: additional_context
+                  additionalContext: additional_context ?? undefined
                 });
 
                 emailSuccess = emailResult.success;

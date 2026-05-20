@@ -16,6 +16,7 @@ const NEXT_BUILD_DIR = path.join(REPO_ROOT, '.next');
 const DEV_SERVER_PORT = 4000;
 const DEFAULT_COMMIT_MESSAGE = 'chore(finalise): repo finalisation';
 const FULL_COMMIT_MESSAGE = 'chore(finalise): full repo finalisation';
+const PRIVATE_PATH_PREFIX = 'private/';
 
 interface FinaliseOptions {
   full: boolean;
@@ -148,6 +149,29 @@ function getChangedFiles(): string[] {
   });
 
   return Array.from(new Set([...getTrimmedLines(tracked.stdout), ...getTrimmedLines(untracked.stdout)]));
+}
+
+function getTrackedPrivateFiles(): string[] {
+  return getTrimmedLines(
+    runCommand('git', ['ls-files', '--', 'private'], {
+      captureOutput: true,
+    }).stdout
+  ).filter((relativePath) => normalizeForMatch(relativePath).startsWith(PRIVATE_PATH_PREFIX));
+}
+
+function assertNoTrackedPrivateFiles(): void {
+  const trackedPrivateFiles = getTrackedPrivateFiles();
+  if (trackedPrivateFiles.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      'Refusing to finalise while private/ files are tracked or staged.',
+      'Remove them from the index with: git rm -r --cached -- private/',
+      `First matches: ${trackedPrivateFiles.slice(0, 10).join(', ')}`,
+    ].join(' ')
+  );
 }
 
 function getGitStatusPorcelain(): string {
@@ -531,12 +555,15 @@ function commitAllChanges(commitMessage: string): boolean {
     return false;
   }
 
+  assertNoTrackedPrivateFiles();
   runCommand('git', ['add', '-A']);
+  assertNoTrackedPrivateFiles();
   runCommand('git', ['commit', '-m', commitMessage]);
   return true;
 }
 
 function pushCurrentBranch(): string {
+  assertNoTrackedPrivateFiles();
   const branch = getCurrentBranch();
   if (!branch) {
     throw new Error('Cannot push from a detached HEAD state');
@@ -577,6 +604,7 @@ async function main(): Promise<void> {
   if (unmergedFiles.length > 0) {
     throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
   }
+  assertNoTrackedPrivateFiles();
 
   const changedFiles = getChangedFiles();
   const pendingMigrationFiles = getPendingMigrationFiles(changedFiles);

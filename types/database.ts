@@ -3820,6 +3820,54 @@ export type Database = {
           },
         ]
       }
+      questionnaire_submissions: {
+        Row: {
+          id: string
+          submission_number: number
+          company_name: string
+          contact_name: string
+          contact_email: string
+          contact_phone: string | null
+          answers: Json
+          metadata: Json
+          email_status: 'pending' | 'sent' | 'failed' | 'skipped'
+          email_sent_at: string | null
+          email_error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          submission_number?: never
+          company_name: string
+          contact_name: string
+          contact_email: string
+          contact_phone?: string | null
+          answers: Json
+          metadata?: Json
+          email_status?: 'pending' | 'sent' | 'failed' | 'skipped'
+          email_sent_at?: string | null
+          email_error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          submission_number?: never
+          company_name?: string
+          contact_name?: string
+          contact_email?: string
+          contact_phone?: string | null
+          answers?: Json
+          metadata?: Json
+          email_status?: 'pending' | 'sent' | 'failed' | 'skipped'
+          email_sent_at?: string | null
+          email_error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           id: string

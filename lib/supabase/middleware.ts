@@ -173,8 +173,10 @@ export async function updateSession(request: NextRequest) {
   const session = await getMiddlewareSession(request)
   await getSupabaseUser(request, response)
   const hasLegacyCookie = hasLegacySupabaseSessionCookie(request)
-  const publicPaths = ['/login', '/change-password', '/offline']
+  const publicPaths = ['/login', '/change-password', '/offline', '/questionnaire']
+  const publicApiPaths = ['/api/questionnaire']
   const isPublicPath = publicPaths.some((path) => request.nextUrl.pathname.startsWith(path))
+  const isPublicApiRoute = publicApiPaths.some((path) => request.nextUrl.pathname.startsWith(path))
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
   const isLockRoute = request.nextUrl.pathname.startsWith('/lock')
   const isAuthRoute = request.nextUrl.pathname.startsWith('/api/auth/')
@@ -197,7 +199,11 @@ export async function updateSession(request: NextRequest) {
   if (!session && hasLegacyCookie) {
     clearAllAuthCookies(request, response)
 
-    if (isApiRoute && !LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
+    if (
+      isApiRoute &&
+      !isPublicApiRoute &&
+      !LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)
+    ) {
       return jsonWithMiddlewareCookies(
         response,
         { error: 'Legacy session expired', code: 'LEGACY_SESSION_EXPIRED' },
@@ -205,7 +211,7 @@ export async function updateSession(request: NextRequest) {
       )
     }
 
-    if (isPublicPath || LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
+    if (isPublicPath || isPublicApiRoute || LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
       return response
     }
 
@@ -243,7 +249,14 @@ export async function updateSession(request: NextRequest) {
     return redirectWithMiddlewareCookies(response, url, 307)
   }
 
-  if (isAuthenticated && isLocked && !isLockRoute && !isApiRoute && request.nextUrl.pathname !== '/login') {
+  if (
+    isAuthenticated &&
+    isLocked &&
+    !isPublicPath &&
+    !isLockRoute &&
+    !isApiRoute &&
+    request.nextUrl.pathname !== '/login'
+  ) {
     const returnTo = `${request.nextUrl.pathname}${request.nextUrl.search}`
     const url = request.nextUrl.clone()
     url.pathname = '/lock'
@@ -253,7 +266,7 @@ export async function updateSession(request: NextRequest) {
     return redirectWithMiddlewareCookies(response, url, 307)
   }
 
-  if (isAuthenticated && isLocked && isApiRoute && !allowLockedApi) {
+  if (isAuthenticated && isLocked && isApiRoute && !isPublicApiRoute && !allowLockedApi) {
     return jsonWithMiddlewareCookies(
       response,
       { error: 'Session is locked', code: 'SESSION_LOCKED' },
@@ -261,7 +274,7 @@ export async function updateSession(request: NextRequest) {
     )
   }
 
-  if (!isPublicPath && !isAuthenticated && !isAuthRoute) {
+  if (!isPublicPath && !isPublicApiRoute && !isAuthenticated && !isAuthRoute) {
     if (isApiRoute) {
       return jsonWithMiddlewareCookies(
         response,

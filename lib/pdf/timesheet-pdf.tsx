@@ -7,6 +7,7 @@ import type { TimesheetOffDayState } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals } from '@/lib/utils/timesheet-leave-totals';
 import { formatEntryJobNumbers, getPrimaryJobNumber } from '@/lib/utils/timesheet-job-codes';
 import { templateConfig } from '@/lib/config/template-config';
+import { getPdfContactLine, getPdfRegisteredOfficeLine } from '@/lib/pdf/branding';
 
 // Create styles for the PDF matching the scanned form
 const styles = StyleSheet.create({
@@ -238,11 +239,11 @@ export function TimesheetPDF({ timesheet, employeeName, offDayStates = [] }: Tim
 
         {/* Company Header */}
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
-          <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
+          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
+            {templateConfig.branding.companyName}
           </Text>
-          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
+          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
+          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
         </View>
 
         {/* Top Info Section */}

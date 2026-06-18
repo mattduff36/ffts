@@ -34,6 +34,7 @@ import {
   LucideIcon
 } from 'lucide-react';
 import { ModuleName } from '@/types/roles';
+import { demoBranchConfig } from '@/lib/config/demo-branch-config';
 
 export interface NavItem {
   href: string;
@@ -44,13 +45,29 @@ export interface NavItem {
   dropdownItems?: NavItem[]; // For dropdown menus
 }
 
+function orderNavItemsForDemoPriorities(items: NavItem[]): NavItem[] {
+  if (!demoBranchConfig.enabled || demoBranchConfig.navigationPriorityHrefs.length === 0) {
+    return items;
+  }
+
+  const priorityByHref = new Map(
+    demoBranchConfig.navigationPriorityHrefs.map((href, index) => [href, index])
+  );
+
+  return [...items].sort((left, right) => {
+    const leftPriority = priorityByHref.get(left.href) ?? Number.MAX_SAFE_INTEGER;
+    const rightPriority = priorityByHref.get(right.href) ?? Number.MAX_SAFE_INTEGER;
+    return leftPriority - rightPriority;
+  });
+}
+
 /**
  * Employee Navigation Items
  * These appear in:
  * - Dashboard Quick Actions tiles
  * - Top navigation bar
  */
-export const employeeNavItems: NavItem[] = [
+const baseEmployeeNavItems: NavItem[] = [
   { 
     href: '/timesheets', 
     label: 'Timesheets', 
@@ -130,6 +147,8 @@ export const employeeNavItems: NavItem[] = [
   },
 ];
 
+export const employeeNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseEmployeeNavItems);
+
 /**
  * Manager Navigation Items
  * These appear in:
@@ -137,7 +156,7 @@ export const employeeNavItems: NavItem[] = [
  * - Top navigation bar (mobile menu)
  * - Left sidebar navigation
  */
-export const managerNavItems: NavItem[] = [
+const baseManagerNavItems: NavItem[] = [
   { 
     href: '/approvals', 
     label: 'Approvals', 
@@ -182,6 +201,8 @@ export const managerNavItems: NavItem[] = [
   },
 ];
 
+export const managerNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseManagerNavItems);
+
 /**
  * Admin Navigation Items
  * These appear in:
@@ -189,7 +210,7 @@ export const managerNavItems: NavItem[] = [
  * - Top navigation bar (mobile menu)
  * - Left sidebar navigation
  */
-export const adminNavItems: NavItem[] = [
+const baseAdminNavItems: NavItem[] = [
   { 
     href: '/customers', 
     label: 'Customers', 
@@ -233,6 +254,8 @@ export const adminNavItems: NavItem[] = [
     category: 'admin'
   },
 ];
+
+export const adminNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseAdminNavItems);
 
 /**
  * Dashboard Navigation Item

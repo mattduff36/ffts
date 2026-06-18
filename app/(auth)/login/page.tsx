@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
@@ -21,7 +22,6 @@ import {
   ArrowUpRight,
   Briefcase,
   HardHat,
-  Lock,
   MousePointerClick,
   User,
   UserCog,
@@ -152,10 +152,17 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-[linear-gradient(rgba(241,214,74,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(241,214,74,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
       <div className="w-full max-w-md relative z-10">
-        {/* Brand Yellow Icon */}
+        {/* Brand Logo */}
         <div className="flex justify-center mb-6">
-          <div className="bg-brand-yellow rounded-2xl p-5 shadow-lg shadow-brand-yellow/20">
-            <Lock className="h-10 w-10 text-slate-900" strokeWidth={2.5} />
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-yellow p-3 shadow-lg shadow-brand-yellow/20">
+            <Image
+              src={templateConfig.branding.logoPath}
+              alt={`${templateConfig.branding.companyName} logo`}
+              width={56}
+              height={56}
+              unoptimized
+              className="max-h-full max-w-full object-contain"
+            />
           </div>
         </div>
 

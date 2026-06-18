@@ -8,6 +8,7 @@ import { buildLeaveAwareTotals } from '@/lib/utils/timesheet-leave-totals';
 import { normalizeTimesheetEntriesForDisplay } from '@/lib/utils/plant-timesheet-v2-normalization';
 import { formatEntryJobNumbers } from '@/lib/utils/timesheet-job-codes';
 import { templateConfig } from '@/lib/config/template-config';
+import { getPdfContactLine, getPdfRegisteredOfficeLine } from '@/lib/pdf/branding';
 
 const styles = StyleSheet.create({
   page: {
@@ -341,11 +342,11 @@ export function PlantTimesheetV2PDF({ timesheet, employeeName, offDayStates = []
         </View>
 
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
-          <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
+          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
+            {templateConfig.branding.companyName}
           </Text>
-          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
+          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
+          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
         </View>
 
         <View style={styles.headerGrid}>

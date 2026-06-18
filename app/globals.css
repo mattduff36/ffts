@@ -195,9 +195,9 @@
 
   /* Brand (yellow) remains the default for non-module pages */
   [data-accent="brand"] {
-    --primary: 48 87% 69%;
+    --primary: var(--brand-yellow);
     --primary-foreground: 222 47% 11%; /* dark text for yellow */
-    --ring: 48 87% 69%;
+    --ring: var(--brand-yellow);
   }
 }
 
@@ -207,7 +207,7 @@
   }
   
   body {
-    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
     background-attachment: fixed;
     color: hsl(var(--foreground));
     font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
@@ -234,19 +234,19 @@
 /* Module-specific color utilities */
 @layer utilities {
   .bg-brand-yellow {
-    background-color: #F1D64A;
+    background-color: hsl(var(--brand-yellow));
   }
   
   .bg-brand-yellow-hover:hover {
-    background-color: #d1b82f;
+    background-color: hsl(var(--brand-yellow-hover));
   }
   
   .text-brand-yellow {
-    color: #F1D64A;
+    color: hsl(var(--brand-yellow));
   }
   
   .border-brand-yellow {
-    border-color: #F1D64A;
+    border-color: hsl(var(--brand-yellow));
   }
   
   /* Timesheet */
@@ -371,8 +371,8 @@
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #f1f1f1; }
-::-webkit-scrollbar-thumb { background: #F1D64A; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #d1b82f; }
+::-webkit-scrollbar-thumb { background: hsl(var(--brand-yellow)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--brand-yellow-hover)); }
 
 /* Smooth scrolling */
 html { scroll-behavior: smooth; }

@@ -4,6 +4,7 @@ import { VanInspection, InspectionItem, INSPECTION_ITEMS } from '@/types/inspect
 import { formatDate } from '@/lib/utils/date';
 import { buildInspectionPdfCommentsText } from '@/lib/utils/inspection-pdf-comments';
 import { templateConfig } from '@/lib/config/template-config';
+import { getPdfContactLine, getPdfRegisteredOfficeLine, getPdfRegistrationLine } from '@/lib/pdf/branding';
 
 // Create styles for the PDF matching the scanned form
 const styles = StyleSheet.create({
@@ -346,12 +347,12 @@ export function InspectionPDF({ inspection, items, vehicleReg, employeeName }: I
 
         {/* Company Header */}
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
-          <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
+          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
+            {templateConfig.branding.companyName}
           </Text>
-          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
-          <Text style={styles.registeredNo}>Registered in England No. 1000918</Text>
+          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
+          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
+          <Text style={styles.registeredNo}>{getPdfRegistrationLine()}</Text>
           <Text style={styles.pageTitle}>VAN INSPECTION PAD</Text>
         </View>
 

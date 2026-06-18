@@ -3,6 +3,7 @@ import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@reac
 import { PLANT_INSPECTION_ITEMS } from '@/lib/checklists/plant-checklists';
 import { formatDate } from '@/lib/utils/date';
 import { templateConfig } from '@/lib/config/template-config';
+import { getPdfContactLine, getPdfRegisteredOfficeLine, getPdfRegistrationLine } from '@/lib/pdf/branding';
 
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 7, fontFamily: 'Helvetica' },
@@ -206,12 +207,12 @@ export function PlantInspectionPDF({
         </View>
 
         <View style={styles.companyHeader}>
-          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
-          <Text style={styles.companyDetails}>
-            REGISTERED OFFICE: 1 TEMPLATE ROAD, SAMPLE BUSINESS PARK, SAMPLE CITY, AB1 2CD
+          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
+            {templateConfig.branding.companyName}
           </Text>
-          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
-          <Text style={styles.registeredNo}>Registered in England No. 1000918</Text>
+          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
+          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
+          <Text style={styles.registeredNo}>{getPdfRegistrationLine()}</Text>
           <Text style={styles.pageTitle}>OPERATED PLANT INSPECTION PAD</Text>
         </View>
 

@@ -369,10 +369,11 @@ export default function DashboardPage() {
           >
             <div className="flex items-center gap-2">
               <Image
-                src="/icon-192x192.png"
-                alt=""
+                src={templateConfig.branding.logoPath}
+                alt={`${templateConfig.branding.companyName} logo`}
                 width={36}
                 height={36}
+                unoptimized
                 className="h-8 w-8 md:h-9 md:w-9"
               />
               <span className="text-2xl md:text-3xl font-bold text-brand-yellow tracking-wide">

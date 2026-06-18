@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { AppProviders } from "@/lib/providers/app-providers";
-import { templateConfig } from "@/lib/config/template-config";
+import { getTemplateBrandCssVariables, templateConfig } from "@/lib/config/template-config";
 import "./globals.css";
 
 // Force dynamic rendering to prevent build-time static generation errors
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   description: `${templateConfig.branding.companyName} digital field operations system`,
   manifest: "/manifest.json",
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    icon: [{ url: templateConfig.branding.faviconPath, type: "image/svg+xml" }],
+    shortcut: [{ url: templateConfig.branding.faviconPath, type: "image/svg+xml" }],
     apple: [
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
@@ -51,7 +51,7 @@ export default function RootLayout({
       className="dark"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      style={{ colorScheme: 'dark' }}
+      style={{ colorScheme: 'dark', ...getTemplateBrandCssVariables() }}
     >
       <head>
         <meta name="color-scheme" content="dark" />

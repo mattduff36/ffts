@@ -9,7 +9,6 @@ import { MobileNavBar } from '@/components/layout/MobileNavBar';
 import { PullToRefresh } from '@/components/layout/PullToRefresh';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DemoBranchNotice } from '@/components/demo/DemoBranchNotice';
 import { getAccentFromRoute } from '@/lib/theme/getAccentFromRoute';
 import { TabletModeProvider, useTabletMode } from '@/components/layout/tablet-mode-context';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -78,7 +77,7 @@ function DashboardLayoutShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { profile, loading: authLoading, locked, isManager, isAdmin, isActualSuperAdmin } = useAuth();
+  const { profile, loading: authLoading, locked } = useAuth();
   const clientServiceOutage = useClientServiceOutage();
   const { tabletModeEnabled, tabletModeInfoOpen, dismissTabletModeInfo } = useTabletMode();
   const lastTrackedPathRef = useRef<string>('');
@@ -176,7 +175,6 @@ function DashboardLayoutShell({
   
   // Determine the accent color based on current route
   const accent = getAccentFromRoute(pathname, searchParams);
-  const shouldApplySidebarOffset = !tabletModeEnabled && (isManager || isAdmin || isActualSuperAdmin);
 
   useEffect(() => {
     const nextPath = getCurrentTrackedPath();
@@ -239,9 +237,6 @@ function DashboardLayoutShell({
       <MessageBlockingCheck />
       
       <Navbar />
-      <div className={`transition-all duration-300 ${shouldApplySidebarOffset ? 'md:pl-16' : ''}`}>
-        <DemoBranchNotice centered className="mx-4 mt-4 sm:mx-6 lg:mx-8" />
-      </div>
       <PullToRefresh />
       <DashboardContent>
         {children}

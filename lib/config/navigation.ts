@@ -34,7 +34,6 @@ import {
   LucideIcon
 } from 'lucide-react';
 import { ModuleName } from '@/types/roles';
-import { demoBranchConfig } from '@/lib/config/demo-branch-config';
 
 export interface NavItem {
   href: string;
@@ -45,13 +44,24 @@ export interface NavItem {
   dropdownItems?: NavItem[]; // For dropdown menus
 }
 
-function orderNavItemsForDemoPriorities(items: NavItem[]): NavItem[] {
-  if (!demoBranchConfig.enabled || demoBranchConfig.navigationPriorityHrefs.length === 0) {
+const clientNavigationPriorityHrefs: string[] = [
+  '/projects',
+  '/inventory',
+  '/quotes',
+  '/customers',
+  '/reports',
+  '/van-inspections',
+  '/plant-inspections',
+  '/hgv-inspections',
+];
+
+function orderNavItemsForClientPriorities(items: NavItem[]): NavItem[] {
+  if (clientNavigationPriorityHrefs.length === 0) {
     return items;
   }
 
   const priorityByHref = new Map(
-    demoBranchConfig.navigationPriorityHrefs.map((href, index) => [href, index])
+    clientNavigationPriorityHrefs.map((href, index) => [href, index])
   );
 
   return [...items].sort((left, right) => {
@@ -147,7 +157,7 @@ const baseEmployeeNavItems: NavItem[] = [
   },
 ];
 
-export const employeeNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseEmployeeNavItems);
+export const employeeNavItems: NavItem[] = orderNavItemsForClientPriorities(baseEmployeeNavItems);
 
 /**
  * Manager Navigation Items
@@ -201,7 +211,7 @@ const baseManagerNavItems: NavItem[] = [
   },
 ];
 
-export const managerNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseManagerNavItems);
+export const managerNavItems: NavItem[] = orderNavItemsForClientPriorities(baseManagerNavItems);
 
 /**
  * Admin Navigation Items
@@ -255,7 +265,7 @@ const baseAdminNavItems: NavItem[] = [
   },
 ];
 
-export const adminNavItems: NavItem[] = orderNavItemsForDemoPriorities(baseAdminNavItems);
+export const adminNavItems: NavItem[] = orderNavItemsForClientPriorities(baseAdminNavItems);
 
 /**
  * Dashboard Navigation Item

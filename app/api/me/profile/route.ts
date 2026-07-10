@@ -20,6 +20,18 @@ function isValidAvatarUrl(value: string): boolean {
   }
 }
 
+function normalizeOptionalProfileText(
+  value: string | null | undefined,
+  maxLength: number,
+  fieldLabel: string
+): string | null | NextResponse {
+  const normalized = value?.trim() || null;
+  if (normalized && normalized.length > maxLength) {
+    return NextResponse.json({ error: `${fieldLabel} is too long` }, { status: 400 });
+  }
+  return normalized;
+}
+
 async function getCurrentUserProfile(userId: string, email: string | null) {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -33,6 +45,13 @@ async function getCurrentUserProfile(userId: string, email: string | null) {
       must_change_password,
       annual_holiday_allowance_days,
       super_admin,
+      emergency_contact_name,
+      emergency_contact_phone,
+      emergency_contact_relationship,
+      secondary_emergency_contact_name,
+      secondary_emergency_contact_phone,
+      secondary_emergency_contact_relationship,
+      employer_profile_notes,
       team:org_teams!profiles_team_id_fkey(id, name),
       role:roles(name, display_name, role_class, is_manager_admin, is_super_admin)
     `)
@@ -86,6 +105,13 @@ export async function PUT(request: NextRequest) {
       full_name?: string;
       phone_number?: string | null;
       avatar_url?: string | null;
+      emergency_contact_name?: string | null;
+      emergency_contact_phone?: string | null;
+      emergency_contact_relationship?: string | null;
+      secondary_emergency_contact_name?: string | null;
+      secondary_emergency_contact_phone?: string | null;
+      secondary_emergency_contact_relationship?: string | null;
+      employer_profile_notes?: string | null;
     };
 
     const currentProfile = current.profile;
@@ -125,6 +151,25 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid avatar URL' }, { status: 400 });
       }
       nextValues.avatar_url = body.avatar_url || null;
+    }
+
+    const employerDetailFields = [
+      ['emergency_contact_name', 'Emergency contact name', 120],
+      ['emergency_contact_phone', 'Emergency contact phone', 50],
+      ['emergency_contact_relationship', 'Emergency contact relationship', 80],
+      ['secondary_emergency_contact_name', 'Secondary emergency contact name', 120],
+      ['secondary_emergency_contact_phone', 'Secondary emergency contact phone', 50],
+      ['secondary_emergency_contact_relationship', 'Secondary emergency contact relationship', 80],
+      ['employer_profile_notes', 'Additional information', 500],
+    ] as const;
+
+    for (const [key, label, maxLength] of employerDetailFields) {
+      if (body[key] === undefined) continue;
+      const normalized = normalizeOptionalProfileText(body[key], maxLength, label);
+      if (normalized instanceof NextResponse) {
+        return normalized;
+      }
+      nextValues[key] = normalized;
     }
 
     const keysToUpdate = Object.keys(nextValues);

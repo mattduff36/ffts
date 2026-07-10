@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Clock3, Loader2, MapPin, RefreshCw, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { fetchWithAuth } from '@/lib/utils/fetch-with-auth';
 
@@ -160,10 +161,7 @@ export function ActiveNowUsersPanel({ open }: ActiveNowUsersPanelProps) {
       </div>
 
       {loading && !payload ? (
-        <div className="flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 py-8 text-sm text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading active users...
-        </div>
+        <PanelLoader message="Loading active users..." className="rounded-md border border-slate-700 bg-slate-950/40 py-8" />
       ) : null}
 
       {!loading && errorMessage && !payload ? (

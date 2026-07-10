@@ -69,6 +69,19 @@ export function getParentHref(
     }
     return '/fleet?tab=hgvs';
   }
+
+  // Inventory item detail routes
+  if (normalizedPath.match(/^\/inventory\/items\/[^/]+$/)) {
+    const fromTab = searchParams?.get('fromTab');
+    const validInventoryTabs = ['overview', 'locations', 'groups'];
+    if (fromTab && validInventoryTabs.includes(fromTab)) {
+      if (fromTab === 'overview' && searchParams?.get('overview') === 'minor-plant') {
+        return '/inventory?overview=minor-plant';
+      }
+      return fromTab === 'overview' ? '/inventory' : `/inventory?tab=${fromTab}`;
+    }
+    return '/inventory';
+  }
   
   // Inspection routes
   if (normalizedPath === '/van-inspections/new') {

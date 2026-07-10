@@ -45,11 +45,13 @@ async function loadTargetsByTable(
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data || []).map((row: { id: string; reg_number: string }) => ({
-    assetType: mapTableToAssetType(tableName),
-    assetId: row.id,
-    registrationNumber: row.reg_number,
-  }));
+  return (data || [])
+    .filter((row) => Boolean(row.reg_number))
+    .map((row) => ({
+      assetType: mapTableToAssetType(tableName),
+      assetId: row.id,
+      registrationNumber: row.reg_number as string,
+    }));
 }
 
 function getErrorMessage(error: unknown): string {

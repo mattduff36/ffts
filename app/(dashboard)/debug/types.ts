@@ -40,13 +40,6 @@ export interface ErrorAdditionalData extends Record<string, unknown> {
   toastCorrelationKey?: string | null;
 }
 
-export interface DebugInfo {
-  environment: string;
-  buildTime: string;
-  nodeVersion: string;
-  nextVersion: string;
-}
-
 export interface AuditLogEntry {
   id: string;
   table_name: string;
@@ -56,7 +49,7 @@ export interface AuditLogEntry {
   team_id: string | null;
   action: string;
   changes: Record<string, { old?: unknown; new?: unknown }> | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface ErrorLogEntry {
@@ -72,6 +65,82 @@ export interface ErrorLogEntry {
   user_agent: string;
   component_name: string | null;
   additional_data: ErrorAdditionalData | null;
+}
+
+export interface UsageAnalyticsSummary {
+  totalEvents: number;
+  uniqueUsers: number;
+  sessionCount: number;
+  pageViews: number;
+  errorEvents: number;
+  activeSessions: number;
+  avgDurationMs: number | null;
+}
+
+export interface UsageAnalyticsBreakdown {
+  label: string;
+  events: number;
+  users: number;
+  sessions: number;
+  pageViews: number;
+}
+
+export interface UsageAnalyticsInsight {
+  title: string;
+  value: string;
+  detail: string;
+  tone: 'info' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+export interface UsageAnalyticsPlainSummary {
+  headline: string;
+  highlights: UsageAnalyticsInsight[];
+}
+
+export interface UsageAnalyticsPayload {
+  success: true;
+  generatedAt: string;
+  range: {
+    start: string;
+    end: string;
+  };
+  summary: UsageAnalyticsSummary;
+  topModules: Array<{ module: string; events: number; users: number }>;
+  topPages: Array<{ path: string; views: number; users: number }>;
+  topEvents: Array<{ eventName: string; events: number; users: number }>;
+  usageSummary: UsageAnalyticsPlainSummary;
+  topTeams: UsageAnalyticsBreakdown[];
+  roleBreakdown: UsageAnalyticsBreakdown[];
+  deviceBreakdown: UsageAnalyticsBreakdown[];
+  activeSessions: Array<{
+    id: string;
+    userId: string | null;
+    userName: string;
+    teamName: string | null;
+    roleName: string | null;
+    lastSeenAt: string;
+    entryPath: string | null;
+    exitPath: string | null;
+    deviceType: string | null;
+    browserName: string | null;
+    eventCount: number;
+    pageViewCount: number;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    occurredAt: string;
+    eventName: string;
+    eventCategory: string;
+    module: string | null;
+    path: string | null;
+    userId: string | null;
+    userName: string;
+    teamName: string | null;
+    roleName: string | null;
+    deviceType: string | null;
+    sessionId: string | null;
+    metadata: Record<string, unknown>;
+  }>;
 }
 
 export interface TestVehicle {

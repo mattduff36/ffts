@@ -1,19 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SelectableCard } from '@/components/ui/selectable-card';
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock,
   Copy,
   Filter,
+  Flame,
   Loader2,
   Monitor,
   RefreshCw,
@@ -24,12 +27,27 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  DEFAULT_ERROR_LOG_FILTERS,
+  isHiddenAdminErrorLog,
+  isLocalhostErrorLog,
+  isVisibleWithDefaultErrorLogFilters,
+} from '@/lib/utils/error-log-filters';
 import { ErrorLogEntry } from '../types';
 
 type ErrorSeverity = 'urgent' | 'important' | 'medium' | 'low';
+type ErrorSummaryTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral';
 
 const UNHANDLED_COMPONENTS = ['Global Error Handler', 'Unhandled Promise Rejection', 'Error Boundary'];
 const ERROR_SEVERITY_ORDER: ErrorSeverity[] = ['urgent', 'important', 'medium', 'low'];
+
+interface ErrorSummaryMetric {
+  title: string;
+  value: string;
+  detail: string;
+  tone: ErrorSummaryTone;
+  icon: ReactNode;
+}
 
 interface UserFacingMessageSnapshot {
   title: string | null;
@@ -51,6 +69,49 @@ interface UserActionSnapshot {
   pageUrl: string | null;
   timestamp: string | null;
   ageMs: number | null;
+}
+
+function formatNumber(value: number): string {
+  return value.toLocaleString('en-GB');
+}
+
+function getErrorSummaryClasses(tone: ErrorSummaryTone): string {
+  switch (tone) {
+    case 'success':
+      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+    case 'warning':
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+    case 'danger':
+      return 'border-red-500/30 bg-red-500/10 text-red-100';
+    case 'info':
+      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+    default:
+      return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+  }
+}
+
+function getTopLabel(values: string[]): { label: string; count: number } | null {
+  if (values.length === 0) return null;
+  const counts = new Map<string, number>();
+  values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)[0] || null;
+}
+
+function ErrorSummaryMetricCard({ metric }: { metric: ErrorSummaryMetric }) {
+  return (
+    <div className={`rounded-xl border p-4 ${getErrorSummaryClasses(metric.tone)}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{metric.title}</p>
+          <p className="mt-2 text-xl font-bold">{metric.value}</p>
+        </div>
+        <span className="opacity-85">{metric.icon}</span>
+      </div>
+      <p className="mt-2 text-sm leading-5 opacity-85">{metric.detail}</p>
+    </div>
+  );
 }
 
 function getUserFacingMessage(log: ErrorLogEntry): UserFacingMessageSnapshot | null {
@@ -174,6 +235,7 @@ function getErrorBadgeMeta(severity: ErrorSeverity): {
 
 export function ErrorLogsDebugPanel() {
   const [errorLogs, setErrorLogs] = useState<ErrorLogEntry[]>([]);
+  const [loadingErrorLogs, setLoadingErrorLogs] = useState(true);
   const [clearingErrors, setClearingErrors] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [expandedErrors, setExpandedErrors] = useState<string[]>([]);
@@ -183,12 +245,14 @@ export function ErrorLogsDebugPanel() {
   const lastNotifiedErrorIdRef = useRef<string | null>(null);
   const clearAllConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [filterLocalhost, setFilterLocalhost] = useState(true);
-  const [filterAdminAccount, setFilterAdminAccount] = useState(true);
+  const [filterLocalhost, setFilterLocalhost] = useState<boolean>(DEFAULT_ERROR_LOG_FILTERS.hideLocalhost);
+  const [filterAdminAccount, setFilterAdminAccount] = useState<boolean>(DEFAULT_ERROR_LOG_FILTERS.hideAdminAccount);
   const [filterErrorType, setFilterErrorType] = useState<string>('all');
   const [filterDeviceType, setFilterDeviceType] = useState<string>('all');
   const [filterComponent, setFilterComponent] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [errorSummaryExpanded, setErrorSummaryExpanded] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('viewedErrorLogs');
@@ -216,6 +280,8 @@ export function ErrorLogsDebugPanel() {
   }, []);
 
   const fetchErrorLogs = async () => {
+    setLoadingErrorLogs(true);
+
     try {
       const response = await fetch('/api/debug/error-logs?limit=200', {
         cache: 'no-store',
@@ -291,6 +357,8 @@ export function ErrorLogsDebugPanel() {
       }
     } catch {
       toast.error('Error loading error logs');
+    } finally {
+      setLoadingErrorLogs(false);
     }
   };
 
@@ -402,12 +470,16 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
   const getFilteredErrorLogs = () => {
     let filtered = [...errorLogs];
 
-    if (filterLocalhost) {
-      filtered = filtered.filter((log) => !log.page_url.toLowerCase().includes('localhost'));
-    }
+    if (filterLocalhost && filterAdminAccount) {
+      filtered = filtered.filter(isVisibleWithDefaultErrorLogFilters);
+    } else {
+      if (filterLocalhost) {
+        filtered = filtered.filter((log) => !isLocalhostErrorLog(log));
+      }
 
-    if (filterAdminAccount) {
-      filtered = filtered.filter((log) => log.user_email !== 'template-admin@example.com');
+      if (filterAdminAccount) {
+        filtered = filtered.filter((log) => !isHiddenAdminErrorLog(log));
+      }
     }
 
     if (filterErrorType !== 'all') {
@@ -441,13 +513,66 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
 
   const uniqueErrorTypes = Array.from(new Set(errorLogs.map((log) => log.error_type))).sort();
   const uniqueComponents = Array.from(new Set(errorLogs.map((log) => log.component_name).filter((c): c is string => c != null))).sort();
+  const filteredErrorLogs = getFilteredErrorLogs();
+  const criticalErrors = filteredErrorLogs.filter((log) => getErrorSeverity(log) === 'urgent').length;
+  const handledWithMessage = filteredErrorLogs.filter((log) => getErrorSeverity(log) === 'important').length;
+  const mobileErrors = filteredErrorLogs.filter((log) => log.user_agent.includes('Mobile') || log.user_agent.includes('iPhone') || log.user_agent.includes('Android')).length;
+  const topComponent = getTopLabel(filteredErrorLogs.map((log) => log.component_name || 'Unknown component'));
+  const topErrorType = getTopLabel(filteredErrorLogs.map((log) => log.error_type));
+  const hasActiveErrorFilters = Boolean(
+    searchQuery ||
+    filterErrorType !== 'all' ||
+    filterDeviceType !== 'all' ||
+    filterComponent !== 'all' ||
+    filterLocalhost ||
+    filterAdminAccount
+  );
+  const errorSummaryHeadline = filteredErrorLogs.length === 0
+    ? 'No errors match the current filters.'
+    : `${formatNumber(filteredErrorLogs.length)} visible errors are loaded, with ${formatNumber(criticalErrors)} marked as critical and ${formatNumber(handledWithMessage)} handled with a user-facing message.`;
+  const errorSummaryMetrics: ErrorSummaryMetric[] = [
+    {
+      title: 'Critical errors',
+      value: formatNumber(criticalErrors),
+      detail: criticalErrors > 0
+        ? 'These are the highest-priority records because the user may not have received a helpful recovery message.'
+        : 'No visible errors are currently marked as critical.',
+      tone: criticalErrors > 0 ? 'danger' : 'success',
+      icon: <Flame className="h-5 w-5" />,
+    },
+    {
+      title: 'Handled errors',
+      value: formatNumber(handledWithMessage),
+      detail: 'These were caught by the app and should have shown a toast, inline state, or modal to the user.',
+      tone: handledWithMessage > 0 ? 'warning' : 'neutral',
+      icon: <CheckCircle2 className="h-5 w-5" />,
+    },
+    {
+      title: 'Most affected area',
+      value: topComponent?.label || 'No data',
+      detail: topComponent ? `${formatNumber(topComponent.count)} visible errors came from this component or route.` : 'No component signal is available yet.',
+      tone: 'info',
+      icon: <AlertTriangle className="h-5 w-5" />,
+    },
+    {
+      title: 'Device pattern',
+      value: `${formatNumber(mobileErrors)} mobile`,
+      detail: topErrorType ? `Most common error type: ${topErrorType.label} (${formatNumber(topErrorType.count)} records).` : 'No error type pattern is available yet.',
+      tone: mobileErrors > 0 ? 'warning' : 'neutral',
+      icon: <Monitor className="h-5 w-5" />,
+    },
+  ];
 
   return (
-    <Card>
+    <Card className="overflow-hidden border-brand-yellow/20 bg-slate-950/60">
+      <div className="pointer-events-none h-1 bg-gradient-to-r from-orange-500 to-red-600" />
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Application Error Log</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <XCircle className="h-5 w-5 text-red-400" />
+              Application Error Log
+            </CardTitle>
             <CardDescription>Track all application errors and exceptions (Last 200 entries)</CardDescription>
           </div>
           <div className="flex gap-2">
@@ -473,155 +598,203 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
         </div>
       </CardHeader>
       <CardContent>
-        <div className="mb-4 p-3 border border-border rounded-lg bg-muted/50">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold text-sm text-foreground">Filters</h3>
-            <Badge variant="secondary" className="ml-auto text-xs">
-              {getFilteredErrorLogs().length} / {errorLogs.length}
-            </Badge>
-          </div>
-
-          <div className="mb-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search errors..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-11 h-9"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <SelectableCard selected={filterLocalhost} onSelect={() => setFilterLocalhost(!filterLocalhost)} variant="default" className="h-9">
-              <span className="text-xs font-medium">Hide Localhost</span>
-            </SelectableCard>
-
-            <SelectableCard selected={filterAdminAccount} onSelect={() => setFilterAdminAccount(!filterAdminAccount)} variant="default" className="h-9">
-              <span className="text-xs font-medium">Hide Admin</span>
-            </SelectableCard>
-
-            <div>
-              <Select value={filterErrorType} onValueChange={setFilterErrorType}>
-                <SelectTrigger className="w-full h-9">
-                  <SelectValue placeholder="Error Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  {uniqueErrorTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Select value={filterDeviceType} onValueChange={setFilterDeviceType}>
-                <SelectTrigger className="w-full h-9">
-                  <SelectValue placeholder="Device" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Devices</SelectItem>
-                  <SelectItem value="mobile">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="h-3 w-3" />
-                      Mobile
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="desktop">
-                    <div className="flex items-center gap-2">
-                      <Monitor className="h-3 w-3" />
-                      Desktop
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {uniqueComponents.length > 0 && (
-              <div className="lg:col-span-4">
-                <Select value={filterComponent} onValueChange={setFilterComponent}>
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue placeholder="Component" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Components</SelectItem>
-                    {uniqueComponents.map((component) => (
-                      <SelectItem key={component} value={component}>
-                        {component}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="mb-4 rounded-xl border border-slate-700/70 bg-slate-950/35">
+          <button
+            type="button"
+            onClick={() => setErrorSummaryExpanded((current) => !current)}
+            className="flex w-full items-center gap-2 px-3 py-3 text-left"
+            aria-expanded={errorSummaryExpanded}
+          >
+            {errorSummaryExpanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-brand-yellow" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-brand-yellow" />
             )}
-          </div>
+            <AlertTriangle className="h-4 w-4 shrink-0 text-brand-yellow" />
+            <span className="shrink-0 text-sm font-semibold text-foreground">Error Summary</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {errorSummaryHeadline}
+            </span>
+            <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+              {formatNumber(filteredErrorLogs.length)}
+            </Badge>
+          </button>
 
-          {(searchQuery ||
-            filterErrorType !== 'all' ||
-            filterDeviceType !== 'all' ||
-            filterComponent !== 'all' ||
-            filterLocalhost ||
-            filterAdminAccount) && (
-            <div className="mt-3 pt-3 border-t border-border">
-              <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                <span className="text-muted-foreground">Active:</span>
-                {filterLocalhost && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    No Localhost
-                  </Badge>
-                )}
-                {filterAdminAccount && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    No Admin
-                  </Badge>
-                )}
-                {filterErrorType !== 'all' && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    {filterErrorType}
-                  </Badge>
-                )}
-                {filterDeviceType !== 'all' && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    {filterDeviceType === 'mobile' ? '📱' : '🖥️'}
-                  </Badge>
-                )}
-                {filterComponent !== 'all' && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    {filterComponent}
-                  </Badge>
-                )}
-                {searchQuery && (
-                  <Badge variant="secondary" className="text-xs h-5">
-                    Search
-                  </Badge>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 text-xs px-2 ml-auto"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setFilterErrorType('all');
-                    setFilterDeviceType('all');
-                    setFilterComponent('all');
-                    setFilterLocalhost(true);
-                    setFilterAdminAccount(true);
-                  }}
-                >
-                  Clear
-                </Button>
-              </div>
+          {errorSummaryExpanded && (
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-700/70 p-3 md:grid-cols-2 xl:grid-cols-4">
+              {errorSummaryMetrics.map((metric) => (
+                <ErrorSummaryMetricCard key={metric.title} metric={metric} />
+              ))}
             </div>
           )}
         </div>
 
-        <div className="mb-4 rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
+        <div className="mb-4 rounded-xl border border-slate-700/70 bg-slate-950/35">
+          <button
+            type="button"
+            onClick={() => setFiltersExpanded((current) => !current)}
+            className="flex w-full items-center gap-2 px-3 py-3 text-left"
+            aria-expanded={filtersExpanded}
+          >
+            {filtersExpanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-brand-yellow" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-brand-yellow" />
+            )}
+            <Filter className="h-4 w-4 shrink-0 text-brand-yellow" />
+            <span className="shrink-0 text-sm font-semibold text-foreground">Filters</span>
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+              <span className="shrink-0 text-xs text-muted-foreground">Active:</span>
+              {hasActiveErrorFilters ? (
+                <>
+                  {filterLocalhost && (
+                    <Badge variant="secondary" className="h-5 shrink-0 text-xs">
+                      No Localhost
+                    </Badge>
+                  )}
+                  {filterAdminAccount && (
+                    <Badge variant="secondary" className="h-5 shrink-0 text-xs">
+                      No Admin
+                    </Badge>
+                  )}
+                  {filterErrorType !== 'all' && (
+                    <Badge variant="secondary" className="h-5 max-w-[120px] shrink-0 truncate text-xs">
+                      {filterErrorType}
+                    </Badge>
+                  )}
+                  {filterDeviceType !== 'all' && (
+                    <Badge variant="secondary" className="h-5 shrink-0 text-xs">
+                      {filterDeviceType}
+                    </Badge>
+                  )}
+                  {filterComponent !== 'all' && (
+                    <Badge variant="secondary" className="h-5 max-w-[160px] shrink-0 truncate text-xs">
+                      {filterComponent}
+                    </Badge>
+                  )}
+                  {searchQuery && (
+                    <Badge variant="secondary" className="h-5 shrink-0 text-xs">
+                      Search
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                <Badge variant="outline" className="h-5 shrink-0 border-slate-500/30 bg-slate-500/10 text-xs text-slate-300">
+                  None
+                </Badge>
+              )}
+            </div>
+            <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+              {filteredErrorLogs.length} / {errorLogs.length}
+            </Badge>
+          </button>
+
+          {filtersExpanded && (
+            <div className="space-y-3 border-t border-slate-700/70 p-3">
+              <div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search errors..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 pl-11"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <SelectableCard selected={filterLocalhost} onSelect={() => setFilterLocalhost(!filterLocalhost)} variant="default" className="h-9">
+                  <span className="text-xs font-medium">Hide Localhost</span>
+                </SelectableCard>
+
+                <SelectableCard selected={filterAdminAccount} onSelect={() => setFilterAdminAccount(!filterAdminAccount)} variant="default" className="h-9">
+                  <span className="text-xs font-medium">Hide Admin</span>
+                </SelectableCard>
+
+                <div>
+                  <Select value={filterErrorType} onValueChange={setFilterErrorType}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder="Error Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      {uniqueErrorTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Select value={filterDeviceType} onValueChange={setFilterDeviceType}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder="Device" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Devices</SelectItem>
+                      <SelectItem value="mobile">
+                        <div className="flex items-center gap-2">
+                          <Smartphone className="h-3 w-3" />
+                          Mobile
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="desktop">
+                        <div className="flex items-center gap-2">
+                          <Monitor className="h-3 w-3" />
+                          Desktop
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {uniqueComponents.length > 0 && (
+                  <div className="lg:col-span-4">
+                    <Select value={filterComponent} onValueChange={setFilterComponent}>
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Component" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Components</SelectItem>
+                        {uniqueComponents.map((component) => (
+                          <SelectItem key={component} value={component}>
+                            {component}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {hasActiveErrorFilters && (
+                <div className="flex justify-end border-t border-slate-700/70 pt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterErrorType('all');
+                      setFilterDeviceType('all');
+                      setFilterComponent('all');
+                      setFilterLocalhost(true);
+                      setFilterAdminAccount(true);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mb-4 rounded-xl border border-slate-700/70 bg-slate-950/35 px-3 py-3">
           <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Badge Key</p>
@@ -636,7 +809,7 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
               return (
                 <div
                   key={severity}
-                  className="flex items-start gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2"
+                  className="flex items-start gap-2 rounded-md border border-slate-700/70 bg-slate-950/45 px-2.5 py-2"
                 >
                   <Badge variant={badgeMeta.variant} className={`${badgeMeta.className} shrink-0`}>
                     Error
@@ -651,13 +824,15 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
           </div>
         </div>
 
-        {errorLogs.length === 0 ? (
+        {loadingErrorLogs ? (
+          <PanelLoader message="Loading error logs..." accent="debug" className="py-8" />
+        ) : errorLogs.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50 text-green-500" />
             <p className="font-semibold">No errors logged</p>
             <p className="text-sm mt-1">Application errors will appear here when they occur</p>
           </div>
-        ) : getFilteredErrorLogs().length === 0 ? (
+        ) : filteredErrorLogs.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Filter className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p className="font-semibold">No errors match your filters</p>
@@ -681,7 +856,7 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
         ) : (
           <div className="space-y-6">
             {(() => {
-              const filteredLogs = getFilteredErrorLogs();
+              const filteredLogs = filteredErrorLogs;
               const newErrors = filteredLogs.filter((log) => !viewedErrors.has(log.id));
               const viewedErrorsList = filteredLogs.filter((log) => viewedErrors.has(log.id));
 
@@ -712,10 +887,10 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                           return (
                             <div
                               key={log.id}
-                              className="border border-red-200 dark:border-red-900 rounded-lg overflow-hidden hover:border-red-300 dark:hover:border-red-800 transition-colors"
+                              className="overflow-hidden rounded-lg border border-red-500/30 bg-red-500/5 transition-colors hover:border-red-500/60"
                             >
                               <div
-                                className="p-4 cursor-pointer hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors"
+                                className="cursor-pointer p-4 transition-colors hover:bg-red-500/10"
                                 onClick={() => toggleErrorExpanded(log.id)}
                               >
                                 <div className="flex items-start gap-3">
@@ -741,8 +916,8 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                                         </Badge>
                                       )}
                                       {isMobile && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          📱 Mobile
+                                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                          Mobile
                                         </Badge>
                                       )}
                                     </div>
@@ -791,7 +966,7 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                               </div>
 
                               {isExpanded && (
-                                <div className="border-t border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10 p-4 space-y-3">
+                                <div className="space-y-3 border-t border-red-500/30 bg-slate-900/55 p-4">
                                   <div>
                                     <p className="text-xs font-semibold text-muted-foreground mb-1">PAGE URL:</p>
                                     <p className="text-xs font-mono bg-muted/50 rounded p-2 break-all">{log.page_url}</p>
@@ -879,10 +1054,10 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                           return (
                             <div
                               key={log.id}
-                              className="border border-red-200 dark:border-red-900 rounded-lg overflow-hidden hover:border-red-300 dark:hover:border-red-800 transition-colors"
+                              className="overflow-hidden rounded-lg border border-slate-700/70 bg-slate-950/30 transition-colors hover:border-orange-500/50"
                             >
                               <div
-                                className="p-4 cursor-pointer hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors"
+                                className="cursor-pointer p-4 transition-colors hover:bg-orange-500/5"
                                 onClick={() => toggleErrorExpanded(log.id)}
                               >
                                 <div className="flex items-start gap-3">
@@ -908,8 +1083,8 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                                         </Badge>
                                       )}
                                       {isMobile && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          📱 Mobile
+                                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                          Mobile
                                         </Badge>
                                       )}
                                     </div>
@@ -958,7 +1133,7 @@ ${log.error_stack ? `STACK TRACE:\n${log.error_stack}\n\n` : ''}${log.additional
                               </div>
 
                               {isExpanded && (
-                                <div className="border-t border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10 p-4 space-y-3">
+                                <div className="space-y-3 border-t border-slate-700/70 bg-slate-900/55 p-4">
                                   <div>
                                     <p className="text-xs font-semibold text-muted-foreground mb-1">PAGE URL:</p>
                                     <p className="text-xs font-mono bg-muted/50 rounded p-2 break-all">{log.page_url}</p>

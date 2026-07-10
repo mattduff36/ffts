@@ -28,7 +28,7 @@ describeOrSkip('Test Vehicle Purge API', () => {
   let testVehicleId: string;
   let testInspectionId: string;
   let testTaskId: string;
-  const TEST_REG = 'TE57TEST';
+  const TEST_REG = 'ZZ99TEST';
 
   beforeAll(async () => {
     // Create test vehicle
@@ -98,7 +98,7 @@ describeOrSkip('Test Vehicle Purge API', () => {
   describe('GET /api/debug/test-vehicles', () => {
     it('should list vehicles matching prefix', async () => {
       const response = await fetch(
-        'http://localhost:4000/api/debug/test-vehicles?prefix=TE57',
+        'http://localhost:4000/api/debug/test-vehicles?prefix=ZZ99',
         {
           headers: {
             'Content-Type': 'application/json',
@@ -113,11 +113,11 @@ describeOrSkip('Test Vehicle Purge API', () => {
 
   describe('POST /api/debug/test-vehicles', () => {
     it('should reject vehicles not matching prefix', async () => {
-      // Try to purge a non-TE57 vehicle
+      // Try to purge a non-ZZ99 vehicle
       const { data: nonTestVehicle } = await supabase
         .from('vans')
         .select('id')
-        .not('reg_number', 'ilike', 'TE57%')
+        .not('reg_number', 'ilike', 'ZZ99%')
         .limit(1)
         .single();
 
@@ -132,7 +132,7 @@ describeOrSkip('Test Vehicle Purge API', () => {
             body: JSON.stringify({
               mode: 'preview',
               vehicle_ids: [nonTestVehicle.id],
-              prefix: 'TE57',
+              prefix: 'ZZ99',
               actions: { inspections: true },
             }),
           }
@@ -163,7 +163,7 @@ describeOrSkip('Test Vehicle Purge API', () => {
       // Preview should not delete anything
       // (Would need auth token to actually test, so we just verify structure)
       expect(testVehicleId).toBeDefined();
-      expect(TEST_REG).toMatch(/^TE57/);
+      expect(TEST_REG).toMatch(/^ZZ99/);
     });
 
     it('should execute purge and delete records', async () => {
@@ -266,13 +266,13 @@ describeOrSkip('Test Vehicle Purge API', () => {
       const { data: nonTestVehicle } = await supabase
         .from('vans')
         .select('id, reg_number')
-        .not('reg_number', 'ilike', 'TE57%')
+        .not('reg_number', 'ilike', 'ZZ99%')
         .limit(1)
         .single();
 
       if (nonTestVehicle) {
         // Verify prefix guard would reject this
-        expect(nonTestVehicle.reg_number).not.toMatch(/^TE57/i);
+        expect(nonTestVehicle.reg_number).not.toMatch(/^ZZ99/i);
       }
     });
 
@@ -322,9 +322,9 @@ describeOrSkip('Test Vehicle Purge API', () => {
 
     it('should enforce prefix matching on all operations', () => {
       // Security check: vehicles must match prefix
-      const testReg = 'TE57ABC';
+      const testReg = 'ZZ99ABC';
       const invalidReg = 'AB12CDE';
-      const prefix = 'TE57';
+      const prefix = 'ZZ99';
 
       expect(testReg.toUpperCase().startsWith(prefix.toUpperCase())).toBe(true);
       expect(invalidReg.toUpperCase().startsWith(prefix.toUpperCase())).toBe(false);

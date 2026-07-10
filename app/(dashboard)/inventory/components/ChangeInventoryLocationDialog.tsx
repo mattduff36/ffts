@@ -11,15 +11,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { InventoryLocation, InventoryUserLocation } from '../types';
+import { InventoryLocationSelect } from './InventoryLocationSelect';
 
 interface ChangeInventoryLocationDialogProps {
   open: boolean;
@@ -47,6 +41,10 @@ export function ChangeInventoryLocationDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [isUnsetting, setIsUnsetting] = useState(false);
   const isSameLocation = hasActiveExistingLocation && locationId === userLocation?.location_id;
+  const selectedLocation = locations.find((location) => location.id === locationId) || null;
+  const selectedFleetLabel = selectedLocation
+    ? [selectedLocation.linked_asset_label, selectedLocation.linked_asset_nickname].filter(Boolean).join(' - ')
+    : '';
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +79,7 @@ export function ChangeInventoryLocationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !isSaving && !isUnsetting) onClose(); }}>
-      <DialogContent className="max-w-lg border-slate-700 bg-slate-900 text-white">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-slate-700 bg-slate-900 text-white">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{hasActiveExistingLocation ? 'Change Inventory Location' : 'Set Inventory Location'}</DialogTitle>
@@ -95,16 +93,18 @@ export function ChangeInventoryLocationDialog({
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>New Location</Label>
-              <Select value={locationId} onValueChange={setLocationId}>
-                <SelectTrigger className="border-slate-600 bg-slate-800">
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <InventoryLocationSelect
+                value={locationId}
+                onValueChange={setLocationId}
+                locations={locations}
+              />
+              {selectedLocation ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedLocation.linked_asset_type
+                    ? `Saving this location will set your current fleet assignment to ${selectedLocation.linked_asset_type.toUpperCase()} ${selectedFleetLabel || selectedLocation.name}.`
+                    : 'Saving this location will clear any current fleet asset assignment on your profile.'}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">

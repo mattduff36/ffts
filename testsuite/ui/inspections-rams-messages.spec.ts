@@ -1,6 +1,6 @@
 /**
- * @tags @inspections @rams @messages
- * Tests page loading for daily checks, RAMS, and messages.
+ * @tags @inspections @messages
+ * Tests page loading for daily checks and messages.
  * Auth: employee storage state (via employee project).
  * NON-DESTRUCTIVE: read-only.
  */
@@ -14,9 +14,7 @@ test.describe('@inspections Daily Checks Module', () => {
     await page.goto('/van-inspections');
     await waitForAppReady(page);
 
-    const bodyText = await page.locator('body').innerText();
-    const hasInspectionContent = /daily check|inspection|van|plant|hgv/i.test(bodyText);
-    expect(hasInspectionContent, 'Daily checks module content should load').toBeTruthy();
+    await expect(page.locator('body')).toContainText(/daily check|inspection|van|plant|hgv/i, { timeout: 10_000 });
 
     const errors = capture.getErrors();
     expect(errors, 'No page errors on inspections').toHaveLength(0);

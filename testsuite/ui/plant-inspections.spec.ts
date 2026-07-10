@@ -81,8 +81,7 @@ test.describe('Plant Daily Checks — Content Verification', () => {
     await page.goto('/plant-inspections');
     await waitForAppReady(page);
 
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText.toLowerCase()).toContain('plant');
+    await expect(page.locator('body')).toContainText(/plant/i, { timeout: 10_000 });
   });
 
   test('list page uses daily check terminology', async ({ page }) => {

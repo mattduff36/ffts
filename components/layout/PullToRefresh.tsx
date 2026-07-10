@@ -3,6 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 
+function isInsideMobileScrollLock(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('[data-mobile-scroll-lock="true"]'));
+}
+
 export function PullToRefresh() {
   const [isPWA, setIsPWA] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -39,6 +43,12 @@ export function PullToRefresh() {
     if (!isPWA) return;
 
     const handleTouchStart = (e: TouchEvent) => {
+      if (isInsideMobileScrollLock(e.target)) {
+        touchStartY.current = null;
+        isPulling.current = false;
+        return;
+      }
+
       // Only trigger if at the top of the page
       if (window.scrollY === 0) {
         touchStartY.current = e.touches[0].clientY;
@@ -47,6 +57,7 @@ export function PullToRefresh() {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      if (isInsideMobileScrollLock(e.target)) return;
       if (!isPulling.current || touchStartY.current === null) return;
 
       touchCurrentY.current = e.touches[0].clientY;

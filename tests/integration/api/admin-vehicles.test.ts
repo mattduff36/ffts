@@ -127,10 +127,10 @@ describe('Admin Vehicles API', () => {
       expect(category.name).toBe('Truck');
     });
 
-    it('should support Van category with 14-point checklist', () => {
-      const category = { name: 'Van', checklist_items: 14 };
+    it('should support Van category with 15-point checklist', () => {
+      const category = { name: 'Van', checklist_items: 15 };
       expect(category.name).toBe('Van');
-      expect(category.checklist_items).toBe(14);
+      expect(category.checklist_items).toBe(15);
     });
   });
 });

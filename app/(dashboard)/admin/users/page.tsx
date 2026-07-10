@@ -2,12 +2,14 @@
 
 import { Fragment, useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  dialogContentViewportClassName,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -31,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 import {
   UserPlus,
   Search,
@@ -38,6 +42,7 @@ import {
   Trash2,
   Shield,
   User,
+  Users,
   Mail,
   Calendar,
   Loader2,
@@ -51,6 +56,11 @@ import { useBrowserSupabaseClient } from '@/lib/hooks/useBrowserSupabaseClient';
 import { fetchAdminTeamDirectory } from '@/lib/admin/team-directory-client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import {
+  SensitiveModuleGate,
+  SensitiveModuleSessionManager,
+  useSensitiveModuleAccess,
+} from '@/components/security/SensitiveModuleGate';
 import type { Database } from '@/types/database';
 import type { WorkShiftPattern, WorkShiftTemplate } from '@/types/work-shifts';
 import { WORK_SHIFT_DAY_LABELS, WORK_SHIFT_DAY_ORDER } from '@/types/work-shifts';
@@ -58,25 +68,25 @@ import { getRoleSortPriority } from '@/lib/config/roles-core';
 import { calculateNewUserRemainingLeaveDefault, roundToNearestHalfDay } from '@/lib/utils/absence-onboarding';
 import { isClientSessionPausedError } from '@/lib/app-auth/session-error';
 import { formatDateTime } from '@/lib/utils/date';
-import { isHiddenUserManagementUser } from '@/lib/utils/hidden-superadmin';
+import { filterHiddenSystemTestAccounts } from '@/lib/utils/system-test-accounts';
 import {
   computeQuickEditFloatingPosition,
   type FloatingPositionResult,
 } from '@/lib/ui/quick-edit-floating-position';
 
-const RoleManagement = dynamic(() => import('@/components/admin/RoleManagement').then(m => ({ default: m.RoleManagement })), { 
+const RoleManagement = dynamic(() => import('@/components/admin/RoleManagement').then(m => ({ default: m.RoleManagement })), {
   ssr: false,
-  loading: () => <div className="flex items-center justify-center p-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+  loading: () => <PanelLoader message="Loading role management..." className="py-12" />
 });
 
 const JobRolesTab = dynamic(() => import('@/components/admin/JobRolesTab').then(m => ({ default: m.JobRolesTab })), {
   ssr: false,
-  loading: () => <div className="flex items-center justify-center p-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+  loading: () => <PanelLoader message="Loading job roles..." className="py-12" />
 });
 
 const TeamsTab = dynamic(() => import('@/components/admin/TeamsTab').then(m => ({ default: m.TeamsTab })), {
   ssr: false,
-  loading: () => <div className="flex items-center justify-center p-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+  loading: () => <PanelLoader message="Loading teams..." className="py-12" />
 });
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -95,13 +105,18 @@ type ProfileWithRole = Omit<Profile, 'role'> & {
   is_placeholder?: boolean | null;
 };
 interface UserActivitySummary {
-  id?: string;
   email?: string;
   last_sign_in_at?: string | null;
   last_active_at?: string | null;
-  profile?: ProfileWithRole | null;
 }
-type ProfileWithEmail = ProfileWithRole & UserActivitySummary;
+interface AdminFleetAssignmentSummary {
+  asset_type: 'van' | 'hgv' | 'plant';
+  asset_label: string | null;
+  asset_nickname: string | null;
+}
+type ProfileWithEmail = ProfileWithRole & UserActivitySummary & {
+  current_fleet_assignment?: AdminFleetAssignmentSummary | null;
+};
 
 type TabType = 'users' | 'roles' | 'teams' | 'permissions';
 type UserStatusTab = 'active' | 'deleted';
@@ -230,6 +245,34 @@ function isDeletedUserProfile(user: { full_name?: string | null }): boolean {
   return Boolean(user.full_name?.includes('(Deleted User)'));
 }
 
+function formatAdminFleetAssignment(assignment: AdminFleetAssignmentSummary | null | undefined): string {
+  if (!assignment) return '-';
+  const assetLabel = [assignment.asset_label, assignment.asset_nickname].filter(Boolean).join(' - ');
+  return `${assignment.asset_type.toUpperCase()} ${assetLabel || 'Fleet asset'}`;
+}
+
+function UserTableAvatar({ user }: { user: ProfileWithEmail }) {
+  const displayName = user.full_name || user.email || 'User';
+
+  return (
+    <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <User className="h-4 w-4 text-slate-600 dark:text-muted-foreground" />
+      </div>
+      {user.avatar_url ? (
+        <Image
+          src={user.avatar_url}
+          alt={`${displayName} avatar`}
+          fill
+          sizes="32px"
+          className="object-cover"
+          loading="lazy"
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function isExpectedUserAdminError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes('Forbidden:');
@@ -242,10 +285,22 @@ function formatAdminActivityTimestamp(value?: string | null): string {
   return absolute || 'Unknown';
 }
 
-function isSupervisorRole(role?: { name?: string | null; display_name?: string | null } | null): boolean {
+function matchesNamedRole(
+  role: { name?: string | null; display_name?: string | null } | null | undefined,
+  expectedName: string
+): boolean {
+  const normalized = expectedName.trim().toLowerCase();
   const roleName = role?.name?.trim().toLowerCase();
   const roleDisplayName = role?.display_name?.trim().toLowerCase();
-  return roleName === 'supervisor' || roleDisplayName === 'supervisor';
+  return roleName === normalized || roleDisplayName === normalized;
+}
+
+function isSupervisorRole(role?: { name?: string | null; display_name?: string | null } | null): boolean {
+  return matchesNamedRole(role, 'supervisor');
+}
+
+function isContractorRole(role?: { name?: string | null; display_name?: string | null } | null): boolean {
+  return matchesNamedRole(role, 'contractor');
 }
 
 export default function UsersAdminPage() {
@@ -253,6 +308,7 @@ export default function UsersAdminPage() {
   const searchParams = useSearchParams();
   const { user: currentUser, profile, isAdmin, isSuperAdmin, isActualSuperAdmin, loading: authLoading } = useAuth();
   const { hasPermission: canManageUsers, loading: permissionLoading } = usePermissionCheck('admin-users', false);
+  const sensitiveAccess = useSensitiveModuleAccess('admin-users', { enabled: canManageUsers });
   const supabase = useBrowserSupabaseClient();
   const [activeTab, setActiveTab] = useState<TabType>('users');
   const isAdminActor = isAdmin || isSuperAdmin || isActualSuperAdmin;
@@ -260,13 +316,14 @@ export default function UsersAdminPage() {
   const canManageRoleDefinitions = isAdminActor || isManagerActor;
   const canEditRolePermissions = isAdminActor;
   const canQuickEditAssignments = isAdminActor;
+  const canAccessUserAdmin = canManageUsers && sensitiveAccess.canAccess;
 
   // State
   const [users, setUsers] = useState<ProfileWithEmail[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<ProfileWithEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'manager' | 'employee'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'manager' | 'supervisor' | 'employee' | 'contractor'>('all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [managerFilter, setManagerFilter] = useState<string>('all');
   const [userStatusTab, setUserStatusTab] = useState<UserStatusTab>('active');
@@ -282,15 +339,32 @@ export default function UsersAdminPage() {
   }>>([]);
 
   useEffect(() => {
+    if (authLoading || permissionLoading || !currentUser || !profile) {
+      return;
+    }
+
     const requestedTab = (searchParams.get('tab') || 'users') as TabType;
-    const validTabs: TabType[] = ['users', 'roles', 'teams', 'permissions'];
+    const validTabs: TabType[] = [
+      'users',
+      ...(canManageRoleDefinitions ? (['roles', 'teams'] as const) : []),
+      ...(canEditRolePermissions ? (['permissions'] as const) : []),
+    ];
     if (validTabs.includes(requestedTab)) {
       setActiveTab(requestedTab);
       return;
     }
     setActiveTab('users');
     router.replace('/admin/users?tab=users', { scroll: false });
-  }, [searchParams, router]);
+  }, [
+    authLoading,
+    permissionLoading,
+    currentUser,
+    profile,
+    canEditRolePermissions,
+    canManageRoleDefinitions,
+    searchParams,
+    router,
+  ]);
 
   function handleTabChange(nextTab: TabType) {
     setActiveTab(nextTab);
@@ -303,9 +377,10 @@ export default function UsersAdminPage() {
   const [deleteOptionsDialogOpen, setDeleteOptionsDialogOpen] = useState(false);
   const [deletionMode, setDeletionMode] = useState<'keep-data' | 'delete-all'>('keep-data');
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
+  const [resetSensitivePinDialogOpen, setResetSensitivePinDialogOpen] = useState(false);
   const [passwordDisplayDialogOpen, setPasswordDisplayDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ProfileWithEmail | null>(null);
-  
+
   // Password display states
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [emailSent, setEmailSent] = useState(false);
@@ -350,7 +425,11 @@ export default function UsersAdminPage() {
     total: usersForCurrentStatus.length,
     admins: usersForCurrentStatus.filter((u) => u.role?.role_class === 'admin' || u.role?.name === 'admin').length,
     managers: usersForCurrentStatus.filter((u) => u.role?.role_class === 'manager').length,
-    employees: usersForCurrentStatus.filter((u) => u.role?.role_class === 'employee').length,
+    supervisors: usersForCurrentStatus.filter((u) => isSupervisorRole(u.role)).length,
+    employees: usersForCurrentStatus.filter(
+      (u) => u.role?.role_class === 'employee' && !isSupervisorRole(u.role) && !isContractorRole(u.role)
+    ).length,
+    contractors: usersForCurrentStatus.filter((u) => isContractorRole(u.role)).length,
   };
 
   const managerNameById = useMemo(() => {
@@ -380,7 +459,7 @@ export default function UsersAdminPage() {
 
   const getUserRolePriority = useMemo(() => {
     return (user: ProfileWithEmail) => {
-      if (user.email === 'template-admin@example.com') {
+      if (user.email === 'admin@mpdee.co.uk') {
         return getRoleSortPriority('admin');
       }
 
@@ -465,6 +544,7 @@ export default function UsersAdminPage() {
       .select(`
         id,
         full_name,
+        avatar_url,
         phone_number,
         employee_id,
         created_at,
@@ -483,9 +563,65 @@ export default function UsersAdminPage() {
       `)
       .order('full_name', { ascending: true });
 
-    if (profilesError) {
-      console.warn('Browser profile query failed; falling back to admin users API profiles:', profilesError);
-    }
+    if (profilesError) throw profilesError;
+    const profileRows = (profiles as unknown as ProfileWithRole[]) || [];
+
+    const profileIds = profileRows.map((profile) => profile.id);
+    const { data: assignmentRows, error: assignmentError } = profileIds.length > 0
+      ? await supabase
+        .from('profile_fleet_assignments')
+        .select(`
+          user_id,
+          linked_van_id,
+          linked_hgv_id,
+          linked_plant_id,
+          van:vans!profile_fleet_assignments_linked_van_id_fkey(reg_number, nickname),
+          hgv:hgvs!profile_fleet_assignments_linked_hgv_id_fkey(reg_number, nickname),
+          plant:plant!profile_fleet_assignments_linked_plant_id_fkey(plant_id, reg_number, nickname)
+        `)
+        .in('user_id', profileIds)
+        .is('ended_at', null)
+      : { data: [], error: null };
+
+    if (assignmentError) throw assignmentError;
+
+    const assignmentByUserId = new Map<string, AdminFleetAssignmentSummary>();
+    ((assignmentRows || []) as Array<{
+      user_id: string;
+      linked_van_id: string | null;
+      linked_hgv_id: string | null;
+      linked_plant_id: string | null;
+      van?: { reg_number: string | null; nickname: string | null } | { reg_number: string | null; nickname: string | null }[] | null;
+      hgv?: { reg_number: string | null; nickname: string | null } | { reg_number: string | null; nickname: string | null }[] | null;
+      plant?: { plant_id: string | null; reg_number: string | null; nickname: string | null } | { plant_id: string | null; reg_number: string | null; nickname: string | null }[] | null;
+    }>).forEach((assignment) => {
+      const van = Array.isArray(assignment.van) ? assignment.van[0] : assignment.van;
+      const hgv = Array.isArray(assignment.hgv) ? assignment.hgv[0] : assignment.hgv;
+      const plant = Array.isArray(assignment.plant) ? assignment.plant[0] : assignment.plant;
+      if (assignment.linked_van_id) {
+        assignmentByUserId.set(assignment.user_id, {
+          asset_type: 'van',
+          asset_label: van?.reg_number || null,
+          asset_nickname: van?.nickname || null,
+        });
+        return;
+      }
+      if (assignment.linked_hgv_id) {
+        assignmentByUserId.set(assignment.user_id, {
+          asset_type: 'hgv',
+          asset_label: hgv?.reg_number || null,
+          asset_nickname: hgv?.nickname || null,
+        });
+        return;
+      }
+      if (assignment.linked_plant_id) {
+        assignmentByUserId.set(assignment.user_id, {
+          asset_type: 'plant',
+          asset_label: plant?.reg_number || plant?.plant_id || null,
+          asset_nickname: plant?.nickname || null,
+        });
+      }
+    });
 
     // Fetch auth users to get emails (via API route)
     const response = await fetch('/api/admin/users/list-with-emails');
@@ -495,31 +631,19 @@ export default function UsersAdminPage() {
     }
     const { users: authUsers } = await response.json();
 
-    const typedAuthUsers = (authUsers || []) as Array<UserActivitySummary & { id: string }>;
     // Create a map of auth details by user id.
     const authUserMap = new Map<string, UserActivitySummary & { id: string }>(
-      typedAuthUsers.map((u) => [u.id, u])
+      authUsers?.map((u: UserActivitySummary & { id: string }) => [u.id, u]) || []
     );
-    const profileMap = new Map<string, ProfileWithRole>();
-    const browserProfiles = profilesError ? [] : ((profiles as unknown as ProfileWithRole[]) || []);
-    browserProfiles.forEach((profile) => {
-      profileMap.set(profile.id, profile);
-    });
-    typedAuthUsers.forEach((authUser) => {
-      if (authUser.profile && !profileMap.has(authUser.profile.id)) {
-        profileMap.set(authUser.profile.id, authUser.profile);
-      }
-    });
 
-    // Merge profiles with emails. The API profile fallback keeps this page useful if browser RLS hides profiles.
-    return Array.from(profileMap.values())
-      .map(profile => ({
-        ...profile,
-        email: authUserMap.get(profile.id)?.email || '',
-        last_sign_in_at: authUserMap.get(profile.id)?.last_sign_in_at || null,
-        last_active_at: authUserMap.get(profile.id)?.last_active_at || null,
-      }))
-      .filter(user => !isHiddenUserManagementUser(user)) || [] as ProfileWithEmail[];
+    // Merge profiles with emails
+    return filterHiddenSystemTestAccounts(profileRows.map(profile => ({
+      ...profile,
+      email: authUserMap.get(profile.id)?.email || '',
+      last_sign_in_at: authUserMap.get(profile.id)?.last_sign_in_at || null,
+      last_active_at: authUserMap.get(profile.id)?.last_active_at || null,
+      current_fleet_assignment: assignmentByUserId.get(profile.id) || null,
+    })) || [] as ProfileWithEmail[]);
   }
 
   // Fetch available roles
@@ -536,7 +660,7 @@ export default function UsersAdminPage() {
           .order('is_super_admin', { ascending: false })
           .order('is_manager_admin', { ascending: false })
           .order('display_name');
-        
+
         if (error) throw error;
 
         const filteredRoles = isManagerActor
@@ -558,10 +682,10 @@ export default function UsersAdminPage() {
       }
     }
 
-    if (canManageUsers) {
+    if (canAccessUserAdmin) {
       fetchRoles();
     }
-  }, [canManageUsers, isManagerActor, supabase]);
+  }, [canAccessUserAdmin, isManagerActor, supabase]);
 
   // Fetch users
   useEffect(function () {
@@ -582,11 +706,11 @@ export default function UsersAdminPage() {
       }
     }
 
-    if (canManageUsers) {
+    if (canAccessUserAdmin) {
       fetchUsers();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManageUsers]);
+  }, [canAccessUserAdmin]);
 
   useEffect(() => {
     if (!addDialogOpen) return;
@@ -623,10 +747,10 @@ export default function UsersAdminPage() {
       }
     }
 
-    if (canManageUsers) {
+    if (canAccessUserAdmin) {
       fetchOnboardingContext();
     }
-  }, [canManageUsers]);
+  }, [canAccessUserAdmin]);
 
   // Fetch team metadata used by the Org V2 admin UI
   useEffect(function () {
@@ -655,10 +779,10 @@ export default function UsersAdminPage() {
       }
     }
 
-    if (canManageUsers) {
+    if (canAccessUserAdmin) {
       fetchHierarchyMetadata();
     }
-  }, [canManageUsers]);
+  }, [canAccessUserAdmin]);
 
   // Search and role filter
   useEffect(function () {
@@ -669,7 +793,11 @@ export default function UsersAdminPage() {
       filtered = filtered.filter((user) => {
         if (roleFilter === 'admin') return user.role?.role_class === 'admin' || user.role?.name === 'admin';
         if (roleFilter === 'manager') return user.role?.role_class === 'manager';
-        if (roleFilter === 'employee') return user.role?.role_class === 'employee';
+        if (roleFilter === 'supervisor') return isSupervisorRole(user.role);
+        if (roleFilter === 'contractor') return isContractorRole(user.role);
+        if (roleFilter === 'employee') {
+          return user.role?.role_class === 'employee' && !isSupervisorRole(user.role) && !isContractorRole(user.role);
+        }
         return true;
       });
     }
@@ -1118,6 +1246,12 @@ export default function UsersAdminPage() {
     setResetPasswordDialogOpen(true);
   }
 
+  function openResetSensitivePinDialog(userProfile: ProfileWithEmail) {
+    setSelectedUser(userProfile);
+    setFormError('');
+    setResetSensitivePinDialogOpen(true);
+  }
+
   // Handle reset password
   async function handleResetPassword() {
     if (!selectedUser) return;
@@ -1152,6 +1286,33 @@ export default function UsersAdminPage() {
     }
   }
 
+  async function handleResetSensitivePin() {
+    if (!selectedUser) return;
+
+    try {
+      setFormLoading(true);
+      setFormError('');
+
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/reset-sensitive-pin`, {
+        method: 'POST',
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to reset sensitive PIN');
+      }
+
+      toast.success('Sensitive PIN reset. The user must set a new PIN from their profile.');
+      setResetSensitivePinDialogOpen(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Error resetting sensitive PIN:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to reset sensitive PIN');
+    } finally {
+      setFormLoading(false);
+    }
+  }
+
   // Copy password to clipboard
   async function copyPasswordToClipboard() {
     try {
@@ -1164,7 +1325,7 @@ export default function UsersAdminPage() {
   }
 
   // Show loading while auth is being checked
-  if (!supabase || authLoading || permissionLoading) {
+  if (!supabase || authLoading || permissionLoading || sensitiveAccess.loading) {
     return <PageLoader message="Loading user admin..." />;
   }
 
@@ -1187,44 +1348,56 @@ export default function UsersAdminPage() {
     );
   }
 
+  if (!sensitiveAccess.canAccess) {
+    return (
+      <AppPageShell width="wide" className="2xl:max-w-[92rem]">
+        <SensitiveModuleGate moduleLabel="User Management" access={sensitiveAccess} />
+      </AppPageShell>
+    );
+  }
+
   return (
-    <AppPageShell width="wide">
-      {/* Header */}
-      <div className="bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">User Management</h1>
-            <p className="text-muted-foreground">
-              Manage users, roles, and permissions
-            </p>
-          </div>
-          {activeTab === 'users' && userStatusTab === 'active' && (
-            <Button
-              onClick={openAddDialog}
-              className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
-          )}
-        </div>
-      </div>
+    <AppPageShell width="wide" className="2xl:max-w-[92rem]">
+      <SensitiveModuleSessionManager moduleLabel="User Management" access={sensitiveAccess} />
+      <AppPageHeader
+        title="User Management"
+        description="Manage users, roles, and permissions"
+        className="bg-slate-900"
+        contentClassName="sm:flex-row sm:items-center sm:justify-between"
+        headingClassName="space-y-0"
+        titleClassName="mb-2 text-white"
+        descriptionClassName="text-base"
+        actionsClassName="sm:w-auto"
+        actions={activeTab === 'users' && userStatusTab === 'active' ? (
+          <Button
+            onClick={openAddDialog}
+            className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900 sm:w-auto"
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add User
+          </Button>
+        ) : null}
+      />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabType)} className="space-y-6">
         <TabsList className={`grid w-full ${
-          canEditRolePermissions ? 'max-w-2xl grid-cols-4' : canManageRoleDefinitions ? 'max-w-xl grid-cols-3' : 'max-w-sm grid-cols-1'
+          canEditRolePermissions
+              ? 'max-w-2xl grid-cols-2 sm:grid-cols-4'
+              : canManageRoleDefinitions
+                ? 'max-w-xl grid-cols-1 sm:grid-cols-3'
+                : 'max-w-sm grid-cols-1'
         } bg-slate-100 dark:bg-slate-800 p-0`}>
-          <TabsTrigger 
-            value="users" 
+          <TabsTrigger
+            value="users"
             className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
           >
             <User className="h-4 w-4" />
             Users
           </TabsTrigger>
           {canManageRoleDefinitions && (
-            <TabsTrigger 
-              value="roles" 
+            <TabsTrigger
+              value="roles"
               className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
             >
               <Briefcase className="h-4 w-4" />
@@ -1241,8 +1414,8 @@ export default function UsersAdminPage() {
             </TabsTrigger>
           )}
           {canEditRolePermissions && (
-            <TabsTrigger 
-              value="permissions" 
+            <TabsTrigger
+              value="permissions"
               className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900"
             >
               <Shield className="h-4 w-4" />
@@ -1273,8 +1446,8 @@ export default function UsersAdminPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card 
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <Card
           className={`border-border cursor-pointer hover:shadow-lg transition-all ${
             roleFilter === 'all' ? 'border-2 border-yellow-500' : ''
           }`}
@@ -1283,14 +1456,14 @@ export default function UsersAdminPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">{userStatusTab === 'deleted' ? 'Deleted Users' : 'Active Users'}</p>
+                <p className="text-sm text-muted-foreground">{userStatusTab === 'deleted' ? 'Deleted Users' : 'All Users'}</p>
                 <p className="text-2xl font-bold text-white">{stats.total}</p>
               </div>
-              <User className="h-8 w-8 text-blue-500" />
+              <Users className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
-        <Card 
+        <Card
           className={`border-border cursor-pointer hover:shadow-lg transition-all ${
             roleFilter === 'admin' ? 'border-2 border-yellow-500' : ''
           }`}
@@ -1302,11 +1475,11 @@ export default function UsersAdminPage() {
                 <p className="text-sm text-muted-foreground">Admins</p>
                 <p className="text-2xl font-bold text-white">{stats.admins}</p>
               </div>
-              <Shield className="h-8 w-8 text-red-500" />
+              <User className="h-8 w-8 text-red-500" />
             </div>
           </CardContent>
         </Card>
-        <Card 
+        <Card
           className={`border-border cursor-pointer hover:shadow-lg transition-all ${
             roleFilter === 'manager' ? 'border-2 border-yellow-500' : ''
           }`}
@@ -1318,11 +1491,27 @@ export default function UsersAdminPage() {
                 <p className="text-sm text-muted-foreground">Managers</p>
                 <p className="text-2xl font-bold text-white">{stats.managers}</p>
               </div>
-              <Shield className="h-8 w-8 text-amber-500" />
+              <User className="h-8 w-8 text-amber-500" />
             </div>
           </CardContent>
         </Card>
-        <Card 
+        <Card
+          className={`border-border cursor-pointer hover:shadow-lg transition-all ${
+            roleFilter === 'supervisor' ? 'border-2 border-yellow-500' : ''
+          }`}
+          onClick={() => setRoleFilter('supervisor')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Supervisors</p>
+                <p className="text-2xl font-bold text-white">{stats.supervisors}</p>
+              </div>
+              <User className="h-8 w-8 text-sky-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card
           className={`border-border cursor-pointer hover:shadow-lg transition-all ${
             roleFilter === 'employee' ? 'border-2 border-yellow-500' : ''
           }`}
@@ -1335,6 +1524,22 @@ export default function UsersAdminPage() {
                 <p className="text-2xl font-bold text-white">{stats.employees}</p>
               </div>
               <User className="h-8 w-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card
+          className={`border-border cursor-pointer hover:shadow-lg transition-all ${
+            roleFilter === 'contractor' ? 'border-2 border-yellow-500' : ''
+          }`}
+          onClick={() => setRoleFilter('contractor')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Contractors</p>
+                <p className="text-2xl font-bold text-white">{stats.contractors}</p>
+              </div>
+              <User className="h-8 w-8 text-orange-500" />
             </div>
           </CardContent>
         </Card>
@@ -1406,9 +1611,7 @@ export default function UsersAdminPage() {
 
             {/* User Table */}
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-              </div>
+              <PanelLoader message="Loading users..." className="py-8" />
             ) : filteredUsers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 {searchQuery
@@ -1419,7 +1622,7 @@ export default function UsersAdminPage() {
               </div>
             ) : (
               <div className="border border-slate-700 rounded-lg overflow-x-auto overflow-y-hidden">
-                <Table className="min-w-[980px]">
+                <Table className="min-w-[1120px]">
                   <TableHeader>
                     <TableRow className="border-slate-700 hover:bg-slate-800/50">
                       <TableHead className="text-muted-foreground">Name</TableHead>
@@ -1428,6 +1631,7 @@ export default function UsersAdminPage() {
                       <TableHead className="text-muted-foreground">Role</TableHead>
                       <TableHead className="text-muted-foreground">Team</TableHead>
                       <TableHead className="text-muted-foreground">Line Manager(s)</TableHead>
+                      <TableHead className="text-muted-foreground">Fleet Asset</TableHead>
                       <TableHead className="text-muted-foreground">Created</TableHead>
                       <TableHead className="text-right text-muted-foreground">Actions</TableHead>
                     </TableRow>
@@ -1443,7 +1647,7 @@ export default function UsersAdminPage() {
                       <Fragment key={user.id}>
                         {startsNewTeam && (
                           <TableRow key={`${currentTeamKey}-divider`} className="border-slate-600 bg-slate-950/40 hover:bg-slate-950/40">
-                            <TableCell colSpan={8} className="py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                            <TableCell colSpan={9} className="py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
                               {teamLabel}
                             </TableCell>
                           </TableRow>
@@ -1454,9 +1658,7 @@ export default function UsersAdminPage() {
                             <TableRow key={user.id} className="border-slate-700 hover:bg-slate-800/50">
                         <TableCell className="font-medium text-white">
                           <div className="flex items-center gap-2 w-full cursor-default">
-                            <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                              <User className="h-4 w-4 text-slate-600 dark:text-muted-foreground" />
-                            </div>
+                            <UserTableAvatar user={user} />
                             {user.full_name || 'Unnamed User'}
                           </div>
                         </TableCell>
@@ -1476,7 +1678,7 @@ export default function UsersAdminPage() {
                           >
                             <Badge
                               variant={
-                                user.email === 'template-admin@example.com'
+                                user.email === 'admin@mpdee.co.uk'
                                   ? 'destructive'
                                   : isSupervisorRole(user.role)
                                     ? 'outline'
@@ -1492,7 +1694,7 @@ export default function UsersAdminPage() {
                                   : undefined
                               }
                             >
-                              {user.email === 'template-admin@example.com' ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
+                              {user.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
                             </Badge>
                           </button>
                         </TableCell>
@@ -1508,6 +1710,15 @@ export default function UsersAdminPage() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {getDisplayedManagers(user.line_manager_id, user.secondary_manager_id)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {user.current_fleet_assignment ? (
+                            <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                              {formatAdminFleetAssignment(user.current_fleet_assignment)}
+                            </Badge>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           <div className="flex items-center gap-2 text-sm">
@@ -1534,6 +1745,15 @@ export default function UsersAdminPage() {
                               title="Reset Password"
                             >
                               <KeyRound className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openResetSensitivePinDialog(user)}
+                              className="text-yellow-300 hover:text-yellow-200 hover:bg-slate-800"
+                              title="Reset Sensitive PIN"
+                            >
+                              <Shield className="h-3 w-3" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -1653,7 +1873,7 @@ export default function UsersAdminPage() {
 
       {/* Add User Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="border-border text-white max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className={dialogContentViewportClassName({ size: '5xl', scroll: 'content', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -1948,7 +2168,7 @@ export default function UsersAdminPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="border-border text-white">
+        <DialogContent className={dialogContentViewportClassName({ className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -2071,7 +2291,7 @@ export default function UsersAdminPage() {
 
       {/* Delete Options Dialog */}
       <Dialog open={deleteOptionsDialogOpen} onOpenChange={setDeleteOptionsDialogOpen}>
-        <DialogContent className="border-border text-white max-w-2xl">
+        <DialogContent className={dialogContentViewportClassName({ size: '2xl', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-500" />
@@ -2081,7 +2301,7 @@ export default function UsersAdminPage() {
               Choose how to handle this user&apos;s company data (timesheets, inspections, etc.)
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedUser && (
             <div className="space-y-4">
               {/* User Info */}
@@ -2098,7 +2318,7 @@ export default function UsersAdminPage() {
                   <span className="text-muted-foreground">Role:</span>{' '}
                   <Badge
                     variant={
-                      selectedUser.email === 'template-admin@example.com'
+                      selectedUser.email === 'admin@mpdee.co.uk'
                         ? 'destructive'
                         : selectedUser.role?.role_class === 'admin'
                           ? 'destructive'
@@ -2107,14 +2327,14 @@ export default function UsersAdminPage() {
                             : 'default'
                     }
                     className={
-                      selectedUser.email === 'template-admin@example.com' || selectedUser.role?.role_class === 'admin'
+                      selectedUser.email === 'admin@mpdee.co.uk' || selectedUser.role?.role_class === 'admin'
                         ? undefined
                         : isSupervisorRole(selectedUser.role)
                           ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
                           : 'bg-slate-700 border-slate-500 text-slate-100 hover:bg-slate-600'
                     }
                   >
-                    {selectedUser.email === 'template-admin@example.com' ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
+                    {selectedUser.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
                   </Badge>
                 </div>
               </div>
@@ -2122,13 +2342,13 @@ export default function UsersAdminPage() {
               {/* Deletion Options */}
               <div className="space-y-3">
                 <Label className="text-white font-semibold">What should happen to this user&apos;s company data?</Label>
-                
+
                 {/* Option 1: Keep Data (Recommended) */}
-                <div 
+                <div
                   onClick={() => setDeletionMode('keep-data')}
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                    deletionMode === 'keep-data' 
-                      ? 'border-green-500 bg-green-500/10' 
+                    deletionMode === 'keep-data'
+                      ? 'border-green-500 bg-green-500/10'
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
                 >
@@ -2159,11 +2379,11 @@ export default function UsersAdminPage() {
                 </div>
 
                 {/* Option 2: Delete All */}
-                <div 
+                <div
                   onClick={() => setDeletionMode('delete-all')}
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                    deletionMode === 'delete-all' 
-                      ? 'border-red-500 bg-red-500/10' 
+                    deletionMode === 'delete-all'
+                      ? 'border-red-500 bg-red-500/10'
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
                 >
@@ -2203,9 +2423,9 @@ export default function UsersAdminPage() {
           )}
 
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setDeleteOptionsDialogOpen(false)} 
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOptionsDialogOpen(false)}
               className="border-slate-600 text-white hover:bg-slate-800"
               disabled={formLoading}
             >
@@ -2234,7 +2454,7 @@ export default function UsersAdminPage() {
 
       {/* Reset Password Confirmation Dialog */}
       <Dialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen}>
-        <DialogContent className="border-border text-white">
+        <DialogContent className={dialogContentViewportClassName({ className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-amber-500" />
@@ -2289,21 +2509,82 @@ export default function UsersAdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reset Sensitive PIN Confirmation Dialog */}
+      <Dialog open={resetSensitivePinDialogOpen} onOpenChange={setResetSensitivePinDialogOpen}>
+        <DialogContent className={dialogContentViewportClassName({ className: 'border-border text-white' })}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-yellow-300" />
+              Reset Sensitive PIN
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              This clears the user&apos;s sensitive module PIN. They must set a new PIN from their profile before opening protected modules.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="bg-slate-800 rounded p-4 space-y-2">
+              <p className="text-sm">
+                <span className="text-muted-foreground">Name:</span>{' '}
+                <span className="text-white font-medium">{selectedUser.full_name}</span>
+              </p>
+              <p className="text-sm">
+                <span className="text-muted-foreground">Email:</span>{' '}
+                <span className="text-slate-200">{selectedUser.email}</span>
+              </p>
+            </div>
+          )}
+          {formError && (
+            <div className="bg-red-500/10 border border-red-500/50 rounded p-3 text-sm text-red-400">
+              {formError}
+            </div>
+          )}
+          <div className="bg-yellow-500/10 border border-yellow-500/50 rounded p-3 text-sm text-yellow-200">
+            <strong>Note:</strong> The current PIN is not displayed or emailed. Admins will be notified of the reset.
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setResetSensitivePinDialogOpen(false); setSelectedUser(null); }}
+              className="border-slate-600 text-white hover:bg-slate-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleResetSensitivePin}
+              disabled={formLoading}
+              className="bg-yellow-500 hover:bg-yellow-600 text-slate-950"
+            >
+              {formLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4 mr-2" />
+                  Reset Sensitive PIN
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Password Display Dialog */}
       <Dialog open={passwordDisplayDialogOpen} onOpenChange={setPasswordDisplayDialogOpen}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
               {isNewUser ? 'User Created Successfully' : 'Password Reset Successfully'}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {isNewUser 
+              {isNewUser
                 ? 'The user account has been created with a temporary password.'
                 : 'The user\'s password has been reset to a new temporary password.'}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {/* Email Status */}
             {emailSent ? (
@@ -2358,7 +2639,7 @@ export default function UsersAdminPage() {
           </div>
 
           <DialogFooter>
-            <Button 
+            <Button
               onClick={() => {
                 setPasswordDisplayDialogOpen(false);
                 setTemporaryPassword('');

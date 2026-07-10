@@ -1,10 +1,10 @@
 # How To Bootstrap And Validate The Database
 
-This template supports two database paths. Choose one deliberately before creating a customer project.
+Forest Farm supports a fresh bootstrap path and an incremental migration path. Choose the path that matches the target database.
 
-## Path A: Fresh Demo Or Customer Database
+## Path A: Fresh Forest Database
 
-Use this for a brand-new customer Supabase project that does not need historical branch context.
+Use this only for a new, dedicated Forest Farm Supabase project.
 
 ```bash
 npm run db:baseline
@@ -17,14 +17,14 @@ npm run db:validate
 2. foundation SQL files in `supabase/baseline/`
 3. every SQL migration in `supabase/migrations/` in filename order
 
-After it finishes, run `db:validate` before seeding data or deploying.
+After it finishes, run `db:validate` before deploying.
 
 ## Path B: Preserved Migration History
 
 Use this for ongoing development after a database has already been bootstrapped.
 
 ```bash
-# Apply only new migration files introduced by your branch using your chosen Supabase workflow.
+# Apply only the inspected new migration files through the repository pg.Client pattern.
 npm run db:validate
 ```
 
@@ -65,5 +65,5 @@ PostgreSQL trigger functions store column names as plain text. When you rename a
 
 **Fix:** Use the direct database connection string for the project owner account.
 
-Never apply migrations, baseline SQL, seeds, or demo reset commands against a customer production database without a backup and an explicit deployment plan.
+Never apply migrations or baseline SQL against Forest production without a schema inventory, an explicit deployment plan, and approval for any destructive data change.
 

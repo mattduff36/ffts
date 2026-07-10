@@ -6,7 +6,7 @@ import { fetchAbsenceMessage, updateAbsenceMessage } from '@/lib/client/absence-
 import { fetchUserDirectory } from '@/lib/client/user-directory';
 import { fetchEmployeeWorkShift, fetchWorkShiftMatrix } from '@/lib/client/work-shifts';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +57,6 @@ import { WorkShiftsContent } from '@/app/(dashboard)/absence/manage/components/W
 import { getErrorMessage, shouldLogAbsenceManageError } from '@/lib/utils/absence-error-handling';
 import {
   buildAbsenceTimesheetImpactMessage,
-  getLockedAbsenceTimesheetImpacts,
   resolveAbsenceTimesheetImpacts,
 } from '@/lib/utils/absence-timesheet-impact';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
@@ -65,6 +64,7 @@ import {
   canUseScopedAbsencePermission,
   useAbsenceSecondaryPermissions,
 } from '@/lib/hooks/useAbsenceSecondaryPermissions';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { canOpenAbsenceManageArea } from '@/types/absence-permissions';
 import type { AbsenceWithRelations } from '@/types/absence';
 import type { WorkShiftPattern } from '@/types/work-shifts';
@@ -77,6 +77,34 @@ const ANNUAL_LEAVE_REASON_NAME = 'annual leave';
 
 function normalizeReasonName(value: string | null | undefined): string {
   return (value || '').trim().toLowerCase();
+}
+
+function buildCreateAbsenceDirtySnapshot({
+  selectedProfileId,
+  selectedReasonId,
+  startDate,
+  endDate,
+  isHalfDay,
+  halfDaySession,
+  notes,
+}: {
+  selectedProfileId: string;
+  selectedReasonId: string;
+  startDate: string;
+  endDate: string;
+  isHalfDay: boolean;
+  halfDaySession: 'AM' | 'PM';
+  notes: string;
+}) {
+  return JSON.stringify({
+    selectedProfileId,
+    selectedReasonId,
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDaySession,
+    notes,
+  });
 }
 
 function isDirectoryAccessError(error: unknown): boolean {
@@ -139,14 +167,30 @@ export default function AdminAbsencePage() {
   const [activeTab, setActiveTab] = useState<ManageTab>('overview');
   
   // Data
-  const { data: absences, isLoading } = useAllAbsences({ 
-    profileId, 
-    dateFrom, 
-    dateTo, 
-    reasonId, 
+  const shouldLoadManageAbsences = Boolean(
+    canOpenManagePage &&
+      !authLoading &&
+      !absencePermissionLoading &&
+      !isAbsenceSecondaryContextLoading &&
+      (activeTab === 'calendar' || activeTab === 'overview')
+  );
+  const absenceFilters = useMemo(() => shouldLoadManageAbsences ? {
+    profileId,
+    dateFrom,
+    dateTo,
+    reasonId,
     status,
     includeArchived,
-  });
+  } : undefined, [
+    shouldLoadManageAbsences,
+    profileId,
+    dateFrom,
+    dateTo,
+    reasonId,
+    status,
+    includeArchived,
+  ]);
+  const { data: absences, isLoading } = useAllAbsences(absenceFilters);
   const actorProfileId = profile?.id || '';
   const scopedAbsences = useMemo(() => {
     return (absences || []).filter((absence) => {
@@ -302,8 +346,53 @@ export default function AdminAbsencePage() {
   const [halfDaySession, setHalfDaySession] = useState<'AM' | 'PM'>('AM');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [createDialogBaselineSnapshot, setCreateDialogBaselineSnapshot] = useState('');
   const { data: selectedProfileSummary, isLoading: loadingSelectedProfileSummary } =
     useAbsenceSummaryForEmployee(selectedProfileId);
+  const currentCreateDialogSnapshot = buildCreateAbsenceDirtySnapshot({
+    selectedProfileId,
+    selectedReasonId,
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDaySession,
+    notes,
+  });
+  const isCreateDialogDirty = showCreateDialog
+    && Boolean(createDialogBaselineSnapshot)
+    && currentCreateDialogSnapshot !== createDialogBaselineSnapshot;
+  const {
+    contentRef: createDialogContentRef,
+    handleOpenChange: handleCreateDialogOpenChange,
+    handleInteractOutside: handleCreateDialogInteractOutside,
+    handleEscapeKeyDown: handleCreateDialogEscapeKeyDown,
+    discard: discardCreateDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isCreateDialogDirty,
+    disabled: submitting,
+    onOpenChange: (open) => {
+      setShowCreateDialog(open);
+    },
+  });
+
+  function resetCreateAbsenceForm() {
+    setSelectedProfileId('');
+    setSelectedReasonId('');
+    setStartDate('');
+    setEndDate('');
+    setIsHalfDay(false);
+    setHalfDaySession('AM');
+    setNotes('');
+    setCreateDialogBaselineSnapshot(buildCreateAbsenceDirtySnapshot({
+      selectedProfileId: '',
+      selectedReasonId: '',
+      startDate: '',
+      endDate: '',
+      isHalfDay: false,
+      halfDaySession: 'AM',
+      notes: '',
+    }));
+  }
   
   const isProtectedTab = useCallback((tab: ManageTab): tab is ProtectedManageTab => {
     return tab === 'overview' || tab === 'allowances' || tab === 'reasons';
@@ -759,10 +848,6 @@ export default function AdminAbsencePage() {
     });
     const message = buildAbsenceTimesheetImpactMessage(selectedReasonName, impacts);
     if (!message) return true;
-    if (getLockedAbsenceTimesheetImpacts(impacts).length > 0) {
-      window.alert(message);
-      return false;
-    }
 
     return window.confirm(message);
   }
@@ -811,13 +896,7 @@ export default function AdminAbsencePage() {
       toast.success('Absence created and approved');
       setAllowancesRefreshKey((k) => k + 1);
       
-      // Reset form
-      setSelectedProfileId('');
-      setSelectedReasonId('');
-      setStartDate('');
-      setEndDate('');
-      setIsHalfDay(false);
-      setNotes('');
+      resetCreateAbsenceForm();
       setShowCreateDialog(false);
     } catch (error) {
       const message = getErrorMessage(error, 'Failed to create absence');
@@ -870,33 +949,27 @@ export default function AdminAbsencePage() {
   
   return (
     <AppPageShell width="wide">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4">
-            <BackButton />
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Absence Management
-              </h1>
-              <p className="text-muted-foreground">
-                View and manage all employee absences
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            {canAddEditBookings ? (
-              <Button
-                onClick={() => setShowCreateDialog(true)}
-                className="w-full sm:w-auto bg-absence hover:bg-absence-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Absence
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <AppPageHeader
+        title="Absence Management"
+        description="View and manage all employee absences"
+        leading={<BackButton />}
+        headingClassName="space-y-0"
+        titleClassName="mb-2"
+        descriptionClassName="text-base"
+        actionsClassName="flex-col sm:w-auto sm:flex-row"
+        actions={canAddEditBookings ? (
+          <Button
+            onClick={() => {
+              resetCreateAbsenceForm();
+              setShowCreateDialog(true);
+            }}
+            className="w-full sm:w-auto bg-absence hover:bg-absence-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Absence
+          </Button>
+        ) : null}
+      />
 
       {isAdmin && (
         <div className="rounded-lg border border-[hsl(var(--absence-primary)/0.25)] bg-[hsl(var(--absence-primary)/0.06)] p-4">
@@ -1452,8 +1525,13 @@ export default function AdminAbsencePage() {
       <AbsenceAboutHelper variant="manage" />
 
       {/* Create Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="border-border max-w-3xl">
+      <Dialog open={showCreateDialog} onOpenChange={handleCreateDialogOpenChange}>
+        <DialogContent
+          ref={createDialogContentRef}
+          className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-border"
+          onInteractOutside={handleCreateDialogInteractOutside}
+          onEscapeKeyDown={handleCreateDialogEscapeKeyDown}
+        >
           <DialogHeader>
             <DialogTitle className="text-foreground">Create Absence Entry</DialogTitle>
             <DialogDescription className="text-slate-400/90">
@@ -1581,9 +1659,13 @@ export default function AdminAbsencePage() {
             
             
             {startDate && (
-              <div className="bg-slate-800/30 p-3 rounded-lg">
+              <div className="space-y-2 bg-slate-800/30 p-3 rounded-lg">
                 <p className="text-sm text-muted-foreground">
                   Duration: <span className="text-white font-medium">{formatDuration(duration)}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Approved bookings will update matching draft/submitted timesheet rows immediately. Processed or adjusted
+                  timesheets stay locked and the absence is recorded without changing payroll history.
                 </p>
               </div>
             )}
@@ -1592,10 +1674,10 @@ export default function AdminAbsencePage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowCreateDialog(false)}
+              onClick={discardCreateDialog}
               className="border-border text-muted-foreground"
             >
-              Cancel
+              {isCreateDialogDirty ? 'Discard Changes' : 'Cancel'}
             </Button>
             <Button
               onClick={handleCreate}
@@ -1622,7 +1704,7 @@ export default function AdminAbsencePage() {
       />
 
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="border-border max-w-3xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">Delete Absence</DialogTitle>
             <DialogDescription className="text-slate-400/90">
@@ -1645,7 +1727,7 @@ export default function AdminAbsencePage() {
 
       {isProtectedTabGateEnabled ? (
         <Dialog open={showPasswordDialog} onOpenChange={(open) => { if (!open) handlePasswordDialogClose(); }}>
-          <DialogContent className="border-border max-w-sm" onOpenAutoFocus={(e) => { e.preventDefault(); setTimeout(() => passwordInputRef.current?.focus(), 0); }}>
+          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-sm overflow-y-auto border-border" onOpenAutoFocus={(e) => { e.preventDefault(); setTimeout(() => passwordInputRef.current?.focus(), 0); }}>
             <DialogHeader>
               <DialogTitle className="text-foreground flex items-center gap-2">
                 <Lock className="h-5 w-5 text-absence" />

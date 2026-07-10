@@ -37,7 +37,19 @@ export async function GET() {
     
     const response: CategoriesListResponse = {
       success: true,
-      categories: categories || []
+      categories: (categories || []).map((category) => ({
+        ...category,
+        period_unit: normalizePeriodUnit(category.type, category.period_unit),
+        is_active: category.is_active ?? true,
+        sort_order: category.sort_order ?? 0,
+        created_at: category.created_at ?? '',
+        updated_at: category.updated_at ?? '',
+        responsibility: category.responsibility ?? 'workshop',
+        show_on_overview: category.show_on_overview ?? true,
+        reminder_in_app_enabled: category.reminder_in_app_enabled ?? false,
+        reminder_email_enabled: category.reminder_email_enabled ?? false,
+        applies_to: category.applies_to ?? [],
+      }))
     };
     
     return NextResponse.json(response);
@@ -145,6 +157,9 @@ export async function POST(request: NextRequest) {
         show_on_overview: body.show_on_overview !== false, // Default true
         reminder_in_app_enabled: body.reminder_in_app_enabled || false,
         reminder_email_enabled: body.reminder_email_enabled || false,
+        field_key: null,
+        is_system: false,
+        is_delete_protected: false,
       })
       .select()
       .single();

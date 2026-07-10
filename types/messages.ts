@@ -1,10 +1,13 @@
+import type { NotificationModuleKey } from '@/types/notifications';
+
 /**
  * Internal Messages and Notifications System Types
  * Supports Toolbox Talks (high priority, blocking) and Reminders (low priority, non-blocking)
  */
 
 export type MessageType = 'TOOLBOX_TALK' | 'REMINDER' | 'NOTIFICATION';
-export type MessagePriority = 'HIGH' | 'LOW';
+export type MessagePriority = 'HIGH' | 'LOW' | 'URGENT';
+export type MessageDisplayPriority = MessagePriority | 'MEDIUM';
 export type MessageRecipientStatus = 'PENDING' | 'SHOWN' | 'SIGNED' | 'DISMISSED';
 
 // Base message interface
@@ -19,7 +22,9 @@ export interface Message {
   updated_at: string;
   deleted_at: string | null;
   created_via: string;
+  module_key: NotificationModuleKey;
   pdf_file_path: string | null;
+  acceptance_delay_minutes: number;
 }
 
 // Message recipient (per-user assignment)
@@ -66,14 +71,18 @@ export interface NotificationItem {
   type: MessageType;
   priority: MessagePriority;
   created_via: string | null;
+  module_key: NotificationModuleKey;
   subject: string;
   body: string;
+  pdf_file_path: string | null;
+  acceptance_delay_minutes: number;
   sender_name: string;
   sender_id: string | null;
   status: MessageRecipientStatus;
   created_at: string;
   signed_at: string | null;
   first_shown_at: string | null;
+  signature_data: string | null;
 }
 
 // Form input types
@@ -83,6 +92,8 @@ export interface CreateMessageInput {
   subject: string;
   body: string;
   recipient_type: 'individual' | 'role' | 'all_staff';
+  priority?: MessagePriority;
+  acceptance_delay_minutes?: number;
   // For 'individual': array of user IDs
   recipient_user_ids?: string[];
   // For 'role': array of roles
@@ -127,8 +138,12 @@ export interface SignMessageResponse {
   error?: string;
 }
 
+export interface MessageReportMessage extends Omit<MessageWithSender, 'priority'> {
+  priority: MessageDisplayPriority;
+}
+
 export interface MessageReportData {
-  message: MessageWithSender;
+  message: MessageReportMessage;
   recipients: (MessageRecipient & {
     user: {
       full_name: string;

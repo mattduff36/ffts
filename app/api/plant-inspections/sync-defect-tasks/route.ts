@@ -153,6 +153,15 @@ function extractDayNumbersFromDescription(description?: string | null): number[]
   return normalizeDayNumbers(parsedDays);
 }
 
+function extractCommentFromDescription(description?: string | null): string {
+  if (!description) {
+    return '';
+  }
+
+  const commentMatch = description.match(/(?:^|\n)Comment:\s*(.+?)(?:\n|$)/);
+  return commentMatch?.[1]?.trim() || '';
+}
+
 function mergeTaskAndPayloadDayNumbers(
   tasks: ExistingInspectionDefectTask[],
   payloadDays: number[]
@@ -418,6 +427,8 @@ export async function POST(request: NextRequest) {
       const commentText = defect.comment ? `\nComment: ${defect.comment}` : '';
       const title = `Plant ${plantNumber}: ${defect.item_description}${daySuffix}`;
       const description = `Plant inspection defect found:\nItem ${defect.item_number} - ${defect.item_description}${daySuffix}${commentText}`;
+      const buildDescriptionWithComment = (comment: string) =>
+        `Plant inspection defect found:\nItem ${defect.item_number} - ${defect.item_description}${daySuffix}${comment ? `\nComment: ${comment}` : ''}`;
 
       if (activeTasksForDefect.length > 1) {
         const sortedTasks = sortByCreatedAtThenId(activeTasksForDefect);
@@ -453,10 +464,10 @@ export async function POST(request: NextRequest) {
       );
 
       if (currentInspectionTask) {
+        const originalComment = extractCommentFromDescription(currentInspectionTask.description) || defect.comment || '';
         const updates: ActionUpdate = {
           title,
-          description,
-          inspection_item_id: defect.primaryInspectionItemId,
+          description: buildDescriptionWithComment(originalComment),
           plant_id: plantId,
           updated_at: new Date().toISOString(),
         };
@@ -476,10 +487,10 @@ export async function POST(request: NextRequest) {
 
       if (activeTasksForDefect.length > 0) {
         const keeperTask = sortByCreatedAtThenId(activeTasksForDefect)[0];
+        const originalComment = extractCommentFromDescription(keeperTask.description) || defect.comment || '';
         const updates: ActionUpdate = {
           title,
-          description,
-          inspection_item_id: defect.primaryInspectionItemId,
+          description: buildDescriptionWithComment(originalComment),
           plant_id: plantId,
           updated_at: new Date().toISOString(),
         };

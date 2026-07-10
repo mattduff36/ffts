@@ -5,6 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import HelpPage from '@/app/(dashboard)/help/page';
+import { templateConfig } from '@/lib/config/template-config';
 
 const replaceMock = vi.fn();
 const signOutMock = vi.fn(async () => ({ error: null }));
@@ -18,6 +19,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/help',
   useRouter: () => ({
     replace: replaceMock,
   }),
@@ -29,6 +31,12 @@ vi.mock('@/lib/hooks/useAuth', () => ({
     profile: { id: 'user-1' },
     isAdmin: false,
     signOut: signOutMock,
+  }),
+}));
+
+vi.mock('@/lib/hooks/usePermissionSnapshot', () => ({
+  usePermissionSnapshot: () => ({
+    enabledModuleSet: new Set(),
   }),
 }));
 
@@ -83,7 +91,9 @@ describe('Help page install tab', () => {
     renderHelpPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Install DigiDocs App')).toBeInTheDocument();
+      expect(
+        screen.getByText(`Install ${templateConfig.branding.shortAppName} App`)
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText('Quick Support Actions')).toBeInTheDocument();

@@ -5,9 +5,64 @@ import type {
   GetNotificationPreferencesResponse,
   UpdateNotificationPreferenceRequest,
   UpdateNotificationPreferenceResponse,
-  NotificationModuleKey,
   NotificationPreference,
 } from '@/types/notifications';
+import {
+  canDisableNotificationModule,
+  NOTIFICATION_MODULES,
+  NOTIFICATION_MODULE_KEYS,
+  type NotificationModuleKey,
+} from '@/types/notifications';
+import { getProfileWithRole } from '@/lib/utils/permissions';
+import { isEffectiveSupervisorOrHigherRole } from '@/lib/utils/role-access';
+import { getEffectiveRole } from '@/lib/utils/view-as';
+
+type NotificationPreferenceRow = Omit<
+  NotificationPreference,
+  'enabled' | 'notify_in_app' | 'notify_email' | 'created_at' | 'updated_at'
+> & {
+  enabled: boolean | null;
+  notify_in_app: boolean | null;
+  notify_email: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+function normalizeNotificationPreference(pref: NotificationPreferenceRow): NotificationPreference {
+  return {
+    ...pref,
+    enabled: pref.enabled ?? true,
+    notify_in_app: pref.notify_in_app ?? true,
+    notify_email: pref.notify_email ?? false,
+    created_at: pref.created_at ?? '',
+    updated_at: pref.updated_at ?? '',
+  };
+}
+
+function canUseNotificationModule(
+  moduleKey: NotificationModuleKey,
+  profile: Awaited<ReturnType<typeof getProfileWithRole>>
+): boolean {
+  const notificationModule = NOTIFICATION_MODULES.find((entry) => entry.key === moduleKey);
+  if (!notificationModule) return false;
+  if (notificationModule.availableFor === 'all') return true;
+
+  const role = profile?.role;
+  const isAdmin = profile?.is_super_admin === true || role?.is_super_admin === true || role?.role_class === 'admin';
+  const isManager = role?.is_manager_admin === true || role?.role_class === 'manager';
+
+  if (notificationModule.availableFor === 'admin') return isAdmin;
+  if (notificationModule.availableFor === 'manager') return isManager || isAdmin;
+  return false;
+}
+
+function isDisablePreferenceRequest(input: {
+  enabled?: boolean;
+  notify_in_app?: boolean;
+  notify_email?: boolean;
+}): boolean {
+  return input.enabled === false || input.notify_in_app === false || input.notify_email === false;
+}
 
 /**
  * GET /api/notification-preferences
@@ -36,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     const response: GetNotificationPreferencesResponse = {
       success: true,
-      preferences: prefs || [],
+      preferences: (prefs || []).map(normalizeNotificationPreference),
     };
 
     return NextResponse.json(response);
@@ -73,13 +128,29 @@ export async function PUT(request: NextRequest) {
 
     // Parse request body
     const body: UpdateNotificationPreferenceRequest = await request.json();
-    const { module_key, notify_in_app, notify_email } = body;
+    const { module_key, enabled, notify_in_app, notify_email } = body;
 
-    const validModules: NotificationModuleKey[] = ['errors', 'maintenance', 'rams', 'approvals', 'inspections'];
-    if (!module_key || !validModules.includes(module_key)) {
+    if (!module_key || !NOTIFICATION_MODULE_KEYS.includes(module_key)) {
       return NextResponse.json({ 
-        error: 'Invalid module_key. Must be: errors, maintenance, rams, approvals, or inspections' 
+        error: `Invalid module_key. Must be one of: ${NOTIFICATION_MODULE_KEYS.join(', ')}`
       }, { status: 400 });
+    }
+
+    const isDisableRequest = isDisablePreferenceRequest({ enabled, notify_in_app, notify_email });
+    if (isDisableRequest && !canDisableNotificationModule(module_key)) {
+      return NextResponse.json({ error: 'Toolbox Talk notifications cannot be disabled' }, { status: 400 });
+    }
+
+    if (isDisableRequest) {
+      const effectiveRole = await getEffectiveRole();
+      if (!isEffectiveSupervisorOrHigherRole(effectiveRole)) {
+        return NextResponse.json({ error: 'Only supervisors and above can disable notifications' }, { status: 403 });
+      }
+    }
+
+    const profile = await getProfileWithRole(user.id);
+    if (!canUseNotificationModule(module_key, profile)) {
+      return NextResponse.json({ error: 'Forbidden for this notification module' }, { status: 403 });
     }
 
     // Build upsert data
@@ -89,6 +160,7 @@ export async function PUT(request: NextRequest) {
     } = {
       user_id: user.id,
       module_key,
+      enabled: true,
     };
 
     if (notify_in_app !== undefined) upsertData.notify_in_app = notify_in_app;
@@ -107,7 +179,7 @@ export async function PUT(request: NextRequest) {
 
     const response: UpdateNotificationPreferenceResponse = {
       success: true,
-      preference: pref,
+      preference: normalizeNotificationPreference(pref),
     };
 
     return NextResponse.json(response);

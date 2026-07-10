@@ -1,86 +1,43 @@
-# Testsuite
+# FFTS Browser Testsuite
 
-Comprehensive test suite for DigiDocs. Converted from the legacy `testsprite_tests/` Python scripts into Playwright (TypeScript) for UI workflows and Vitest for API/integration checks.
+The dedicated `testsuite/` folder is the finalise smoke and workflow suite. It complements the main `tests/` Vitest workspace.
 
-## Data Safety
+## Test Tiers
 
-**Non-destructive guarantee**: the suite never edits, deletes, or mutates pre-existing records. It creates dedicated TEST accounts, TEST vehicles, and TEST tasks — all clearly tagged with a `TESTSUITE-<timestamp>` prefix — and cleans up only what it created.
+- API guards in `testsuite/api`
+- Playwright UI workflows in `testsuite/ui`
+- Shared deterministic fixtures and cleanup in `testsuite/helpers`
+
+## Role Projects
+
+`testsuite/config/playwright.config.ts` defines setup, unauthenticated auth, lifecycle, employee, manager, admin, permissions, and responsive projects.
 
 ## Prerequisites
 
-1. Copy `.env.local` must have:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+`.env.local` must contain the required Supabase values and dedicated fictional test-user credentials. Provision test users once with:
 
-2. Provision test users (first time only):
-   ```bash
-   npm run testsuite:setup
-   ```
-
-3. Ensure the dev server is running:
-   ```bash
-   npm run dev
-   ```
-
-## Running Tests
-
-### Run everything (API + UI)
 ```bash
-npm run testsuite
+npm run testsuite:setup
 ```
 
-### Run only UI (Playwright) tests
-```bash
-npm run testsuite:ui
-```
+Run the application at `http://127.0.0.1:4000` before browser tests.
 
-### Run only API (Vitest) tests
+## Commands
+
 ```bash
 npm run testsuite:api
+npm run testsuite:ui
+npm run testsuite
+npx tsx testsuite/runner/run.ts --tag @fleet
+npx tsx testsuite/runner/run.ts --grep "reminders"
 ```
 
-### Filter by tag / module
-```bash
-# Run only tests tagged @fleet
-npm run testsuite:ui -- --grep "@fleet"
+## Data Safety
 
-# Run only tests tagged @timesheets
-npm run testsuite:ui -- --grep "@timesheets"
+- Never edit or delete a pre-existing row.
+- Tag created records with the current `TESTSUITE-<timestamp>` run tag.
+- Register every created record with cleanup helpers.
+- Use fictional names, `example.test` addresses, and `ZZ99` fleet identifiers.
+- Skip a workflow when its isolated prerequisites cannot be created safely.
 
-# Run only tests tagged @critical
-npm run testsuite:ui -- --grep "@critical"
-```
-
-### Available tags
-- `@auth` — Authentication and login flows
-- `@fleet` — Fleet page, tabs, vehicle history
-- `@workshop` — Workshop tasks, comments, taxonomy
-- `@timesheets` — Timesheet creation, submission, approval
-- `@permissions` — Role-based access control
-- `@inspections` — Vehicle inspections
-- `@rams` — RAMS workflows
-- `@messages` — Internal messaging
-- `@errors` — Error logging and console error checks
-- `@perf` — Performance benchmarks (optional)
-- `@critical` — Critical path flows (also checks for console errors)
-
-## Reports
-
-After a run, reports are written to `testsuite/reports/`:
-- `results.json` — Raw Playwright JSON output
-- `html/` — Playwright HTML report
-- `latest.md` — Markdown summary of failures (auto-generated)
-
-## Folder Structure
-
-```
-testsuite/
-  ui/          Playwright specs (browser-based workflow tests)
-  api/         Vitest integration specs (API-level tests)
-  helpers/     Shared auth, data, selector, and fixture helpers
-  config/      Playwright config for the suite
-  runner/      CLI runner + report generator
-  reports/     Generated reports (.gitignored)
-  .state/      Test user credentials + storage state (.gitignored)
-```
+Generated reports and auth state are written under ignored `testsuite/reports/` and `testsuite/.state/`.

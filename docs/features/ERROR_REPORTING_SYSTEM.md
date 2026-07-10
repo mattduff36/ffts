@@ -326,7 +326,7 @@ Potential improvements:
 
 ```bash
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL="DigiDocs <noreply@your-app.example.com>"
+RESEND_FROM_EMAIL="Forest Farm Operations <noreply@your-app.example.com>"
 ```
 
 ### Admin Account Setup

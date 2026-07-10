@@ -58,6 +58,7 @@ export function InventoryLocationDialog({
   const [form, setForm] = useState<InventoryLocationFormData>(EMPTY_INVENTORY_LOCATION_FORM);
   const [saving, setSaving] = useState(false);
   const isEditing = !!location;
+  const canEditLinkedAsset = !location || location.location_type === 'manual';
 
   const filteredAssets = useMemo(() => {
     if (form.linked_asset_type === 'none') return [];
@@ -95,12 +96,14 @@ export function InventoryLocationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !saving) onClose(); }}>
-      <DialogContent className="max-w-xl bg-slate-900 text-white border-slate-700">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-xl overflow-y-auto bg-slate-900 text-white border-slate-700">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Edit Location' : 'Add Location'}</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Create a location bucket and optionally link it to a current fleet asset.
+              {canEditLinkedAsset
+                ? 'Create a manual location bucket and optionally link it to a current fleet asset.'
+                : 'This generated location is synced from its source. Edit display details only.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -132,6 +135,7 @@ export function InventoryLocationDialog({
                 <Label>Linked Asset Type</Label>
                 <Select
                   value={form.linked_asset_type}
+                  disabled={!canEditLinkedAsset}
                   onValueChange={(value) => {
                     updateField('linked_asset_type', value as FleetAssetLinkType | 'none');
                     updateField('linked_asset_id', '');
@@ -153,7 +157,7 @@ export function InventoryLocationDialog({
                 <Label>Linked Asset</Label>
                 <Select
                   value={form.linked_asset_id || 'none'}
-                  disabled={form.linked_asset_type === 'none'}
+                  disabled={!canEditLinkedAsset || form.linked_asset_type === 'none'}
                   onValueChange={(value) => updateField('linked_asset_id', value === 'none' ? '' : value)}
                 >
                   <SelectTrigger className="bg-slate-800 border-slate-600">
@@ -168,6 +172,11 @@ export function InventoryLocationDialog({
                 </Select>
               </div>
             </div>
+            {!canEditLinkedAsset ? (
+              <p className="text-xs text-muted-foreground">
+                Linked assets for van, HGV, plant, site, Yard, and Unknown locations are maintained by sync rules.
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter>

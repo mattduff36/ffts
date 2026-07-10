@@ -3,6 +3,15 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { LOCKED_INSPECTION_DEFECT_STATUSES } from '@/lib/utils/inspectionDefectTaskStatuses';
 import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-access';
 
+function extractOriginalInspectionComment(description: string | null | undefined): string {
+  if (!description) {
+    return '';
+  }
+
+  const commentMatch = description.match(/(?:^|\n)Comment:\s*(.+?)(?:\n|$)/);
+  return commentMatch?.[1]?.trim() || '';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { errorResponse } = await getInspectionRouteActorAccess('hgv-inspections');
@@ -51,12 +60,12 @@ export async function GET(request: NextRequest) {
     }
 
     const itemIds = tasks.map(t => t.inspection_item_id).filter(Boolean);
-    let items: Array<{ id: string; item_number: number; item_description: string }> = [];
+    let items: Array<{ id: string; item_number: number; item_description: string; comments: string | null }> = [];
 
     if (itemIds.length > 0) {
       const { data: fetchedItems } = await supabaseAdmin
         .from('inspection_items')
-        .select('id, item_number, item_description')
+        .select('id, item_number, item_description, comments')
         .in('id', itemIds);
 
       if (fetchedItems) {
@@ -101,7 +110,8 @@ export async function GET(request: NextRequest) {
         item_description: itemDescription,
         status: task.status,
         actionId: task.id,
-        comment: task.logged_comment || task.workshop_comments || 'Defect in progress',
+        comment: items.find(i => i.id === task.inspection_item_id)?.comments?.trim()
+          || extractOriginalInspectionComment(task.description),
       });
     }
 

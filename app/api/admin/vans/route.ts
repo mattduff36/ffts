@@ -6,7 +6,11 @@ import { logServerError } from '@/lib/utils/server-error-logger';
 import { createDVLAApiService } from '@/lib/services/dvla-api';
 import { createMotHistoryService } from '@/lib/services/mot-history-api';
 import { formatRegistrationForStorage, validateRegistrationNumber } from '@/lib/utils/registration';
-import { isRoadEligibleRegistration, runFleetDvlaSync } from '@/lib/services/fleet-dvla-sync';
+import {
+  isExpectedFleetDvlaLookupFailure,
+  isRoadEligibleRegistration,
+  runFleetDvlaSync,
+} from '@/lib/services/fleet-dvla-sync';
 import type { Database } from '@/types/database';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 
@@ -187,7 +191,7 @@ export async function POST(request: NextRequest) {
     console.log(`[INFO] Van created: ${data.reg_number} (ID: ${data.id})`);
 
     // Automatically sync TAX and MOT data from APIs (non-blocking)
-    const syncResult = await syncVanData(data.id, data.reg_number, effectiveRole.user_id, supabase);
+    const syncResult = await syncVanData(data.id, data.reg_number || cleanReg, effectiveRole.user_id, supabase);
 
     return NextResponse.json({ 
       vehicle: data,
@@ -271,17 +275,22 @@ async function syncVanData(
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown auto-sync error';
-    console.error(`[ERROR] Auto-sync failed for ${regNumber}:`, message);
+    const shouldLogServerError = !isExpectedFleetDvlaLookupFailure(message);
 
-    await logServerError({
-      error: error as Error,
-      componentName: 'syncVanData',
-      additionalData: {
-        vanId,
-        regNumber,
-        context: 'auto_sync_on_van_create'
-      },
-    });
+    if (shouldLogServerError) {
+      console.error(`[ERROR] Auto-sync failed for ${regNumber}:`, message);
+      await logServerError({
+        error: error as Error,
+        componentName: 'syncVanData',
+        additionalData: {
+          vanId,
+          regNumber,
+          context: 'auto_sync_on_van_create'
+        },
+      });
+    } else {
+      console.warn(`[WARN] DVLA lookup did not find ${regNumber}:`, message);
+    }
 
     return {
       success: false,

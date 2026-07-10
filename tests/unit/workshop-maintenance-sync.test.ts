@@ -33,7 +33,7 @@ function makeCategory(
 describe('workshop maintenance sync', () => {
   it('links a 6 weekly inspection task by title', () => {
     const match = inferMaintenanceLink({
-      title: '6 Weekly Inspection Due - VS71 TMP',
+      title: '6 Weekly Inspection Due - ZZ99 TMP',
     });
 
     expect(match).toEqual({
@@ -130,5 +130,96 @@ describe('workshop maintenance sync', () => {
       last_service_hours: 1200,
       next_service_hours: 1450,
     });
+  });
+
+  it('updates the HGV Full Service custom category for major service tasks', () => {
+    const plan = buildAutomaticMaintenancePlan({
+      context: {
+        title: 'Workshop Task - AB12 CDE',
+        description: 'MAJOR SERVICE',
+        workshopCategoryName: 'Service (HGV)',
+      },
+      categories: [
+        makeCategory({
+          id: 'cat-service-due',
+          name: 'Service Due',
+          type: 'mileage',
+          period_unit: 'miles',
+          period_value: 10000,
+          alert_threshold_days: null,
+          alert_threshold_miles: 1000,
+          applies_to: ['van'],
+        }),
+        makeCategory({
+          id: 'cat-engine-service',
+          name: 'Engine Service',
+          type: 'mileage',
+          period_unit: 'miles',
+          period_value: 25000,
+          alert_threshold_days: null,
+          alert_threshold_miles: 1000,
+          applies_to: ['hgv'],
+        }),
+        makeCategory({
+          id: 'cat-full-service',
+          name: 'Full Service',
+          type: 'mileage',
+          period_unit: 'miles',
+          period_value: 100000,
+          alert_threshold_days: null,
+          alert_threshold_miles: 5000,
+          applies_to: ['hgv'],
+        }),
+      ],
+      state: {
+        currentMileage: 275309,
+        currentHours: null,
+      },
+      completedAt: '2026-05-01T14:30:35.000Z',
+      assetType: 'hgv',
+    });
+
+    expect(plan?.maintenanceUpdates).toEqual({});
+    expect(plan?.customItems).toEqual([
+      {
+        category_id: 'cat-full-service',
+        last_mileage: 275309,
+        due_mileage: 375309,
+      },
+      {
+        category_id: 'cat-engine-service',
+        last_mileage: 275309,
+        due_mileage: 300309,
+      },
+    ]);
+    expect(plan?.linkedCategoryId).toBe('cat-full-service');
+  });
+
+  it('does not apply HGV-only service categories to van service tasks', () => {
+    const plan = buildAutomaticMaintenancePlan({
+      context: {
+        title: 'Full service',
+      },
+      categories: [
+        makeCategory({
+          id: 'cat-full-service',
+          name: 'Full Service',
+          type: 'mileage',
+          period_unit: 'miles',
+          period_value: 100000,
+          alert_threshold_days: null,
+          alert_threshold_miles: 5000,
+          applies_to: ['hgv'],
+        }),
+      ],
+      state: {
+        currentMileage: 10000,
+        currentHours: null,
+      },
+      completedAt: '2026-05-01T14:30:35.000Z',
+      assetType: 'van',
+    });
+
+    expect(plan).toBeNull();
   });
 });

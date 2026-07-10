@@ -178,6 +178,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SendRemin
           priority: 'LOW',
           sender_id: user.id,
           created_via: 'maintenance_reminder',
+          module_key: 'maintenance',
         })
         .select()
         .single();
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SendRemin
           to: recipientEmails,
           senderName: senderProfile.full_name || 'TemplateApp',
           subject,
-          vehicleReg: vehicle.reg_number,
+          vehicleReg: vehicle.reg_number || 'Unknown',
           categoryName: category.name,
           dueInfo,
         });

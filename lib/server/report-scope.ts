@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getUsersWithModuleAccess } from '@/lib/server/team-permissions';
 import { hasWorkshopInspectionFullVisibilityOverride } from '@/lib/utils/inspection-visibility';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
+import { getEffectiveModuleAccessLevel } from '@/lib/utils/rbac';
 import { getEffectiveRole, type EffectiveRoleInfo } from '@/lib/utils/view-as';
 import { hasAccountsTimesheetFullVisibilityOverride } from '@/lib/utils/timesheet-visibility';
 import type { ModuleName } from '@/types/roles';
@@ -25,18 +26,15 @@ function isAdminTierRole(effectiveRole: EffectiveRoleInfo): boolean {
   return hasEffectiveRoleFullAccess(effectiveRole);
 }
 
-function isManagerLikeRole(effectiveRole: EffectiveRoleInfo): boolean {
-  return Boolean(effectiveRole.is_manager_admin || effectiveRole.role_name === 'supervisor');
-}
-
 export async function getReportScopeContext(): Promise<ReportScopeContext> {
   const effectiveRole = await getEffectiveRole();
+  const reportAccessLevel = await getEffectiveModuleAccessLevel('reports');
   const hasAccountsVisibilityOverride = hasAccountsTimesheetFullVisibilityOverride(
     effectiveRole.role_name,
     effectiveRole.team_name
   );
-  const isAdminTier = isAdminTierRole(effectiveRole) || hasAccountsVisibilityOverride;
-  const isManagerLike = isManagerLikeRole(effectiveRole);
+  const isAdminTier = isAdminTierRole(effectiveRole) || reportAccessLevel >= 5 || hasAccountsVisibilityOverride;
+  const isManagerLike = reportAccessLevel >= 3;
 
   return {
     effectiveRole,

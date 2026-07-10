@@ -105,7 +105,7 @@ export function InspectionPhotoTiles({
       </div>
 
       <Dialog open={Boolean(selectedPhoto)} onOpenChange={(open) => !open && setSelectedPhoto(null)}>
-        <DialogContent className="max-w-4xl border-border">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl overflow-y-auto border-border">
           {selectedPhoto && (
             <>
               <DialogHeader>

@@ -14,8 +14,21 @@ import {
   getHoursBasedStatus,
   getMileageBasedStatus,
 } from '@/lib/utils/maintenanceCalculations';
+import {
+  MAINTENANCE_CATEGORY_NAMES,
+  createMaintenanceCategoryMap,
+  getMaintenanceCategory,
+  getVisibleMaintenanceStatuses,
+  type MaintenanceCategoryConfig,
+  type MaintenanceCategoryMap,
+} from '@/lib/utils/maintenanceCategoryRules';
 import { getDashboardApprovalsMetrics } from '@/lib/server/dashboard-approvals';
 import { canAccessDebugConsole } from '@/lib/utils/debug-access';
+import {
+  DASHBOARD_FLEET_INSPECTION_REFRESH_INTERVAL_MS,
+  ensureFleetInspectionReminderActionsFresh,
+} from '@/lib/server/reminders/ensure-fleet-inspection-actions-fresh';
+import { DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL } from '@/lib/utils/error-log-filters';
 
 type PermissionMap = Record<(typeof ALL_MODULES)[number], boolean>;
 
@@ -49,6 +62,13 @@ interface CountMetricResult {
   error: unknown;
 }
 
+type ReminderActionSummaryRow = Pick<
+  Database['public']['Tables']['reminder_actions']['Row'],
+  'id' | 'ignored_forever' | 'ignored_until'
+> & {
+  reminders?: Array<Pick<Database['public']['Tables']['reminders']['Row'], 'status'>> | null;
+};
+
 async function resolveCountMetric(
   label: string,
   promise: PromiseLike<CountMetricResult>
@@ -76,6 +96,42 @@ async function resolveMetricValue<T>(label: string, promise: PromiseLike<T>, fal
   }
 }
 
+function isReminderActionIgnoredNow(action: ReminderActionSummaryRow, nowIso: string): boolean {
+  return action.ignored_forever || Boolean(action.ignored_until && action.ignored_until > nowIso);
+}
+
+function isUnassignedReminderAction(action: ReminderActionSummaryRow, nowIso: string): boolean {
+  if (isReminderActionIgnoredNow(action, nowIso)) {
+    return false;
+  }
+
+  const reminders = action.reminders || [];
+  return reminders.every((reminder) => reminder.status !== 'pending' && reminder.status !== 'actioned');
+}
+
+async function getUnassignedReminderActionsCount(admin: SupabaseClient<Database>): Promise<number> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await admin
+    .from('reminder_actions')
+    .select(`
+      id,
+      ignored_forever,
+      ignored_until,
+      reminders (
+        status
+      )
+    `)
+    .eq('status', 'open');
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data || []) as ReminderActionSummaryRow[]).filter((action) =>
+    isUnassignedReminderAction(action, nowIso)
+  ).length;
+}
+
 function createFullAccessPermissionMap(): PermissionMap {
   return ALL_MODULES.reduce<PermissionMap>((acc, moduleName) => {
     acc[moduleName] = true;
@@ -83,31 +139,25 @@ function createFullAccessPermissionMap(): PermissionMap {
   }, createEmptyModulePermissionRecord() as PermissionMap);
 }
 
-function getThresholds(categories: Array<Record<string, unknown>>) {
-  const categoryMap = new Map<string, Record<string, unknown>>();
-  categories.forEach((category) => {
-    const name = typeof category.name === 'string' ? category.name.toLowerCase() : '';
-    categoryMap.set(name, category);
-  });
-
+function getThresholds(categoryMap: MaintenanceCategoryMap) {
   const getDays = (name: string, fallback: number) =>
-    Number(categoryMap.get(name)?.alert_threshold_days ?? fallback);
+    Number(getMaintenanceCategory(categoryMap, name)?.alert_threshold_days ?? fallback);
   const getMiles = (name: string, fallback: number) =>
-    Number(categoryMap.get(name)?.alert_threshold_miles ?? fallback);
+    Number(getMaintenanceCategory(categoryMap, name)?.alert_threshold_miles ?? fallback);
   const getHours = (name: string, fallback: number) =>
-    Number(categoryMap.get(name)?.alert_threshold_hours ?? fallback);
+    Number(getMaintenanceCategory(categoryMap, name)?.alert_threshold_hours ?? fallback);
 
   return {
-    taxThreshold: getDays('tax due date', 30),
-    motThreshold: getDays('mot due date', 30),
-    serviceThreshold: getMiles('service due', 1000),
-    cambeltThreshold: getMiles('cambelt replacement', 5000),
-    firstAidThreshold: getDays('first aid kit expiry', 30),
-    sixWeeklyThreshold: getDays('6 weekly inspection due', 7),
-    fireExtinguisherThreshold: getDays('fire extinguisher due', 30),
-    tacoCalibrationThreshold: getDays('taco calibration due', 60),
-    lolerThreshold: getDays('loler due', 30),
-    serviceHoursThreshold: getHours('service due (hours)', 50),
+    taxThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.tax, 30),
+    motThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.mot, 30),
+    serviceThreshold: getMiles(MAINTENANCE_CATEGORY_NAMES.service, 1000),
+    cambeltThreshold: getMiles(MAINTENANCE_CATEGORY_NAMES.cambelt, 5000),
+    firstAidThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.firstAid, 30),
+    sixWeeklyThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.sixWeekly, 7),
+    fireExtinguisherThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.fireExtinguisher, 30),
+    tacoCalibrationThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.tacoCalibration, 60),
+    lolerThreshold: getDays(MAINTENANCE_CATEGORY_NAMES.loler, 30),
+    serviceHoursThreshold: getHours(MAINTENANCE_CATEGORY_NAMES.serviceHours, 50),
   };
 }
 
@@ -116,6 +166,7 @@ function getMaintenanceCountsForAsset(params: {
   maintenance: MaintenanceRow | null;
   lolerDueDate?: string | null;
   thresholds: ReturnType<typeof getThresholds>;
+  categoryMap: MaintenanceCategoryMap;
 }): MaintenanceCounts {
   const lolerStatus = params.assetType === 'plant'
     ? getDateBasedStatus(params.lolerDueDate || null, params.thresholds.lolerThreshold)
@@ -123,7 +174,9 @@ function getMaintenanceCountsForAsset(params: {
 
   if (!params.maintenance) {
     const counts = params.assetType === 'plant'
-      ? calculateAlertCounts([lolerStatus])
+      ? calculateAlertCounts(getVisibleMaintenanceStatuses(params.assetType, params.categoryMap, [
+          { categoryName: MAINTENANCE_CATEGORY_NAMES.loler, status: lolerStatus },
+        ]))
       : { overdue: 0, due_soon: 0 };
     return {
       attentionTotal: counts.overdue + counts.due_soon,
@@ -132,43 +185,51 @@ function getMaintenanceCountsForAsset(params: {
     };
   }
 
-  const statuses = [
-    getDateBasedStatus(params.maintenance.tax_due_date, params.thresholds.taxThreshold),
-    getDateBasedStatus(params.maintenance.mot_due_date, params.thresholds.motThreshold),
-    getMileageBasedStatus(
+  const taxStatus = getDateBasedStatus(params.maintenance.tax_due_date, params.thresholds.taxThreshold);
+  const motStatus = getDateBasedStatus(params.maintenance.mot_due_date, params.thresholds.motThreshold);
+  const serviceStatus = getMileageBasedStatus(
       params.maintenance.current_mileage,
       params.maintenance.next_service_mileage,
       params.thresholds.serviceThreshold
-    ),
-    getMileageBasedStatus(
+    );
+  const cambeltStatus = getMileageBasedStatus(
       params.maintenance.current_mileage,
       params.maintenance.cambelt_due_mileage,
       params.thresholds.cambeltThreshold
-    ),
-    getDateBasedStatus(params.maintenance.first_aid_kit_expiry, params.thresholds.firstAidThreshold),
-    getDateBasedStatus(
+    );
+  const firstAidStatus = getDateBasedStatus(params.maintenance.first_aid_kit_expiry, params.thresholds.firstAidThreshold);
+  const sixWeeklyStatus = getDateBasedStatus(
       params.maintenance.six_weekly_inspection_due_date,
       params.thresholds.sixWeeklyThreshold
-    ),
-    getDateBasedStatus(
+    );
+  const fireExtinguisherStatus = getDateBasedStatus(
       params.maintenance.fire_extinguisher_due_date,
       params.thresholds.fireExtinguisherThreshold
-    ),
-    getDateBasedStatus(
+    );
+  const tacoCalibrationStatus = getDateBasedStatus(
       params.maintenance.taco_calibration_due_date,
       params.thresholds.tacoCalibrationThreshold
-    ),
-    lolerStatus,
-    params.assetType === 'plant'
+    );
+  const serviceHoursStatus = params.assetType === 'plant'
       ? getHoursBasedStatus(
           params.maintenance.current_hours,
           params.maintenance.next_service_hours,
           params.thresholds.serviceHoursThreshold
         )
-      : { status: 'not_set' as const },
-  ];
+      : { status: 'not_set' as const };
 
-  const counts = calculateAlertCounts(statuses);
+  const counts = calculateAlertCounts(getVisibleMaintenanceStatuses(params.assetType, params.categoryMap, [
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.tax, status: taxStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.mot, status: motStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.service, status: serviceStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.cambelt, status: cambeltStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.firstAid, status: firstAidStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.sixWeekly, status: sixWeeklyStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.fireExtinguisher, status: fireExtinguisherStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.tacoCalibration, status: tacoCalibrationStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.loler, status: lolerStatus },
+    { categoryName: MAINTENANCE_CATEGORY_NAMES.serviceHours, status: serviceHoursStatus },
+  ]));
   return {
     attentionTotal: counts.overdue + counts.due_soon,
     dueSoonTotal: counts.due_soon,
@@ -181,8 +242,7 @@ async function getMaintenanceCounts(): Promise<MaintenanceCounts> {
   const [{ data: categories, error: categoriesError }, vansResult, hgvsResult, plantResult] = await Promise.all([
     supabase
       .from('maintenance_categories')
-      .select('name, alert_threshold_days, alert_threshold_miles, alert_threshold_hours')
-      .eq('is_active', true),
+      .select('name, alert_threshold_days, alert_threshold_miles, alert_threshold_hours, applies_to, is_active, show_on_overview'),
     supabase
       .from('vans')
       .select(`
@@ -248,7 +308,8 @@ async function getMaintenanceCounts(): Promise<MaintenanceCounts> {
   if (hgvsResult.error) throw hgvsResult.error;
   if (plantResult.error) throw plantResult.error;
 
-  const thresholds = getThresholds((categories || []) as Array<Record<string, unknown>>);
+  const categoryMap = createMaintenanceCategoryMap((categories || []) as MaintenanceCategoryConfig[]);
+  const thresholds = getThresholds(categoryMap);
   const totals: MaintenanceCounts = {
     attentionTotal: 0,
     dueSoonTotal: 0,
@@ -260,6 +321,7 @@ async function getMaintenanceCounts(): Promise<MaintenanceCounts> {
       assetType: 'van',
       maintenance: (Array.isArray(row.maintenance) ? row.maintenance[0] : row.maintenance) as MaintenanceRow | null,
       thresholds,
+      categoryMap,
     });
     totals.attentionTotal += counts.attentionTotal;
     totals.dueSoonTotal += counts.dueSoonTotal;
@@ -271,6 +333,7 @@ async function getMaintenanceCounts(): Promise<MaintenanceCounts> {
       assetType: 'hgv',
       maintenance: (Array.isArray(row.maintenance) ? row.maintenance[0] : row.maintenance) as MaintenanceRow | null,
       thresholds,
+      categoryMap,
     });
     totals.attentionTotal += counts.attentionTotal;
     totals.dueSoonTotal += counts.dueSoonTotal;
@@ -283,6 +346,7 @@ async function getMaintenanceCounts(): Promise<MaintenanceCounts> {
       maintenance: (Array.isArray(row.maintenance) ? row.maintenance[0] : row.maintenance) as MaintenanceRow | null,
       lolerDueDate: row.loler_due_date,
       thresholds,
+      categoryMap,
     });
     totals.attentionTotal += counts.attentionTotal;
     totals.dueSoonTotal += counts.dueSoonTotal;
@@ -342,11 +406,15 @@ export async function GET() {
   const permissions =
     hasEffectiveRoleFullAccess(effectiveRole)
       ? createFullAccessPermissionMap()
-      : await getPermissionMapForUser(userId, effectiveRole.role_id, admin, effectiveRole.team_id);
+      : await getPermissionMapForUser(userId, effectiveRole.role_id, admin, effectiveRole.team_id, {
+        includeUserOverrides: effectiveRole.is_viewing_as !== true,
+      });
 
   const canViewApprovals = permissions.approvals;
+  const canViewActions = permissions.actions;
   const canViewWorkshopTasks = permissions['workshop-tasks'];
   const canViewMaintenance = permissions.maintenance;
+  const canViewReminders = permissions.reminders;
   const canViewSuggestions = permissions.suggestions;
   const canViewErrorReports = permissions['error-reports'];
   const canViewQuotes = permissions.quotes;
@@ -356,6 +424,16 @@ export async function GET() {
     isViewingAs: effectiveRole.is_viewing_as,
   });
 
+  if (canViewActions) {
+    await resolveMetricValue(
+      'fleet inspection action refresh',
+      ensureFleetInspectionReminderActionsFresh({
+        staleAfterMs: DASHBOARD_FLEET_INSPECTION_REFRESH_INTERVAL_MS,
+      }),
+      null,
+    );
+  }
+
   const [
     approvalsMetrics,
     workshopPendingResult,
@@ -364,6 +442,8 @@ export async function GET() {
     quotesResult,
     errorLogsResult,
     maintenanceCounts,
+    remindersPendingResult,
+    actionsUnassignedCount,
   ] = await Promise.all([
     canViewApprovals
       ? resolveMetricValue(
@@ -416,7 +496,11 @@ export async function GET() {
     canAccessDebugTools
       ? resolveCountMetric(
           'error logs',
-          supabase.from('error_logs').select('id', { count: 'exact', head: true })
+          supabase
+            .from('error_logs')
+            .select('id', { count: 'exact', head: true })
+            .or('page_url.is.null,page_url.not.ilike.%localhost%')
+            .or(`user_email.is.null,user_email.neq.${DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL}`)
         )
       : Promise.resolve({ count: 0, error: null }),
     canViewMaintenance
@@ -434,6 +518,23 @@ export async function GET() {
           dueSoonTotal: 0,
           overdueTotal: 0,
         }),
+    canViewReminders
+      ? resolveCountMetric(
+          'pending reminders',
+          supabase
+            .from('reminders')
+            .select('id', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'pending')
+        )
+      : Promise.resolve({ count: 0, error: null }),
+    canViewActions
+      ? resolveMetricValue(
+          'unassigned action reminders',
+          getUnassignedReminderActionsCount(admin),
+          0
+        )
+      : Promise.resolve(0),
   ]);
 
   return NextResponse.json({
@@ -448,6 +549,8 @@ export async function GET() {
         workshop_pending: workshopPendingResult.count || 0,
         maintenance_due_soon: maintenanceCounts.dueSoonTotal,
         maintenance_overdue: maintenanceCounts.overdueTotal,
+        reminders_pending: remindersPendingResult.count || 0,
+        actions_unassigned: actionsUnassignedCount,
         suggestions_new: suggestionBadgeMetrics.newCount + suggestionBadgeMetrics.awaitingAdminReplyCount,
         error_reports_new: errorsNewResult.count || 0,
         quotes_pending_internal_approval: quotesResult.count || 0,

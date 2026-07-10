@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import {
@@ -64,10 +64,8 @@ function parseOptionalTimesheetType(value: unknown): string | undefined {
 }
 
 async function assertAdminUsersAccess() {
-  const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-  if (!canAccessUserAdmin) {
-    return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-  }
+  const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+  if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
   const effectiveRole = await getEffectiveRole();
   const actorIsAdmin = hasEffectiveRoleFullAccess(effectiveRole);

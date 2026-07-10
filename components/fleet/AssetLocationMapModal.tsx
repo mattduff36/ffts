@@ -12,34 +12,22 @@ import {
 import { X } from 'lucide-react';
 import * as maptilersdk from '@maptiler/sdk';
 import '@maptiler/sdk/dist/maptiler-sdk.css';
-
-interface LocationData {
-  lat: number;
-  lng: number;
-  speed: number;
-  heading: number;
-  updatedAt: string;
-  name: string;
-  vrn: string;
-  vehicleId: string;
-}
-
-interface OtherVehicle {
-  vehicleId: string;
-  name: string;
-  vrn: string;
-  lat: number;
-  lng: number;
-  speed: number;
-  heading: number;
-  updatedAt: string;
-}
+import { formatTrackerTimestamp } from '@/lib/utils/tracker-dates';
+import { buildTrackerPopupHtml } from '@/lib/utils/tracker-popup';
+import type { TrackerLocationData } from '@/types/fleet-tracker';
 
 interface AssetLocationMapModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   assetLabel: string;
-  location: LocationData | null;
+  location: TrackerLocationData | null;
+  locationProvider?: 'fleetsmart' | 'velocityfleet';
+}
+
+function getAllLocationsEndpoint(locationProvider: 'fleetsmart' | 'velocityfleet'): string {
+  return locationProvider === 'velocityfleet'
+    ? '/api/velocityfleet/all-locations'
+    : '/api/fleetsmart/all-locations';
 }
 
 /** Extract a short display label from a FleetSmart vehicle name */
@@ -61,10 +49,11 @@ export function AssetLocationMapModal({
   onOpenChange,
   assetLabel,
   location,
+  locationProvider = 'fleetsmart',
 }: AssetLocationMapModalProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maptilersdk.Map | null>(null);
-  const [otherVehicles, setOtherVehicles] = useState<OtherVehicle[]>([]);
+  const [otherVehicles, setOtherVehicles] = useState<TrackerLocationData[]>([]);
   const [fetchDone, setFetchDone] = useState(false);
 
   // Fetch all vehicle locations when modal opens.
@@ -84,7 +73,7 @@ export function AssetLocationMapModal({
 
     async function fetchAll() {
       try {
-        const res = await fetch('/api/fleetsmart/all-locations');
+        const res = await fetch(getAllLocationsEndpoint(locationProvider));
         if (!res.ok) {
           if (!cancelled) setFetchDone(true);
           return;
@@ -115,7 +104,7 @@ export function AssetLocationMapModal({
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [open]);
+  }, [open, locationProvider]);
 
   // Initialize map ONLY after fetch is done (or at least attempted)
   useEffect(() => {
@@ -155,19 +144,21 @@ export function AssetLocationMapModal({
         if (String(v.vehicleId) === String(location!.vehicleId)) continue;
         if (isNaN(v.lat) || isNaN(v.lng)) continue;
 
-        const label = extractLabel(v.name, v.vrn);
+        const label = v.vrn || extractLabel(v.name, v.vrn);
+        const lastSeen = formatTrackerTimestamp(v.updatedAt);
         otherCount++;
 
         new maptilersdk.Marker({ color: '#3b82f6' })
           .setLngLat([v.lng, v.lat])
           .setPopup(
             new maptilersdk.Popup({ offset: 25 }).setHTML(
-              `<div style="color: #1e293b; padding: 4px; font-size: 13px;">
-                <strong>${label}</strong><br/>
-                ${v.vrn ? `VRN: ${v.vrn}<br/>` : ''}
-                Speed: ${v.speed ?? 0} mph<br/>
-                Last seen: ${new Date(v.updatedAt).toLocaleString('en-GB')}
-              </div>`
+              buildTrackerPopupHtml({
+                regLabel: label,
+                vrn: v.vrn,
+                nickname: v.nickname,
+                speed: v.speed,
+                lastSeen,
+              })
             )
           )
           .addTo(map);
@@ -176,16 +167,19 @@ export function AssetLocationMapModal({
       console.log(`[MapModal] Added ${otherCount} other vehicle markers`);
 
       // Add main asset marker (red) – on top
+      const assetLastSeen = formatTrackerTimestamp(location!.updatedAt);
+      const assetRegLabel = location!.vrn || assetLabel;
       const marker = new maptilersdk.Marker({ color: '#ef4444' })
         .setLngLat([location!.lng, location!.lat])
         .setPopup(
           new maptilersdk.Popup({ offset: 25 }).setHTML(
-            `<div style="color: #1e293b; padding: 4px; font-size: 13px;">
-              <strong>${assetLabel}</strong><br/>
-              ${location!.vrn ? `VRN: ${location!.vrn}<br/>` : ''}
-              Speed: ${location!.speed ?? 0} mph<br/>
-              Last seen: ${new Date(location!.updatedAt).toLocaleString('en-GB')}
-            </div>`
+            buildTrackerPopupHtml({
+              regLabel: assetRegLabel,
+              vrn: location!.vrn,
+              nickname: location!.nickname,
+              speed: location!.speed,
+              lastSeen: assetLastSeen,
+            })
           )
         )
         .addTo(map);
@@ -206,6 +200,8 @@ export function AssetLocationMapModal({
     };
   }, [open, fetchDone, location, assetLabel, otherVehicles]);
 
+  const lastReported = formatTrackerTimestamp(location?.updatedAt);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[90vw] w-[90vw] max-h-[85vh] p-0 gap-0 flex flex-col [&>button:last-of-type]:hidden">
@@ -218,7 +214,7 @@ export function AssetLocationMapModal({
           <DialogTitle>Location – {assetLabel}</DialogTitle>
           <DialogDescription>
             {location
-              ? `Last reported: ${new Date(location.updatedAt).toLocaleString('en-GB')} · Speed: ${location.speed ?? 0} mph`
+              ? `Last reported: ${lastReported} · Speed: ${location.speed ?? 0} mph`
               : 'No location data available'}
           </DialogDescription>
           <div className="flex items-center gap-4 pt-1 text-xs text-muted-foreground">

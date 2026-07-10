@@ -4,16 +4,20 @@ import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { fetchUserDirectory } from '@/lib/client/user-directory';
+import { useTimesheetJobCodeOptions } from '@/lib/client/timesheet-job-codes';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DidNotWorkReasonDialog, type DidNotWorkReasonDecision } from '@/components/timesheets/DidNotWorkReasonDialog';
 import { JobCodeFields } from '@/components/timesheets/JobCodeFields';
+import { MobileNumericTimeInput } from '@/components/timesheets/MobileNumericTimeInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Save, Check, AlertCircle, XCircle, Home, User, Loader2 } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { ArrowLeft, Save, Check, AlertCircle, XCircle, Home, User, Moon } from 'lucide-react';
 import Link from 'next/link';
 // Removed: getWeekEnding, formatDateISO - no longer needed (week comes from props)
 import { calculateStandardTimesheetHours, formatHours, roundTimeToNearestQuarterHour } from '@/lib/utils/time-calculations';
@@ -28,11 +32,13 @@ import { toast } from 'sonner';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
 import { TrainingDeclineDialog } from '../../components/TrainingDeclineDialog';
 import { declineTrainingBookingsClient } from '@/lib/client/training-bookings';
+import { notifyTimesheetDidNotWorkExceptions } from '@/lib/client/timesheet-did-not-work-notifications';
 import { fetchCurrentWorkShift, fetchEmployeeWorkShift } from '@/lib/client/work-shifts';
 import type { WorkShiftPattern } from '@/types/work-shifts';
 import {
   type ApprovedAbsenceForTimesheet,
   isWorkWindowOvernight,
+  type TimesheetDidNotWorkReason,
   type TimesheetEntryLike,
   type TimesheetOffDayState,
   getTimesheetEntryDateFromWeekEnding,
@@ -43,13 +49,36 @@ import {
 } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals, formatLeaveAwareWeeklyDisplayMultiline } from '@/lib/utils/timesheet-leave-totals';
 import {
+  formatDidNotWorkReasonRemark,
+  getMissingScheduledDidNotWorkReasonException,
+  isScheduledWorkingDayDidNotWork,
+  parseDidNotWorkReasonRemark,
+} from '@/lib/utils/timesheet-did-not-work-exceptions';
+import {
+  areCataloguedJobNumbers,
   getEntryJobNumbers,
   getNormalizedJobNumbers,
   getPrimaryJobNumber,
-  hasDuplicateJobNumbers,
-  isValidJobNumber,
   normalizeJobNumberInput,
 } from '@/lib/utils/timesheet-job-codes';
+import {
+  hasWorkedTimesForSubsistence,
+  isSubsistencePaymentRequired,
+  syncSubsistenceRemark,
+} from '@/lib/utils/timesheet-subsistence';
+import { isDuplicateTimesheetWeekError } from '@/lib/utils/timesheet-errors';
+import {
+  applyPendingTrainingBookingsToOffDayStates,
+  formatHalfDayTrainingRemark,
+  getHalfDayTrainingRemarkForOffDayState,
+  getPendingDidNotWorkBookingsPayload,
+  getPendingDidNotWorkTrainingBooking,
+  isHalfDayTrainingSession,
+  type DidNotWorkTrainingSession,
+  type PendingDidNotWorkBooking,
+  type PendingDidNotWorkBookingMap,
+} from '@/lib/utils/timesheet-did-not-work-bookings';
+import { commitTimesheetDidNotWorkBookings } from '@/lib/client/timesheet-did-not-work-bookings';
 
 /**
  * Civils Timesheet Component
@@ -83,6 +112,7 @@ const createBlankEntry = (dayOfWeek: number): TimesheetEntryDraft => ({
   job_number: '',
   job_numbers: [],
   working_in_yard: false,
+  subsistence_payment_required: false,
   did_not_work: false,
   didNotWorkReason: null,
   night_shift: false,
@@ -95,6 +125,13 @@ const createBlankEntry = (dayOfWeek: number): TimesheetEntryDraft => ({
 const createBlankWeekEntries = (): TimesheetEntryDraft[] =>
   Array.from({ length: 7 }, (_, i) => createBlankEntry(i + 1));
 
+function formatLocalIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function CivilsTimesheet({
   weekEnding: initialWeekEnding,
   existingId: initialExistingId,
@@ -104,6 +141,11 @@ export function CivilsTimesheet({
 }: CivilsTimesheetProps) {
   const router = useRouter();
   const { user, profile, isManager, isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
+  const { options: jobCodeOptions, isLoading: jobCodeOptionsLoading } = useTimesheetJobCodeOptions();
+  const cataloguedJobNumbers = useMemo(
+    () => new Set(jobCodeOptions.map((option) => option.value)),
+    [jobCodeOptions]
+  );
   
   const supabase = useMemo(() => createClient(), []);
   
@@ -137,6 +179,7 @@ export function CivilsTimesheet({
   const [offDayRefreshToken, setOffDayRefreshToken] = useState(0);
   const [trainingDeclineDayIndex, setTrainingDeclineDayIndex] = useState<number | null>(null);
   const [decliningTraining, setDecliningTraining] = useState(false);
+  const [didNotWorkReasonDayIndex, setDidNotWorkReasonDayIndex] = useState<number | null>(null);
   
   // Track time validation errors per day
   const [timeErrors, setTimeErrors] = useState<Record<number, string>>({});
@@ -160,15 +203,20 @@ export function CivilsTimesheet({
   const [offDayStates, setOffDayStates] = useState<TimesheetOffDayState[]>([]);
   const [offDayKey, setOffDayKey] = useState<string>('');
   const [loadingOffDays, setLoadingOffDays] = useState(true);
+  const [pendingDidNotWorkBookings, setPendingDidNotWorkBookings] = useState<PendingDidNotWorkBookingMap>({});
   const currentOffDayKey = useMemo(
     () => (selectedEmployeeId && weekEnding ? `${selectedEmployeeId}:${weekEnding}` : ''),
     [selectedEmployeeId, weekEnding]
   );
+  const effectiveOffDayStates = useMemo(
+    () => applyPendingTrainingBookingsToOffDayStates(offDayStates, pendingDidNotWorkBookings),
+    [offDayStates, pendingDidNotWorkBookings]
+  );
 
   const offDayMap = useMemo(() => {
     if (offDayKey !== currentOffDayKey) return new Map<number, TimesheetOffDayState>();
-    return new Map(offDayStates.map((state) => [state.day_of_week, state] as const));
-  }, [offDayKey, currentOffDayKey, offDayStates]);
+    return new Map(effectiveOffDayStates.map((state) => [state.day_of_week, state] as const));
+  }, [offDayKey, currentOffDayKey, effectiveOffDayStates]);
 
   // Fetch bank holidays from GOV.UK API on mount
   useEffect(() => {
@@ -203,6 +251,10 @@ export function CivilsTimesheet({
       current === managerSelectedUserId ? current : managerSelectedUserId
     );
   }, [managerSelectedUserId]);
+
+  useEffect(() => {
+    setPendingDidNotWorkBookings({});
+  }, [selectedEmployeeId, weekEnding]);
 
   // Load existing timesheet if ID is provided via props
   useEffect(() => {
@@ -299,15 +351,15 @@ export function CivilsTimesheet({
 
   useEffect(() => {
     if (!existingTimesheetLoaded) return;
-    if (offDayKey !== currentOffDayKey || offDayStates.length === 0) return;
+    if (offDayKey !== currentOffDayKey || effectiveOffDayStates.length === 0) return;
 
     setEntries((prev) =>
-      normalizeTimesheetEntriesForOffDays(prev, offDayStates, {
+      normalizeTimesheetEntriesForOffDays(prev, effectiveOffDayStates, {
         enforceLeaveOverwrite: true,
         applyNonShiftDefaults: true,
       }) as TimesheetEntryDraft[]
     );
-  }, [currentOffDayKey, existingTimesheetLoaded, offDayKey, offDayStates]);
+  }, [currentOffDayKey, effectiveOffDayStates, existingTimesheetLoaded, offDayKey]);
 
   // Removed: Fetch existing timesheets effect - no longer needed
   // Duplicate checking now happens in WeekSelector
@@ -317,6 +369,38 @@ export function CivilsTimesheet({
 
   const getOffDayForIndex = (dayIndex: number): TimesheetOffDayState | undefined =>
     offDayMap.get(dayIndex + 1);
+
+  const buildPendingDidNotWorkBooking = (
+    dayIndex: number,
+    kind: PendingDidNotWorkBooking['kind'],
+    trainingSession?: DidNotWorkTrainingSession
+  ): PendingDidNotWorkBooking => ({
+    dayOfWeek: dayIndex + 1,
+    dayName: DAY_NAMES[dayIndex] || `Day ${dayIndex + 1}`,
+    date: formatLocalIsoDate(getDayDate(dayIndex)),
+    kind,
+    ...(trainingSession ? { trainingSession } : {}),
+  });
+
+  function queuePendingDidNotWorkBooking(booking: PendingDidNotWorkBooking) {
+    setPendingDidNotWorkBookings((current) => ({
+      ...current,
+      [booking.dayOfWeek - 1]: booking,
+    }));
+  }
+
+  function removePendingDidNotWorkBooking(dayIndex: number) {
+    setPendingDidNotWorkBookings((current) => {
+      if (!current[dayIndex]) return current;
+      const next = { ...current };
+      delete next[dayIndex];
+      return next;
+    });
+  }
+
+  function hasPendingTrainingBooking(dayIndex: number): boolean {
+    return Boolean(getPendingDidNotWorkTrainingBooking(pendingDidNotWorkBookings, dayIndex));
+  }
 
   const isLeaveLockedDay = (dayIndex: number): boolean => Boolean(getOffDayForIndex(dayIndex)?.isLeaveLocked);
   const isLeaveDay = (dayIndex: number): boolean => Boolean(getOffDayForIndex(dayIndex)?.isOnApprovedLeave);
@@ -370,6 +454,12 @@ export function CivilsTimesheet({
     dayOffState?.pendingTrainingDisplayRemarks || dayOffState?.pendingTrainingLabels[0]?.label || 'Training pending approval';
 
   const handleTrainingStatusToggle = (dayIndex: number) => {
+    if (hasPendingTrainingBooking(dayIndex)) {
+      removePendingDidNotWorkBooking(dayIndex);
+      toast.success('Training booking selection removed.');
+      return;
+    }
+
     const dayOffState = getOffDayForIndex(dayIndex);
     if (!dayOffState?.hasTrainingBooking) return;
     setTrainingDeclineDayIndex(dayIndex);
@@ -558,6 +648,7 @@ export function CivilsTimesheet({
   const handleSelectedEmployeeChange = (nextEmployeeId: string) => {
     setSelectedEmployeeId(nextEmployeeId);
     onSelectedEmployeeChange?.(nextEmployeeId);
+    setPendingDidNotWorkBookings({});
 
     // New timesheets should always start from a clean week for the chosen employee.
     // This prevents prior employee leave defaults from leaking into the new selection.
@@ -673,9 +764,14 @@ export function CivilsTimesheet({
         .from('timesheets')
         .select('*')
         .eq('id', timesheetId)
-        .single();
+        .maybeSingle();
       
       if (timesheetError) throw timesheetError;
+      if (!timesheetData) {
+        setError('Timesheet could not be found or is no longer available');
+        setShowErrorDialog(true);
+        return;
+      }
       
       // Check if user has access and timesheet is draft or rejected
       // Calculate permissions dynamically from current profile state (not stale closure values)
@@ -738,6 +834,7 @@ export function CivilsTimesheet({
           job_number: getPrimaryJobNumber(existingEntry) || '',
           job_numbers: getEntryJobNumbers(existingEntry),
           working_in_yard: existingEntry.working_in_yard || false,
+          subsistence_payment_required: isSubsistencePaymentRequired(existingEntry),
           did_not_work: existingEntry.did_not_work || false,
           didNotWorkReason: inferredReason,
           night_shift: existingEntry.night_shift || false,
@@ -750,7 +847,7 @@ export function CivilsTimesheet({
       
       setEntries(fullWeek);
     } catch (err) {
-      if (!isAuthErrorStatus(getErrorStatus(err))) {
+      if (!isAuthErrorStatus(getErrorStatus(err)) && !isNetworkFetchError(err)) {
         console.error('Error loading existing timesheet:', err);
       }
       setError(err instanceof Error ? err.message : 'Failed to load timesheet');
@@ -770,7 +867,12 @@ export function CivilsTimesheet({
   };
 
   // Calculate hours when times change
-  const updateEntry = (dayIndex: number, field: string, value: string | boolean | string[]) => {
+  const updateEntry = (
+    dayIndex: number,
+    field: string,
+    value: string | boolean | string[],
+    options?: { didNotWorkReason?: string; didNotWorkReasonCategory?: TimesheetDidNotWorkReason }
+  ) => {
     if (isLeaveLockedDay(dayIndex)) return;
     const workWindow = getWorkWindowForDay(dayIndex);
 
@@ -780,24 +882,30 @@ export function CivilsTimesheet({
     if (field === 'did_not_work') {
       if (isLeaveDay(dayIndex)) return;
       if (value === true) {
+        const requiredReason = options?.didNotWorkReason?.trim();
         // Setting did_not_work to true
         newEntries[dayIndex] = {
           ...newEntries[dayIndex],
           did_not_work: true,
-          didNotWorkReason: null, // Clear any previous reason
+          didNotWorkReason: requiredReason ? (options?.didNotWorkReasonCategory || 'Other') : null,
           time_started: '',
           time_finished: '',
           job_number: '',
           job_numbers: [],
           working_in_yard: false,
+          subsistence_payment_required: false,
           daily_total: 0,
+          remarks: requiredReason ? formatDidNotWorkReasonRemark(requiredReason) : '',
         };
       } else {
+        removePendingDidNotWorkBooking(dayIndex);
+        const currentRemarks = newEntries[dayIndex].remarks;
         // Setting did_not_work to false - reset daily_total if times are empty
         newEntries[dayIndex] = {
           ...newEntries[dayIndex],
           did_not_work: false,
           didNotWorkReason: null, // Clear reason when re-enabling work
+          remarks: parseDidNotWorkReasonRemark(currentRemarks) === currentRemarks ? currentRemarks : '',
         };
         // Recalculate daily_total if times are present, otherwise set to null
         const entry = newEntries[dayIndex];
@@ -869,6 +977,15 @@ export function CivilsTimesheet({
         };
       }
 
+      if (field === 'subsistence_payment_required') {
+        const isRequired = Boolean(value);
+        newEntries[dayIndex] = {
+          ...newEntries[dayIndex],
+          subsistence_payment_required: isRequired,
+          remarks: syncSubsistenceRemark(newEntries[dayIndex].remarks, isRequired),
+        };
+      }
+
       // Auto-calculate daily total if both times are present
       if (field === 'time_started' || field === 'time_finished') {
         const entry = newEntries[dayIndex];
@@ -914,12 +1031,20 @@ export function CivilsTimesheet({
             );
           }
         }
+
+        if (!hasWorkedTimesForSubsistence(newEntries[dayIndex])) {
+          newEntries[dayIndex] = {
+            ...newEntries[dayIndex],
+            subsistence_payment_required: false,
+            remarks: syncSubsistenceRemark(newEntries[dayIndex].remarks, false),
+          };
+        }
       }
     }
 
     const normalizedEntries =
-      offDayKey === currentOffDayKey && offDayStates.length > 0
-        ? (normalizeTimesheetEntriesForOffDays(newEntries, offDayStates, {
+      offDayKey === currentOffDayKey && effectiveOffDayStates.length > 0
+        ? (normalizeTimesheetEntriesForOffDays(newEntries, effectiveOffDayStates, {
             enforceLeaveOverwrite: true,
             // Keep approved-leave guardrails, but do not re-force "Not on Shift" while the
             // user is actively editing. This allows weekend overtime overrides.
@@ -930,9 +1055,108 @@ export function CivilsTimesheet({
     setEntries(normalizedEntries);
   };
 
+  function handleDidNotWorkToggle(dayIndex: number) {
+    const entry = entries[dayIndex];
+    if (entry.did_not_work) {
+      updateEntry(dayIndex, 'did_not_work', false);
+      return;
+    }
+
+    const offDay = getOffDayForIndex(dayIndex);
+    if (isScheduledWorkingDayDidNotWork({ did_not_work: true }, offDay)) {
+      setDidNotWorkReasonDayIndex(dayIndex);
+      return;
+    }
+
+    updateEntry(dayIndex, 'did_not_work', true);
+  }
+
+  function handleSubsistenceToggle(dayIndex: number) {
+    const entry = entries[dayIndex];
+    const nextValue = !entry.subsistence_payment_required;
+
+    if (nextValue && !hasWorkedTimesForSubsistence(entry)) {
+      toast.info('Enter start and finish times before adding subsistence.', {
+        id: `timesheet-subsistence-blocked-${dayIndex}`,
+        description: 'Use this when the worker stayed away overnight and needs subsistence payment.',
+      });
+      return;
+    }
+
+    updateEntry(dayIndex, 'subsistence_payment_required', nextValue);
+    toast.success(nextValue ? 'Subsistence payment added' : 'Subsistence payment removed', {
+      id: `timesheet-subsistence-toggle-${dayIndex}`,
+      description: nextValue
+        ? 'This day will be marked as stayed away for payroll.'
+        : 'The stayed-away payroll marker has been removed for this day.',
+    });
+  }
+
+  function applyPendingTrainingSelection(dayIndex: number, trainingSession: DidNotWorkTrainingSession) {
+    const booking = buildPendingDidNotWorkBooking(dayIndex, 'training', trainingSession);
+    const halfDayRemark = isHalfDayTrainingSession(trainingSession)
+      ? formatHalfDayTrainingRemark(trainingSession)
+      : '';
+    queuePendingDidNotWorkBooking(booking);
+    setEntries((current) => {
+      const next = [...current];
+      const entry = next[dayIndex];
+      const dailyTotal =
+        entry.time_started && entry.time_finished
+          ? calculateStandardTimesheetHours(entry.time_started, entry.time_finished)
+          : null;
+
+      next[dayIndex] = {
+        ...entry,
+        did_not_work: false,
+        didNotWorkReason: null,
+        working_in_yard: false,
+        job_number: '',
+        job_numbers: [],
+        subsistence_payment_required: Boolean(entry.subsistence_payment_required && dailyTotal !== null),
+        daily_total: dailyTotal,
+        remarks: halfDayRemark,
+      };
+      return next;
+    });
+    toast.info(`${booking.dayName} marked for ${trainingSession === 'FULL' ? 'Training' : `Training (${trainingSession})`}.`, {
+      description: isHalfDayTrainingSession(trainingSession)
+        ? 'Enter the total day start and finish times, including training and any worked time.'
+        : 'Enter the training-day start and finish times before saving.',
+    });
+  }
+
+  function handleDidNotWorkReasonConfirm(decision: DidNotWorkReasonDecision) {
+    if (didNotWorkReasonDayIndex === null) return;
+    if (decision.kind === 'sickness') {
+      queuePendingDidNotWorkBooking(buildPendingDidNotWorkBooking(didNotWorkReasonDayIndex, 'sickness'));
+      updateEntry(didNotWorkReasonDayIndex, 'did_not_work', true, {
+        didNotWorkReason: 'Sickness',
+        didNotWorkReasonCategory: 'Sickness',
+      });
+    } else if (decision.kind === 'training') {
+      applyPendingTrainingSelection(didNotWorkReasonDayIndex, decision.trainingSession);
+    } else {
+      removePendingDidNotWorkBooking(didNotWorkReasonDayIndex);
+      updateEntry(didNotWorkReasonDayIndex, 'did_not_work', true, { didNotWorkReason: decision.reason });
+    }
+    setDidNotWorkReasonDayIndex(null);
+  }
+
+  function validateScheduledDidNotWorkReasons(entriesToValidate: TimesheetEntryDraft[]): boolean {
+    const missingReason = getMissingScheduledDidNotWorkReasonException(entriesToValidate, effectiveOffDayStates, weekEnding);
+    if (!missingReason) return true;
+
+    const dayIndex = missingReason.dayOfWeek - 1;
+    setError(`${missingReason.dayName}: please add a reason before selecting Did Not Work on a scheduled day.`);
+    setShowErrorDialog(true);
+    setActiveDay(String(dayIndex));
+    return false;
+  }
+
   const leaveAwareTotals = useMemo(
-    () => buildLeaveAwareTotals(entries, offDayStates),
-    [entries, offDayStates]
+    () => buildLeaveAwareTotals(entries, effectiveOffDayStates),
+    [effectiveOffDayStates, entries]
   );
   const weeklyTotalMultiline = formatLeaveAwareWeeklyDisplayMultiline(
     leaveAwareTotals.weekly.workedHours,
@@ -966,13 +1190,14 @@ export function CivilsTimesheet({
     }
 
     const entriesForValidation =
-      offDayKey === currentOffDayKey && offDayStates.length > 0
-        ? (normalizeTimesheetEntriesForOffDays(entries, offDayStates, {
+      offDayKey === currentOffDayKey && effectiveOffDayStates.length > 0
+        ? (normalizeTimesheetEntriesForOffDays(entries, effectiveOffDayStates, {
             enforceLeaveOverwrite: true,
             applyNonShiftDefaults: true,
           }) as TimesheetEntryDraft[])
         : entries;
-    const offDayByDay = new Map(offDayStates.map((state) => [state.day_of_week, state] as const));
+    if (!validateScheduledDidNotWorkReasons(entriesForValidation)) return;
+    const offDayByDay = new Map(effectiveOffDayStates.map((state) => [state.day_of_week, state] as const));
     
     // Validate that ALL days have either hours OR "did not work" marked
     const allDaysComplete = entriesForValidation.every(entry => {
@@ -1032,6 +1257,12 @@ export function CivilsTimesheet({
       return;
     }
 
+    if (jobCodeOptionsLoading) {
+      setError('Job codes are still loading. Please wait a moment, then try again.');
+      setShowErrorDialog(true);
+      return;
+    }
+
     // Validate job numbers for all working days (unless working in yard)
     const allJobNumbersValid = entriesForValidation.every(entry => {
       const offDay = offDayByDay.get(entry.day_of_week);
@@ -1042,14 +1273,11 @@ export function CivilsTimesheet({
       if (entry.working_in_yard) return true; // Skip validation for yard work
       if (!hasHours) return true;
 
-      const jobNumbers = getNormalizedJobNumbers(entry.job_numbers);
-      if (jobNumbers.length === 0) return false;
-      if (hasDuplicateJobNumbers(entry.job_numbers)) return false;
-      return jobNumbers.every((jobNumber) => isValidJobNumber(jobNumber));
+      return areCataloguedJobNumbers(entry.job_numbers, cataloguedJobNumbers);
     });
     
     if (!allJobNumbersValid) {
-      setError('Please enter at least one valid Job Number (format: 1234-AB) for all working days, and do not repeat the same code on a single day.');
+      setError('Please select at least one valid Job Number from the job-code list for all working days, and do not repeat the same code on a single day.');
       setShowErrorDialog(true);
       return;
     }
@@ -1100,13 +1328,14 @@ export function CivilsTimesheet({
 
     try {
       const entriesForPersistence =
-        offDayKey === currentOffDayKey && offDayStates.length > 0
-          ? (normalizeTimesheetEntriesForOffDays(entries, offDayStates, {
+        offDayKey === currentOffDayKey && effectiveOffDayStates.length > 0
+          ? (normalizeTimesheetEntriesForOffDays(entries, effectiveOffDayStates, {
               enforceLeaveOverwrite: true,
               applyNonShiftDefaults: true,
             }) as TimesheetEntryDraft[])
           : entries;
-      const offDayByDay = new Map(offDayStates.map((state) => [state.day_of_week, state] as const));
+      if (!validateScheduledDidNotWorkReasons(entriesForPersistence)) return;
+      const offDayByDay = new Map(effectiveOffDayStates.map((state) => [state.day_of_week, state] as const));
       const invalidHalfDayWindow = entriesForPersistence.find((entry) => {
         const offDay = offDayByDay.get(entry.day_of_week);
         if (!offDay?.workWindow) return false;
@@ -1185,7 +1414,6 @@ export function CivilsTimesheet({
           .eq('timesheet_id', timesheetId);
         
         if (deleteError) {
-          console.error('Error deleting timesheet entries:', deleteError);
           throw new Error(`Failed to delete timesheet entries: ${deleteError.message}`);
         }
       }
@@ -1200,11 +1428,16 @@ export function CivilsTimesheet({
           // Automatically detect night shift and bank holiday
           const isNight = !entry.did_not_work && isNightShift(entry.time_started, entry.daily_total);
           const isBankHol = !entry.did_not_work && isUKBankHoliday(entryDate);
+          const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(offDay);
           const normalizedRemarks =
             entry.remarks?.trim() ||
+            halfDayTrainingRemark ||
             (entry.did_not_work
               ? (offDay && !offDay.isExpectedShiftDay ? 'Not on Shift' : 'Did Not Work')
               : '');
+          const requiresSubsistence =
+            Boolean(entry.subsistence_payment_required) && hasWorkedTimesForSubsistence(entry);
+          const persistedRemarks = syncSubsistenceRemark(normalizedRemarks, requiresSubsistence);
           
           return {
             timesheet_id: timesheetId,
@@ -1213,11 +1446,12 @@ export function CivilsTimesheet({
             time_finished: entry.time_finished || null,
             job_number: persistedJobNumbers[0] || null,
             working_in_yard: entry.working_in_yard,
+            subsistence_payment_required: requiresSubsistence,
             did_not_work: entry.did_not_work,
             night_shift: isNight,
             bank_holiday: isBankHol,
             daily_total: entry.daily_total,
-            remarks: normalizedRemarks || null,
+            remarks: persistedRemarks || null,
           };
         });
 
@@ -1228,7 +1462,6 @@ export function CivilsTimesheet({
         .select('id, day_of_week');
 
       if (entriesError) {
-        console.error('Error inserting timesheet entries:', entriesError);
         throw new Error(`Failed to insert timesheet entries: ${entriesError.message}`);
       }
 
@@ -1253,9 +1486,19 @@ export function CivilsTimesheet({
           .insert(jobCodesToInsert);
 
         if (jobCodesError) {
-          console.error('Error inserting timesheet entry job codes:', jobCodesError);
           throw new Error(`Failed to insert timesheet job codes: ${jobCodesError.message}`);
         }
+      }
+
+      const didNotWorkBookings = getPendingDidNotWorkBookingsPayload(pendingDidNotWorkBookings);
+      if (didNotWorkBookings.length > 0) {
+        await commitTimesheetDidNotWorkBookings(timesheetId, didNotWorkBookings);
+      }
+
+      try {
+        await notifyTimesheetDidNotWorkExceptions(timesheetId);
+      } catch (notificationError) {
+        console.warn('Did Not Work notification was not sent:', notificationError);
       }
 
       // Show success message
@@ -1271,7 +1514,10 @@ export function CivilsTimesheet({
 
       router.push('/timesheets');
     } catch (err: unknown) {
+      const error = err as { code?: string; message?: string; details?: string; hint?: string };
+      const isDuplicateTimesheetError = isDuplicateTimesheetWeekError(err);
       const shouldLogError =
+        !isDuplicateTimesheetError &&
         !isAuthErrorStatus(getErrorStatus(err)) &&
         !isNetworkFetchError(err);
 
@@ -1279,11 +1525,9 @@ export function CivilsTimesheet({
         console.error('Error saving timesheet:', err);
         console.error('Error details:', JSON.stringify(err, null, 2));
       }
-      
+
       // Handle errors
-      const error = err as { code?: string; message?: string; details?: string; hint?: string };
-      
-      if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('timesheets_user_id_week_ending_key')) {
+      if (isDuplicateTimesheetError) {
         // Only handle duplicate error if we're not updating an existing timesheet
         if (!existingTimesheetId) {
           // Find the existing timesheet and redirect user to edit it
@@ -1336,14 +1580,7 @@ export function CivilsTimesheet({
     offDayKey !== currentOffDayKey;
 
   if (!existingTimesheetLoaded || waitingForOffDayData) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Loader2 className="h-10 w-10 animate-spin text-timesheet mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">Loading timesheets...</p>
-        </div>
-      </div>
-    );
+    return <PanelLoader message="Loading timesheets..." accent="timesheet" className="min-h-[400px]" />;
   }
 
   return (
@@ -1527,7 +1764,6 @@ export function CivilsTimesheet({
                 const hasTrainingBooking = Boolean(dayOffState?.hasTrainingBooking);
                 const hasPendingTrainingBooking = Boolean(dayOffState?.hasPendingTrainingBooking);
                 const isPartialLeave = Boolean(dayOffState?.isPartialLeave);
-                const workWindow = dayOffState?.workWindow ?? null;
                 const disableForDidNotWork = entry.did_not_work && !isPartialLeave;
                 const disableWorkingInputs = isLeaveLocked || disableForDidNotWork;
                 const disableStatusForTraining = hasTrainingBooking;
@@ -1536,7 +1772,11 @@ export function CivilsTimesheet({
                   ? 'N/A (Training)'
                   : entry.working_in_yard
                     ? 'N/A (Yard)'
-                    : '1234-AB';
+                    : 'Select job code';
+                const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(dayOffState);
+                const halfDayTrainingHelperText = halfDayTrainingRemark
+                  ? 'Half-day training: enter the total day start and finish times, including training and any worked time.'
+                  : null;
 
                 return (
                 <TabsContent key={index} value={String(index)} className="space-y-4 px-4 pb-4 overflow-hidden">
@@ -1549,17 +1789,14 @@ export function CivilsTimesheet({
 
                   <div className="space-y-4 max-w-full">
                     {/* Start and Finish Time - Side by Side on Mobile */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 items-end">
                       <div className="space-y-2">
                         <Label className="text-foreground text-xl">Start Time</Label>
-                        <Input
-                          type="time"
-                          step="900"
+                        <MobileNumericTimeInput
                           value={entry.time_started}
-                          onChange={(e) => updateEntry(index, 'time_started', e.target.value)}
+                          onChange={(value) => updateEntry(index, 'time_started', value)}
                           disabled={disableWorkingInputs}
-                          min={workWindow?.start}
-                          max={workWindow?.end}
+                          ariaLabel={`${DAY_NAMES[index]} start time`}
                           className={`h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white w-full disabled:opacity-30 disabled:cursor-not-allowed ${
                             timeErrors[index] ? 'border-red-500' : ''
                           }`}
@@ -1568,18 +1805,34 @@ export function CivilsTimesheet({
 
                       <div className="space-y-2">
                         <Label className="text-foreground text-xl">Finish Time</Label>
-                        <Input
-                          type="time"
-                          step="900"
+                        <MobileNumericTimeInput
                           value={entry.time_finished}
-                          onChange={(e) => updateEntry(index, 'time_finished', e.target.value)}
+                          onChange={(value) => updateEntry(index, 'time_finished', value)}
                           disabled={disableWorkingInputs}
-                          min={workWindow?.start}
-                          max={workWindow?.end}
+                          ariaLabel={`${DAY_NAMES[index]} finish time`}
                           className={`h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white w-full disabled:opacity-30 disabled:cursor-not-allowed ${
                             timeErrors[index] ? 'border-red-500' : ''
                           }`}
                         />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-foreground text-sm leading-tight">Subsistence</Label>
+                        <button
+                          type="button"
+                          aria-pressed={entry.subsistence_payment_required}
+                          aria-label={`${DAY_NAMES[index]} subsistence payment required`}
+                          title="Stayed away - subsistence payment required"
+                          onClick={() => handleSubsistenceToggle(index)}
+                          disabled={disableWorkingInputs}
+                          className={`flex h-16 w-16 items-center justify-center rounded-lg border-2 transition-all ${
+                            entry.subsistence_payment_required
+                              ? 'bg-emerald-500/20 border-emerald-500 shadow-lg shadow-emerald-500/20'
+                              : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                          } disabled:opacity-30 disabled:cursor-not-allowed`}
+                        >
+                          <Moon className={`h-7 w-7 ${entry.subsistence_payment_required ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                        </button>
                       </div>
                     </div>
                     {timeErrors[index] && (
@@ -1603,6 +1856,8 @@ export function CivilsTimesheet({
                         onRemove={(jobIndex) => handleRemoveJobNumberField(index, jobIndex)}
                         placeholder={jobNumberPlaceholder}
                         disabled={disableJobNumberInput}
+                        jobCodeOptions={jobCodeOptions}
+                        jobCodeOptionsLoading={jobCodeOptionsLoading}
                         inputClassName="h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase disabled:opacity-30 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -1631,7 +1886,7 @@ export function CivilsTimesheet({
                         {/* Did Not Work Button */}
                         <button
                           type="button"
-                          onClick={() => updateEntry(index, 'did_not_work', !entry.did_not_work)}
+                          onClick={() => handleDidNotWorkToggle(index)}
                           disabled={isLeaveDayForRow || disableStatusForTraining}
                           className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 transition-all ${
                             entry.did_not_work
@@ -1689,6 +1944,11 @@ export function CivilsTimesheet({
                               {dayOffState?.workWindow && (dayOffState?.leaveLabels.length ?? 0) > 0 && (
                                 <p className="text-xs text-muted-foreground">
                                   Working hours allowed: {dayOffState?.workWindow?.start} to {dayOffState?.workWindow?.end}
+                                </p>
+                              )}
+                              {halfDayTrainingHelperText && (
+                                <p className="text-sm font-medium text-emerald-200">
+                                  {halfDayTrainingHelperText}
                                 </p>
                               )}
                             </div>
@@ -1752,7 +2012,11 @@ export function CivilsTimesheet({
                     ? 'N/A (Training)'
                     : entry.working_in_yard
                       ? 'N/A (Yard)'
-                      : '1234-AB';
+                      : 'Select job code';
+                  const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(dayOffState);
+                  const halfDayTrainingHelperText = halfDayTrainingRemark
+                    ? 'Half-day training: enter total day hours, including training and worked time.'
+                    : null;
 
                   return (
                   <tr key={entry.day_of_week} className="border-b border-border/50">
@@ -1801,6 +2065,8 @@ export function CivilsTimesheet({
                         onRemove={(jobIndex) => handleRemoveJobNumberField(index, jobIndex)}
                         placeholder={jobNumberPlaceholder}
                         disabled={disableJobNumberInput}
+                        jobCodeOptions={jobCodeOptions}
+                        jobCodeOptionsLoading={jobCodeOptionsLoading}
                         inputClassName="w-28 bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase disabled:opacity-30 disabled:cursor-not-allowed"
                       />
                     </td>
@@ -1825,7 +2091,7 @@ export function CivilsTimesheet({
                           {/* Did Not Work Button */}
                           <button
                             type="button"
-                            onClick={() => updateEntry(index, 'did_not_work', !entry.did_not_work)}
+                            onClick={() => handleDidNotWorkToggle(index)}
                             disabled={isLeaveDayForRow || disableStatusForTraining}
                             className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
                               entry.did_not_work
@@ -1835,6 +2101,21 @@ export function CivilsTimesheet({
                             title="Did Not Work"
                           >
                             <XCircle className={`h-5 w-5 ${entry.did_not_work ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSubsistenceToggle(index)}
+                            disabled={disableWorkingInputs}
+                            aria-pressed={entry.subsistence_payment_required}
+                            className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
+                              entry.subsistence_payment_required
+                                ? 'bg-emerald-500/20 border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                            } disabled:opacity-30 disabled:cursor-not-allowed`}
+                            title="Subsistence Payment"
+                          >
+                            <Moon className={`h-5 w-5 ${entry.subsistence_payment_required ? 'text-emerald-400' : 'text-muted-foreground'}`} />
                           </button>
 
                           {hasTrainingBooking && (
@@ -1876,6 +2157,11 @@ export function CivilsTimesheet({
                                     {label.label}
                                   </p>
                                 ))}
+                                {halfDayTrainingHelperText && (
+                                  <p className="max-w-40 text-[10px] font-medium text-emerald-200">
+                                    {halfDayTrainingHelperText}
+                                  </p>
+                                )}
                               </div>
                             ) : (
                               <p
@@ -2010,7 +2296,7 @@ export function CivilsTimesheet({
         onConfirm={handleConfirmSubmission}
         weekEnding={weekEnding}
         entries={entries}
-        offDayStates={offDayStates}
+        offDayStates={effectiveOffDayStates}
         regNumber={regNumber}
         submitting={false}
       />
@@ -2028,9 +2314,22 @@ export function CivilsTimesheet({
         onConfirm={handleConfirmTrainingDecline}
       />
 
+      <DidNotWorkReasonDialog
+        key={didNotWorkReasonDayIndex ?? 'closed'}
+        open={didNotWorkReasonDayIndex !== null}
+        dayName={didNotWorkReasonDayIndex === null ? '' : DAY_NAMES[didNotWorkReasonDayIndex]}
+        initialReason={
+          didNotWorkReasonDayIndex === null ? '' : parseDidNotWorkReasonRemark(entries[didNotWorkReasonDayIndex]?.remarks)
+        }
+        onOpenChange={(open) => {
+          if (!open) setDidNotWorkReasonDayIndex(null);
+        }}
+        onConfirm={handleDidNotWorkReasonConfirm}
+      />
+
       {/* Signature Dialog */}
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border text-white">
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Sign Timesheet</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -2057,7 +2356,7 @@ export function CivilsTimesheet({
 
       {/* Error Dialog */}
       <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-        <DialogContent className="bg-slate-900 border-red-500/50 text-white max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto bg-slate-900 border-red-500/50 text-white">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20 border border-red-500/50">
@@ -2085,7 +2384,7 @@ export function CivilsTimesheet({
 
       {/* Bank Holiday Warning Dialog */}
       <Dialog open={showBankHolidayWarning} onOpenChange={setShowBankHolidayWarning}>
-        <DialogContent className="bg-slate-900 border-yellow-500/50 text-white max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto bg-slate-900 border-yellow-500/50 text-white">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-500/20 border border-yellow-500/50">

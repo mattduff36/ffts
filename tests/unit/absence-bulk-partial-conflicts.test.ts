@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bookBulkAbsence } from '@/lib/services/absence-bank-holiday-sync';
 import { loadEmployeeWorkShiftPatternMap } from '@/lib/server/work-shifts';
 import { STANDARD_WORK_SHIFT_PATTERN } from '@/lib/utils/work-shifts';
+import { createSupabaseQueryMock } from '@/tests/utils/supabase-query-mock';
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: vi.fn(() => ({})),
@@ -91,17 +92,10 @@ function buildMockSupabase(options: BuildMockSupabaseOptions) {
       if (table === 'absence_allowance_carryovers') {
         return {
           select() {
-            const chain = {
-              eq() {
-                return chain;
-              },
-              in() {
-                return chain;
-              },
-              async then(resolve: (value: { data: Array<{ profile_id: string; carried_days: number }>; error: null }) => void) {
-                resolve({ data: options.carryovers || [], error: null });
-              },
-            };
+            const chain = createSupabaseQueryMock(
+              { data: options.carryovers || [], error: null },
+              ['eq', 'in']
+            );
             return chain;
           },
         };

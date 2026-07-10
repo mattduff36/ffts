@@ -77,7 +77,7 @@ function isRouteCovered(slug: string, testFiles: string[]): boolean {
   return testFiles.some(t => {
     const normalizedTest = t.toLowerCase().replace(/[^a-z0-9]/g, '');
     // Check if slug keywords appear in test file path
-    const keywords = normalizedSlug.split(/(?=[A-Z])|[-_\/\[\]]/g).filter(Boolean);
+    const keywords = normalizedSlug.split(/(?=[A-Z])|[-_/[\]]/g).filter(Boolean);
     const significantKeywords = keywords.filter(k => k.length > 3);
     return significantKeywords.some(kw => normalizedTest.includes(kw));
   });

@@ -223,7 +223,7 @@ async function checkServer() {
   try {
     await fetch(BASE_URL);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

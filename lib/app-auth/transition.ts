@@ -14,7 +14,6 @@ export type AuthTransitionReason =
 
 export interface AuthSessionSnapshot {
   authenticated: boolean;
-  locked: boolean;
   userId: string | null;
   profileId: string | null;
 }
@@ -22,20 +21,16 @@ export interface AuthSessionSnapshot {
 export interface AuthSessionTransition {
   changed: boolean;
   authChanged: boolean;
-  lockChanged: boolean;
   userChanged: boolean;
   profileChanged: boolean;
   becameAuthenticated: boolean;
   becameUnauthenticated: boolean;
-  becameLocked: boolean;
-  becameUnlocked: boolean;
   shouldInvalidateToken: boolean;
 }
 
 export function getUnauthenticatedSessionSnapshot(): AuthSessionSnapshot {
   return {
     authenticated: false,
-    locked: false,
     userId: null,
     profileId: null,
   };
@@ -56,7 +51,6 @@ export function buildSessionSnapshot(payload: ClientAuthSessionResponse | null |
 
   return {
     authenticated: true,
-    locked: payload.locked === true,
     userId: payload.user.id,
     profileId,
   };
@@ -68,22 +62,18 @@ export function getSessionTransition(
 ): AuthSessionTransition {
   const before = previous ?? getUnauthenticatedSessionSnapshot();
   const authChanged = before.authenticated !== next.authenticated;
-  const lockChanged = before.locked !== next.locked;
   const userChanged = before.userId !== next.userId;
   const profileChanged = before.profileId !== next.profileId;
-  const changed = authChanged || lockChanged || userChanged || profileChanged;
+  const changed = authChanged || userChanged || profileChanged;
 
   return {
     changed,
     authChanged,
-    lockChanged,
     userChanged,
     profileChanged,
     becameAuthenticated: !before.authenticated && next.authenticated,
     becameUnauthenticated: before.authenticated && !next.authenticated,
-    becameLocked: !before.locked && next.locked,
-    becameUnlocked: before.locked && !next.locked,
     shouldInvalidateToken:
-      userChanged || profileChanged || authChanged || lockChanged || next.locked || !next.authenticated,
+      userChanged || profileChanged || authChanged || !next.authenticated,
   };
 }

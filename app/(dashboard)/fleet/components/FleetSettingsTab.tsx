@@ -2,6 +2,7 @@ import { Loader2, Truck, Plus, Edit, Trash2, HardHat, ChevronDown } from 'lucide
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TabsContent } from '@/components/ui/tabs';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import type { Category, HgvAsset, HgvCategory, PlantAsset, Vehicle } from '../types';
 
 interface FleetSettingsTabProps {
@@ -107,9 +108,7 @@ export function FleetSettingsTab({
             {plantCategoriesExpanded && (
               <CardContent className="pt-6">
                 {categoriesLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                  </div>
+                  <PanelLoader message="Loading plant categories..." accent="fleet" className="py-8" />
                 ) : (() => {
                   const plantCategories = categories.filter(c =>
                     (c.applies_to || []).includes('plant')
@@ -226,9 +225,7 @@ export function FleetSettingsTab({
             {vanCategoriesExpanded && (
               <CardContent className="pt-6">
                 {categoriesLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                  </div>
+                  <PanelLoader message="Loading van categories..." accent="fleet" className="py-8" />
                 ) : (() => {
                   const vanCategories = categories.filter(c => {
                     return (c.applies_to || ['van']).includes('van');
@@ -337,9 +334,7 @@ export function FleetSettingsTab({
             {hgvCategoriesExpanded && (
               <CardContent className="pt-6">
                 {hgvCategoriesLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-                  </div>
+                  <PanelLoader message="Loading HGV categories..." accent="fleet" className="py-8" />
                 ) : hgvCategories.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     No HGV categories found

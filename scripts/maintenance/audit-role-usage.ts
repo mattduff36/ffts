@@ -62,7 +62,7 @@ function scanFile(filePath: string) {
         }
       });
     });
-  } catch (_err: unknown) {
+  } catch {
     // Ignore errors
   }
 }
@@ -86,7 +86,7 @@ function scanDirectory(dir: string) {
         }
       }
     }
-  } catch (_err: unknown) {
+  } catch {
     // Ignore errors
   }
 }

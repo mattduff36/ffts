@@ -89,10 +89,11 @@ export async function GET(request: NextRequest) {
       declined: 0,
     };
 
-    countData?.forEach((suggestion: { status: string }) => {
+    countData?.forEach((suggestion) => {
+      const status = suggestion.status || 'new';
       counts.all++;
-      if (suggestion.status in counts) {
-        counts[suggestion.status]++;
+      if (status in counts) {
+        counts[status]++;
       }
     });
 

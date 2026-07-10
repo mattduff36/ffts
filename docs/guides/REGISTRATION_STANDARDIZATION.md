@@ -12,11 +12,11 @@ All vehicle registration numbers in the system follow a standardized format to e
 - **Whitespace:** Single space between position 4 and 5 for modern plates
 
 **Examples:**
-- ✅ `BC21 YZU`
-- ✅ `FE24 TYO`
-- ✅ `SHZ 1180` (older format, preserved as-is)
-- ❌ `BC21YZU` (no space - will be auto-formatted)
-- ❌ `bc21 yzu` (lowercase - will be auto-formatted)
+- ✅ `AB12 CDE`
+- ✅ `XY34 ZZZ`
+- ✅ `XYZ 123` (older format, preserved as-is)
+- ❌ `AB12CDE` (no space - will be auto-formatted)
+- ❌ `ab12 cde` (lowercase - will be auto-formatted)
 
 ### Frontend Display
 - **Format:** Same as database (UK standard with space)
@@ -28,8 +28,7 @@ All vehicle registration numbers in the system follow a standardized format to e
 - **Transformation:** Automatic via `formatRegistrationForApi()`
 
 **Examples:**
-- Database: `BC21 YZU` → API: `BC21YZU`
-- Database: `FE24 TYO` → API: `FE24TYO`
+- Database: `AB12 CDE` → API: `AB12CDE`
 
 ## Utility Functions
 
@@ -39,24 +38,24 @@ Located in `lib/utils/registration.ts`:
 Formats a registration number for database storage.
 
 ```typescript
-formatRegistrationForStorage("bc21yzU")  // => "BC21 YZU"
-formatRegistrationForStorage("BC21 YZU") // => "BC21 YZU"
-formatRegistrationForStorage(" bc21  yzu ") // => "BC21 YZU"
+formatRegistrationForStorage("ab12cde")  // => "AB12 CDE"
+formatRegistrationForStorage("AB12 CDE") // => "AB12 CDE"
+formatRegistrationForStorage(" ab12  cde ") // => "AB12 CDE"
 ```
 
 ### `formatRegistrationForApi(reg: string): string`
 Formats a registration number for external API calls (removes all spaces).
 
 ```typescript
-formatRegistrationForApi("BC21 YZU")     // => "BC21YZU"
-formatRegistrationForApi(" bc21  yzu ") // => "BC21YZU"
+formatRegistrationForApi("AB12 CDE")     // => "AB12CDE"
+formatRegistrationForApi(" ab12  cde ") // => "AB12CDE"
 ```
 
 ### `validateRegistrationNumber(reg: string): string | null`
 Validates a UK registration number format.
 
 ```typescript
-validateRegistrationNumber("BC21 YZU")  // => null (valid)
+validateRegistrationNumber("AB12 CDE")  // => null (valid)
 validateRegistrationNumber("ABC")       // => "Invalid..." (too short)
 validateRegistrationNumber("BC21@YZU")  // => "Invalid..." (special chars)
 ```
@@ -66,14 +65,14 @@ Alias for `formatRegistrationForStorage` - ensures consistent display format.
 
 ## Implementation
 
-### Vehicle Creation (POST /api/admin/vehicles)
+### Van Creation (`POST /api/admin/vans`)
 ```typescript
 const cleanReg = formatRegistrationForStorage(reg_number);
 // Store in database with space
-await supabase.from('vehicles').insert({ reg_number: cleanReg });
+await supabase.from('vans').insert({ reg_number: cleanReg });
 ```
 
-### Vehicle Update (PATCH /api/admin/vehicles/[id])
+### Van Update (`PATCH /api/admin/vans/[id]`)
 ```typescript
 if (reg_number !== undefined) {
   const validationError = validateRegistrationNumber(reg_number);
@@ -94,25 +93,23 @@ const dvlaData = await dvlaService.getVehicleData(regNumberNoSpaces);
 const motData = await motService.getMotExpiryData(regNumberNoSpaces);
 ```
 
-## Audit Results (Jan 2026)
+## Verification
 
-**Database Status:** ✅ Consistent
-- 53 modern plates stored WITH spaces (correct)
-- 0 modern plates stored WITHOUT spaces
-- 2 non-standard/older formats (preserved as-is)
-- 0 duplicates found
+The registration audit should confirm that modern plates use normalized uppercase spacing, legacy formats remain readable, and no normalized duplicates exist. Do not record live fleet counts or registrations in this guide.
 
 **Files Updated:**
 - `lib/utils/registration.ts` - New utility functions
-- `app/api/admin/vehicles/route.ts` - Vehicle creation
-- `app/api/admin/vehicles/[id]/route.ts` - Vehicle updates
+- `app/api/admin/vans/route.ts` - Van creation
+- `app/api/admin/vans/[id]/route.ts` - Van updates
+- `app/api/admin/hgvs/route.ts` - HGV creation and updates
+- `app/api/admin/plant/route.ts` - Plant creation and updates
 - `app/api/maintenance/sync-dvla/route.ts` - DVLA sync
 - `app/api/maintenance/sync-dvla-scheduled/route.ts` - Scheduled sync
 
 ## Benefits
 
 1. **Consistency:** All registrations stored in same format
-2. **No Duplicates:** Prevents `BC21YZU` and `BC21 YZU` being treated as different vehicles
+2. **No Duplicates:** Prevents `AB12CDE` and `AB12 CDE` being treated as different vehicles
 3. **API Compatibility:** Automatic space removal for external APIs
 4. **User-Friendly:** Display matches UK standard format
 5. **Validation:** Catches invalid formats at entry point
@@ -134,6 +131,6 @@ npx tsx scripts/audit-registration-formats.ts
 
 ---
 
-**Last Updated:** 7 January 2026  
+**Last Updated:** 10 July 2026  
 **Status:** ✅ Implemented and Audited
 

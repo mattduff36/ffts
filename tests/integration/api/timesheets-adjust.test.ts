@@ -11,6 +11,9 @@ vi.mock('@/lib/utils/view-as');
 vi.mock('@/lib/utils/rbac', () => ({
   canEffectiveRoleAccessModule: vi.fn(),
 }));
+vi.mock('@/lib/server/processed-absence-notifications', () => ({
+  notifyProcessedAbsenceTimesheetAdjustment: vi.fn().mockResolvedValue(['accounts-supervisor']),
+}));
 vi.mock('@/lib/utils/email', () => ({
   sendTimesheetAdjustmentEmail: vi.fn().mockResolvedValue({ success: true }),
 }));
@@ -45,6 +48,7 @@ async function mockEffectiveRole(overrides: Partial<EffectiveRoleInfo> = {}) {
     role_id: null,
     role_name: null,
     display_name: null,
+    role_class: null,
     is_manager_admin: false,
     is_super_admin: false,
     is_viewing_as: false,
@@ -64,8 +68,10 @@ describe('POST /api/timesheets/[id]/adjust', () => {
     await setupAdminClientMock();
     const rbac = await import('@/lib/utils/rbac');
     const email = await import('@/lib/utils/email');
+    const processedAbsenceNotifications = await import('@/lib/server/processed-absence-notifications');
     vi.mocked(email.sendTimesheetAdjustmentEmail).mockResolvedValue({ success: true });
     vi.mocked(rbac.canEffectiveRoleAccessModule).mockResolvedValue(true);
+    vi.mocked(processedAbsenceNotifications.notifyProcessedAbsenceTimesheetAdjustment).mockResolvedValue(['accounts-supervisor']);
     const logger = await import('@/lib/utils/server-error-logger');
     vi.mocked(logger.logServerError).mockResolvedValue(undefined);
   });
@@ -155,7 +161,18 @@ describe('POST /api/timesheets/[id]/adjust', () => {
 
       const response = await POST(request as NextRequest, { params: Promise.resolve({ id: 'test-id' }) });
       
+      const processedAbsenceNotifications = await import('@/lib/server/processed-absence-notifications');
       expect(response.status).toBe(200);
+      expect(processedAbsenceNotifications.notifyProcessedAbsenceTimesheetAdjustment).toHaveBeenCalledWith(
+        expect.objectContaining({ auth: expect.any(Object) }),
+        expect.objectContaining({
+          actorUserId: manager.id,
+          employeeProfileId: 'test-user-id',
+          employeeName: 'Employee',
+          weekEnding: '2024-12-01',
+          adjustmentComments: 'Adjusted hours',
+        })
+      );
     });
 
     it('should allow admins to adjust timesheets', async () => {
@@ -485,8 +502,10 @@ describe('POST /api/timesheets/[id]/adjust', () => {
 
       expect(messageInsertMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: expect.stringContaining('Adjusted'),
-          message_type: 'timesheet_adjustment',
+          type: 'NOTIFICATION',
+          subject: expect.stringContaining('Adjusted'),
+          created_via: 'timesheet_adjustment',
+          module_key: 'timesheets',
         })
       );
     });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { templateConfig } from '@/lib/config/template-config';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const bookingRange = formatAbsenceRange(absence.date, absence.end_date);
     const subject = `Leave cancellation request from ${employeeName}`;
     const body = [
-      `${employeeName} tried to cancel a leave booking in DigiDocs.`,
+      `${employeeName} tried to cancel a leave booking in ${templateConfig.branding.appName}.`,
       '',
       `Type: ${reasonName}`,
       `Booking: ${bookingRange}`,
@@ -154,6 +155,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         priority: 'LOW',
         sender_id: current.profile.id,
         created_via: 'absence_contact_line_manager',
+        module_key: 'absence',
       })
       .select('id')
       .single();

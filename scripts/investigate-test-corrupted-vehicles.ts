@@ -69,7 +69,7 @@ async function investigateVehicles() {
   console.log('=========================================\n');
   console.log(`Mode: ${FIX_MODE ? '⚠️  FIX MODE (WILL MODIFY DATA)' : '📊 READ-ONLY (NO CHANGES)'}\n`);
 
-  // Get all non-TE57 vehicles (real production vehicles)
+  // Get all non-ZZ99 vehicles (real production vehicles)
   const { data: vehicles, error } = await supabase
     .from('vans')
     .select(`
@@ -79,7 +79,7 @@ async function investigateVehicles() {
       status,
       vehicle_maintenance(id, current_mileage, updated_at)
     `)
-    .not('reg_number', 'ilike', 'TE57%')
+    .not('reg_number', 'ilike', 'ZZ99%')
     .neq('status', 'deleted')
     .order('reg_number');
 
@@ -93,7 +93,7 @@ async function investigateVehicles() {
     return;
   }
 
-  console.log(`Found ${vehicles.length} production vehicles (excluding TE57 test vehicles)\n`);
+  console.log(`Found ${vehicles.length} production vehicles (excluding ZZ99 test vehicles)\n`);
 
   const corruptedVehicles: Array<{
     vehicle: VehicleWithMaintenance;

@@ -14,6 +14,28 @@ vi.mock('@/lib/utils/server-error-logger', () => ({
 import { DELETE, GET } from '@/app/api/debug/error-logs/route';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 
+function createSensitivePinAccessMocks() {
+  const permissionModuleChain = {
+    eq: vi.fn(() => permissionModuleChain),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: { module_name: 'debug', requires_sensitive_pin: false },
+      error: null,
+    }),
+  };
+  const sensitivePinChain = {
+    eq: vi.fn(() => sensitivePinChain),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    }),
+  };
+
+  return {
+    permissionModules: { select: vi.fn(() => permissionModuleChain) },
+    sensitivePins: { select: vi.fn(() => sensitivePinChain) },
+  };
+}
+
 describe('debug error logs route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +96,7 @@ describe('debug error logs route', () => {
       team_id: null,
       team_name: null,
     });
+    const sensitiveAccessMocks = createSensitivePinAccessMocks();
     vi.mocked(createAdminClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === 'error_logs') {
@@ -81,6 +104,12 @@ describe('debug error logs route', () => {
         }
         if (table === 'profiles') {
           return { select: selectProfiles };
+        }
+        if (table === 'permission_modules') {
+          return sensitiveAccessMocks.permissionModules;
+        }
+        if (table === 'profile_sensitive_pins') {
+          return sensitiveAccessMocks.sensitivePins;
         }
 
         throw new Error(`Unexpected table: ${table}`);
@@ -131,7 +160,7 @@ describe('debug error logs route', () => {
     const selectProfiles = vi.fn(() => ({ in: inProfiles }));
 
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'debug.user@example.com' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue({
       role_id: 'role-admin',
@@ -142,10 +171,11 @@ describe('debug error logs route', () => {
       is_super_admin: false,
       is_viewing_as: false,
       is_actual_super_admin: false,
-      user_id: 'charlotte-id',
+      user_id: 'debug-admin-id',
       team_id: null,
       team_name: null,
     });
+    const sensitiveAccessMocks = createSensitivePinAccessMocks();
     vi.mocked(createAdminClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === 'error_logs') {
@@ -153,6 +183,12 @@ describe('debug error logs route', () => {
         }
         if (table === 'profiles') {
           return { select: selectProfiles };
+        }
+        if (table === 'permission_modules') {
+          return sensitiveAccessMocks.permissionModules;
+        }
+        if (table === 'profile_sensitive_pins') {
+          return sensitiveAccessMocks.sensitivePins;
         }
 
         throw new Error(`Unexpected table: ${table}`);
@@ -194,10 +230,17 @@ describe('debug error logs route', () => {
       team_id: null,
       team_name: null,
     });
+    const sensitiveAccessMocks = createSensitivePinAccessMocks();
     vi.mocked(createAdminClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === 'error_logs') {
           return { delete: deleteLogs };
+        }
+        if (table === 'permission_modules') {
+          return sensitiveAccessMocks.permissionModules;
+        }
+        if (table === 'profile_sensitive_pins') {
+          return sensitiveAccessMocks.sensitivePins;
         }
 
         throw new Error(`Unexpected table: ${table}`);

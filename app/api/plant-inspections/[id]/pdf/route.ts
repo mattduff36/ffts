@@ -137,7 +137,7 @@ export async function GET(
       },
       items: items.map(item => ({
         item_number: item.item_number,
-        item_description: item.item_description,
+        item_description: item.item_description || `Item ${item.item_number}`,
         day_of_week: item.day_of_week,
         status: item.status as 'ok' | 'attention' | 'na',
         comments: item.comments,

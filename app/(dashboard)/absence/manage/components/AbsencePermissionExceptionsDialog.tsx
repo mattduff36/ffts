@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   Select,
   SelectContent,
@@ -291,10 +292,7 @@ export function AbsencePermissionExceptionsDialog({ open, onOpenChange }: Absenc
 
         <div className="border border-slate-700 rounded-lg overflow-auto">
           {loadingMatrix ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Loading exceptions matrix...
-            </div>
+            <PanelLoader message="Loading exceptions matrix..." accent="absence" className="py-16" />
           ) : rows.length === 0 ? (
             <div className="py-14 text-center text-muted-foreground">
               No user exceptions yet. Add a user to create their override row.

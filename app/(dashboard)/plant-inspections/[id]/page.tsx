@@ -26,6 +26,7 @@ import { InformWorkshopSummary } from '@/components/inspections/InformWorkshopSu
 import { useInspectionPhotos } from '@/lib/hooks/useInspectionPhotos';
 import { getInspectionPhotoKey } from '@/lib/inspection-photos';
 import { formatReferenceId, getReferenceIdSuffix, getWorkshopTaskHref } from '@/lib/utils/reference-ids';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
 import { toast } from 'sonner';
 
 interface PlantInspectionWithDetails {
@@ -59,8 +60,14 @@ interface DailyHour {
   hours: number | null;
 }
 
-interface InspectionItemWithDay extends InspectionItem {
+interface InspectionItemWithDay extends Omit<InspectionItem, 'item_description' | 'created_at'> {
+  item_description: string | null;
+  created_at: string | null;
   day_of_week: number | null;
+}
+
+function getInspectionItemDescription(item: Pick<InspectionItemWithDay, 'item_number' | 'item_description'>): string {
+  return item.item_description || `Item ${item.item_number}`;
 }
 
 export default function ViewPlantInspectionPage() {
@@ -163,9 +170,13 @@ export default function ViewPlantInspectionPage() {
           profiles!plant_inspections_user_id_fkey (full_name)
         `)
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (inspectionError) throw inspectionError;
+      if (!inspectionData) {
+        setError('Inspection not found');
+        return;
+      }
       
       if (
         inspectionData &&
@@ -228,7 +239,10 @@ export default function ViewPlantInspectionPage() {
       // Draft edits are handled on /plant-inspections/new?id=...
     } catch (err) {
       const errorContextId = 'plant-inspection-details-fetch-error';
-      console.error('Error fetching inspection:', err, { errorContextId });
+      const status = getErrorStatus(err);
+      if (!isAuthErrorStatus(status) && !isNetworkFetchError(err)) {
+        console.error('Error fetching inspection:', err, { errorContextId });
+      }
       const message = err instanceof Error ? err.message : 'Failed to load inspection';
       setError(message);
       toast.error(message, { id: errorContextId });
@@ -352,11 +366,12 @@ export default function ViewPlantInspectionPage() {
           }>();
 
           insertedItems.forEach((item: InspectionItemWithDay) => {
-            const key = `${item.item_number}-${item.item_description}`;
+            const itemDescription = getInspectionItemDescription(item);
+            const key = `${item.item_number}-${itemDescription}`;
             if (!groupedDefects.has(key)) {
               groupedDefects.set(key, {
                 item_number: item.item_number,
-                item_description: item.item_description,
+                item_description: itemDescription,
                 days: [],
                 comments: [],
                 item_ids: []
@@ -417,8 +432,7 @@ export default function ViewPlantInspectionPage() {
           if (pendingActions && pendingActions.length > 0) {
             for (const resolvedItem of resolvedItems) {
               const matchingAction = pendingActions.find(
-                (action: { id: string; inspection_item_id: string | null; description: string | null; status: string }) =>
-                  action.inspection_item_id === resolvedItem.id
+                (action) => action.inspection_item_id === resolvedItem.id
               );
 
               if (matchingAction) {
@@ -563,7 +577,7 @@ export default function ViewPlantInspectionPage() {
         seenNumbers.add(item.item_number);
         uniqueItems.push({
           number: item.item_number,
-          description: item.item_description,
+          description: getInspectionItemDescription(item),
         });
       }
     });
@@ -814,7 +828,7 @@ export default function ViewPlantInspectionPage() {
                   {items.map((item) => (
                     <tr key={item.id} className="border-b hover:bg-secondary/20">
                       <td className="p-2 text-sm text-muted-foreground">{item.item_number}</td>
-                      <td className="p-2 text-sm">{item.item_description}</td>
+                      <td className="p-2 text-sm">{getInspectionItemDescription(item)}</td>
                       <td className="p-2">
                         <div className="flex items-center justify-center">
                           {getStatusIcon(item.status)}
@@ -869,7 +883,7 @@ export default function ViewPlantInspectionPage() {
                 <Card key={item.id}>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm">
-                      {item.item_number}. {item.item_description}
+                      {item.item_number}. {getInspectionItemDescription(item)}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -947,7 +961,7 @@ export default function ViewPlantInspectionPage() {
                         {getStatusIcon(item.status)}
                         <div className="flex-1">
                           <div className="font-medium">
-                            {item.item_number}. {item.item_description}
+                            {item.item_number}. {getInspectionItemDescription(item)}
                             {dayName && ` (${dayName})`}
                             {statusBadge}
                           </div>
@@ -961,7 +975,7 @@ export default function ViewPlantInspectionPage() {
                       <InspectionPhotoGallery
                         photos={getPhotosForItem(item.item_number, item.day_of_week)}
                         title={`Item #${item.item_number} photos`}
-                        description={`Uploaded photos for ${item.item_description}.`}
+                        description={`Uploaded photos for ${getInspectionItemDescription(item)}.`}
                         compact
                         className="mt-3 pl-7"
                       />

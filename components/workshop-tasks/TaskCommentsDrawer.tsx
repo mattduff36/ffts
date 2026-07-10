@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/utils/date';
 import { toast } from 'sonner';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
+import { useWorkshopDraftPersistence } from '@/lib/hooks/useWorkshopDraftPersistence';
 
 // Types from API
 type TimelineItem = {
@@ -35,6 +36,7 @@ interface TaskCommentsDrawerProps {
   onOpenChange: (open: boolean) => void;
   taskId: string;
   taskTitle: string;
+  userId?: string | null;
 }
 
 export function TaskCommentsDrawer({
@@ -42,6 +44,7 @@ export function TaskCommentsDrawer({
   onOpenChange,
   taskId,
   taskTitle,
+  userId = null,
 }: TaskCommentsDrawerProps) {
   const { tabletModeEnabled } = useTabletMode();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -55,6 +58,24 @@ export function TaskCommentsDrawer({
     () => newComment.trim().length > 0 || (editingCommentId !== null && editText.trim().length > 0),
     [newComment, editingCommentId, editText]
   );
+  const { clearDraft: clearNewCommentDraft } = useWorkshopDraftPersistence({
+    enabled: open,
+    draftId: `workshop-task-comment-new:${userId || 'anonymous'}:${taskId}`,
+    kind: 'workshop-task-comment-new',
+    ownerId: userId,
+    value: { newComment },
+    isDirty: newComment.trim().length > 0,
+    onRestore: (draft) => setNewComment(draft.newComment || ''),
+  });
+  const { clearDraft: clearEditCommentDraft } = useWorkshopDraftPersistence({
+    enabled: open && Boolean(editingCommentId),
+    draftId: `workshop-task-comment-edit:${userId || 'anonymous'}:${taskId}:${editingCommentId || 'none'}`,
+    kind: 'workshop-task-comment-edit',
+    ownerId: userId,
+    value: { editText },
+    isDirty: Boolean(editingCommentId && editText.trim().length > 0),
+    onRestore: (draft) => setEditText(draft.editText || ''),
+  });
 
   // Fetch timeline when dialog opens
   useEffect(() => {
@@ -115,6 +136,7 @@ export function TaskCommentsDrawer({
       // Add new comment to timeline
       setTimeline((prev) => [...prev, data.comment]);
       setNewComment('');
+      void clearNewCommentDraft();
       toast.success('Comment added');
     } catch (error: unknown) {
       console.error('Error adding comment:', error);
@@ -160,6 +182,7 @@ export function TaskCommentsDrawer({
       );
       setEditingCommentId(null);
       setEditText('');
+      void clearEditCommentDraft();
       toast.success('Comment updated');
     } catch (error: unknown) {
       console.error('Error updating comment:', error);
@@ -200,6 +223,7 @@ export function TaskCommentsDrawer({
   };
 
   const cancelEdit = () => {
+    void clearEditCommentDraft();
     setEditingCommentId(null);
     setEditText('');
   };
@@ -355,6 +379,10 @@ export function TaskCommentsDrawer({
           triggerShakeAnimation(contentRef.current);
           return;
         }
+        if (!nextOpen) {
+          void clearNewCommentDraft();
+          void clearEditCommentDraft();
+        }
         onOpenChange(nextOpen);
       }}
     >
@@ -416,7 +444,10 @@ export function TaskCommentsDrawer({
             </span>
             {newComment.trim().length > 0 && (
               <Button
-                onClick={() => setNewComment('')}
+                onClick={() => {
+                  void clearNewCommentDraft();
+                  setNewComment('');
+                }}
                 variant="outline"
                 size="sm"
                 className={tabletModeEnabled ? 'min-h-11 text-base px-4' : undefined}

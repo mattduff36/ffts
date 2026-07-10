@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageLoader } from '@/components/ui/page-loader';
-import { Clipboard, Clock, Download, Filter, Loader2, Plus, Trash2, User, LayoutGrid, Table2, Settings2 } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { Clipboard, Clock, Download, Filter, Loader2, Plus, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { fetchUserDirectory } from '@/lib/client/user-directory';
@@ -20,17 +21,10 @@ import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { canEditDraftInspection, getInspectionVisibilityFlags } from '@/lib/utils/inspection-access';
 import { formatDate } from '@/lib/utils/date';
 import { isUuid } from '@/lib/utils/uuid';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
-import type { Employee } from '@/types/common';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import type { Employee, InspectionStatusFilter } from '@/types/common';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ColumnVisibilityMenu, DataViewToggle } from '@/components/ui/data-view-controls';
 import {
   DEFAULT_HGV_INSPECTIONS_COLUMN_VISIBILITY,
   HgvInspectionsColumnVisibility,
@@ -131,6 +125,10 @@ function HgvInspectionsContent() {
     defaultValue: 'all',
     shallow: false,
   });
+  const [statusFilter, setStatusFilter] = useQueryState('status', {
+    defaultValue: 'all' as InspectionStatusFilter,
+    shallow: false,
+  });
   const normalizedEmployeeFilter =
     selectedEmployeeId !== 'all' && !isUuid(selectedEmployeeId) ? 'all' : selectedEmployeeId;
   const normalizedHgvFilter = hgvFilter === 'all' || isUuid(hgvFilter) ? hgvFilter : 'all';
@@ -212,6 +210,11 @@ function HgvInspectionsContent() {
 
       if ((normalizedHgvFilter || 'all') !== 'all') {
         query = query.eq('hgv_id', normalizedHgvFilter as string);
+      }
+
+      const currentStatusFilter = statusFilter || 'all';
+      if (currentStatusFilter !== 'all') {
+        query = query.eq('status', currentStatusFilter as 'draft' | 'submitted');
       }
 
       const { data, error } = await query;
@@ -311,8 +314,17 @@ function HgvInspectionsContent() {
       );
     } catch (error) {
       const errorContextId = 'hgv-inspections-fetch-list-error';
-      console.error('Error fetching HGV inspections:', error, { errorContextId });
-      toast.error('Failed to load HGV inspections', { id: errorContextId });
+      const isNetworkFailure = isNetworkFetchError(error);
+      const isAuthFailure = isAuthErrorStatus(getErrorStatus(error));
+
+      if (isNetworkFailure) {
+        console.warn('Unable to load HGV inspections (network):', error, { errorContextId, network: true });
+      } else if (isAuthFailure) {
+        console.warn('Unable to load HGV inspections (auth):', error, { errorContextId, auth: true });
+      } else {
+        console.error('Error fetching HGV inspections:', error, { errorContextId });
+        toast.error('Failed to load HGV inspections', { id: errorContextId });
+      }
     } finally {
       setLoading(false);
     }
@@ -326,13 +338,14 @@ function HgvInspectionsContent() {
     hasTeamInspectionVisibility,
     scopedEmployeeIds,
     normalizedEmployeeFilter,
+    statusFilter,
     supabase,
     user,
   ]);
 
   useEffect(() => {
     setDisplayCount(pageSize);
-  }, [pageSize, normalizedEmployeeFilter, normalizedHgvFilter]);
+  }, [pageSize, normalizedEmployeeFilter, normalizedHgvFilter, statusFilter]);
 
   useEffect(() => {
     try {
@@ -407,7 +420,7 @@ function HgvInspectionsContent() {
 
   const getInspectionIcon = (inspection: HgvInspectionWithRelations) => {
     const iconColorClass = inspection.has_inform_workshop_task
-      ? 'text-inspection'
+      ? 'text-hgv-inspection'
       : inspection.has_reported_defect
         ? 'text-red-500'
         : 'text-green-500';
@@ -425,6 +438,15 @@ function HgvInspectionsContent() {
       currentUserId: user?.id,
       canManageInspections,
     });
+
+  function getFilterLabel(filter: InspectionStatusFilter) {
+    switch (filter) {
+      case 'all': return 'All';
+      case 'draft': return 'Draft';
+      case 'submitted': return 'Submitted';
+      default: return filter;
+    }
+  }
 
   const canDeleteInspection = (inspection: Pick<HgvInspectionWithRelations, 'status' | 'user_id'>) =>
     canDeleteInspections && canEditInspection(inspection);
@@ -446,12 +468,12 @@ function HgvInspectionsContent() {
     <AppPageShell>
       <div className={`bg-slate-900 rounded-lg border border-border ${tabletModeEnabled ? 'p-5 md:p-6' : 'p-6'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-white mb-2">HGV Daily Checks</h1>
-            <p className="text-muted-foreground">Daily 25-point HGV safety checks</p>
+            <p className="text-muted-foreground">Daily 26-point HGV safety checks</p>
           </div>
-          <Link href="/hgv-inspections/new">
-            <Button className={`bg-inspection hover:bg-inspection/90 text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
+          <Link href="/hgv-inspections/new" className="w-full md:w-auto">
+            <Button className={`w-full bg-hgv-inspection hover:bg-hgv-inspection-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg md:w-auto ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
               <Plus className="h-4 w-4 mr-2" />
               New Daily Check
             </Button>
@@ -460,8 +482,8 @@ function HgvInspectionsContent() {
 
         {canViewCrossUserInspections && employees.length > 0 && (
           <div className="pt-4 border-t border-border">
-            <div className={`flex items-center gap-3 ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
-            <Label className="text-white text-sm flex items-center gap-2 whitespace-nowrap">
+            <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
+            <Label className="text-white text-sm flex items-center gap-2">
               <User className="h-4 w-4" />
               View daily checks for:
             </Label>
@@ -488,35 +510,52 @@ function HgvInspectionsContent() {
       {canViewCrossUserInspections && (
         <Card className="border-border">
           <CardContent className="pt-6">
-            <div className={`flex items-center gap-3 ${tabletModeEnabled ? 'flex-wrap' : ''}`}>
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-slate-400">Filter by HGV:</span>
-              <Select value={normalizedHgvFilter || 'all'} onValueChange={setHgvFilter}>
-                <SelectTrigger className={`${tabletModeEnabled ? 'min-h-11 text-base w-full md:w-[360px]' : 'w-[320px] h-9'} border-border text-white bg-slate-900/50`}>
-                  <SelectValue placeholder="All HGVs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All HGVs</SelectItem>
-                  {hgvs.map((hgv) => (
-                    <SelectItem key={hgv.id} value={hgv.id}>
-                      {hgv.reg_number}
-                      {hgv.nickname ? ` - ${hgv.nickname}` : ''}
-                    </SelectItem>
+            <div className={`grid grid-cols-1 gap-6 ${tabletModeEnabled ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by status:</span>
+                <div className="flex gap-2 flex-wrap">
+                  {(['all', 'draft', 'submitted'] as InspectionStatusFilter[]).map((filter) => (
+                    <Button
+                      key={filter}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStatusFilter(filter)}
+                      className={`${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''} ${statusFilter === filter ? 'bg-white text-slate-900 border-white/80 hover:bg-slate-200' : 'border-slate-600 text-muted-foreground hover:bg-slate-700/50'}`}
+                    >
+                      {filter === 'draft' && <Clipboard className="h-3 w-3 mr-1" />}
+                      {filter === 'submitted' && <Clock className="h-3 w-3 mr-1" />}
+                      {getFilterLabel(filter)}
+                    </Button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by HGV:</span>
+                <Select value={normalizedHgvFilter || 'all'} onValueChange={setHgvFilter}>
+                  <SelectTrigger className={`${tabletModeEnabled ? 'min-h-11 text-base' : 'h-9'} border-border text-white bg-slate-900/50`}>
+                    <SelectValue placeholder="All HGVs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All HGVs</SelectItem>
+                    {hgvs.map((hgv) => (
+                      <SelectItem key={hgv.id} value={hgv.id}>
+                        {hgv.reg_number}
+                        {hgv.nickname ? ` - ${hgv.nickname}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
       {showInitialLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-inspection mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">Loading daily checks...</p>
-          </div>
-        </div>
+        <PanelLoader message="Loading daily checks..." accent="hgv-inspection" className="py-20" />
       ) : inspections.length === 0 ? (
         <Card className="border-border">
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -524,7 +563,7 @@ function HgvInspectionsContent() {
             <h3 className="text-lg font-semibold text-white mb-2">No HGV daily checks yet</h3>
             <p className="text-slate-400 mb-4">Create your first HGV daily check</p>
             <Link href="/hgv-inspections/new">
-              <Button className={`bg-inspection hover:bg-inspection/90 text-white transition-all duration-200 active:scale-95 ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
+              <Button className={`bg-hgv-inspection hover:bg-hgv-inspection-dark text-white transition-all duration-200 active:scale-95 ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Daily Check
               </Button>
@@ -542,70 +581,24 @@ function HgvInspectionsContent() {
 
           {canViewCrossUserInspections && (
             <div className="hidden md:flex items-center justify-end gap-2">
-              {viewMode === 'table' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="border-slate-600">
-                      <Settings2 className="h-4 w-4 mr-2" />
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-slate-900 border border-border">
-                    <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.employeeId}
-                      onCheckedChange={() => toggleColumn('employeeId')}
-                    >
-                      Employee ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.nickname}
-                      onCheckedChange={() => toggleColumn('nickname')}
-                    >
-                      Nickname
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.status}
-                      onCheckedChange={() => toggleColumn('status')}
-                    >
-                      Status
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.submittedAt}
-                      onCheckedChange={() => toggleColumn('submittedAt')}
-                    >
-                      Submitted
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('table');
-                    localStorage.setItem('hgv-inspections-view-mode', 'table');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'table' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <Table2 className="h-4 w-4 mr-1.5" />
-                  Table
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('cards');
-                    localStorage.setItem('hgv-inspections-view-mode', 'cards');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'cards' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <LayoutGrid className="h-4 w-4 mr-1.5" />
-                  Cards
-                </Button>
-              </div>
+              {viewMode === 'table' ? (
+                <ColumnVisibilityMenu
+                  options={[
+                    { id: 'employeeId', label: 'Employee ID', checked: columnVisibility.employeeId },
+                    { id: 'nickname', label: 'Nickname', checked: columnVisibility.nickname },
+                    { id: 'status', label: 'Status', checked: columnVisibility.status },
+                    { id: 'submittedAt', label: 'Submitted', checked: columnVisibility.submittedAt },
+                  ]}
+                  onToggle={toggleColumn}
+                />
+              ) : null}
+              <DataViewToggle
+                value={viewMode}
+                onValueChange={(nextViewMode) => {
+                  setViewMode(nextViewMode);
+                  localStorage.setItem('hgv-inspections-view-mode', nextViewMode);
+                }}
+              />
             </div>
           )}
 
@@ -628,7 +621,7 @@ function HgvInspectionsContent() {
             {inspections.slice(0, displayCount).map((inspection) => (
             <Card
               key={inspection.id}
-              className="border-border hover:shadow-lg hover:border-inspection/50 transition-all duration-200 cursor-pointer"
+              className="border-border hover:shadow-lg hover:border-hgv-inspection/50 transition-all duration-200 cursor-pointer"
               onClick={() => router.push(getInspectionHref(inspection))}
             >
               <CardHeader>
@@ -651,7 +644,7 @@ function HgvInspectionsContent() {
                       variant={inspection.status === 'submitted' ? 'default' : 'secondary'}
                       className={
                         inspection.status === 'submitted'
-                          ? 'border-inspection/40 bg-inspection/10 text-inspection'
+                          ? 'border-hgv-inspection/40 bg-hgv-inspection/10 text-hgv-inspection'
                           : undefined
                       }
                     >
@@ -687,7 +680,7 @@ function HgvInspectionsContent() {
                       disabled={downloading === inspection.id}
                       variant="outline"
                       size="sm"
-                      className={`bg-slate-900 border-inspection text-inspection hover:bg-inspection hover:text-white transition-all duration-200 ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
+                      className={`bg-slate-900 border-hgv-inspection text-hgv-inspection hover:bg-hgv-inspection hover:text-white transition-all duration-200 ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
                     >
                       <Download className="h-4 w-4 mr-2" />
                       {downloading === inspection.id ? 'Downloading...' : 'Download PDF'}

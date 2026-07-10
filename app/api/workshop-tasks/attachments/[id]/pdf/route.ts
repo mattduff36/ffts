@@ -11,6 +11,15 @@ import { normalizeSignatureDataUrl } from '@/lib/pdf/signature-image';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type { StatusHistoryEvent } from '@/lib/utils/workshopTaskStatusHistory';
 import { inferAssetMeterUnit, normalizeAssetMeterUnit } from '@/lib/workshop-tasks/asset-meter';
+import {
+  calculateLolerExpiryDate,
+  findLolerMaintenanceCategory,
+  getLolerPeriodLabel,
+  type LolerMaintenanceCategory,
+} from '@/lib/utils/lolerMaintenance';
+
+const LOLER_THOROUGH_EXAMINATION = 'LOLER THOROUGH EXAMINATION';
+const LEGACY_LOLER_TYPO_PATTERN = new RegExp(`\\b${['LOLO', 'R'].join('')}\\b`, 'gi');
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,7 +32,9 @@ interface AttachmentRow {
   template_id: string;
   status: 'pending' | 'completed';
   completed_at: string | null;
+  completed_by: string | null;
   created_at: string;
+  created_by: string | null;
   workshop_attachment_templates: {
     id: string;
     name: string;
@@ -77,6 +88,12 @@ interface MaintenanceMeterRow {
   current_mileage?: number | null;
 }
 
+interface MaintenanceCategoryPeriodRow extends LolerMaintenanceCategory {
+  name: string;
+  field_key: string | null;
+  is_active: boolean | null;
+}
+
 function isStatusHistoryEvent(value: unknown): value is StatusHistoryEvent {
   if (!value || typeof value !== 'object') {
     return false;
@@ -114,6 +131,14 @@ function getIsoDatePart(value: string | null | undefined): string | null {
   }
 
   return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeLolerText(value: string): string {
+  return value
+    .replace(LEGACY_LOLER_TYPO_PATTERN, 'LOLER')
+    .replace(/\bLOLER\s*\/\s*Inspection\b/gi, LOLER_THOROUGH_EXAMINATION)
+    .replace(/\bLOLER\s+Inspection\b/gi, LOLER_THOROUGH_EXAMINATION)
+    .replace(/\bLOLER\b(?!\s+THOROUGH\s+EXAMINATION)/gi, LOLER_THOROUGH_EXAMINATION);
 }
 
 function hasSignatureDateMismatch(
@@ -311,6 +336,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     let assetType: 'van' | 'plant' | 'hgv' | null = null;
     let assetMeterReading = task?.asset_meter_reading ?? null;
     let assetMeterUnit = normalizeAssetMeterUnit(task?.asset_meter_unit ?? null);
+    let lolerExpiryDate: string | null = null;
 
     if (task?.van_id) {
       const { data: vehicle } = await supabase
@@ -327,13 +353,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     } else if (task?.plant_id) {
       const { data: plant } = await supabase
         .from('plant')
-        .select('plant_id, nickname, serial_number')
+        .select('plant_id, nickname, serial_number, loler_due_date')
         .eq('id', task.plant_id)
         .single();
       if (plant) {
-        const p = plant as { plant_id: string; nickname: string | null; serial_number: string | null };
+        const p = plant as {
+          plant_id: string;
+          nickname: string | null;
+          serial_number: string | null;
+          loler_due_date: string | null;
+        };
         assetName = `${p.plant_id}${p.nickname ? ` (${p.nickname})` : ''}${p.serial_number ? ` (SN: ${p.serial_number})` : ''}`;
         assetType = 'plant';
+        lolerExpiryDate = p.loler_due_date;
       }
     } else if (task?.hgv_id) {
       const { data: hgv } = await supabase
@@ -375,6 +407,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const logoSrc = await loadTemplateLogoDataUrl();
     const reportCreatedAt = task?.created_at ?? attachment.created_at;
     const reportCompletedAt = task ? task.actioned_at : attachment.completed_at;
+    let lolerIntervalLabel = '12 months';
+    if (assetType === 'plant') {
+      const { data: maintenanceCategories, error: maintenanceCategoriesError } = await supabase
+        .from('maintenance_categories')
+        .select('name, field_key, type, period_value, period_unit, is_active')
+        .eq('is_active', true);
+
+      if (maintenanceCategoriesError) {
+        console.error('Error fetching LOLER maintenance category:', maintenanceCategoriesError);
+      } else {
+        const lolerCategory = findLolerMaintenanceCategory(
+          (maintenanceCategories || []) as MaintenanceCategoryPeriodRow[]
+        );
+        lolerIntervalLabel = getLolerPeriodLabel(lolerCategory);
+        lolerExpiryDate = calculateLolerExpiryDate(reportCompletedAt, lolerCategory) || lolerExpiryDate;
+      }
+    }
+    let inspectorName: string | null = null;
+    if (attachment.completed_by) {
+      const { data: completedByProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', attachment.completed_by)
+        .maybeSingle();
+
+      inspectorName = (completedByProfile as { full_name?: string | null } | null)?.full_name || null;
+    }
     const completedStatusEvent = getLatestCompletedStatusEvent(task?.status_history);
     const completedTimestampAdjusted = Boolean(completedStatusEvent?.meta?.timestamp_adjusted);
     const signatureTimestampOverride = reportCompletedAt && (
@@ -400,6 +459,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       assetType,
       assetMeterReading,
       assetMeterUnit,
+      inspectorName,
+      lolerExpiryDate,
+      lolerIntervalLabel,
       logoSrc,
     });
 
@@ -412,7 +474,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const pdfBytes = new Uint8Array(Buffer.concat(chunks));
 
     // Build a clean filename
-    const safeTemplateName = templateName.replace(/[^a-z0-9]/gi, '_');
+    const safeTemplateName = normalizeLolerText(templateName).replace(/[^a-z0-9]/gi, '_');
     const filename = `${safeTemplateName}_attachment.pdf`;
 
     return new NextResponse(pdfBytes, {

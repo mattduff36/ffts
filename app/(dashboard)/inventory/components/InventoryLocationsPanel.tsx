@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Link2, MapPin, Pencil, Trash2 } from 'lucide-react';
 import type { FleetAssetOption, InventoryLocation } from '../types';
+import { formatInventoryLocationTypeLabel } from '../utils';
 
 interface InventoryLocationsPanelProps {
   locations: InventoryLocation[];
@@ -33,6 +34,7 @@ export function InventoryLocationsPanel({
             <thead>
               <tr className="border-b border-slate-700 bg-slate-800/80">
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Location</th>
+                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Type</th>
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Linked Asset</th>
                 <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Items</th>
                 <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Actions</th>
@@ -48,6 +50,15 @@ export function InventoryLocationsPanel({
                       {location.description ? (
                         <div className="text-xs text-muted-foreground">{location.description}</div>
                       ) : null}
+                      {location.external_reference ? (
+                        <div className="text-xs text-muted-foreground">Ref: {location.external_reference}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className="border-slate-600 text-slate-200">
+                        {formatInventoryLocationTypeLabel(location)}
+                      </Badge>
+                      <div className="mt-1 text-xs text-muted-foreground">{location.sync_status}</div>
                     </td>
                     <td className="px-4 py-3">
                       {linkedAssetLabel ? (
@@ -66,10 +77,12 @@ export function InventoryLocationsPanel({
                           <Pencil className="mr-2 h-3 w-3" />
                           Edit
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => onRemove(location)} className="border-red-500/30 text-red-300 hover:bg-red-500/10">
-                          <Trash2 className="mr-2 h-3 w-3" />
-                          Remove
-                        </Button>
+                        {location.location_type === 'manual' ? (
+                          <Button size="sm" variant="outline" onClick={() => onRemove(location)} className="border-red-500/30 text-red-300 hover:bg-red-500/10">
+                            <Trash2 className="mr-2 h-3 w-3" />
+                            Remove
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -96,16 +109,27 @@ export function InventoryLocationsPanel({
                   </div>
                   <Badge variant="outline">{location.item_count || 0} items</Badge>
                 </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant="outline" className="border-slate-600 text-slate-200">
+                    {formatInventoryLocationTypeLabel(location)}
+                  </Badge>
+                  <Badge variant="outline" className="border-slate-600 text-slate-200">
+                    {location.sync_status}
+                  </Badge>
+                </div>
                 <div className="mt-3 text-xs text-muted-foreground">
                   {linkedAssetLabel ? `Linked to ${linkedAssetLabel}` : 'No linked asset'}
+                  {location.external_reference ? ` · Ref: ${location.external_reference}` : ''}
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => onEdit(location)} className="flex-1 border-slate-600">
                     Edit
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => onRemove(location)} className="flex-1 border-red-500/30 text-red-300">
-                    Remove
-                  </Button>
+                  {location.location_type === 'manual' ? (
+                    <Button size="sm" variant="outline" onClick={() => onRemove(location)} className="flex-1 border-red-500/30 text-red-300">
+                      Remove
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             );

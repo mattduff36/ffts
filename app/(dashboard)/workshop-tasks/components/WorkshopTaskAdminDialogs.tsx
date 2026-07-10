@@ -129,7 +129,7 @@ export function WorkshopTaskAdminDialogs({
       )}
 
       <Dialog open={showDeleteConfirm} onOpenChange={onShowDeleteConfirmChange}>
-        <DialogContent className={`bg-white dark:bg-slate-900 border-border text-foreground max-w-md ${tabletModeEnabled ? 'p-5 sm:p-6' : ''}`}>
+        <DialogContent className={`max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-white dark:bg-slate-900 border-border text-foreground max-w-md ${tabletModeEnabled ? 'p-5 sm:p-6' : ''}`}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-xl">Delete Workshop Task</DialogTitle>
             <DialogDescription className="text-muted-foreground">

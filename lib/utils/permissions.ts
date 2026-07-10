@@ -212,7 +212,7 @@ export async function validateUserAssignment(
 
     return {
       valid: false,
-      error: `${typedProfile?.full_name || 'This user'} (${typedProfile?.roles?.display_name}) does not have access to ${module}. Please update their team permission matrix or choose a different user.`,
+      error: `${typedProfile?.full_name || 'This user'} (${typedProfile?.roles?.display_name}) does not have access to ${module}. Please update their user permission level or choose a different user.`,
     };
   }
 

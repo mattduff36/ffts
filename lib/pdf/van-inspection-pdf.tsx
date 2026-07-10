@@ -1,19 +1,16 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@react-pdf/renderer';
-import { VanInspection, InspectionItem } from '@/types/inspection';
+import { Document, Image as PdfImage, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { InspectionItem, VanInspection } from '@/types/inspection';
 import { formatDate } from '@/lib/utils/date';
 import { buildInspectionPdfCommentsText } from '@/lib/utils/inspection-pdf-comments';
 import { templateConfig } from '@/lib/config/template-config';
-import { getPdfContactLine, getPdfRegisteredOfficeLine, getPdfRegistrationLine } from '@/lib/pdf/branding';
 
-// Create styles for the PDF matching the Van inspection form
 const styles = StyleSheet.create({
   page: {
     padding: 20,
     fontSize: 7,
     fontFamily: 'Helvetica',
   },
-  // Form number in top right
   formNumber: {
     position: 'absolute',
     top: 30,
@@ -22,7 +19,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#666',
   },
-  // Company header
   companyHeader: {
     textAlign: 'center',
     marginBottom: 8,
@@ -54,7 +50,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 6,
   },
-  // Top info table
   topTable: {
     borderWidth: 1,
     borderColor: '#000',
@@ -64,6 +59,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#000',
+    minHeight: 22,
+  },
+  topRowLast: {
+    flexDirection: 'row',
     minHeight: 22,
   },
   topCell: {
@@ -84,52 +83,27 @@ const styles = StyleSheet.create({
     fontSize: 8,
     marginTop: 2,
   },
-  // Week ending row with day columns
-  weekRow: {
-    flexDirection: 'row',
-    minHeight: 18,
-  },
-  weekLabel: {
-    width: '40%',
-    padding: 4,
-    justifyContent: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-  },
-  dayCell: {
-    width: '8.57%', // 60% / 7 days
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-  },
-  dayCellLast: {
-    width: '8.57%',
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dayText: {
-    fontSize: 7,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  // Checklist table
   checklistTable: {
     borderWidth: 1,
     borderColor: '#000',
     borderTopWidth: 0,
   },
-  checklistRow: {
+  tableHeader: {
     flexDirection: 'row',
+    minHeight: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    minHeight: 16,
+    backgroundColor: '#efefef',
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    minHeight: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
   },
   checklistRowLast: {
     flexDirection: 'row',
-    minHeight: 16,
+    minHeight: 18,
   },
   numberCell: {
     width: '6%',
@@ -140,25 +114,36 @@ const styles = StyleSheet.create({
     borderRightColor: '#000',
   },
   itemCell: {
-    width: '34%',
+    width: '49%',
     padding: 3,
     justifyContent: 'center',
     borderRightWidth: 1,
     borderRightColor: '#000',
   },
-  checkCell: {
-    width: '8.57%',
-    padding: 2,
+  passCell: {
+    width: '11%',
+    padding: 3,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
     borderRightColor: '#000',
   },
-  checkCellLast: {
-    width: '8.57%',
-    padding: 2,
+  failCell: {
+    width: '11%',
+    padding: 3,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+  },
+  commentsCell: {
+    width: '23%',
+    padding: 3,
+    justifyContent: 'center',
+  },
+  headerText: {
+    fontSize: 7,
+    fontWeight: 'bold',
   },
   numberText: {
     fontSize: 8,
@@ -167,11 +152,14 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 7,
   },
-  checkText: {
+  statusText: {
     fontSize: 6,
     fontWeight: 'bold',
   },
-  // Checked by section
+  commentsText: {
+    fontSize: 6,
+    lineHeight: 1.2,
+  },
   checkedBySection: {
     borderWidth: 1,
     borderColor: '#000',
@@ -179,13 +167,13 @@ const styles = StyleSheet.create({
     padding: 4,
     minHeight: 34,
   },
-  checkedByText: {
-    fontSize: 7,
-  },
   checkedByLabel: {
     fontSize: 7,
     fontWeight: 'bold',
     marginBottom: 2,
+  },
+  checkedByText: {
+    fontSize: 7,
   },
   signatureRow: {
     flexDirection: 'row',
@@ -209,7 +197,6 @@ const styles = StyleSheet.create({
     fontSize: 6,
     color: '#666',
   },
-  // Comments sections
   commentsBox: {
     borderWidth: 1,
     borderColor: '#000',
@@ -222,10 +209,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 2,
   },
-  commentsText: {
-    fontSize: 6,
-    lineHeight: 1.2,
-  },
 });
 
 interface VanInspectionPDFProps {
@@ -235,55 +218,31 @@ interface VanInspectionPDFProps {
   employeeName?: string;
 }
 
-export function VanInspectionPDF({ inspection, items, vehicleReg, employeeName }: VanInspectionPDFProps) {
-  const formatSignedAt = (signedAt?: string | null) => {
-    if (!signedAt) {
-      return '-';
-    }
-    const date = new Date(signedAt);
-    if (Number.isNaN(date.getTime())) {
-      return '-';
-    }
-    const time = date.toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-    return `${formatDate(signedAt)} ${time}`;
-  };
+function formatSignedAt(signedAt?: string | null) {
+  if (!signedAt) return '-';
 
-  // Get form number (last 5 digits of ID or full ID if shorter)
-  const formNumber = inspection.id 
-    ? inspection.id.slice(-5).toUpperCase() 
-    : '00000';
+  const date = new Date(signedAt);
+  if (Number.isNaN(date.getTime())) return '-';
 
-  // Get unique item descriptions from the items (should be 14 for Van)
-  const uniqueItems: { number: number; description: string }[] = [];
-  const seenNumbers = new Set<number>();
-  
-  items.forEach(item => {
-    if (!seenNumbers.has(item.item_number)) {
-      seenNumbers.add(item.item_number);
-      uniqueItems.push({
-        number: item.item_number,
-        description: item.item_description,
-      });
-    }
+  const time = date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
   });
-  
-  // Sort by item number
-  uniqueItems.sort((a, b) => a.number - b.number);
+  return `${formatDate(signedAt)} ${time}`;
+}
 
-  // Helper to get check text for an item on a specific day (1=Monday, 7=Sunday)
-  const getCheckMark = (itemNumber: number, dayOfWeek: number) => {
-    const item = items.find(i => 
-      Number(i.item_number) === Number(itemNumber) && 
-      Number((i as unknown as { day_of_week?: number }).day_of_week ?? 0) === Number(dayOfWeek)
-    );
-    if (!item) return '';
-    return item.status === 'ok' ? 'PASS' : item.status === 'attention' ? 'FAIL' : 'N/A';
-  };
+function getRowComment(item: InspectionItem): string {
+  if (item.status === 'na') {
+    return item.comments ? `N/A - ${item.comments}` : 'N/A';
+  }
 
+  return item.comments || '';
+}
+
+export function VanInspectionPDF({ inspection, items, vehicleReg, employeeName }: VanInspectionPDFProps) {
+  const formNumber = inspection.id ? inspection.id.slice(-5).toUpperCase() : '00000';
+  const sortedItems = [...items].sort((left, right) => left.item_number - right.item_number);
   const defectsAndComments = buildInspectionPdfCommentsText({
     inspectorComments: inspection.inspector_comments,
     items: items as Array<InspectionItem & { day_of_week?: number | null }>,
@@ -292,93 +251,90 @@ export function VanInspectionPDF({ inspection, items, vehicleReg, employeeName }
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Form Number in top right */}
         <View style={styles.formNumber}>
           <Text>{formNumber}</Text>
         </View>
 
-        {/* Company Header */}
         <View style={styles.companyHeader}>
-          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
-            {templateConfig.branding.companyName}
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
+          <Text style={styles.companyDetails}>
+            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
           </Text>
-          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
-          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
-          <Text style={styles.registeredNo}>{getPdfRegistrationLine()}</Text>
-          <Text style={styles.pageTitle}>COMPANY VAN INSPECTION PAD</Text>
+          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
+          <Text style={styles.registeredNo}>Registered in England No. 1000918</Text>
+          <Text style={styles.pageTitle}>COMPANY VAN DAILY CHECK</Text>
         </View>
 
-        {/* Top Info Table */}
         <View style={styles.topTable}>
           <View style={styles.topRow}>
-            <View style={[styles.topCell, { width: '30%' }]}>
+            <View style={[styles.topCell, { width: '25%' }]}>
               <Text style={styles.topLabel}>REG NO.</Text>
               <Text style={styles.topValue}>{vehicleReg || ''}</Text>
             </View>
-            <View style={[styles.topCell, { width: '30%' }]}>
+            <View style={[styles.topCell, { width: '25%' }]}>
               <Text style={styles.topLabel}>MILEAGE</Text>
               <Text style={styles.topValue}>{inspection.current_mileage || ''}</Text>
             </View>
-            <View style={[styles.topCellLast, { width: '40%' }]}>
+            <View style={[styles.topCell, { width: '25%' }]}>
+              <Text style={styles.topLabel}>INSPECTION DATE</Text>
+              <Text style={styles.topValue}>{formatDate(inspection.inspection_date)}</Text>
+            </View>
+            <View style={[styles.topCellLast, { width: '25%' }]}>
               <Text style={styles.topLabel}>DRIVER NAME</Text>
               <Text style={styles.topValue}>{employeeName || ''}</Text>
             </View>
           </View>
-
-          {/* Week Ending Row with Day Columns */}
-          <View style={styles.weekRow}>
-            <View style={styles.weekLabel}>
-              <Text style={styles.topLabel}>WEEK ENDING DATE.</Text>
-              <Text style={styles.topValue}>{inspection.inspection_end_date ? formatDate(new Date(inspection.inspection_end_date)) : ''}</Text>
+          <View style={styles.topRowLast}>
+            <View style={[styles.topCell, { width: '50%' }]}>
+              <Text style={styles.topLabel}>SUBMITTED</Text>
+              <Text style={styles.topValue}>{formatSignedAt(inspection.signed_at || inspection.submitted_at)}</Text>
             </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>MON</Text>
-            </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>TUE</Text>
-            </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>WED</Text>
-            </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>THUR</Text>
-            </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>FRI</Text>
-            </View>
-            <View style={styles.dayCell}>
-              <Text style={styles.dayText}>SAT</Text>
-            </View>
-            <View style={styles.dayCellLast}>
-              <Text style={styles.dayText}>SUN</Text>
+            <View style={[styles.topCellLast, { width: '50%' }]}>
+              <Text style={styles.topLabel}>STATUS</Text>
+              <Text style={styles.topValue}>{inspection.status.toUpperCase()}</Text>
             </View>
           </View>
         </View>
 
-        {/* Checklist Table */}
         <View style={styles.checklistTable}>
-          {uniqueItems.map((item, index) => (
-            <View key={item.number} style={index === uniqueItems.length - 1 ? styles.checklistRowLast : styles.checklistRow}>
+          <View style={styles.tableHeader}>
+            <View style={styles.numberCell}>
+              <Text style={styles.headerText}>#</Text>
+            </View>
+            <View style={styles.itemCell}>
+              <Text style={styles.headerText}>CHECKLIST ITEM</Text>
+            </View>
+            <View style={styles.passCell}>
+              <Text style={styles.headerText}>PASS</Text>
+            </View>
+            <View style={styles.failCell}>
+              <Text style={styles.headerText}>FAIL</Text>
+            </View>
+            <View style={styles.commentsCell}>
+              <Text style={styles.headerText}>COMMENTS</Text>
+            </View>
+          </View>
+          {sortedItems.map((item, index) => (
+            <View key={item.id} style={index === sortedItems.length - 1 ? styles.checklistRowLast : styles.checklistRow}>
               <View style={styles.numberCell}>
-                <Text style={styles.numberText}>{String(item.number).padStart(2, '0')}</Text>
+                <Text style={styles.numberText}>{String(item.item_number).padStart(2, '0')}</Text>
               </View>
               <View style={styles.itemCell}>
-                <Text style={styles.itemText}>{item.description}</Text>
+                <Text style={styles.itemText}>{item.item_description}</Text>
               </View>
-              {/* 7 day columns (1=Mon, 2=Tue, ..., 7=Sun) */}
-              {[1, 2, 3, 4, 5, 6].map((dayOfWeek) => (
-                <View key={dayOfWeek} style={styles.checkCell}>
-                  <Text style={styles.checkText}>{getCheckMark(item.number, dayOfWeek)}</Text>
-                </View>
-              ))}
-              <View style={styles.checkCellLast}>
-                <Text style={styles.checkText}>{getCheckMark(item.number, 7)}</Text>
+              <View style={styles.passCell}>
+                <Text style={styles.statusText}>{item.status === 'ok' ? 'PASS' : ''}</Text>
+              </View>
+              <View style={styles.failCell}>
+                <Text style={styles.statusText}>{item.status === 'attention' || item.status === 'defect' ? 'FAIL' : ''}</Text>
+              </View>
+              <View style={styles.commentsCell}>
+                <Text style={styles.commentsText}>{getRowComment(item)}</Text>
               </View>
             </View>
           ))}
         </View>
 
-        {/* Checked By Section */}
         <View style={styles.checkedBySection}>
           <Text style={styles.checkedByLabel}>Checked By</Text>
           <View style={styles.signatureRow}>
@@ -395,16 +351,13 @@ export function VanInspectionPDF({ inspection, items, vehicleReg, employeeName }
           </View>
         </View>
 
-        {/* Defects / Comments Section */}
         <View style={styles.commentsBox}>
           <Text style={styles.commentsTitle}>DEFECTS/COMMENTS</Text>
           <Text style={styles.commentsText}>
-            {defectsAndComments || '................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................'}
+            {defectsAndComments || 'No defects or additional comments recorded.'}
           </Text>
         </View>
       </Page>
     </Document>
   );
 }
-
-

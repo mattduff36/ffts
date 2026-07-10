@@ -2,7 +2,7 @@
 
 ## Overview
 
-The DigiDocs application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
+The Forest Farm Operations application includes a comprehensive audit logging system that automatically tracks all changes to key database tables. This enables administrators to monitor database modifications, troubleshoot issues, and maintain accountability.
 
 ## Features
 
@@ -18,11 +18,11 @@ The system automatically logs:
 The following tables are monitored:
 - `timesheets` - Timesheet submissions and status changes
 - `timesheet_entries` - Individual timesheet day entries
-- `vehicle_inspections` - Vehicle inspection forms
-- `inspection_items` - Individual inspection checklist items
+- `van_inspections`, `plant_inspections`, and `hgv_inspections` - Daily-check forms
+- asset-specific inspection item tables - Individual checklist items
 - `absences` - Employee absence requests
 - `profiles` - User profile changes
-- `vehicles` - Vehicle record modifications
+- `vans`, `hgvs`, and `plant` - Fleet record modifications
 - `rams_documents` - RAMS document changes
 
 ### Captured Information
@@ -42,7 +42,7 @@ Each audit log entry includes:
 
 ### SuperAdmin Debug Console
 
-1. Log in as SuperAdmin (`template-admin@example.com`)
+1. Log in as SuperAdmin (`admin@mpdee.co.uk`)
 2. Navigate to `/debug`
 3. Click the **"Audit Log"** tab
 4. View the last 100 database changes

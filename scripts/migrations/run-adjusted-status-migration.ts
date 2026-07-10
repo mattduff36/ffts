@@ -106,7 +106,7 @@ async function runMigration() {
             console.log('✅ All columns exist - migration was previously completed');
             process.exit(0);
           }
-        } catch (verifyError) {
+        } catch {
           console.error('Could not verify migration state');
         }
       }

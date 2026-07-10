@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { POST } from '@/app/api/admin/users/route';
 
@@ -18,6 +18,9 @@ vi.mock('@/lib/utils/view-as', () => ({
 vi.mock('@/lib/utils/rbac', () => ({
   canEffectiveRoleAccessModule: vi.fn(),
   canEffectiveRoleAssignRole: vi.fn(),
+}));
+vi.mock('@/lib/server/admin-users-module-access', () => ({
+  requireAdminUsersModuleAccess: vi.fn(),
 }));
 vi.mock('@/lib/server/team-managers', () => ({
   reconcileProfileHierarchy: vi.fn(),
@@ -146,6 +149,7 @@ describe('POST /api/admin/users', () => {
     const { createClient } = await import('@supabase/supabase-js');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
     const { canEffectiveRoleAccessModule, canEffectiveRoleAssignRole } = await import('@/lib/utils/rbac');
+    const { requireAdminUsersModuleAccess } = await import('@/lib/server/admin-users-module-access');
     const { reconcileProfileHierarchy } = await import('@/lib/server/team-managers');
     const { sendPasswordEmail } = await import('@/lib/utils/email');
     const { applyTemplateToProfiles } = await import('@/lib/server/work-shifts');
@@ -158,6 +162,7 @@ describe('POST /api/admin/users', () => {
       role_name: 'admin',
       is_super_admin: true,
     } as never);
+    vi.mocked(requireAdminUsersModuleAccess).mockResolvedValue(null);
     vi.mocked(canEffectiveRoleAccessModule).mockResolvedValue(true);
     vi.mocked(canEffectiveRoleAssignRole).mockResolvedValue(true);
     vi.mocked(reconcileProfileHierarchy).mockResolvedValue({ affected_team_ids: [] });
@@ -206,6 +211,27 @@ describe('POST /api/admin/users', () => {
 
     expect(response.status).toBe(400);
     expect(payload.error).toContain('Team is required');
+  });
+
+  it('requires unlocked admin-users sensitive access before creating a user', async () => {
+    const { requireAdminUsersModuleAccess } = await import('@/lib/server/admin-users-module-access');
+    vi.mocked(requireAdminUsersModuleAccess).mockResolvedValue(
+      NextResponse.json(
+        { error: 'Sensitive access PIN required for protected modules.', code: 'SENSITIVE_PIN_REQUIRED' },
+        { status: 428 }
+      )
+    );
+
+    const request = new Request('http://localhost/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    const response = await POST(request as NextRequest);
+    const payload = await response.json();
+
+    expect(response.status).toBe(428);
+    expect(payload.code).toBe('SENSITIVE_PIN_REQUIRED');
   });
 
   it('creates a user when all mandatory onboarding fields are provided', async () => {

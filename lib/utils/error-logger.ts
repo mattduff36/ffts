@@ -7,6 +7,7 @@
 import { toast } from 'sonner';
 import { isClientSessionPausedMessage } from '@/lib/app-auth/session-error';
 import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
+import { getUsageAnalyticsContext, trackUsageEvent } from '@/lib/analytics/client';
 
 export interface ErrorHandlingMetadata {
   wasHandled: boolean;
@@ -51,9 +52,15 @@ interface ToastErrorMetadata {
 export function shouldIgnoreRuntimeErrorForLogging(message: string, filename?: string): boolean {
   const msg = (message || '').trim();
   const file = filename || '';
+  const normalized = msg.toLowerCase();
 
   // Browser reports this generic cross-origin/script failure without useful code context.
   if (msg === 'Script error.' && !file) return true;
+
+  // Minified Next chunk script failures usually indicate a stale/interrupted deploy asset.
+  if (msg === 'Script error.' && file.includes('/_next/static/')) return true;
+  if (normalized.includes('chunkloaderror')) return true;
+  if (normalized.includes('loading chunk') && normalized.includes('failed')) return true;
 
   // Mobile Safari noise seen in production logs (no repo reference found).
   if (msg.includes("Can't find variable: gmo") || msg.includes('gmo is not defined')) return true;
@@ -67,9 +74,112 @@ export function shouldIgnoreRuntimeErrorForLogging(message: string, filename?: s
 export function shouldIgnoreConsoleErrorForLogging(errorMessage: string): boolean {
   const normalized = errorMessage.toLowerCase();
 
-  return (
+  if (
     normalized.includes('failed to fetch rsc payload') &&
     normalized.includes('falling back to browser navigation')
+  ) {
+    return true;
+  }
+
+  const hasTransientNetworkMarker = [
+    'typeerror: load failed',
+    'error: load failed',
+    'unknownerrorexception: load failed',
+    'failed to fetch',
+    'networkerror',
+    'network request failed',
+  ].some((marker) => normalized.includes(marker));
+
+  if (!hasTransientNetworkMarker) return false;
+
+  return [
+    'error signing message:',
+    'failed to load pdf document:',
+    'error fetching rams documents:',
+    'error fetching notifications:',
+    'error checking for existing timesheet:',
+    'error fetching timesheet type:',
+  ].some((context) => normalized.includes(context));
+}
+
+function asLoggingText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return null;
+}
+
+function isMessageLessBrowserEvent(reason: unknown): boolean {
+  if (!reason || typeof reason !== 'object' || reason instanceof Error) {
+    return false;
+  }
+
+  const reasonLike = reason as {
+    isTrusted?: unknown;
+    message?: unknown;
+    stack?: unknown;
+    target?: unknown;
+    currentTarget?: unknown;
+    type?: unknown;
+  };
+
+  if (asLoggingText(reasonLike.message) || asLoggingText(reasonLike.stack)) {
+    return false;
+  }
+
+  if (typeof Event !== 'undefined' && reason instanceof Event) {
+    return true;
+  }
+
+  const hasEventShape =
+    'isTrusted' in reasonLike &&
+    ('target' in reasonLike || 'currentTarget' in reasonLike || 'type' in reasonLike);
+
+  return reasonLike.isTrusted === true && hasEventShape;
+}
+
+export function shouldIgnoreUnhandledPromiseRejectionForLogging(reason: unknown): boolean {
+  const reasonLike = reason && typeof reason === 'object' ? reason as { message?: unknown; stack?: unknown } : null;
+  const message =
+    (reason instanceof Error ? asLoggingText(reason.message) : null) ||
+    asLoggingText(reasonLike?.message) ||
+    '';
+  const stack =
+    (reason instanceof Error ? asLoggingText(reason.stack) : null) ||
+    asLoggingText(reasonLike?.stack) ||
+    '';
+  const status = getErrorStatus(reason);
+
+  if (!message) {
+    return isMessageLessBrowserEvent(reason);
+  }
+
+  if (shouldIgnoreRuntimeErrorForLogging(message, stack)) {
+    return true;
+  }
+
+  if (message.includes('We could not verify your session, so data loading has been paused.')) {
+    return true;
+  }
+
+  if (message !== 'Unauthorized' && message !== 'Session is locked') {
+    return false;
+  }
+
+  if (isAuthErrorStatus(status)) {
+    return true;
+  }
+
+  return (
+    stack.includes('accessToken') ||
+    stack.includes('_getAccessToken') ||
+    stack.includes('setAuth') ||
+    stack.includes('SupabaseClient')
   );
 }
 
@@ -98,15 +208,7 @@ class ErrorLogger {
   private latestUserAction: Omit<UserActionMetadata, 'ageMs' | 'timestamp'> & { timestampMs: number } | null = null;
 
   private asText(value: unknown): string | null {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    }
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      return String(value);
-    }
-    return null;
+    return asLoggingText(value);
   }
 
   private truncate(value: string, maxLength = 140): string {
@@ -180,6 +282,7 @@ class ErrorLogger {
       'network request failed',
       'network error',
       'authretryablefetcherror',
+      'load failed',
       'err_internet_disconnected',
       'err_network_changed',
       'timeout',
@@ -323,39 +426,7 @@ class ErrorLogger {
   }
 
   private shouldIgnoreUnhandledPromiseRejection(reason: unknown): boolean {
-    const reasonLike = reason && typeof reason === 'object' ? reason as { message?: unknown; stack?: unknown } : null;
-    const message =
-      (reason instanceof Error ? this.asText(reason.message) : null) ||
-      this.asText(reasonLike?.message) ||
-      '';
-    const stack =
-      (reason instanceof Error ? this.asText(reason.stack) : null) ||
-      this.asText(reasonLike?.stack) ||
-      '';
-    const status = getErrorStatus(reason);
-
-    if (!message) {
-      return false;
-    }
-
-    if (message.includes('We could not verify your session, so data loading has been paused.')) {
-      return true;
-    }
-
-    if (message !== 'Unauthorized' && message !== 'Session is locked') {
-      return false;
-    }
-
-    if (isAuthErrorStatus(status)) {
-      return true;
-    }
-
-    return (
-      stack.includes('accessToken') ||
-      stack.includes('_getAccessToken') ||
-      stack.includes('setAuth') ||
-      stack.includes('SupabaseClient')
-    );
+    return shouldIgnoreUnhandledPromiseRejectionForLogging(reason);
   }
 
   private constructor() {
@@ -628,7 +699,7 @@ class ErrorLogger {
     try {
       const errorObj = typeof error === 'string' ? new Error(error) : error;
       const normalizedAdditionalData: Record<string, unknown> = {
-        ...(additionalData || {}),
+        ...additionalData,
       };
       const args = Array.isArray(normalizedAdditionalData.args)
         ? (normalizedAdditionalData.args as unknown[])
@@ -648,6 +719,20 @@ class ErrorLogger {
           normalizedAdditionalData.userAction = recentAction;
         }
       }
+
+      const usageAnalyticsContext = getUsageAnalyticsContext();
+      normalizedAdditionalData.usageAnalytics = usageAnalyticsContext;
+      trackUsageEvent({
+        eventName: 'error_observed',
+        path: typeof window !== 'undefined' ? window.location.href : null,
+        metadata: {
+          componentName,
+          errorType: errorObj.name || 'Error',
+          errorMessage: this.truncate(errorObj.message || String(error), 180),
+          classification: normalizedAdditionalData.errorClassification,
+          clientSessionId: usageAnalyticsContext.clientSessionId,
+        },
+      });
       
       const errorLog: Omit<ErrorLog, 'id'> = {
         timestamp: new Date().toISOString(),
@@ -689,25 +774,28 @@ class ErrorLogger {
     this.isProcessing = true;
 
     try {
-      const batch = [...this.queue];
-      this.queue = [];
+      while (this.queue.length > 0) {
+        const batch = [...this.queue];
+        this.queue = [];
 
-      const response = await fetch('/api/errors/log', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-        keepalive: true,
-        body: JSON.stringify({ logs: batch }),
-      });
+        const response = await fetch('/api/errors/log', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+          keepalive: true,
+          body: JSON.stringify({ logs: batch }),
+        });
 
-      if (!response.ok) {
-        // Put items back in queue if insert failed
-        this.queue.unshift(...batch);
-        const payload = await response.json().catch(() => ({}));
-        console.warn('Failed to save error logs to database:', payload?.error || `HTTP ${response.status}`);
-      } else {
+        if (!response.ok) {
+          // Put items back in queue if insert failed
+          this.queue.unshift(...batch);
+          const payload = await response.json().catch(() => ({}));
+          console.warn('Failed to save error logs to database:', payload?.error || `HTTP ${response.status}`);
+          break;
+        }
+
         // After successfully logging error, check if we should send daily summary
         this.checkAndSendDailySummary();
       }

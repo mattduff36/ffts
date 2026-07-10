@@ -12,3 +12,13 @@ export function resolveNotificationToOpen(
 
   return notifications.find((n) => n.id === openNotificationId) ?? null;
 }
+
+export function isUnreadNotification(notification: Pick<NotificationItem, 'status' | 'type' | 'priority'>): boolean {
+  if (notification.status === 'PENDING') return true;
+
+  // Level 1 Toolbox Talks are internally marked SHOWN when the user chooses
+  // read-later so they stop blocking the app, but they still require a later signature.
+  return notification.status === 'SHOWN'
+    && notification.type === 'TOOLBOX_TALK'
+    && notification.priority === 'LOW';
+}

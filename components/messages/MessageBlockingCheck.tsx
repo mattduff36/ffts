@@ -6,16 +6,20 @@ import { subscribeToAuthStateChange } from '@/lib/app-auth/client';
 import { loadClientAuthSession } from '@/lib/app-auth/client-session';
 import { fetchWithAuth } from '@/lib/utils/fetch-with-auth';
 import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { BiometricEnrollmentPrompt } from '@/components/auth/BiometricEnrollmentPrompt';
 import { BlockingMessageModal } from './BlockingMessageModal';
 import { ReminderModal } from './ReminderModal';
-import { Loader2 } from 'lucide-react';
-import { templateConfig } from '@/lib/config/template-config';
 
 interface PendingToolboxTalk {
   id: string;
   recipient_id: string;
   subject: string;
   body: string;
+  priority?: 'LOW' | 'HIGH' | 'URGENT';
+  acceptance_delay_minutes?: number;
+  first_shown_at?: string | null;
+  pdf_file_path?: string | null;
   sender_name: string;
   created_at: string;
 }
@@ -51,6 +55,7 @@ export function MessageBlockingCheck() {
   const router = useRouter();
   const pathname = usePathname();
   const isDashboardPath = pathname?.startsWith('/dashboard') ?? false;
+  const { profile, loading: authLoading } = useAuth();
 
   const [authRefreshTick, setAuthRefreshTick] = useState(0);
   const [checking, setChecking] = useState(false);
@@ -58,6 +63,8 @@ export function MessageBlockingCheck() {
   const [currentToolboxTalkIndex, setCurrentToolboxTalkIndex] = useState(0);
   const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([]);
   const [showReminder, setShowReminder] = useState(false);
+  const [biometricPromptOpen, setBiometricPromptOpen] = useState(false);
+  const [biometricCheckComplete, setBiometricCheckComplete] = useState(false);
 
   const checkPendingMessages = useCallback(async (signal: AbortSignal) => {
     try {
@@ -91,7 +98,8 @@ export function MessageBlockingCheck() {
       setPendingToolboxTalks(talks);
       setCurrentToolboxTalkIndex(0);
       setPendingReminders(reminders);
-      setShowReminder(talks.length === 0 && reminders.length > 0);
+      setShowReminder(false);
+      setBiometricCheckComplete(false);
     } catch (error) {
       if (signal.aborted) {
         return;
@@ -113,6 +121,7 @@ export function MessageBlockingCheck() {
   useEffect(() => {
     if (!isDashboardPath) {
       setChecking(false);
+      setBiometricCheckComplete(false);
       return;
     }
 
@@ -135,7 +144,18 @@ export function MessageBlockingCheck() {
     return () => window.clearTimeout(timeoutId);
   }, [checking, isDashboardPath, pathname]);
 
-  function handleToolboxTalkSigned() {
+  useEffect(() => {
+    if (pendingToolboxTalks.length > 0) return;
+    if (!biometricCheckComplete || biometricPromptOpen) return;
+    if (pendingReminders.length > 0) setShowReminder(true);
+  }, [
+    biometricCheckComplete,
+    biometricPromptOpen,
+    pendingReminders.length,
+    pendingToolboxTalks.length,
+  ]);
+
+  function handleToolboxTalkCompleted() {
     // Move to next Toolbox Talk or finish
     if (currentToolboxTalkIndex + 1 < pendingToolboxTalks.length) {
       setCurrentToolboxTalkIndex(currentToolboxTalkIndex + 1);
@@ -143,10 +163,6 @@ export function MessageBlockingCheck() {
       // All Toolbox Talks signed, check if there are Reminders
       setPendingToolboxTalks([]);
       setCurrentToolboxTalkIndex(0);
-      
-      if (pendingReminders.length > 0) {
-        setShowReminder(true);
-      }
     }
   }
 
@@ -165,18 +181,6 @@ export function MessageBlockingCheck() {
     });
   }
 
-  // Show loading state briefly while checking
-  if (checking) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-        <div className="bg-white dark:bg-slate-900 rounded-lg p-6 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading {templateConfig.branding.appName}...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Show blocking Toolbox Talk modal (if any pending)
   if (pendingToolboxTalks.length > 0) {
     const currentTalk = pendingToolboxTalks[currentToolboxTalkIndex];
@@ -185,26 +189,37 @@ export function MessageBlockingCheck() {
       <BlockingMessageModal
         open={true}
         message={currentTalk}
-        onSigned={handleToolboxTalkSigned}
+        onSigned={handleToolboxTalkCompleted}
+        onDeferred={handleToolboxTalkCompleted}
         totalPending={pendingToolboxTalks.length}
         currentIndex={currentToolboxTalkIndex}
       />
     );
   }
 
-  // Show non-blocking Reminder modal (if any pending)
-  if (showReminder && pendingReminders.length > 0) {
-    return (
-      <ReminderModal
-        open={true}
-        onClose={() => setShowReminder(false)}
-        message={pendingReminders[0]}
-        onDismissed={handleReminderDismissed}
-      />
-    );
-  }
+  const canCheckBiometrics =
+    isDashboardPath &&
+    !authLoading &&
+    Boolean(profile?.id) &&
+    pendingToolboxTalks.length === 0;
 
-  // No blocking messages
-  return null;
+  return (
+    <>
+      <BiometricEnrollmentPrompt
+        profileId={profile?.id}
+        canCheck={canCheckBiometrics}
+        onOpenChange={setBiometricPromptOpen}
+        onCheckComplete={() => setBiometricCheckComplete(true)}
+      />
+      {showReminder && pendingReminders.length > 0 ? (
+        <ReminderModal
+          open={true}
+          onClose={() => setShowReminder(false)}
+          message={pendingReminders[0]}
+          onDismissed={handleReminderDismissed}
+        />
+      ) : null}
+    </>
+  );
 }
 

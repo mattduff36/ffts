@@ -79,11 +79,6 @@ function ReadRAMSContent() {
       setError(null);
 
       const sessionResult = await loadClientAuthSession();
-      if (sessionResult.status === 'locked') {
-        router.replace('/lock');
-        return;
-      }
-
       if (sessionResult.status !== 'authenticated' || !sessionResult.payload?.user?.id) {
         router.replace('/login');
         return;
@@ -110,7 +105,10 @@ function ReadRAMSContent() {
         return;
       }
 
-      setRamsDocument(doc);
+      setRamsDocument({
+        ...doc,
+        created_at: doc.created_at ?? '',
+      });
       setRequiredSignature((doc as { document_type?: { required_signature?: boolean } | null }).document_type?.required_signature ?? true);
 
       // Fetch assignment (for employees)
@@ -122,7 +120,10 @@ function ReadRAMSContent() {
         .single();
 
       if (assignmentData) {
-        setAssignment(assignmentData);
+        setAssignment({
+          ...assignmentData,
+          status: assignmentData.status ?? 'pending',
+        });
         // If action was already taken, enable sign button
         if (assignmentData.action_taken) {
           setActionTaken(assignmentData.action_taken as ActionType);
@@ -439,7 +440,7 @@ function ReadRAMSContent() {
 
   return (
     <RAMSErrorBoundary>
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-dvh">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b border-border shadow-sm">
           <div className="container mx-auto px-4 py-4 max-w-6xl">

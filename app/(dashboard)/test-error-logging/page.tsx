@@ -1,24 +1,92 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { AlertCircle, Bug, CheckCircle2 } from 'lucide-react';
+import { PageLoader } from '@/components/ui/page-loader';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { canAccessDebugConsole } from '@/lib/utils/debug-access';
+
+interface BrowserErrorLogger {
+  logError: (input: {
+    error: Error;
+    componentName?: string;
+    additionalData?: Record<string, unknown>;
+  }) => Promise<void>;
+}
 
 export default function TestErrorLoggingPage() {
+  const router = useRouter();
+  const { profile, loading, isActualSuperAdmin, isViewingAs } = useAuth();
   const [results, setResults] = useState<string[]>([]);
+  const canAccessDebugTools = canAccessDebugConsole({
+    email: profile?.email,
+    isActualSuperAdmin,
+    isViewingAs,
+  });
+
+  useEffect(() => {
+    if (loading) return;
+    if (!profile) {
+      router.replace('/login');
+      return;
+    }
+    if (!canAccessDebugTools) {
+      router.replace('/dashboard');
+    }
+  }, [canAccessDebugTools, loading, profile, router]);
+
+  if (loading) {
+    return <PageLoader message="Checking debug access..." />;
+  }
+
+  if (!profile || !canAccessDebugTools) {
+    return <PageLoader message="Redirecting..." />;
+  }
 
   const addResult = (message: string) => {
     setResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
 
-  const testClientError = () => {
+  const testClientError = async () => {
     addResult('Testing client-side error...');
     try {
       throw new Error('Test client-side error: Button click handler failed');
     } catch (error) {
       console.error('Test client error:', error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      await (window as Window & { errorLogger?: BrowserErrorLogger }).errorLogger?.logError({
+        error: errorObj,
+        componentName: 'ErrorLoggingTestPage',
+        additionalData: {
+          testSource: 'testClientError',
+        },
+      });
+      await fetch('/api/errors/log', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          logs: [{
+            timestamp: new Date().toISOString(),
+            error_message: errorObj.message,
+            error_stack: errorObj.stack || null,
+            error_type: errorObj.name,
+            page_url: window.location.href,
+            user_agent: navigator.userAgent,
+            component_name: 'ErrorLoggingTestPage',
+            additional_data: {
+              testSource: 'testClientErrorDirectPersist',
+            },
+          }],
+        }),
+      });
+      await fetch('/api/test-error-logging?type=client');
       addResult('✅ Client error thrown and logged');
       toast.error('Client error logged! Check /debug');
     }
@@ -91,7 +159,7 @@ export default function TestErrorLoggingPage() {
     addResult('🚀 Starting comprehensive error logging tests...');
     
     // Client-side tests
-    testClientError();
+    await testClientError();
     await new Promise(resolve => setTimeout(resolve, 500));
     
     testPromiseRejection();

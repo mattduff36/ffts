@@ -8,10 +8,14 @@ interface WorkshopTaskCategoryShape {
   name: string;
 }
 
+interface WorkshopTaskSubcategoryShape {
+  name: string;
+}
+
 interface WorkshopTaskShape {
   id: string;
-  created_at: string;
-  status: string;
+  created_at: string | null;
+  status: string | null;
   action_type: 'inspection_defect' | 'workshop_vehicle_task' | 'manager_action';
   workshop_comments: string | null;
   description: string | null;
@@ -25,6 +29,7 @@ interface WorkshopTaskShape {
   hgv_id: string | null;
   plant_id: string | null;
   workshop_task_categories?: WorkshopTaskCategoryShape[] | WorkshopTaskCategoryShape | null;
+  workshop_task_subcategories?: WorkshopTaskSubcategoryShape[] | WorkshopTaskSubcategoryShape | null;
   profiles?: { full_name: string | null } | null;
 }
 
@@ -62,7 +67,7 @@ export async function GET(
     const { vehicleId } = await params;
     
     // Try vans table first, then hgvs table
-    let vehicle: { id: string; reg_number: string } | null = null;
+  let vehicle: { id: string; reg_number: string | null } | null = null;
     let assetType: 'van' | 'hgv' = 'van';
     
     const { data: van } = await supabase
@@ -167,6 +172,9 @@ export async function GET(
         plant_id,
         workshop_task_categories (
           name
+        ),
+        workshop_task_subcategories (
+          name
         )
       `)
       .eq(fkColumn, vehicleId)
@@ -215,9 +223,14 @@ export async function GET(
 
     const normalizedWorkshopTasks = tasksWithProfiles.map((task) => ({
       ...task,
+      created_at: task.created_at ?? '',
+      status: task.status ?? 'pending',
       workshop_task_categories: Array.isArray(task.workshop_task_categories)
         ? task.workshop_task_categories[0] ?? null
         : task.workshop_task_categories ?? null,
+      workshop_task_subcategories: Array.isArray(task.workshop_task_subcategories)
+        ? task.workshop_task_subcategories[0] ?? null
+        : task.workshop_task_subcategories ?? null,
       profiles: task.profiles?.full_name
         ? { full_name: task.profiles.full_name }
         : null,
@@ -225,11 +238,14 @@ export async function GET(
     
     const response: MaintenanceHistoryResponse = {
       success: true,
-      history: history || [],
+      history: (history || []).map((entry) => ({
+        ...entry,
+        created_at: entry.created_at ?? '',
+      })),
       workshopTasks: normalizedWorkshopTasks,
       vehicle: {
         id: vehicle.id,
-        reg_number: vehicle.reg_number
+        reg_number: vehicle.reg_number || 'Unknown'
       },
       vesData: maintenanceData || null
     };

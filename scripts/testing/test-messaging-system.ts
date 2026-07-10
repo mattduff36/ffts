@@ -521,7 +521,7 @@ async function runTests() {
     // @ts-expect-error testing file existence
     await import('../types/messages');
     logTest('Types file (types/messages.ts) exists', true);
-  } catch (error) {
+  } catch {
     logTest('Types file (types/messages.ts) exists', false, 'File not found or has errors');
   }
 
@@ -554,7 +554,7 @@ async function runTests() {
     try {
       await import(`../components/messages/${component}`);
       logTest(`Component (${component}.tsx) exists`, true);
-    } catch (error) {
+    } catch {
       logTest(`Component (${component}.tsx) exists`, false, 'File not found or has errors');
     }
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-access';
+import { getVanInspectionsMaintenanceResponse } from '@/lib/server/van-inspections-maintenance';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 export async function DELETE(
@@ -11,6 +12,11 @@ export async function DELETE(
     const { access, errorResponse } = await getInspectionRouteActorAccess('inspections');
     if (errorResponse || !access) {
       return errorResponse ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const maintenanceResponse = getVanInspectionsMaintenanceResponse();
+    if (maintenanceResponse) {
+      return maintenanceResponse;
     }
 
     if (!access.canDeleteInspections) {

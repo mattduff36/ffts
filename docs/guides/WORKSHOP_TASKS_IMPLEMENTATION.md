@@ -109,7 +109,7 @@ Added new columns:
 - **Add Task Modal:**
   - Vehicle selection (active vehicles)
   - Category selection (active categories)
-  - Workshop comments (min 10 chars, max 500)
+  - Workshop comments (min 5 chars, max 500)
   - Validation and error handling
 - **Mark In Progress Modal:**
   - Short progress note (max 40 chars)
@@ -133,7 +133,7 @@ Added new columns:
 
 ### 5. Inspection Integration ✅
 
-**File Modified:** `app/(dashboard)/inspections/new/page.tsx`
+**Files:** `app/(dashboard)/van-inspections/new/page.tsx`, `app/(dashboard)/plant-inspections/new/page.tsx`, and `app/(dashboard)/hgv-inspections/new/page.tsx`
 
 **Change:**
 - Inspection submission now sets `action_type='inspection_defect'` when creating actions for failed items
@@ -284,7 +284,9 @@ As documented in the PRD, these features are explicitly deferred:
 - `lib/utils/permissions.ts`
 - `app/globals.css`
 - `app/(dashboard)/dashboard/page.tsx`
-- `app/(dashboard)/inspections/new/page.tsx`
+- `app/(dashboard)/van-inspections/new/page.tsx`
+- `app/(dashboard)/plant-inspections/new/page.tsx`
+- `app/(dashboard)/hgv-inspections/new/page.tsx`
 - `app/(dashboard)/actions/page.tsx`
 - `components/layout/Navbar.tsx`
 

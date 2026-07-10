@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Loader2, UserCheck, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { toast } from 'sonner';
 
 interface Manager {
@@ -30,7 +31,7 @@ interface Manager {
 
 const PRIORITY_MANAGER_EMAIL =
   process.env.NEXT_PUBLIC_PRIORITY_MANAGER_EMAIL?.trim().toLowerCase() ||
-  'priority.manager@example.com';
+  'admin@mpdee.co.uk';
 
 function isPriorityManager(manager: Manager): boolean {
   return manager.email?.trim().toLowerCase() === PRIORITY_MANAGER_EMAIL;
@@ -254,9 +255,7 @@ export function TimesheetAdjustmentModal({
 
             {/* Managers List */}
             {fetching ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
+              <PanelLoader message="Loading managers..." accent="timesheet" className="py-8" />
             ) : (
               <ScrollArea className="h-[250px] pr-4">
                 <div className="space-y-2">

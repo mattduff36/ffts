@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Edit2,
   FileText,
   Package,
 } from 'lucide-react';
@@ -341,15 +342,26 @@ export function TimesheetsApprovalTable({
                         </>
                       )}
                       {ts.status === 'approved' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); onProcess(ts.id); }}
-                          className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all h-8 px-2"
-                        >
-                          <Package className="h-3.5 w-3.5 mr-1" />
-                          Manager Approved
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/timesheets/${ts.id}`); }}
+                            className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all h-8 px-2"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 mr-1" />
+                            Adjust
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); onProcess(ts.id); }}
+                            className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all h-8 px-2"
+                          >
+                            <Package className="h-3.5 w-3.5 mr-1" />
+                            Manager Approved
+                          </Button>
+                        </>
                       )}
                       {ts.status !== 'submitted' && ts.status !== 'approved' && (
                         <span className="text-xs text-muted-foreground">-</span>

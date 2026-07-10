@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import {
@@ -11,6 +11,7 @@ import {
   validateTeamManagerSelection,
 } from '@/lib/server/team-managers';
 import { ensureTeamPermissionRows } from '@/lib/server/team-permissions';
+import { filterHiddenSystemTestAccounts } from '@/lib/utils/system-test-accounts';
 
 function getSupabaseAdmin() {
   return createSupabaseClient(
@@ -52,10 +53,8 @@ function parseTimesheetType(value: unknown): string | undefined {
 }
 
 export async function GET() {
-  const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-  if (!canAccessUserAdmin) {
-    return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-  }
+  const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+  if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
   const supabaseAdmin = getSupabaseAdmin();
   const { data: teamsData, error: teamsError } = await supabaseAdmin
@@ -98,7 +97,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to load teams' }, { status: 500 });
   }
 
-  const rows = ((data || []) as Array<{
+  const rows = filterHiddenSystemTestAccounts(((data || []) as Array<{
     id: string;
     full_name?: string | null;
     employee_id?: string | null;
@@ -114,7 +113,7 @@ export async function GET() {
     team_id: row.team_id ?? null,
     line_manager_id: row.line_manager_id ?? null,
     role: row.role ?? null,
-  }));
+  })));
 
   const teamStats = new Map<string, {
     team_id: string;
@@ -205,10 +204,8 @@ function normalizeTeamId(value: string): string {
 }
 
 export async function POST(request: Request) {
-  const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-  if (!canAccessUserAdmin) {
-    return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-  }
+  const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+  if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
   const effectiveRole = await getEffectiveRole();
   const actorIsAdmin = hasEffectiveRoleFullAccess(effectiveRole);

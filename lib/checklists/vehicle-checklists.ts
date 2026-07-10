@@ -7,7 +7,7 @@
 
 export type VehicleCategory = 'Artic' | 'Trailer' | 'Truck' | 'Van';
 
-// Truck/Artic/Trailer checklist (25 items)
+// Truck/Artic/Trailer checklist (26 items)
 const TRUCK_CHECKLIST_ITEMS = [
   'Fuel - and ad-blu',
   'Mirrors - includes Class V & Class VI',
@@ -30,13 +30,17 @@ const TRUCK_CHECKLIST_ITEMS = [
   'Sheets / Ropes / Chains',
   'Security of Load',
   'Side underbar/Rails',
+  'Transmission',
   'Brake Hoses',
   'Couplings Secure',
   'Electrical Connections',
   'Trailer No. Plate',
 ];
 
-// Van checklist (14 items)
+const HGV_ARTIC_ONLY_START_ITEM = 23;
+const HGV_ARTIC_ONLY_END_ITEM = TRUCK_CHECKLIST_ITEMS.length;
+
+// Van checklist (15 items)
 const VAN_CHECKLIST_ITEMS = [
   'Oil, Fuel & Coolant Levels/Leaks',
   'Wheels & Nuts',
@@ -52,6 +56,7 @@ const VAN_CHECKLIST_ITEMS = [
   'Steering',
   'Parking Brake',
   'Brake Test',
+  'Transmission',
 ];
 
 /**
@@ -93,6 +98,6 @@ export function isVanCategory(category: string): boolean {
 export const INSPECTION_ITEMS = TRUCK_CHECKLIST_ITEMS;
 
 // Named exports for specific checklists
-export { TRUCK_CHECKLIST_ITEMS, VAN_CHECKLIST_ITEMS };
+export { TRUCK_CHECKLIST_ITEMS, VAN_CHECKLIST_ITEMS, HGV_ARTIC_ONLY_START_ITEM, HGV_ARTIC_ONLY_END_ITEM };
 
 

@@ -5,13 +5,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { fetchUserDirectory } from '@/lib/client/user-directory';
+import { useTimesheetJobCodeOptions } from '@/lib/client/timesheet-job-codes';
 import { fetchCurrentWorkShift, fetchEmployeeWorkShift } from '@/lib/client/work-shifts';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DidNotWorkReasonDialog, type DidNotWorkReasonDecision } from '@/components/timesheets/DidNotWorkReasonDialog';
 import { JobCodeFields } from '@/components/timesheets/JobCodeFields';
+import { MobileNumericTimeInput } from '@/components/timesheets/MobileNumericTimeInput';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   Select,
@@ -26,7 +29,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageLoader } from '@/components/ui/page-loader';
-import { AlertCircle, ArrowLeft, Check, Home, Save, User, Wrench, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, Home, Moon, Save, User, Wrench, XCircle } from 'lucide-react';
 import { DAY_NAMES } from '@/types/timesheet';
 import { formatHours, roundTimeToNearestQuarterHour } from '@/lib/utils/time-calculations';
 import { SignaturePad } from '@/components/forms/SignaturePad';
@@ -37,6 +40,7 @@ import { Employee } from '@/types/common';
 import { toast } from 'sonner';
 import { TrainingDeclineDialog } from '../../components/TrainingDeclineDialog';
 import { declineTrainingBookingsClient } from '@/lib/client/training-bookings';
+import { notifyTimesheetDidNotWorkExceptions } from '@/lib/client/timesheet-did-not-work-notifications';
 import {
   getRecentVehicleIds,
   recordRecentVehicleId,
@@ -46,8 +50,10 @@ import { getRecentTextValues, recordRecentTextValue } from '@/lib/utils/recentTe
 import {
   type ApprovedAbsenceForTimesheet,
   isWorkWindowOvernight,
+  type TimesheetDidNotWorkReason,
   type TimesheetEntryLike,
   type TimesheetOffDayState,
+  getTimesheetEntryDateFromWeekEnding,
   getTimesheetWeekIsoBounds,
   isTimeWithinWorkWindow,
   normalizeTimesheetEntriesForOffDays,
@@ -55,13 +61,36 @@ import {
 } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals, formatLeaveAwareWeeklyDisplayMultiline } from '@/lib/utils/timesheet-leave-totals';
 import {
+  formatDidNotWorkReasonRemark,
+  getMissingScheduledDidNotWorkReasonException,
+  isScheduledWorkingDayDidNotWork,
+  parseDidNotWorkReasonRemark,
+} from '@/lib/utils/timesheet-did-not-work-exceptions';
+import {
+  areCataloguedJobNumbers,
   getEntryJobNumbers,
   getNormalizedJobNumbers,
   getPrimaryJobNumber,
-  hasDuplicateJobNumbers,
-  isValidJobNumber,
   normalizeJobNumberInput,
 } from '@/lib/utils/timesheet-job-codes';
+import {
+  hasWorkedTimesForSubsistence,
+  isSubsistencePaymentRequired,
+  syncSubsistenceRemark,
+} from '@/lib/utils/timesheet-subsistence';
+import { isDuplicateTimesheetWeekError } from '@/lib/utils/timesheet-errors';
+import {
+  applyPendingTrainingBookingsToOffDayStates,
+  formatHalfDayTrainingRemark,
+  getHalfDayTrainingRemarkForOffDayState,
+  getPendingDidNotWorkBookingsPayload,
+  getPendingDidNotWorkTrainingBooking,
+  isHalfDayTrainingSession,
+  type DidNotWorkTrainingSession,
+  type PendingDidNotWorkBooking,
+  type PendingDidNotWorkBookingMap,
+} from '@/lib/utils/timesheet-did-not-work-bookings';
+import { commitTimesheetDidNotWorkBookings } from '@/lib/client/timesheet-did-not-work-bookings';
 import type { WorkShiftPattern } from '@/types/work-shifts';
 import {
   buildValidationErrors,
@@ -103,6 +132,13 @@ const QUARTER_HOUR_TIME_FIELDS: ReadonlySet<keyof PlantEntryDraft> = new Set([
 
 const createBlankPlantWeekEntries = (): PlantEntryDraft[] =>
   Array.from({ length: 7 }, (_, index) => createBlankEntry(index + 1));
+
+function formatLocalIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function formatDerivedHours(value: number | null): string {
   if (value === null) return '';
@@ -174,7 +210,8 @@ function buildWorkWindowValidationErrors(
 
 function buildJobNumberValidationErrors(
   entries: PlantEntryDraft[],
-  offDayMap: Map<number, TimesheetOffDayState>
+  offDayMap: Map<number, TimesheetOffDayState>,
+  cataloguedJobNumbers: ReadonlySet<string>
 ): Record<number, string> {
   const errors: Record<number, string> = {};
 
@@ -186,9 +223,8 @@ function buildJobNumberValidationErrors(
     if (offDay?.hasTrainingBooking) return;
     if (entry.did_not_work || entry.working_in_yard || !hasHours) return;
 
-    const jobNumbers = getNormalizedJobNumbers(entry.job_numbers);
-    if (jobNumbers.length === 0 || hasDuplicateJobNumbers(entry.job_numbers) || !jobNumbers.every((jobNumber) => isValidJobNumber(jobNumber))) {
-      errors[index] = `${DAY_NAMES[index]}: Add at least one valid Job Number in format 1234-AB and do not repeat the same code on a single day.`;
+    if (!areCataloguedJobNumbers(entry.job_numbers, cataloguedJobNumbers)) {
+      errors[index] = `${DAY_NAMES[index]}: Select at least one valid Job Number from the job-code list and do not repeat the same code on a single day.`;
     }
   });
 
@@ -258,6 +294,11 @@ export function PlantTimesheetV2({
 }: PlantTimesheetV2Props) {
   const router = useRouter();
   const { user, profile, loading: authLoading, isManager, isAdmin, isSuperAdmin } = useAuth();
+  const { options: jobCodeOptions, isLoading: jobCodeOptionsLoading } = useTimesheetJobCodeOptions();
+  const cataloguedJobNumbers = useMemo(
+    () => new Set(jobCodeOptions.map((option) => option.value)),
+    [jobCodeOptions]
+  );
   const supabase = useMemo(() => createClient(), []);
   const hasElevatedPermissions = isSuperAdmin || isManager || isAdmin;
 
@@ -303,19 +344,25 @@ export function PlantTimesheetV2({
   const [offDayRefreshToken, setOffDayRefreshToken] = useState(0);
   const [trainingDeclineDayIndex, setTrainingDeclineDayIndex] = useState<number | null>(null);
   const [decliningTraining, setDecliningTraining] = useState(false);
+  const [didNotWorkReasonDayIndex, setDidNotWorkReasonDayIndex] = useState<number | null>(null);
+  const [pendingDidNotWorkBookings, setPendingDidNotWorkBookings] = useState<PendingDidNotWorkBookingMap>({});
 
   const currentOffDayKey = selectedEmployeeId && weekEnding ? `${selectedEmployeeId}:${weekEnding}` : '';
+  const effectiveOffDayStates = useMemo(
+    () => applyPendingTrainingBookingsToOffDayStates(offDayStates, pendingDidNotWorkBookings),
+    [offDayStates, pendingDidNotWorkBookings]
+  );
   const offDayMap = useMemo(
     () =>
       offDayKey === currentOffDayKey
-        ? new Map(offDayStates.map((state) => [state.day_of_week, state] as const))
+        ? new Map(effectiveOffDayStates.map((state) => [state.day_of_week, state] as const))
         : new Map<number, TimesheetOffDayState>(),
-    [currentOffDayKey, offDayKey, offDayStates]
+    [currentOffDayKey, effectiveOffDayStates, offDayKey]
   );
 
   const leaveAwareTotals = useMemo(
-    () => buildLeaveAwareTotals(entries, offDayStates),
-    [entries, offDayStates]
+    () => buildLeaveAwareTotals(entries, effectiveOffDayStates),
+    [effectiveOffDayStates, entries]
   );
   const weeklyTotalMultiline = formatLeaveAwareWeeklyDisplayMultiline(
     leaveAwareTotals.weekly.workedHours,
@@ -332,6 +379,43 @@ export function PlantTimesheetV2({
     if (selectedEmployeeId === user?.id) return profile?.full_name || '';
     return employees.find((employee) => employee.id === selectedEmployeeId)?.full_name || '';
   }, [employees, profile?.full_name, selectedEmployeeId, user?.id]);
+
+  const getDayDate = (dayIndex: number): Date =>
+    getTimesheetEntryDateFromWeekEnding(weekEnding, dayIndex + 1);
+
+  function buildPendingDidNotWorkBooking(
+    dayIndex: number,
+    kind: PendingDidNotWorkBooking['kind'],
+    trainingSession?: DidNotWorkTrainingSession
+  ): PendingDidNotWorkBooking {
+    return {
+      dayOfWeek: dayIndex + 1,
+      dayName: DAY_NAMES[dayIndex] || `Day ${dayIndex + 1}`,
+      date: formatLocalIsoDate(getDayDate(dayIndex)),
+      kind,
+      ...(trainingSession ? { trainingSession } : {}),
+    };
+  }
+
+  function queuePendingDidNotWorkBooking(booking: PendingDidNotWorkBooking) {
+    setPendingDidNotWorkBookings((current) => ({
+      ...current,
+      [booking.dayOfWeek - 1]: booking,
+    }));
+  }
+
+  function removePendingDidNotWorkBooking(dayIndex: number) {
+    setPendingDidNotWorkBookings((current) => {
+      if (!current[dayIndex]) return current;
+      const next = { ...current };
+      delete next[dayIndex];
+      return next;
+    });
+  }
+
+  function hasPendingTrainingBooking(dayIndex: number): boolean {
+    return Boolean(getPendingDidNotWorkTrainingBooking(pendingDidNotWorkBookings, dayIndex));
+  }
 
   const machineSelectValue = useMemo(() => {
     if (isHiredPlant) return HIRED_PLANT_SENTINEL;
@@ -412,6 +496,10 @@ export function PlantTimesheetV2({
       current === managerSelectedUserId ? current : managerSelectedUserId
     );
   }, [managerSelectedUserId]);
+
+  useEffect(() => {
+    setPendingDidNotWorkBookings({});
+  }, [selectedEmployeeId, weekEnding]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -526,6 +614,7 @@ export function PlantTimesheetV2({
             job_number: getPrimaryJobNumber(existingEntry) || '',
             job_numbers: getEntryJobNumbers(existingEntry),
             working_in_yard: existingEntry.working_in_yard || false,
+            subsistence_payment_required: isSubsistencePaymentRequired(existingEntry),
             time_started: existingEntry.time_started || '',
             time_finished: existingEntry.time_finished || '',
             operator_travel_hours: toHoursInput(existingEntry.operator_travel_hours),
@@ -654,9 +743,9 @@ export function PlantTimesheetV2({
 
   useEffect(() => {
     if (!existingTimesheetLoaded) return;
-    if (!currentOffDayKey || offDayKey !== currentOffDayKey || offDayStates.length === 0) return;
-    setEntries((previous) => applyOffDayDefaults(previous, offDayStates));
-  }, [currentOffDayKey, existingTimesheetLoaded, offDayKey, offDayStates]);
+    if (!currentOffDayKey || offDayKey !== currentOffDayKey || effectiveOffDayStates.length === 0) return;
+    setEntries((previous) => applyOffDayDefaults(previous, effectiveOffDayStates));
+  }, [currentOffDayKey, effectiveOffDayStates, existingTimesheetLoaded, offDayKey]);
 
   useEffect(() => {
     const nextErrors: Record<number, string> = {};
@@ -705,6 +794,12 @@ export function PlantTimesheetV2({
     offDayMap.get(dayIndex + 1);
 
   const handleTrainingStatusToggle = (dayIndex: number) => {
+    if (hasPendingTrainingBooking(dayIndex)) {
+      removePendingDidNotWorkBooking(dayIndex);
+      toast.success('Training booking selection removed.');
+      return;
+    }
+
     const dayOffState = getOffDayForIndex(dayIndex);
     if (!dayOffState?.hasTrainingBooking) return;
     setTrainingDeclineDayIndex(dayIndex);
@@ -754,11 +849,21 @@ export function PlantTimesheetV2({
         typeof normalizedValue === 'string' && (field === 'time_started' || field === 'time_finished')
           ? getMachineMirrorUpdates(currentEntry, field, normalizedValue)
           : {};
-      const updated = recalculateEntry({
+      let updated = recalculateEntry({
         ...currentEntry,
         [field]: normalizedValue,
         ...machineMirrorUpdates,
       } as PlantEntryDraft, getRecalculateOptionsForOffDay(offDayState));
+      if (
+        (field === 'time_started' || field === 'time_finished') &&
+        !hasWorkedTimesForSubsistence(updated)
+      ) {
+        updated = {
+          ...updated,
+          subsistence_payment_required: false,
+          remarks: syncSubsistenceRemark(updated.remarks, false),
+        };
+      }
       next[dayIndex] = updated;
       return next;
     });
@@ -768,10 +873,19 @@ export function PlantTimesheetV2({
     setEntries((current) => {
       const next = [...current];
       const offDayState = getOffDayForIndex(dayIndex);
-      next[dayIndex] = recalculateEntry({
+      let updated = recalculateEntry({
         ...next[dayIndex],
         ...updates,
       }, getRecalculateOptionsForOffDay(offDayState));
+      if ('subsistence_payment_required' in updates) {
+        const isRequired = Boolean(updates.subsistence_payment_required);
+        updated = {
+          ...updated,
+          subsistence_payment_required: isRequired,
+          remarks: syncSubsistenceRemark(updated.remarks, isRequired),
+        };
+      }
+      next[dayIndex] = updated;
       return next;
     });
   };
@@ -830,50 +944,135 @@ export function PlantTimesheetV2({
     });
   };
 
+  const applyDidNotWorkSelection = (
+    dayIndex: number,
+    reason?: string,
+    didNotWorkReasonCategory: TimesheetDidNotWorkReason = 'Other'
+  ) => {
+    const trimmedReason = reason?.trim();
+    setEntries((current) => {
+      const next = [...current];
+      const clearedEntry = recalculateEntry({
+        ...next[dayIndex],
+        did_not_work: true,
+        didNotWorkReason: trimmedReason ? didNotWorkReasonCategory : next[dayIndex].didNotWorkReason || 'Other',
+        working_in_yard: false,
+        subsistence_payment_required: false,
+        time_started: '',
+        time_finished: '',
+        job_number: '',
+        job_numbers: [],
+        operator_travel_hours: '',
+        operator_yard_hours: '',
+        machine_travel_hours: '',
+        machine_start_time: '',
+        machine_finish_time: '',
+        machine_standing_hours: '',
+        machine_operator_hours: '',
+        maintenance_breakdown_hours: '',
+        remarks: trimmedReason ? formatDidNotWorkReasonRemark(trimmedReason) : next[dayIndex].remarks,
+      });
+      next[dayIndex] = {
+        ...clearedEntry,
+        daily_total: 0,
+      };
+      return next;
+    });
+  };
+
   const toggleDidNotWork = (dayIndex: number) => {
     const currentEntry = entries[dayIndex];
     const nextDidNotWork = !currentEntry.did_not_work;
 
     if (nextDidNotWork) {
-      setEntries((current) => {
-        const next = [...current];
-        const clearedEntry = recalculateEntry({
-          ...next[dayIndex],
-          did_not_work: true,
-          didNotWorkReason: next[dayIndex].didNotWorkReason || 'Other',
-          working_in_yard: false,
-          time_started: '',
-          time_finished: '',
-          job_number: '',
-          job_numbers: [],
-          operator_travel_hours: '',
-          operator_yard_hours: '',
-          machine_travel_hours: '',
-          machine_start_time: '',
-          machine_finish_time: '',
-          machine_standing_hours: '',
-          machine_operator_hours: '',
-          maintenance_breakdown_hours: '',
-        });
-        next[dayIndex] = {
-          ...clearedEntry,
-          daily_total: 0,
-        };
-        return next;
+      if (isScheduledWorkingDayDidNotWork({ did_not_work: true }, getOffDayForIndex(dayIndex))) {
+        setDidNotWorkReasonDayIndex(dayIndex);
+        return;
+      }
+
+      applyDidNotWorkSelection(dayIndex);
+      return;
+    }
+
+    const existingRemarks = currentEntry.remarks;
+    removePendingDidNotWorkBooking(dayIndex);
+    updateEntry(dayIndex, {
+      did_not_work: false,
+      didNotWorkReason: null,
+      daily_total: currentEntry.time_started && currentEntry.time_finished ? currentEntry.daily_total : null,
+      remarks: parseDidNotWorkReasonRemark(existingRemarks) === existingRemarks ? existingRemarks : '',
+    });
+  };
+
+  const toggleSubsistencePayment = (dayIndex: number) => {
+    const currentEntry = entries[dayIndex];
+    const nextValue = !currentEntry.subsistence_payment_required;
+
+    if (nextValue && !hasWorkedTimesForSubsistence(currentEntry)) {
+      toast.info('Enter start and finish times before adding subsistence.', {
+        id: `plant-timesheet-subsistence-blocked-${dayIndex}`,
+        description: 'Use this when the worker stayed away overnight and needs subsistence payment.',
       });
       return;
     }
 
     updateEntry(dayIndex, {
-      did_not_work: false,
-      didNotWorkReason: null,
-      daily_total: currentEntry.time_started && currentEntry.time_finished ? currentEntry.daily_total : null,
+      subsistence_payment_required: nextValue,
     });
+    toast.success(nextValue ? 'Subsistence payment added' : 'Subsistence payment removed', {
+      id: `plant-timesheet-subsistence-toggle-${dayIndex}`,
+      description: nextValue
+        ? 'This day will be marked as stayed away for payroll.'
+        : 'The stayed-away payroll marker has been removed for this day.',
+    });
+  };
+
+  const applyPendingTrainingSelection = (dayIndex: number, trainingSession: DidNotWorkTrainingSession) => {
+    const booking = buildPendingDidNotWorkBooking(dayIndex, 'training', trainingSession);
+    const halfDayRemark = isHalfDayTrainingSession(trainingSession)
+      ? formatHalfDayTrainingRemark(trainingSession)
+      : '';
+    queuePendingDidNotWorkBooking(booking);
+    setEntries((current) => {
+      const next = [...current];
+      next[dayIndex] = recalculateEntry({
+        ...next[dayIndex],
+        did_not_work: false,
+        didNotWorkReason: null,
+        working_in_yard: false,
+        subsistence_payment_required: false,
+        job_number: '',
+        job_numbers: [],
+        operator_yard_hours: '',
+        remarks: halfDayRemark,
+      });
+      return next;
+    });
+    toast.info(`${booking.dayName} marked for ${trainingSession === 'FULL' ? 'Training' : `Training (${trainingSession})`}.`, {
+      description: isHalfDayTrainingSession(trainingSession)
+        ? 'Enter the total day start and finish times, including training and any worked time.'
+        : 'Enter the training-day start and finish times before saving.',
+    });
+  };
+
+  const handleDidNotWorkReasonConfirm = (decision: DidNotWorkReasonDecision) => {
+    if (didNotWorkReasonDayIndex === null) return;
+    if (decision.kind === 'sickness') {
+      queuePendingDidNotWorkBooking(buildPendingDidNotWorkBooking(didNotWorkReasonDayIndex, 'sickness'));
+      applyDidNotWorkSelection(didNotWorkReasonDayIndex, 'Sickness', 'Sickness');
+    } else if (decision.kind === 'training') {
+      applyPendingTrainingSelection(didNotWorkReasonDayIndex, decision.trainingSession);
+    } else {
+      removePendingDidNotWorkBooking(didNotWorkReasonDayIndex);
+      applyDidNotWorkSelection(didNotWorkReasonDayIndex, decision.reason);
+    }
+    setDidNotWorkReasonDayIndex(null);
   };
 
   const handleSelectedEmployeeChange = (nextEmployeeId: string) => {
     setSelectedEmployeeId(nextEmployeeId);
     onSelectedEmployeeChange?.(nextEmployeeId);
+    setPendingDidNotWorkBookings({});
 
     // New timesheets should reset daily rows when switching employee context
     // to avoid carrying over prior employee leave defaults/values.
@@ -922,14 +1121,31 @@ export function PlantTimesheetV2({
       return false;
     }
 
+    const missingReason = getMissingScheduledDidNotWorkReasonException(
+      entries as unknown as TimesheetEntryLike[],
+      effectiveOffDayStates,
+      weekEnding
+    );
+    if (missingReason) {
+      setRowErrors({ [missingReason.dayOfWeek - 1]: `${missingReason.dayName}: reason required for Did Not Work` });
+      setError(`${missingReason.dayName}: please add a reason before selecting Did Not Work on a scheduled day.`);
+      setActiveDay(String(missingReason.dayOfWeek - 1));
+      return false;
+    }
+
     if (isHiredPlant && !hiredPlantIdSerial.trim()) {
       setError('Please enter the hired plant ID / serial before saving.');
       return false;
     }
 
+    if (jobCodeOptionsLoading) {
+      setError('Job codes are still loading. Please wait a moment, then try again.');
+      return false;
+    }
+
     const requiredFieldErrors = buildValidationErrors(entries);
     const workWindowErrors = buildWorkWindowValidationErrors(entries, offDayMap);
-    const jobNumberErrors = buildJobNumberValidationErrors(entries, offDayMap);
+    const jobNumberErrors = buildJobNumberValidationErrors(entries, offDayMap, cataloguedJobNumbers);
     const inlineTimeErrors = Object.entries(timeErrors).reduce<Record<number, string>>((acc, [key, message]) => {
       const index = Number(key);
       if (!Number.isFinite(index)) return acc;
@@ -1042,11 +1258,16 @@ export function PlantTimesheetV2({
         const machineStanding = parseHoursInput(recalculated.machine_standing_hours);
         const machineOperator = parseHoursInput(recalculated.machine_operator_hours);
         const maintenanceBreakdown = parseHoursInput(recalculated.maintenance_breakdown_hours);
+        const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(offDayState);
         const normalizedRemarks =
           recalculated.remarks?.trim() ||
+          halfDayTrainingRemark ||
           (recalculated.did_not_work
             ? (offDayState && !offDayState.isExpectedShiftDay ? 'Not on Shift' : 'Did Not Work')
             : '');
+        const requiresSubsistence =
+          Boolean(recalculated.subsistence_payment_required) && hasWorkedTimesForSubsistence(recalculated);
+        const persistedRemarks = syncSubsistenceRemark(normalizedRemarks, requiresSubsistence);
 
         return {
           timesheet_id: timesheetId,
@@ -1066,10 +1287,11 @@ export function PlantTimesheetV2({
           daily_total: recalculated.daily_total,
           job_number: persistedJobNumbers[0] || null,
           working_in_yard: recalculated.working_in_yard,
+          subsistence_payment_required: requiresSubsistence,
           did_not_work: recalculated.did_not_work,
           night_shift: false,
           bank_holiday: false,
-          remarks: normalizedRemarks || null,
+          remarks: persistedRemarks || null,
         };
       });
 
@@ -1103,6 +1325,17 @@ export function PlantTimesheetV2({
         if (jobCodesError) throw jobCodesError;
       }
 
+      const didNotWorkBookings = getPendingDidNotWorkBookingsPayload(pendingDidNotWorkBookings);
+      if (didNotWorkBookings.length > 0) {
+        await commitTimesheetDidNotWorkBookings(timesheetId, didNotWorkBookings);
+      }
+
+      try {
+        await notifyTimesheetDidNotWorkExceptions(timesheetId);
+      } catch (notificationError) {
+        console.warn('Did Not Work notification was not sent:', notificationError);
+      }
+
       commitRecentHeaderValues();
 
       if (status === 'draft') {
@@ -1113,18 +1346,19 @@ export function PlantTimesheetV2({
 
       router.push('/timesheets');
     } catch (saveError) {
+      const isDuplicateTimesheetError = isDuplicateTimesheetWeekError(saveError);
       const shouldLogError =
+        !isDuplicateTimesheetError &&
         !isAuthErrorStatus(getErrorStatus(saveError)) &&
         !isNetworkFetchError(saveError);
 
       if (shouldLogError) {
         console.error('Error saving plant timesheet:', saveError);
       }
-      const typedError = saveError as { message?: string; code?: string };
 
       if (
         !existingTimesheetId &&
-        (typedError?.code === '23505' || typedError?.message?.includes('timesheets_user_id_week_ending_key'))
+        isDuplicateTimesheetError
       ) {
         const { data: duplicate } = await supabase
           .from('timesheets')
@@ -1448,14 +1682,17 @@ export function PlantTimesheetV2({
                 const isPartialLeave = Boolean(dayOffState?.isPartialLeave);
                 const disableForDidNotWork = entry.did_not_work && !isPartialLeave;
                 const disableInputs = isLeaveLocked || disableForDidNotWork;
-                const workWindow = dayOffState?.workWindow ?? null;
                 const disableStatusForTraining = hasTrainingBooking;
                 const disableJobNumberInput = disableInputs || entry.working_in_yard || hasTrainingBooking;
                 const jobNumberPlaceholder = hasTrainingBooking
                   ? 'N/A (Training)'
                   : entry.working_in_yard
                     ? 'N/A (Yard)'
-                    : '1234-AB';
+                    : 'Select job code';
+                const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(dayOffState);
+                const halfDayTrainingHelperText = halfDayTrainingRemark
+                  ? 'Half-day training: enter the total day start and finish times, including training and any worked time.'
+                  : null;
 
                 return (
                   <TabsContent key={entry.day_of_week} value={String(index)} className="space-y-4 px-4 pb-4 overflow-hidden">
@@ -1495,21 +1732,23 @@ export function PlantTimesheetV2({
                             Working hours allowed: {dayOffState?.workWindow?.start} to {dayOffState?.workWindow?.end}
                           </p>
                         )}
+                        {halfDayTrainingHelperText && (
+                          <p className="text-sm font-medium text-emerald-200">
+                            {halfDayTrainingHelperText}
+                          </p>
+                        )}
                       </div>
                     ) : null}
 
                     <div className="space-y-4 max-w-full">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 items-end">
                         <div className="space-y-2">
                           <Label className="text-foreground text-xl">Start Time</Label>
-                          <Input
-                            type="time"
-                            step="900"
+                          <MobileNumericTimeInput
                             value={entry.time_started}
-                            onChange={(event) => updateEntryField(index, 'time_started', event.target.value)}
+                            onChange={(value) => updateEntryField(index, 'time_started', value)}
                             disabled={disableInputs}
-                            min={workWindow?.start}
-                            max={workWindow?.end}
+                            ariaLabel={`${DAY_NAMES[index]} start time`}
                             className={`h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white w-full disabled:opacity-30 disabled:cursor-not-allowed ${
                               timeErrors[index] ? 'border-red-500' : ''
                             }`}
@@ -1517,18 +1756,33 @@ export function PlantTimesheetV2({
                         </div>
                         <div className="space-y-2">
                           <Label className="text-foreground text-xl">Finish Time</Label>
-                          <Input
-                            type="time"
-                            step="900"
+                          <MobileNumericTimeInput
                             value={entry.time_finished}
-                            onChange={(event) => updateEntryField(index, 'time_finished', event.target.value)}
+                            onChange={(value) => updateEntryField(index, 'time_finished', value)}
                             disabled={disableInputs}
-                            min={workWindow?.start}
-                            max={workWindow?.end}
+                            ariaLabel={`${DAY_NAMES[index]} finish time`}
                             className={`h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white w-full disabled:opacity-30 disabled:cursor-not-allowed ${
                               timeErrors[index] ? 'border-red-500' : ''
                             }`}
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-foreground text-sm leading-tight">Subsistence</Label>
+                          <button
+                            type="button"
+                            aria-pressed={entry.subsistence_payment_required}
+                            aria-label={`${DAY_NAMES[index]} subsistence payment required`}
+                            title="Stayed away - subsistence payment required"
+                            onClick={() => toggleSubsistencePayment(index)}
+                            disabled={disableInputs}
+                            className={`flex h-16 w-16 items-center justify-center rounded-lg border-2 transition-all ${
+                              entry.subsistence_payment_required
+                                ? 'bg-emerald-500/20 border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                            } disabled:opacity-30 disabled:cursor-not-allowed`}
+                          >
+                            <Moon className={`h-7 w-7 ${entry.subsistence_payment_required ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                          </button>
                         </div>
                       </div>
                       {timeErrors[index] && (
@@ -1538,8 +1792,8 @@ export function PlantTimesheetV2({
                         </p>
                       )}
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
+                      <div className="grid grid-cols-[minmax(7.25rem,0.75fr)_minmax(0,1.45fr)] gap-2">
+                        <div className="min-w-0 space-y-2">
                           <Label className="text-foreground text-xl">Travel Time</Label>
                           <Input
                             type="number"
@@ -1552,7 +1806,7 @@ export function PlantTimesheetV2({
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2">
                           <Label className="text-foreground text-xl flex items-center gap-2">
                             Job Number
                             {!entry.working_in_yard && !hasTrainingBooking && <span className="text-red-400 text-lg">*</span>}
@@ -1564,6 +1818,8 @@ export function PlantTimesheetV2({
                             onRemove={(jobIndex) => handleRemoveJobNumberField(index, jobIndex)}
                             placeholder={jobNumberPlaceholder}
                             disabled={disableJobNumberInput}
+                            jobCodeOptions={jobCodeOptions}
+                            jobCodeOptionsLoading={jobCodeOptionsLoading}
                             inputClassName="h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </div>
@@ -1649,6 +1905,11 @@ export function PlantTimesheetV2({
                                     Working hours allowed: {dayOffState?.workWindow?.start} to {dayOffState?.workWindow?.end}
                                   </p>
                                 )}
+                                {halfDayTrainingHelperText && (
+                                  <p className="text-sm font-medium text-emerald-200">
+                                    {halfDayTrainingHelperText}
+                                  </p>
+                                )}
                               </div>
                             ) : (
                               <p
@@ -1690,27 +1951,21 @@ export function PlantTimesheetV2({
                               <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-foreground text-xl">Machine Start Time</Label>
-                                  <Input
-                                    type="time"
-                                    step="900"
+                                  <MobileNumericTimeInput
                                     value={entry.machine_start_time}
-                                    onChange={(event) => updateEntryField(index, 'machine_start_time', event.target.value)}
+                                    onChange={(value) => updateEntryField(index, 'machine_start_time', value)}
                                     disabled={disableInputs}
-                                    min={workWindow?.start}
-                                    max={workWindow?.end}
+                                    ariaLabel={`${DAY_NAMES[index]} machine start time`}
                                     className="h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white disabled:opacity-30 disabled:cursor-not-allowed"
                                   />
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-foreground text-xl">Machine Finish Time</Label>
-                                  <Input
-                                    type="time"
-                                    step="900"
+                                  <MobileNumericTimeInput
                                     value={entry.machine_finish_time}
-                                    onChange={(event) => updateEntryField(index, 'machine_finish_time', event.target.value)}
+                                    onChange={(value) => updateEntryField(index, 'machine_finish_time', value)}
                                     disabled={disableInputs}
-                                    min={workWindow?.start}
-                                    max={workWindow?.end}
+                                    ariaLabel={`${DAY_NAMES[index]} machine finish time`}
                                     className="h-16 text-3xl text-center bg-slate-900/50 border-slate-600 text-white disabled:opacity-30 disabled:cursor-not-allowed"
                                   />
                                 </div>
@@ -1786,7 +2041,7 @@ export function PlantTimesheetV2({
                 <col style={{ width: '132px' }} />
                 <col style={{ width: '132px' }} />
                 <col style={{ width: '110px' }} />
-                <col style={{ width: '136px' }} />
+                <col style={{ width: '160px' }} />
                 <col style={{ width: '132px' }} />
                 <col style={{ width: '84px' }} />
                 <col />
@@ -1820,7 +2075,11 @@ export function PlantTimesheetV2({
                     ? 'N/A (Training)'
                     : entry.working_in_yard
                       ? 'N/A (Yard)'
-                      : '1234-AB';
+                      : 'Select job code';
+                  const halfDayTrainingRemark = getHalfDayTrainingRemarkForOffDayState(dayOffState);
+                  const halfDayTrainingHelperText = halfDayTrainingRemark
+                    ? 'Half-day training: enter total day hours, including training and worked time.'
+                    : null;
 
                   return (
                     <Fragment key={entry.day_of_week}>
@@ -1881,7 +2140,9 @@ export function PlantTimesheetV2({
                             onRemove={(jobIndex) => handleRemoveJobNumberField(index, jobIndex)}
                             placeholder={jobNumberPlaceholder}
                             disabled={disableJobNumberInput}
-                            inputClassName="w-28 bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase disabled:opacity-30 disabled:cursor-not-allowed"
+                            jobCodeOptions={jobCodeOptions}
+                            jobCodeOptionsLoading={jobCodeOptionsLoading}
+                            inputClassName="w-32 bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className="p-3">
@@ -1912,6 +2173,21 @@ export function PlantTimesheetV2({
                                 title="Did Not Work"
                               >
                                 <XCircle className={`h-5 w-5 ${entry.did_not_work ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => toggleSubsistencePayment(index)}
+                                disabled={disableInputs}
+                                aria-pressed={entry.subsistence_payment_required}
+                                className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
+                                  entry.subsistence_payment_required
+                                    ? 'bg-emerald-500/20 border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                    : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                                } disabled:opacity-30 disabled:cursor-not-allowed`}
+                                title="Subsistence Payment"
+                              >
+                                <Moon className={`h-5 w-5 ${entry.subsistence_payment_required ? 'text-emerald-400' : 'text-muted-foreground'}`} />
                               </button>
 
                               {hasTrainingBooking && (
@@ -1952,6 +2228,11 @@ export function PlantTimesheetV2({
                                         {label.label}
                                       </p>
                                     ))}
+                                    {halfDayTrainingHelperText && (
+                                      <p className="max-w-40 text-[10px] font-medium text-emerald-200">
+                                        {halfDayTrainingHelperText}
+                                      </p>
+                                    )}
                                   </div>
                                 ) : (
                                   <p
@@ -2189,8 +2470,21 @@ export function PlantTimesheetV2({
         onConfirm={handleConfirmTrainingDecline}
       />
 
+      <DidNotWorkReasonDialog
+        key={didNotWorkReasonDayIndex ?? 'closed'}
+        open={didNotWorkReasonDayIndex !== null}
+        dayName={didNotWorkReasonDayIndex === null ? '' : DAY_NAMES[didNotWorkReasonDayIndex]}
+        initialReason={
+          didNotWorkReasonDayIndex === null ? '' : parseDidNotWorkReasonRemark(entries[didNotWorkReasonDayIndex]?.remarks)
+        }
+        onOpenChange={(open) => {
+          if (!open) setDidNotWorkReasonDayIndex(null);
+        }}
+        onConfirm={handleDidNotWorkReasonConfirm}
+      />
+
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border text-white">
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Sign Plant Timesheet</DialogTitle>
             <DialogDescription className="text-muted-foreground">

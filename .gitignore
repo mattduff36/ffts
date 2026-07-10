@@ -33,8 +33,6 @@ yarn-error.log*
 # env files
 .env*.local
 .env
-template-setup.local.json
-template-setup-checklist.md
 
 # vercel
 .vercel
@@ -65,11 +63,9 @@ agent-tools/
 
 # database backups
 /backups
-/demo-snapshots
 
 # private documentation and sensitive materials
-/docs_private
-/private/
+/docs_private/
 
 # Playwright
 node_modules/

@@ -5,7 +5,6 @@ import {
 } from '@/lib/server/app-auth/cookies';
 import type { AppSessionValidationResult } from '@/lib/server/app-auth/session';
 
-const LEGACY_LOCK_COOKIE_NAME = 'avs_account_locked';
 const LEGACY_SUPABASE_COOKIE_PATTERN = /^sb-.*-auth-token(?:\.[0-9]+)?$/;
 const LEGACY_SUPABASE_CODE_VERIFIER_PATTERN = /^sb-.*-auth-token-code-verifier$/;
 
@@ -38,14 +37,6 @@ function getRequestCookies(
     });
 }
 
-export function clearLegacyLockCookie(response: NextResponse): void {
-  response.cookies.set(LEGACY_LOCK_COOKIE_NAME, '', {
-    path: '/',
-    maxAge: 0,
-    sameSite: 'lax',
-  });
-}
-
 export function clearLegacySupabaseCookies(request: NextRequest | Request, response: NextResponse): void {
   getRequestCookies(request).forEach((cookie) => {
     if (
@@ -73,6 +64,5 @@ export function applyValidationCookieIfNeeded(
 
 export function clearAllAuthCookies(request: NextRequest | Request, response: NextResponse): void {
   expireAppSessionCookieInResponse(response);
-  clearLegacyLockCookie(response);
   clearLegacySupabaseCookies(request, response);
 }

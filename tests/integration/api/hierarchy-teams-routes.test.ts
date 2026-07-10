@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const {
   mockCanAccess,
+  mockRequireAdminUsersModuleAccess,
   mockEnsureTeamPermissionRows,
   mockGetTeamManagerOptions,
   mockGetEffectiveRole,
@@ -16,6 +17,7 @@ const {
   mockValidateTeamManagerSelection,
 } = vi.hoisted(() => ({
   mockCanAccess: vi.fn(),
+  mockRequireAdminUsersModuleAccess: vi.fn(),
   mockEnsureTeamPermissionRows: vi.fn(),
   mockGetTeamManagerOptions: vi.fn(),
   mockGetEffectiveRole: vi.fn(),
@@ -79,6 +81,10 @@ vi.mock('@/lib/utils/rbac', () => ({
   canEffectiveRoleAccessModule: mockCanAccess,
 }));
 
+vi.mock('@/lib/server/admin-users-module-access', () => ({
+  requireAdminUsersModuleAccess: mockRequireAdminUsersModuleAccess,
+}));
+
 vi.mock('@/lib/utils/view-as', () => ({
   getEffectiveRole: mockGetEffectiveRole,
 }));
@@ -99,6 +105,7 @@ describe('Hierarchy teams routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCanAccess.mockResolvedValue(true);
+    mockRequireAdminUsersModuleAccess.mockResolvedValue(null);
     mockEnsureTeamPermissionRows.mockResolvedValue(undefined);
     mockGetTeamManagerOptions.mockResolvedValue([]);
     mockInsertSingleResult.mockResolvedValue({ data: null, error: null });

@@ -4,15 +4,36 @@
 -- Messages Table
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  type TEXT NOT NULL CHECK (type IN ('TOOLBOX_TALK', 'REMINDER')),
+  type TEXT NOT NULL CHECK (type IN ('TOOLBOX_TALK', 'REMINDER', 'NOTIFICATION')),
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
-  priority TEXT NOT NULL CHECK (priority IN ('HIGH', 'LOW')),
+  priority TEXT NOT NULL CHECK (priority IN ('LOW', 'HIGH', 'URGENT')),
   sender_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  created_via TEXT DEFAULT 'web'
+  created_via TEXT DEFAULT 'web',
+  module_key TEXT NOT NULL DEFAULT 'general_notifications' CHECK (
+    module_key IN (
+      'errors',
+      'maintenance',
+      'rams',
+      'approvals',
+      'inspections',
+      'absence',
+      'timesheets',
+      'inventory',
+      'processed_absence',
+      'training',
+      'suggestions',
+      'toolbox_talks',
+      'reminders',
+      'quotes',
+      'general_notifications',
+      'sensitive_pin_security'
+    )
+  ),
+  acceptance_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (acceptance_delay_minutes >= 0 AND acceptance_delay_minutes <= 1440)
 );
 
 -- Message Recipients Table (one row per user per message)
@@ -32,6 +53,7 @@ CREATE TABLE IF NOT EXISTS message_recipients (
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
+CREATE INDEX IF NOT EXISTS idx_messages_module_key_created_at ON messages(module_key, created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at);
@@ -49,6 +71,7 @@ ALTER TABLE message_recipients ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for messages
 
 -- Managers/admins can view all messages they created
+DROP POLICY IF EXISTS "Managers can view their messages" ON messages;
 CREATE POLICY "Managers can view their messages" ON messages
   FOR SELECT USING (
     EXISTS (
@@ -59,6 +82,7 @@ CREATE POLICY "Managers can view their messages" ON messages
   );
 
 -- Employees can view messages assigned to them (via message_recipients join)
+DROP POLICY IF EXISTS "Users can view assigned messages" ON messages;
 CREATE POLICY "Users can view assigned messages" ON messages
   FOR SELECT USING (
     EXISTS (
@@ -69,6 +93,7 @@ CREATE POLICY "Users can view assigned messages" ON messages
   );
 
 -- Managers/admins can create messages
+DROP POLICY IF EXISTS "Managers can create messages" ON messages;
 CREATE POLICY "Managers can create messages" ON messages
   FOR INSERT WITH CHECK (
     EXISTS (
@@ -79,6 +104,7 @@ CREATE POLICY "Managers can create messages" ON messages
   );
 
 -- Managers/admins can update messages (for soft delete)
+DROP POLICY IF EXISTS "Managers can update messages" ON messages;
 CREATE POLICY "Managers can update messages" ON messages
   FOR UPDATE USING (
     EXISTS (
@@ -91,10 +117,12 @@ CREATE POLICY "Managers can update messages" ON messages
 -- RLS Policies for message_recipients
 
 -- Users can view their own message recipient records
+DROP POLICY IF EXISTS "Users can view their recipients" ON message_recipients;
 CREATE POLICY "Users can view their recipients" ON message_recipients
   FOR SELECT USING (user_id = auth.uid());
 
 -- Managers/admins can view all message recipient records
+DROP POLICY IF EXISTS "Managers can view all recipients" ON message_recipients;
 CREATE POLICY "Managers can view all recipients" ON message_recipients
   FOR SELECT USING (
     EXISTS (
@@ -105,6 +133,7 @@ CREATE POLICY "Managers can view all recipients" ON message_recipients
   );
 
 -- Managers/admins can create message recipient records
+DROP POLICY IF EXISTS "Managers can create recipients" ON message_recipients;
 CREATE POLICY "Managers can create recipients" ON message_recipients
   FOR INSERT WITH CHECK (
     EXISTS (
@@ -115,10 +144,12 @@ CREATE POLICY "Managers can create recipients" ON message_recipients
   );
 
 -- Users can update their own recipient records (for signing/dismissing)
+DROP POLICY IF EXISTS "Users can update their recipients" ON message_recipients;
 CREATE POLICY "Users can update their recipients" ON message_recipients
   FOR UPDATE USING (user_id = auth.uid());
 
 -- Managers/admins can update any recipient record
+DROP POLICY IF EXISTS "Managers can update recipients" ON message_recipients;
 CREATE POLICY "Managers can update recipients" ON message_recipients
   FOR UPDATE USING (
     EXISTS (
@@ -137,6 +168,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS messages_updated_at ON messages;
 CREATE TRIGGER messages_updated_at
   BEFORE UPDATE ON messages
   FOR EACH ROW
@@ -151,6 +183,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS message_recipients_updated_at ON message_recipients;
 CREATE TRIGGER message_recipients_updated_at
   BEFORE UPDATE ON message_recipients
   FOR EACH ROW

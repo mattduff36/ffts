@@ -1,11 +1,13 @@
 import type { ModuleName } from '@/types/roles';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
+import { createStatusError } from '@/lib/utils/http-error';
 
 export interface DirectoryUserRole {
   id?: string | null;
   name?: string | null;
   display_name?: string | null;
   is_manager_admin?: boolean | null;
+  is_super_admin?: boolean | null;
 }
 
 export interface DirectoryUserTeam {
@@ -17,6 +19,7 @@ export interface DirectoryUser {
   id: string;
   full_name: string | null;
   employee_id: string | null;
+  super_admin?: boolean | null;
   annual_holiday_allowance_days?: number | null;
   role?: DirectoryUserRole | null;
   team?: DirectoryUserTeam | null;
@@ -29,6 +32,7 @@ export interface FetchUserDirectoryOptions {
   includeDeleted?: boolean;
   ids?: string[];
   module?: ModuleName;
+  context?: 'actions-assignment' | 'toolbox-talks-assignment';
   limit?: number;
   offset?: number;
 }
@@ -58,6 +62,10 @@ export async function fetchUserDirectory(
     params.set('module', options.module);
   }
 
+  if (options.context) {
+    params.set('context', options.context);
+  }
+
   if (typeof options.limit === 'number') {
     params.set('limit', String(options.limit));
   }
@@ -77,7 +85,7 @@ export async function fetchUserDirectory(
     };
 
     if (!response.ok) {
-      throw new Error(payload.error || 'Failed to load users');
+      throw createStatusError(payload.error || 'Failed to load users', response.status, payload);
     }
 
     return payload.users || [];

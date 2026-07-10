@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { TabletActionBar } from '@/components/ui/tablet-action-bar';
 import { SignaturePad } from '@/components/forms/SignaturePad';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
+import { useWorkshopDraftPersistence } from '@/lib/hooks/useWorkshopDraftPersistence';
 import { Download, Loader2, X } from 'lucide-react';
 import type {
   AttachmentSchemaField,
@@ -20,6 +21,7 @@ import type {
   AttachmentSchemaSection,
   AttachmentSchemaSnapshot,
 } from '@/types/workshop-attachments-v2';
+import { getErrorStatus } from '@/lib/utils/http-error';
 import { toast } from 'sonner';
 
 interface AttachmentHybridFormModalProps {
@@ -31,6 +33,10 @@ interface AttachmentHybridFormModalProps {
   readOnly?: boolean;
   isCompleted?: boolean;
   attachmentId?: string;
+  initialActiveSectionKey?: string;
+  initialScrollTop?: number;
+  onActiveSectionChange?: (sectionKey: string) => void;
+  onScrollPositionChange?: (scrollTop: number) => void;
   onSave: (responses: AttachmentSchemaResponse[], markComplete: boolean) => Promise<void>;
   canUndoComplete?: boolean;
   undoCompleteLabel?: string | null;
@@ -42,6 +48,18 @@ interface LocalResponseValue {
   response_value: string | null;
   response_json: Record<string, unknown> | null;
   field_id: string | null;
+}
+
+interface InitialResponseState {
+  responses: Record<string, LocalResponseValue>;
+  signatureNames: Record<string, string>;
+  fingerprint: string;
+}
+
+interface SaveAttachmentOptions {
+  markComplete: boolean;
+  closeOnSuccess?: boolean;
+  showSuccessToast?: boolean;
 }
 
 const MARKING_CODE_OPTIONS = [
@@ -97,6 +115,31 @@ function toResponseKey(sectionKey: string, fieldKey: string): string {
   return `${sectionKey}::${fieldKey}`;
 }
 
+function getInitialResponseState(existingResponses: AttachmentSchemaResponse[]): InitialResponseState {
+  const responses: Record<string, LocalResponseValue> = {};
+  const signatureNames: Record<string, string> = {};
+
+  existingResponses.forEach((response) => {
+    const key = toResponseKey(response.section_key, response.field_key);
+    responses[key] = {
+      response_value: response.response_value ?? null,
+      response_json: response.response_json ?? null,
+      field_id: response.field_id ?? null,
+    };
+
+    const signedByName = normalizeValue(response.response_json?.signed_by_name);
+    if (signedByName.length > 0) {
+      signatureNames[key] = signedByName;
+    }
+  });
+
+  return {
+    responses,
+    signatureNames,
+    fingerprint: getResponsesFingerprint(responses),
+  };
+}
+
 function normalizeValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
@@ -115,6 +158,21 @@ const SUPPRESSED_FIELD_HELP_TEXTS = new Set([
 function shouldRenderFieldHelpText(helpText: string): boolean {
   const normalized = helpText.toLowerCase().replace(/\s+/g, ' ').trim();
   return normalized.length > 0 && !SUPPRESSED_FIELD_HELP_TEXTS.has(normalized);
+}
+
+function isExpectedAttachmentPersistenceError(error: unknown): boolean {
+  const status = getErrorStatus(error);
+  return status === 404 || status === 409;
+}
+
+function getAttachmentPersistenceErrorMessage(error: unknown): string {
+  if (getErrorStatus(error) === 404) {
+    return 'This attachment is no longer available. Refreshing the task attachments.';
+  }
+  if (getErrorStatus(error) === 409) {
+    return error instanceof Error ? error.message : 'This attachment can no longer be edited.';
+  }
+  return 'Failed to save attachment';
 }
 
 function getValidationRequiredNoteValues(field: AttachmentSchemaField): string[] {
@@ -219,6 +277,10 @@ export function AttachmentHybridFormModal({
   readOnly = false,
   isCompleted = false,
   attachmentId,
+  initialActiveSectionKey,
+  initialScrollTop = 0,
+  onActiveSectionChange,
+  onScrollPositionChange,
   onSave,
   canUndoComplete = false,
   undoCompleteLabel = null,
@@ -238,30 +300,46 @@ export function AttachmentHybridFormModal({
   const [signatureNames, setSignatureNames] = useState<Record<string, string>>({});
   const [initialResponsesFingerprint, setInitialResponsesFingerprint] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const initializedSessionKeyRef = useRef<string | null>(null);
+  const restoredScrollSessionKeyRef = useRef<string | null>(null);
+  const mainScrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const formSessionKey = `${attachmentId || 'new-attachment'}:${snapshot.id}:${snapshot.template_version_id}`;
 
   useEffect(() => {
-    if (!open) return;
-    setActiveSectionKey(sections[0]?.section_key || '');
+    if (!open) {
+      initializedSessionKeyRef.current = null;
+      restoredScrollSessionKeyRef.current = null;
+      return;
+    }
+    if (initializedSessionKeyRef.current === formSessionKey) return;
+    initializedSessionKeyRef.current = formSessionKey;
+
+    const initialSectionKey = initialActiveSectionKey
+      && sections.some((section) => section.section_key === initialActiveSectionKey)
+      ? initialActiveSectionKey
+      : sections[0]?.section_key || '';
+    setActiveSectionKey(initialSectionKey);
     setActiveSignatureKey(null);
 
-    const nextResponses: Record<string, LocalResponseValue> = {};
-    const nextSignatureNames: Record<string, string> = {};
-    existingResponses.forEach((response) => {
-      const key = toResponseKey(response.section_key, response.field_key);
-      nextResponses[key] = {
-        response_value: response.response_value ?? null,
-        response_json: response.response_json ?? null,
-        field_id: response.field_id ?? null,
-      };
-      const signedByName = normalizeValue(response.response_json?.signed_by_name);
-      if (signedByName.length > 0) {
-        nextSignatureNames[key] = signedByName;
-      }
-    });
-    setResponses(nextResponses);
-    setSignatureNames(nextSignatureNames);
-    setInitialResponsesFingerprint(getResponsesFingerprint(nextResponses));
-  }, [open, existingResponses, sections]);
+    const initialResponseState = getInitialResponseState(existingResponses);
+    setResponses(initialResponseState.responses);
+    setSignatureNames(initialResponseState.signatureNames);
+    setInitialResponsesFingerprint(initialResponseState.fingerprint);
+  }, [existingResponses, formSessionKey, initialActiveSectionKey, open, sections]);
+
+  useEffect(() => {
+    if (!open || !activeSectionKey) return;
+    onActiveSectionChange?.(activeSectionKey);
+  }, [activeSectionKey, onActiveSectionChange, open]);
+
+  useEffect(() => {
+    if (!open || !activeSectionKey || restoredScrollSessionKeyRef.current === formSessionKey) return;
+    const scrollArea = mainScrollAreaRef.current;
+    if (!scrollArea) return;
+
+    restoredScrollSessionKeyRef.current = formSessionKey;
+    scrollArea.scrollTop = initialScrollTop;
+  }, [activeSectionKey, formSessionKey, initialScrollTop, open]);
 
   const activeSection = sections.find((section) => section.section_key === activeSectionKey) || sections[0];
   const totalFields = sections.reduce((sum, section) => sum + section.fields.length, 0);
@@ -294,6 +372,28 @@ export function AttachmentHybridFormModal({
       && getResponsesFingerprint(responses) !== initialResponsesFingerprint,
     [initialResponsesFingerprint, responses],
   );
+  const { clearDraft } = useWorkshopDraftPersistence({
+    enabled: open && !readOnly && !isCompleted && Boolean(attachmentId),
+    draftId: `workshop-attachment:${attachmentId || 'none'}`,
+    kind: 'workshop-attachment',
+    value: {
+      responses,
+      signatureNames,
+      activeSectionKey,
+    },
+    isDirty,
+    onRestore: (draft) => {
+      setResponses(draft.responses || {});
+      setSignatureNames(draft.signatureNames || {});
+      setActiveSectionKey(draft.activeSectionKey || sections[0]?.section_key || '');
+    },
+    onServerAutosave: async (draft) => {
+      await onSave(buildResponsesPayload(draft.responses || {}), false);
+      setInitialResponsesFingerprint(getResponsesFingerprint(draft.responses || {}));
+    },
+    clearLocalDraftAfterServerAutosave: true,
+    autosaveDelayMs: 5_000,
+  });
 
   function setFieldResponse(
     sectionKey: string,
@@ -319,7 +419,7 @@ export function AttachmentHybridFormModal({
       [key]: {
         response_value: prev[key]?.response_value ?? null,
         response_json: {
-          ...(prev[key]?.response_json || {}),
+          ...prev[key]?.response_json,
           ...updates,
         },
         field_id: field.id || prev[key]?.field_id || null,
@@ -337,20 +437,12 @@ export function AttachmentHybridFormModal({
     return { requiredCount, requiredComplete };
   }
 
-  async function handleSave(markComplete: boolean) {
-    if (saving || readOnly) return;
-    const invalidField = markComplete ? findFirstInvalidRequired(sections, responses) : null;
-    if (invalidField) {
-      setActiveSectionKey(invalidField.sectionKey);
-      toast.error(`Complete required field: ${invalidField.label}`);
-      return;
-    }
-
+  function buildResponsesPayload(nextResponses: Record<string, LocalResponseValue>): AttachmentSchemaResponse[] {
     const payload: AttachmentSchemaResponse[] = [];
     sections.forEach((section) => {
       section.fields.forEach((field) => {
         const key = toResponseKey(section.section_key, field.field_key);
-        const response = responses[key];
+        const response = nextResponses[key];
         payload.push({
           field_id: response?.field_id || field.id || null,
           section_key: section.section_key,
@@ -360,19 +452,49 @@ export function AttachmentHybridFormModal({
         });
       });
     });
+    return payload;
+  }
+
+  async function saveAttachment({
+    markComplete,
+    closeOnSuccess = false,
+    showSuccessToast = true,
+  }: SaveAttachmentOptions): Promise<boolean> {
+    if (saving || readOnly) return false;
+    const invalidField = markComplete ? findFirstInvalidRequired(sections, responses) : null;
+    if (invalidField) {
+      setActiveSectionKey(invalidField.sectionKey);
+      toast.error(`Complete required field: ${invalidField.label}`);
+      return false;
+    }
+
+    const payload = buildResponsesPayload(responses);
 
     setSaving(true);
     try {
       await onSave(payload, markComplete);
       setInitialResponsesFingerprint(getResponsesFingerprint(responses));
-      toast.success(markComplete ? 'Attachment completed' : 'Draft saved');
-      if (markComplete) onOpenChange(false);
-    } catch (error) {
-      console.error('Error saving schema attachment responses:', error);
-      toast.error('Failed to save attachment');
-    } finally {
+      void clearDraft();
+      if (showSuccessToast) {
+        toast.success(markComplete ? 'Attachment completed' : 'Draft saved');
+      }
       setSaving(false);
+      if (markComplete || closeOnSuccess) onOpenChange(false);
+      return true;
+    } catch (error) {
+      if (isExpectedAttachmentPersistenceError(error)) {
+        console.warn('Attachment save was rejected:', error);
+      } else {
+        console.error('Error saving schema attachment responses:', error);
+      }
+      toast.error(getAttachmentPersistenceErrorMessage(error));
+      setSaving(false);
+      return false;
     }
+  }
+
+  async function handleSave(markComplete: boolean) {
+    await saveAttachment({ markComplete });
   }
 
   function navigateSection(direction: 'next' | 'previous') {
@@ -382,6 +504,10 @@ export function AttachmentHybridFormModal({
     const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     if (nextIndex < 0 || nextIndex >= sections.length) return;
     setActiveSectionKey(sections[nextIndex].section_key);
+  }
+
+  function handleMainScroll(event: UIEvent<HTMLDivElement>) {
+    onScrollPositionChange?.(event.currentTarget.scrollTop);
   }
 
   async function handleDownloadPdf() {
@@ -652,11 +778,28 @@ export function AttachmentHybridFormModal({
   }
 
   function handleDialogOpenChange(nextOpen: boolean) {
-    if (!nextOpen && !readOnly && !saving && !undoingComplete && isDirty) {
-      toast.info('Save or discard your draft before closing.');
+    if (nextOpen) {
+      onOpenChange(true);
       return;
     }
-    onOpenChange(nextOpen);
+
+    if (saving || undoingComplete) return;
+
+    if (!readOnly && !isCompleted && isDirty) {
+      void saveAttachment({
+        markComplete: false,
+        closeOnSuccess: true,
+        showSuccessToast: false,
+      });
+      return;
+    }
+
+    onOpenChange(false);
+  }
+
+  function discardDraftAndClose() {
+    void clearDraft();
+    onOpenChange(false);
   }
 
   return (
@@ -769,7 +912,12 @@ export function AttachmentHybridFormModal({
           </aside>
 
           <main className="min-h-0">
-            <ScrollArea className="h-[62vh]">
+            <ScrollArea
+              ref={mainScrollAreaRef}
+              className="h-[62vh]"
+              onScroll={handleMainScroll}
+              data-testid="attachment-form-scroll-area"
+            >
               {activeSection ? (
                 <div className="p-5 space-y-4">
                   <div className="flex items-center justify-between">
@@ -819,7 +967,7 @@ export function AttachmentHybridFormModal({
                   statusText={`${completedRequired}/${totalRequired} required complete`}
                   tertiaryAction={{
                     label: isDirty ? 'Discard Changes' : 'Close',
-                    onClick: () => onOpenChange(false),
+                    onClick: discardDraftAndClose,
                     disabled: saving,
                     variant: 'outline',
                   }}
@@ -839,7 +987,7 @@ export function AttachmentHybridFormModal({
               </div>
             ) : (
               <DialogFooter className="px-5 py-4 border-t border-border">
-                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                <Button variant="outline" onClick={discardDraftAndClose} disabled={saving}>
                   {isDirty ? 'Discard Changes' : 'Cancel'}
                 </Button>
                 <Button variant="outline" onClick={() => { void handleSave(false); }} disabled={saving}>

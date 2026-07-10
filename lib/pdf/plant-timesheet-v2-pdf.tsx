@@ -7,8 +7,8 @@ import type { TimesheetOffDayState } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals } from '@/lib/utils/timesheet-leave-totals';
 import { normalizeTimesheetEntriesForDisplay } from '@/lib/utils/plant-timesheet-v2-normalization';
 import { formatEntryJobNumbers } from '@/lib/utils/timesheet-job-codes';
+import { addSubsistenceRemark } from '@/lib/utils/timesheet-subsistence';
 import { templateConfig } from '@/lib/config/template-config';
-import { getPdfContactLine, getPdfRegisteredOfficeLine } from '@/lib/pdf/branding';
 
 const styles = StyleSheet.create({
   page: {
@@ -292,15 +292,23 @@ function formatHours(value: number | null | undefined): string {
   return Number(value).toFixed(2);
 }
 
-function formatPlantRemarks(entry: { job_number?: string | null; job_numbers?: string[]; remarks?: string | null }): string {
+function formatPlantRemarks(entry: {
+  job_number?: string | null;
+  job_numbers?: string[];
+  remarks?: string | null;
+  subsistence_payment_required?: boolean | null;
+}): string {
   const jobNumbers = formatEntryJobNumbers(entry);
-  if (jobNumbers !== '-' && entry.remarks?.trim()) {
-    return `Job numbers ${jobNumbers} - ${entry.remarks.trim()}`;
+  const remarks = entry.subsistence_payment_required
+    ? addSubsistenceRemark(entry.remarks)
+    : entry.remarks;
+  if (jobNumbers !== '-' && remarks?.trim()) {
+    return `Job numbers ${jobNumbers} - ${remarks.trim()}`;
   }
   if (jobNumbers !== '-') {
     return `Job numbers ${jobNumbers}`;
   }
-  return entry.remarks || '';
+  return remarks || '';
 }
 
 export function PlantTimesheetV2PDF({ timesheet, employeeName, offDayStates = [] }: PlantTimesheetV2PDFProps) {
@@ -325,6 +333,7 @@ export function PlantTimesheetV2PDF({ timesheet, employeeName, offDayStates = []
       job_number: null,
       job_numbers: [],
       working_in_yard: false,
+      subsistence_payment_required: false,
       daily_total: null,
       remarks: '',
       did_not_work: false,
@@ -342,11 +351,11 @@ export function PlantTimesheetV2PDF({ timesheet, employeeName, offDayStates = []
         </View>
 
         <View style={styles.companyHeader}>
-          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
-            {templateConfig.branding.companyName}
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
+          <Text style={styles.companyDetails}>
+            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
           </Text>
-          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
-          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
+          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
         </View>
 
         <View style={styles.headerGrid}>

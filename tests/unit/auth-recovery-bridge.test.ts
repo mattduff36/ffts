@@ -38,9 +38,7 @@ describe('auth recovery bridge', () => {
     expect(forceAuthRedirect).not.toHaveBeenCalled();
   });
 
-  it('falls back to a lock redirect when the account switcher is enabled', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ACCOUNT_SWITCHER_ENABLED', 'true');
-
+  it('ignores removed locked-session responses', async () => {
     const replace = vi.fn();
     vi.stubGlobal('window', {
       location: {
@@ -52,22 +50,7 @@ describe('auth recovery bridge', () => {
     const recovered = await handleAuthFailureStatus(423);
 
     expect(recovered).toBe(false);
-    expect(replace).toHaveBeenCalledWith('/lock');
-  });
-
-  it('falls back to login for 423 responses when the account switcher is disabled', async () => {
-    const replace = vi.fn();
-    vi.stubGlobal('window', {
-      location: {
-        replace,
-      },
-    } as unknown as Window);
-
-    const { handleAuthFailureStatus } = await import('@/lib/app-auth/recovery-bridge');
-    const recovered = await handleAuthFailureStatus(423);
-
-    expect(recovered).toBe(false);
-    expect(replace).toHaveBeenCalledWith('/login');
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('falls back to redirect instead of rejecting when recovery handler throws', async () => {

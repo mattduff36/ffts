@@ -1,5 +1,4 @@
 import { headers } from 'next/headers';
-import { isAccountSwitcherEnabledServer } from '@/lib/account-switch/feature-flag';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
@@ -17,13 +16,12 @@ import {
 } from '@/lib/server/app-auth/cookies';
 import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 import { randomToken, sha256Hex } from '@/lib/server/app-auth/jwt';
-import { createAccountSwitchAuditEvent } from '@/lib/server/account-switch-audit';
-import {
-  getAccountSwitchDevice,
-  upsertAccountSwitchDevice,
-} from '@/lib/server/account-switch-device';
+import { upsertWebAuthnDevice, getWebAuthnDevice } from '@/lib/server/webauthn/devices';
 
-export type AppAuthSessionSource = 'password_login' | 'pin_unlock' | 'session_bootstrap';
+export type AppAuthSessionSource =
+  | 'password_login'
+  | 'session_bootstrap'
+  | 'biometric_login';
 
 export interface AppAuthSessionRow {
   id: string;
@@ -32,7 +30,6 @@ export interface AppAuthSessionRow {
   session_secret_hash: string;
   session_source: AppAuthSessionSource;
   remember_me: boolean;
-  locked_at: string | null;
   last_seen_at: string;
   idle_expires_at: string;
   absolute_expires_at: string;
@@ -46,7 +43,7 @@ export interface AppAuthSessionRow {
 }
 
 export interface AppSessionValidationResult {
-  status: 'missing' | 'invalid' | 'locked' | 'active';
+  status: 'missing' | 'invalid' | 'active';
   session: AppAuthSessionRow | null;
   profileId: string | null;
   email: string | null;
@@ -62,7 +59,6 @@ export interface IssueAppSessionOptions {
   deviceLabel?: string | null;
   actorProfileId?: string | null;
   previousSessionId?: string | null;
-  lockSession?: boolean;
   revokedReason?: string | null;
 }
 
@@ -129,7 +125,7 @@ async function resolveDeviceId(
     return null;
   }
 
-  const device = await upsertAccountSwitchDevice({
+  const device = await upsertWebAuthnDevice({
     profileId,
     rawDeviceId,
     deviceLabel: deviceLabel || null,
@@ -145,24 +141,9 @@ async function markDeviceAuthenticated(deviceId: string | null): Promise<void> {
 
   const admin = createAdminClient();
   await admin
-    .from('account_switch_devices')
+    .from('webauthn_devices')
     .update({
       last_authenticated_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('id', deviceId);
-}
-
-async function markDeviceLocked(deviceId: string | null): Promise<void> {
-  if (!deviceId) {
-    return;
-  }
-
-  const admin = createAdminClient();
-  await admin
-    .from('account_switch_devices')
-    .update({
-      last_locked_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
     })
     .eq('id', deviceId);
@@ -202,11 +183,10 @@ function getNextIdleExpiry(row: AppAuthSessionRow, now: Date): Date {
 
 async function updateSessionActivity(
   row: AppAuthSessionRow,
-  options: { rotate: boolean; locked: boolean; now: Date }
+  options: { rotate: boolean; now: Date }
 ): Promise<{ row: AppAuthSessionRow; cookieValue: string | null; cookieExpiresAt: Date | null }> {
   const admin = createAdminClient();
   const nextIdleExpiry = getNextIdleExpiry(row, options.now);
-  const nextLockedAt = options.locked ? row.locked_at || options.now.toISOString() : null;
   let nextSecret = row.session_secret_hash;
   let rawSecret: string | null = null;
 
@@ -218,7 +198,6 @@ async function updateSessionActivity(
   const updatePayload: Partial<AppAuthSessionRow> = {
     last_seen_at: options.now.toISOString(),
     idle_expires_at: nextIdleExpiry.toISOString(),
-    locked_at: nextLockedAt,
   };
 
   if (options.rotate) {
@@ -250,7 +229,6 @@ async function updateSessionActivity(
     cookieValue: await buildAppSessionCookieValue({
       sid: nextRow.id,
       secret: rawSecret,
-      locked: Boolean(nextRow.locked_at),
       expiresAt: nextIdleExpiry,
     }),
     cookieExpiresAt: nextIdleExpiry,
@@ -279,7 +257,6 @@ export async function issueAppSession(
       session_secret_hash: sessionSecretHash,
       session_source: options.source,
       remember_me: rememberMe,
-      locked_at: options.lockSession ? now.toISOString() : null,
       last_seen_at: now.toISOString(),
       idle_expires_at: cookieExpiresAt.toISOString(),
       absolute_expires_at: absoluteExpiresAt.toISOString(),
@@ -299,27 +276,11 @@ export async function issueAppSession(
     await markDeviceAuthenticated(deviceId);
   }
 
-  await createAccountSwitchAuditEvent({
-    profileId: options.profileId,
-    actorProfileId: options.actorProfileId ?? options.profileId,
-    eventType:
-      options.source === 'pin_unlock'
-        ? 'app_session_unlocked'
-        : 'app_session_created',
-    metadata: {
-      app_session_id: data.id,
-      device_id: deviceId,
-      session_source: options.source,
-      remember_me: rememberMe,
-    },
-  });
-
   return {
     row: data as AppAuthSessionRow,
     cookieValue: await buildAppSessionCookieValue({
       sid: data.id,
       secret,
-      locked: options.lockSession === true,
       expiresAt: cookieExpiresAt,
     }),
     cookieExpiresAt,
@@ -351,20 +312,10 @@ export async function revokeAppSession(
     throw new Error(error.message);
   }
 
-  await createAccountSwitchAuditEvent({
-    profileId: existing.profile_id,
-    actorProfileId: existing.profile_id,
-    eventType: 'app_session_revoked',
-    metadata: {
-      app_session_id: sessionId,
-      revoked_reason: reason,
-      replaced_by_session_id: replacementSessionId || null,
-    },
-  });
 }
 
 export async function validateAppSession(
-  options: { allowLocked?: boolean; includeEmail?: boolean } = {}
+  options: { includeEmail?: boolean } = {}
 ): Promise<AppSessionValidationResult> {
   const cookiePayload = await getCurrentAppSessionCookiePayload();
   if (!cookiePayload || cookiePayload.v !== APP_SESSION_COOKIE_VERSION) {
@@ -408,25 +359,19 @@ export async function validateAppSession(
   }
 
   let currentRow = row;
-  const lockEnforced = isAccountSwitcherEnabledServer();
-  let isLocked = lockEnforced && Boolean(currentRow.locked_at);
   const email = options.includeEmail ? await getAuthUserEmail(currentRow.profile_id) : null;
   let nextCookieValue: string | null = null;
   let nextCookieExpiresAt: Date | null = null;
 
   const needsRotation = shouldRotateSession(currentRow, now);
-  const needsLockReset = !lockEnforced && Boolean(currentRow.locked_at);
-  const needsLockFlagSync = cookiePayload.locked !== isLocked;
   const needsSeenUpdate = now.getTime() - new Date(currentRow.last_seen_at).getTime() >= 60 * 1000;
 
-  if (needsRotation || needsLockReset || needsLockFlagSync || needsSeenUpdate) {
+  if (needsRotation || needsSeenUpdate) {
     const refreshed = await updateSessionActivity(currentRow, {
       rotate: needsRotation,
-      locked: isLocked,
       now,
     });
     currentRow = refreshed.row;
-    isLocked = Boolean(currentRow.locked_at);
 
     nextCookieExpiresAt = refreshed.cookieExpiresAt ?? getNextIdleExpiry(currentRow, now);
     nextCookieValue =
@@ -434,24 +379,12 @@ export async function validateAppSession(
       (await buildAppSessionCookieValue({
         sid: currentRow.id,
         secret: cookiePayload.secret,
-        locked: isLocked,
         expiresAt: nextCookieExpiresAt,
       }));
   }
 
-  if (isLocked && options.allowLocked !== true) {
-    return {
-      status: 'locked',
-      session: currentRow,
-      profileId: currentRow.profile_id,
-      email,
-      cookieValue: nextCookieValue,
-      cookieExpiresAt: nextCookieExpiresAt,
-    };
-  }
-
   return {
-    status: isLocked ? 'locked' : 'active',
+    status: 'active',
     session: currentRow,
     profileId: currentRow.profile_id,
     email,
@@ -460,95 +393,20 @@ export async function validateAppSession(
   };
 }
 
-export async function lockCurrentAppSession(): Promise<{
-  row: AppAuthSessionRow;
-  cookieValue: string;
-  cookieExpiresAt: Date;
-}> {
-  if (!isAccountSwitcherEnabledServer()) {
-    throw new Error('Account switch is disabled');
-  }
-
-  const validation = await validateAppSession({ allowLocked: true });
-  if (!validation.session || validation.status === 'missing' || validation.status === 'invalid') {
-    const current = await getCurrentAuthenticatedProfileFromSupabase({ includeEmail: true });
-    if (!current) {
-      throw new Error('No active session to lock');
-    }
-
-    const nextSession = await issueAppSession({
-      profileId: current.profile.id,
-      source: 'session_bootstrap',
-      rememberMe: true,
-      actorProfileId: current.profile.id,
-      lockSession: true,
-    });
-
-    await markDeviceLocked(nextSession.row.device_id);
-    await createAccountSwitchAuditEvent({
-      profileId: nextSession.row.profile_id,
-      actorProfileId: nextSession.row.profile_id,
-      eventType: 'app_session_locked',
-      metadata: {
-        app_session_id: nextSession.row.id,
-        device_id: nextSession.row.device_id,
-      },
-    });
-
-    return {
-      row: nextSession.row,
-      cookieValue: nextSession.cookieValue,
-      cookieExpiresAt: nextSession.cookieExpiresAt,
-    };
-  }
-
-  const refreshed = await updateSessionActivity(validation.session, {
-    rotate: true,
-    locked: true,
-    now: new Date(),
-  });
-
-  if (!refreshed.cookieValue || !refreshed.cookieExpiresAt) {
-    throw new Error('Failed to issue locked app session cookie');
-  }
-
-  await markDeviceLocked(refreshed.row.device_id);
-  await createAccountSwitchAuditEvent({
-    profileId: refreshed.row.profile_id,
-    actorProfileId: refreshed.row.profile_id,
-    eventType: 'app_session_locked',
-    metadata: {
-      app_session_id: refreshed.row.id,
-      device_id: refreshed.row.device_id,
-    },
-  });
-
-  return {
-    row: refreshed.row,
-    cookieValue: refreshed.cookieValue,
-    cookieExpiresAt: refreshed.cookieExpiresAt,
-  };
-}
-
 export async function getCurrentAuthenticatedProfile(
-  options: { allowLocked?: boolean; includeEmail?: boolean } = {}
+  options: { includeEmail?: boolean } = {}
 ) {
   const validation = await validateAppSession(options);
   if (
     validation.session &&
     validation.status !== 'missing' &&
-    validation.status !== 'invalid' &&
-    (validation.status !== 'locked' || options.allowLocked === true)
+    validation.status !== 'invalid'
   ) {
     const profile = await getAppAuthProfile(validation.session.profile_id, validation.email);
     return {
       validation,
       profile,
     };
-  }
-
-  if (validation.status === 'locked' && options.allowLocked !== true) {
-    return null;
   }
 
   return getCurrentAuthenticatedProfileFromSupabase(options);
@@ -581,6 +439,6 @@ export async function getCurrentAuthenticatedProfileFromSupabase(
 }
 
 export async function getDeviceIdForProfile(profileId: string, rawDeviceId: string): Promise<string | null> {
-  const device = await getAccountSwitchDevice(profileId, rawDeviceId);
+  const device = await getWebAuthnDevice(profileId, rawDeviceId);
   return device?.id || null;
 }

@@ -5,7 +5,6 @@ import {
   reportClientServiceOutage,
   shouldTripClientServiceOutage,
 } from '@/lib/app-auth/client-service-health';
-import { shouldTreatAuthResponseAsLocked } from '@/lib/app-auth/client-auth-policy';
 import { CLIENT_SESSION_PAUSED_MESSAGE } from '@/lib/app-auth/session-error';
 import { createStatusError, getErrorStatus } from '@/lib/utils/http-error';
 
@@ -16,14 +15,13 @@ export interface ClientAuthSessionUser {
 
 export interface ClientAuthSessionResponse {
   authenticated: boolean;
-  locked: boolean;
   user: ClientAuthSessionUser | null;
   profile?: unknown;
   data_token_available?: boolean;
 }
 
 export interface ClientAuthSessionResult {
-  status: 'authenticated' | 'locked' | 'unauthenticated' | 'error';
+  status: 'authenticated' | 'unauthenticated' | 'error';
   payload: ClientAuthSessionResponse | null;
   responseStatus: number | null;
   error: Error | null;
@@ -57,16 +55,6 @@ async function requestClientAuthSession(): Promise<ClientAuthSessionResult> {
     clearClientServiceOutage('auth-session');
     return {
       status: 'unauthenticated',
-      payload,
-      responseStatus: response.status,
-      error: null,
-    };
-  }
-
-  if (shouldTreatAuthResponseAsLocked({ statusCode: response.status, payloadLocked: payload?.locked })) {
-    clearClientServiceOutage('auth-session');
-    return {
-      status: 'locked',
       payload,
       responseStatus: response.status,
       error: null,

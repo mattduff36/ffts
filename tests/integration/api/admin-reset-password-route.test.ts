@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextResponse } from 'next/server';
 
 const mocks = vi.hoisted(() => {
   const createSupabaseAdminClient = vi.fn();
@@ -13,7 +14,8 @@ const mocks = vi.hoisted(() => {
   const sendPasswordEmail = vi.fn();
   const canEffectiveRoleAccessModule = vi.fn();
   const canEffectiveRoleAssignRole = vi.fn();
-  const generateSecurePassword = vi.fn(() => 'TMPa1B2');
+  const requireAdminUsersModuleAccess = vi.fn();
+  const generateSecurePassword = vi.fn(() => 'Fft1A2b');
   const logServerError = vi.fn().mockResolvedValue(undefined);
 
   return {
@@ -29,6 +31,7 @@ const mocks = vi.hoisted(() => {
     sendPasswordEmail,
     canEffectiveRoleAccessModule,
     canEffectiveRoleAssignRole,
+    requireAdminUsersModuleAccess,
     generateSecurePassword,
     logServerError,
   };
@@ -53,6 +56,10 @@ vi.mock('@/lib/utils/email', () => ({
 vi.mock('@/lib/utils/rbac', () => ({
   canEffectiveRoleAccessModule: mocks.canEffectiveRoleAccessModule,
   canEffectiveRoleAssignRole: mocks.canEffectiveRoleAssignRole,
+}));
+
+vi.mock('@/lib/server/admin-users-module-access', () => ({
+  requireAdminUsersModuleAccess: mocks.requireAdminUsersModuleAccess,
 }));
 
 vi.mock('@/lib/utils/server-error-logger', () => ({
@@ -107,6 +114,7 @@ describe('POST /api/admin/users/[id]/reset-password', () => {
 
     mocks.canEffectiveRoleAccessModule.mockResolvedValue(true);
     mocks.canEffectiveRoleAssignRole.mockResolvedValue(true);
+    mocks.requireAdminUsersModuleAccess.mockResolvedValue(null);
     mocks.getUserById.mockResolvedValue({
       data: {
         user: {
@@ -130,11 +138,11 @@ describe('POST /api/admin/users/[id]/reset-password', () => {
 
     expect(response.status).toBe(200);
     expect(payload.success).toBe(true);
-    expect(payload.temporaryPassword).toBe('TMPa1B2');
+    expect(payload.temporaryPassword).toBe('Fft1A2b');
     expect(payload.emailSent).toBe(true);
 
     expect(mocks.updateUserById).toHaveBeenCalledWith('user-1', {
-      password: 'TMPa1B2',
+      password: 'Fft1A2b',
     });
     expect(mocks.profileUpdate).toHaveBeenCalledWith({
       must_change_password: true,
@@ -143,13 +151,18 @@ describe('POST /api/admin/users/[id]/reset-password', () => {
     expect(mocks.sendPasswordEmail).toHaveBeenCalledWith({
       to: 'user@example.com',
       userName: 'Example User',
-      temporaryPassword: 'TMPa1B2',
+      temporaryPassword: 'Fft1A2b',
       isReset: true,
     });
   });
 
   it('rejects non-admin access before attempting a reset', async () => {
-    mocks.canEffectiveRoleAccessModule.mockResolvedValue(false);
+    mocks.requireAdminUsersModuleAccess.mockResolvedValue(
+      NextResponse.json(
+        { error: 'Forbidden: admin-users access required' },
+        { status: 403 }
+      )
+    );
 
     const request = new Request('http://localhost/api/admin/users/user-1/reset-password', {
       method: 'POST',

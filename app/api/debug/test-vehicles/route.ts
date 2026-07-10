@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createClient as createServerClient } from '@/lib/supabase/server';
-import { getEffectiveRole } from '@/lib/utils/view-as';
-import { canAccessDebugConsole } from '@/lib/utils/debug-access';
+import { createDebugAccessErrorBody, requireDebugConsoleAccess } from '@/lib/server/debug-console-access';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 type FleetItem = {
@@ -27,37 +25,101 @@ function getSupabaseAdmin() {
   );
 }
 
+function getReminderAssetColumns(fleetType: 'vans' | 'hgvs' | 'plant') {
+  if (fleetType === 'hgvs') {
+    return { assetType: 'hgv', idColumn: 'hgv_id' } as const;
+  }
+
+  if (fleetType === 'plant') {
+    return { assetType: 'plant', idColumn: 'plant_id' } as const;
+  }
+
+  return { assetType: 'van', idColumn: 'van_id' } as const;
+}
+
+async function getReminderActionCleanupTargets(
+  adminSupabase: ReturnType<typeof getSupabaseAdmin>,
+  fleetType: 'vans' | 'hgvs' | 'plant',
+  itemIds: string[],
+) {
+  if (itemIds.length === 0) {
+    return {
+      actionIds: [] as string[],
+      reminderCount: 0,
+    };
+  }
+
+  const { assetType, idColumn } = getReminderAssetColumns(fleetType);
+  const { data: reminderActions, error: actionsError } = await adminSupabase
+    .from('reminder_actions')
+    .select('id')
+    .eq('asset_type', assetType)
+    .in(idColumn, itemIds);
+
+  if (actionsError) {
+    throw actionsError;
+  }
+
+  const actionIds = (reminderActions || []).map((action) => action.id);
+  if (actionIds.length === 0) {
+    return {
+      actionIds,
+      reminderCount: 0,
+    };
+  }
+
+  const { count: reminderCount, error: remindersError } = await adminSupabase
+    .from('reminders')
+    .select('id', { count: 'exact', head: true })
+    .in('action_id', actionIds);
+
+  if (remindersError) {
+    throw remindersError;
+  }
+
+  return {
+    actionIds,
+    reminderCount: reminderCount || 0,
+  };
+}
+
+async function deleteReminderActionsForFleetItems(
+  adminSupabase: ReturnType<typeof getSupabaseAdmin>,
+  fleetType: 'vans' | 'hgvs' | 'plant',
+  itemIds: string[],
+) {
+  const targets = await getReminderActionCleanupTargets(adminSupabase, fleetType, itemIds);
+  if (targets.actionIds.length === 0) {
+    return targets;
+  }
+
+  const { error } = await adminSupabase
+    .from('reminder_actions')
+    .delete()
+    .in('id', targets.actionIds);
+
+  if (error) {
+    throw error;
+  }
+
+  return targets;
+}
+
 /**
  * GET /api/debug/test-vehicles
  * List fleet items (vans, HGVs, and/or plant) matching a prefix (for test data management)
  * SuperAdmin only
- * Query: prefix=TE57, type=vans|hgvs|plant|all
+ * Query: prefix=ZZ99, type=vans|hgvs|plant|all
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const effectiveRole = await getEffectiveRole();
-    const canAccessDebugTools = canAccessDebugConsole({
-      email: user.email,
-      isActualSuperAdmin: effectiveRole.is_actual_super_admin,
-      isViewingAs: effectiveRole.is_viewing_as,
-    });
-
-    if (!canAccessDebugTools) {
-      return NextResponse.json(
-        { error: 'Forbidden: Debug access required' },
-        { status: 403 }
-      );
+    const access = await requireDebugConsoleAccess();
+    if (!access.ok) {
+      return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
     }
 
     const { searchParams } = new URL(request.url);
-    const prefix = searchParams.get('prefix') || 'TE57';
+    const prefix = searchParams.get('prefix') || 'ZZ99';
     const typeParam = searchParams.get('type') || 'all'; // vans | hgvs | plant | all
 
     type FleetItem = { id: string; reg_number: string; nickname: string | null; status: string; fleet_type: 'van' | 'hgv' | 'plant' };
@@ -152,25 +214,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const effectiveRole = await getEffectiveRole();
-    const canAccessDebugTools = canAccessDebugConsole({
-      email: user.email,
-      isActualSuperAdmin: effectiveRole.is_actual_super_admin,
-      isViewingAs: effectiveRole.is_viewing_as,
-    });
-
-    if (!canAccessDebugTools) {
-      return NextResponse.json(
-        { error: 'Forbidden: Debug access required' },
-        { status: 403 }
-      );
+    const access = await requireDebugConsoleAccess();
+    if (!access.ok) {
+      return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
     }
 
     const body = await request.json();
@@ -197,7 +243,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validPrefix = prefix || 'TE57';
+    const validPrefix = prefix || 'ZZ99';
     const fleetType = fleet_type === 'hgvs' ? 'hgvs' : fleet_type === 'plant' ? 'plant' : 'vans';
     const adminSupabase = getSupabaseAdmin();
 
@@ -243,6 +289,21 @@ export async function POST(request: NextRequest) {
 
     // Build counts object
     const counts: Record<string, number> = {};
+
+    if (actions?.inspections) {
+      const reminderTargets = await getReminderActionCleanupTargets(adminSupabase, fleetType, itemIds);
+      counts.reminder_actions = reminderTargets.actionIds.length;
+      counts.reminders = reminderTargets.reminderCount;
+
+      if (mode === 'execute' && reminderTargets.actionIds.length > 0) {
+        const { error: deleteReminderActionsError } = await adminSupabase
+          .from('reminder_actions')
+          .delete()
+          .in('id', reminderTargets.actionIds);
+
+        if (deleteReminderActionsError) throw deleteReminderActionsError;
+      }
+    }
 
     // Count/delete inspections (van_inspections, hgv_inspections, or plant_inspections)
     if (actions?.inspections) {
@@ -495,25 +556,13 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const access = await requireDebugConsoleAccess();
+    if (!access.ok) {
+      return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
     }
-
-    const effectiveRole = await getEffectiveRole();
-    const canAccessDebugTools = canAccessDebugConsole({
-      email: user.email,
-      isActualSuperAdmin: effectiveRole.is_actual_super_admin,
-      isViewingAs: effectiveRole.is_viewing_as,
-    });
-
-    if (!canAccessDebugTools) {
-      return NextResponse.json(
-        { error: 'Forbidden: Debug access required' },
-        { status: 403 }
-      );
+    const actorProfileId = access.profileId;
+    if (!actorProfileId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -540,7 +589,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const validPrefix = prefix || 'TE57';
+    const validPrefix = prefix || 'ZZ99';
     const fleetType = fleet_type === 'hgvs' ? 'hgvs' : fleet_type === 'plant' ? 'plant' : 'vans';
     const adminSupabase = getSupabaseAdmin();
 
@@ -614,7 +663,7 @@ export async function DELETE(request: NextRequest) {
               category_id: fullVehicle.category_id,
               status: fullVehicle.status,
               archive_reason: archive_reason || 'Test Data Cleanup',
-              archived_by: user.id,
+              archived_by: actorProfileId,
               vehicle_data: fullVehicle,
               maintenance_data: fullVehicle.vehicle_maintenance || null,
             });
@@ -663,6 +712,10 @@ export async function DELETE(request: NextRequest) {
 
       // Delete in proper order to avoid FK violations
       const deleteCounts: Record<string, number> = {};
+
+      const reminderTargets = await deleteReminderActionsForFleetItems(adminSupabase, fleetType, vehicleIds);
+      deleteCounts.reminder_actions = reminderTargets.actionIds.length;
+      deleteCounts.reminders = reminderTargets.reminderCount;
 
       // First, get all task IDs for these items
       const { data: tasksToDelete } = await adminSupabase

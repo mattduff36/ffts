@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist';
-import { isExpectedPdfRenderError } from '@/lib/pdf/render-errors';
+import { getPdfLoadMessage, isExpectedPdfLoadError, isExpectedPdfRenderError } from '@/lib/pdf/render-errors';
 
 type PdfjsLib = {
   GlobalWorkerOptions: { workerSrc: string };
@@ -40,35 +41,6 @@ function ensurePromiseWithResolvers(): void {
     });
     return { promise, resolve, reject };
   };
-}
-
-function isExpectedPdfLoadError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes('unexpected server response (400)') ||
-    message.includes('unexpected server response (401)') ||
-    message.includes('unexpected server response (403)') ||
-    message.includes('unexpected server response (404)')
-  );
-}
-
-function getPdfLoadMessage(error: unknown): string {
-  if (!(error instanceof Error) || error.message.trim().length === 0) {
-    return 'Failed to load PDF';
-  }
-
-  const message = error.message;
-  if (/(400|401|403)/.test(message) && message.includes('Unexpected server response')) {
-    return 'This PDF link has expired or is unavailable. Please reopen the document and try again.';
-  }
-
-  if (/404/.test(message) && message.includes('Unexpected server response')) {
-    return 'This PDF is no longer available.';
-  }
-
-  return message;
 }
 
 async function getPdfjs(): Promise<PdfjsLib> {
@@ -226,12 +198,7 @@ export function PDFCanvasRenderer({ url, className }: PDFCanvasRendererProps) {
   }, [loading, pdfDoc, renderPages]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading PDF...</span>
-      </div>
-    );
+    return <PanelLoader message="Loading PDF..." className="py-16" />;
   }
 
   if (error) {

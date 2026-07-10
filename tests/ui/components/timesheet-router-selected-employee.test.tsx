@@ -5,8 +5,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { TimesheetRouter } from '@/app/(dashboard)/timesheets/components/TimesheetRouter';
 
 const useTimesheetTypeMock = vi.fn(
-  (userId: string): { timesheetType: 'civils' | 'plant'; loading: boolean; error: string | null } => ({
+  (userId: string): { timesheetType: 'civils' | 'plant' | null; mode: 'fixed' | 'choice'; loading: boolean; error: string | null } => ({
     timesheetType: userId === 'employee-plant' ? 'plant' : 'civils',
+    mode: 'fixed',
     loading: false,
     error: null,
   })
@@ -68,6 +69,7 @@ describe('TimesheetRouter selected employee routing', () => {
     vi.clearAllMocks();
     useTimesheetTypeMock.mockImplementation((userId) => ({
       timesheetType: userId === 'employee-plant' ? 'plant' : 'civils',
+      mode: 'fixed',
       loading: false,
       error: null,
     }));
@@ -111,5 +113,26 @@ describe('TimesheetRouter selected employee routing', () => {
 
     expect(useTimesheetTypeMock).toHaveBeenLastCalledWith('employee-plant');
     expect(screen.getByTestId('plant-v2-sheet')).toHaveTextContent('employee-plant');
+  });
+
+  it('uses the selected concrete type when the employee is in choice mode', () => {
+    useTimesheetTypeMock.mockReturnValue({
+      timesheetType: null,
+      mode: 'choice',
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <TimesheetRouter
+        weekEnding="2026-03-29"
+        existingId={null}
+        userId="employee-choice"
+        selectedTimesheetType="plant"
+      />
+    );
+
+    expect(useTimesheetTypeMock).toHaveBeenCalledWith('employee-choice');
+    expect(screen.getByTestId('plant-v2-sheet')).toHaveTextContent('employee-choice');
   });
 });

@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  normalizeTimesheetExceptionOverrideType,
   normalizeTimesheetExceptionType,
+  type TimesheetExceptionOverrideType,
   type TimesheetExceptionType,
   type TimesheetTypeExceptionMatrixResponse,
 } from '@/types/timesheet-type-exceptions';
@@ -93,8 +95,8 @@ export async function getTimesheetTypeExceptionMatrix(): Promise<TimesheetTypeEx
         teamTimesheetType: profile.team?.timesheet_type,
         roleTimesheetType: profile.role?.timesheet_type,
       });
-      const overrideType = normalizeTimesheetExceptionType(exceptionRow.timesheet_type);
-      const effectiveType = overrideType || defaultType;
+      const overrideType = normalizeTimesheetExceptionOverrideType(exceptionRow.timesheet_type);
+      const effectiveType: TimesheetExceptionOverrideType = overrideType || defaultType;
 
       return {
         profile_id: profile.id,
@@ -146,7 +148,7 @@ export async function addTimesheetTypeExceptionRow(profileId: string, actorId?: 
 
 export async function upsertTimesheetTypeException(params: {
   profile_id: string;
-  timesheet_type: TimesheetExceptionType | null;
+  timesheet_type: TimesheetExceptionOverrideType | null;
   actor_id?: string | null;
 }): Promise<void> {
   const admin = createAdminClient();

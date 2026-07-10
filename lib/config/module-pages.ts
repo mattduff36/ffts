@@ -131,8 +131,20 @@ export const MODULE_PAGES: ModulePage[] = [
     module: 'toolbox-talks',
     displayName: MODULE_DISPLAY_NAMES['toolbox-talks'],
     subPages: [
-      { value: 'toolbox-talks-list', label: 'Toolbox Talks List' },
-      { value: 'toolbox-talks-new', label: 'New Toolbox Talk' },
+      { value: 'toolbox-talks-list', label: 'Overview' },
+      { value: 'toolbox-talks-new', label: 'Create Toolbox Talk' },
+      { value: 'toolbox-talks-reminder', label: 'Create Notification / Reminder' },
+    ],
+  },
+  {
+    module: 'training',
+    displayName: MODULE_DISPLAY_NAMES.training,
+    subPages: [
+      { value: 'training-overview', label: 'Overview' },
+      { value: 'training-records', label: 'Records' },
+      { value: 'training-people', label: 'People' },
+      { value: 'training-qualifications', label: 'Qualifications' },
+      { value: 'training-notes', label: 'Workbook Notes' },
     ],
   },
   {
@@ -157,6 +169,13 @@ export const MODULE_PAGES: ModulePage[] = [
     subPages: [
       { value: 'inventory-overview', label: 'Inventory Overview' },
       { value: 'inventory-locations', label: 'Location Management' },
+    ],
+  },
+  {
+    module: 'reminders',
+    displayName: MODULE_DISPLAY_NAMES.reminders,
+    subPages: [
+      { value: 'reminders-list', label: 'Reminders List' },
     ],
   },
   {
@@ -242,7 +261,7 @@ export function getPageUrl(value: string): string {
     // Workshop Tasks
     'workshop-tasks-list': '/workshop-tasks',
     'workshop-tasks-new': '/workshop-tasks',
-    'workshop-tasks-view': '/workshop-tasks',
+    'workshop-tasks-view': '/workshop-tasks?taskId=[id]',
     
     // Approvals
     'approvals-list': '/approvals',
@@ -254,8 +273,8 @@ export function getPageUrl(value: string): string {
     
     // Reports
     'reports-list': '/reports',
-    'reports-timesheets': '/reports?tab=timesheets',
-    'reports-absence': '/reports?tab=absence-leave',
+    'reports-timesheets': '/reports?reportTab=timesheets',
+    'reports-absence': '/reports?reportTab=absence-leave',
 
     // Suggestions / FAQ / Error Reports
     'suggestions-manage': '/suggestions/manage',
@@ -264,8 +283,16 @@ export function getPageUrl(value: string): string {
     'error-reports-manage': '/admin/errors/manage',
     
     // Toolbox Talks
-    'toolbox-talks-list': '/toolbox-talks',
-    'toolbox-talks-new': '/toolbox-talks',
+    'toolbox-talks-list': '/toolbox-talks?tab=overview',
+    'toolbox-talks-new': '/toolbox-talks?tab=create-toolbox-talk',
+    'toolbox-talks-reminder': '/toolbox-talks?tab=create-reminder',
+
+    // Training
+    'training-overview': '/training?tab=overview',
+    'training-records': '/training?tab=records',
+    'training-people': '/training?tab=people',
+    'training-qualifications': '/training?tab=qualifications',
+    'training-notes': '/training?tab=notes',
     
     // Admin - Users
     'admin-users-list': '/admin/users',
@@ -274,15 +301,17 @@ export function getPageUrl(value: string): string {
     // Admin - Vans
     'admin-vans-list': '/fleet?tab=vans',
     'admin-vans-new': '/fleet?tab=vans',
-    'admin-vans-history': '/fleet?tab=vans',
 
     // Inventory
     'inventory-overview': '/inventory',
     'inventory-locations': '/inventory?tab=locations',
+
+    // Reminders
+    'reminders-list': '/reminders',
     
     // Admin - FAQ
     'admin-faq-list': '/admin/faq',
-    'admin-faq-categories': '/admin/faq?tab=categories',
+    'admin-faq-categories': '/admin/faq/categories',
     
     // Other
     'dashboard': '/dashboard',

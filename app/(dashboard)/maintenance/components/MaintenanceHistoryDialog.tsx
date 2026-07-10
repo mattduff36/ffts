@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, History as HistoryIcon, User, Edit, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { History as HistoryIcon, User, Edit, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react';
 import { useMaintenanceHistory } from '@/lib/hooks/useMaintenance';
 import { formatDateTime } from '@/lib/utils/date';
 import { formatMaintenanceDate } from '@/lib/utils/maintenanceCalculations';
@@ -43,6 +44,11 @@ export function MaintenanceHistoryDialog({
   const history = historyData?.history || [];
   const workshopTasks = historyData?.workshopTasks || [];
   const vesData = historyData?.vesData || null;
+  const defectBadgeClass = assetType === 'hgv'
+    ? 'text-hgv-inspection border-hgv-inspection'
+    : assetType === 'plant'
+      ? 'text-plant-inspection border-plant-inspection'
+      : 'text-inspection border-inspection';
   
   // Combine maintenance history and workshop tasks, sorted by date
   type CombinedItem = 
@@ -185,8 +191,13 @@ export function MaintenanceHistoryDialog({
           
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className="text-xs bg-[#8B4513]/20 border-[#8B4513]/40 text-[#D2691E]">
-                {task.action_type === 'inspection_defect' ? 'Inspection Defect Fix' : 'Workshop Task'}
+              <Badge
+                variant="outline"
+                className={`bg-transparent text-xs font-semibold ${
+                  task.action_type === 'inspection_defect' ? defectBadgeClass : 'text-workshop border-workshop'
+                }`}
+              >
+                {task.action_type === 'inspection_defect' ? 'Daily Check Defect Fix' : 'Workshop Task'}
               </Badge>
               {task.action_type === 'workshop_vehicle_task' && task.workshop_task_categories && (
                 <Badge variant="outline" className="text-xs">
@@ -340,9 +351,7 @@ export function MaintenanceHistoryDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+          <PanelLoader message="Loading maintenance history..." accent="maintenance" className="py-12" />
         ) : (
           <div className="space-y-4">
             {/* VES Vehicle Data Section - Show even if no history */}

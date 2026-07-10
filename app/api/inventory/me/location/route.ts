@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireInventoryAccess, requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
+import { canShareInventoryPrimaryLocation } from '@/app/(dashboard)/inventory/utils';
+import {
+  clearUserInventoryLocationWithFleetAssignment,
+  getCurrentFleetAssignmentSummary,
+  setUserInventoryLocationWithFleetAssignment,
+} from '@/lib/server/profile-fleet-assignments';
 
 interface UpdateLocationBody {
   location_id?: string;
@@ -10,6 +16,16 @@ interface UpdateLocationBody {
 interface ExistingUserLocationRow {
   location_id: string | null;
   location?: { is_active: boolean | null } | { is_active: boolean | null }[] | null;
+}
+
+interface InventoryLocationRow {
+  id: string;
+  name: string;
+  location_type: 'yard' | 'unknown' | 'van' | 'hgv' | 'plant' | 'site' | 'manual';
+  is_active: boolean | null;
+  linked_van_id: string | null;
+  linked_hgv_id: string | null;
+  linked_plant_id: string | null;
 }
 
 function pickExistingLocation(
@@ -26,7 +42,9 @@ export async function GET() {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const { data, error } = await createAdminClient()
+    const admin = createAdminClient();
+    const [{ data, error }, currentFleetAssignment] = await Promise.all([
+      admin
       .from('inventory_user_locations')
       .select(`
         user_id,
@@ -34,11 +52,16 @@ export async function GET() {
         location:inventory_locations(*)
       `)
       .eq('user_id', access.userId)
-      .maybeSingle();
+      .maybeSingle(),
+      getCurrentFleetAssignmentSummary(admin, access.userId),
+    ]);
 
     if (error) throw error;
 
-    return NextResponse.json({ user_location: data || null });
+    return NextResponse.json({
+      user_location: data || null,
+      current_fleet_assignment: currentFleetAssignment,
+    });
   } catch (error) {
     console.error('Error fetching user inventory location:', error);
     return NextResponse.json({ error: 'Failed to fetch user inventory location' }, { status: 500 });
@@ -62,13 +85,38 @@ export async function PATCH(request: NextRequest) {
     const admin = createAdminClient();
     const { data: location, error: locationError } = await admin
       .from('inventory_locations')
-      .select('id, is_active')
+      .select('id, name, location_type, is_active, linked_van_id, linked_hgv_id, linked_plant_id')
       .eq('id', locationId)
       .maybeSingle();
 
     if (locationError) throw locationError;
-    if (!location?.is_active) {
+    const typedLocation = location as InventoryLocationRow | null;
+    if (!typedLocation?.is_active) {
       return NextResponse.json({ error: 'Location not found' }, { status: 404 });
+    }
+    if (typedLocation.location_type === 'site') {
+      return NextResponse.json(
+        { error: 'Site locations can only be assigned as secondary locations by a supervisor or higher' },
+        { status: 400 }
+      );
+    }
+
+    const canShareLocation = canShareInventoryPrimaryLocation(typedLocation, {
+      teamId: access.teamId,
+      teamName: access.teamName,
+    });
+    if (!canShareLocation) {
+      const { data: conflictingAssignments, error: conflictError } = await admin
+        .from('inventory_user_locations')
+        .select('user_id')
+        .eq('location_id', locationId)
+        .neq('user_id', access.userId)
+        .limit(1);
+
+      if (conflictError) throw conflictError;
+      if ((conflictingAssignments || []).length > 0) {
+        return NextResponse.json({ error: 'Location is already assigned to another user' }, { status: 400 });
+      }
     }
 
     const { data: existingUserLocation, error: existingError } = await admin
@@ -93,25 +141,36 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Reason for changing location is required' }, { status: 400 });
     }
 
-    const { data, error } = await admin
+    await setUserInventoryLocationWithFleetAssignment(admin, {
+      userId: access.userId,
+      locationId,
+      changeReason,
+      actorUserId: access.userId,
+    });
+
+    const [{ data, error }, currentFleetAssignment] = await Promise.all([
+      admin
       .from('inventory_user_locations')
-      .upsert({
-        user_id: access.userId,
-        location_id: locationId,
-        change_reason: changeReason,
-        updated_by: access.userId,
-      }, { onConflict: 'user_id' })
       .select(`
         user_id,
         location_id,
         location:inventory_locations(*)
       `)
-      .single();
+      .eq('user_id', access.userId)
+      .single(),
+      getCurrentFleetAssignmentSummary(admin, access.userId),
+    ]);
 
     if (error) throw error;
 
-    return NextResponse.json({ user_location: data });
+    return NextResponse.json({
+      user_location: data,
+      current_fleet_assignment: currentFleetAssignment,
+    });
   } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return NextResponse.json({ error: 'This fleet asset is already assigned to another user' }, { status: 400 });
+    }
     console.error('Error updating user inventory location:', error);
     return NextResponse.json({ error: 'Failed to update user inventory location' }, { status: 500 });
   }
@@ -124,12 +183,11 @@ export async function DELETE() {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const { error } = await createAdminClient()
-      .from('inventory_user_locations')
-      .delete()
-      .eq('user_id', access.userId);
-
-    if (error) throw error;
+    const admin = createAdminClient();
+    await clearUserInventoryLocationWithFleetAssignment(admin, {
+      userId: access.userId,
+      actorUserId: access.userId,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

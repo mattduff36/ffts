@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { getDidNotWorkReasonInfo } from '@/lib/utils/timesheetDidNotWork';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { buildSafeReportFilename, parseReportDateRange, validateRequiredReportDateRange } from '@/lib/server/report-date-range';
 import { filterTimesheetRowsForReportScope } from '@/lib/server/reports-timesheet-scope';
 import { loadEmployeeWorkShiftPatternMap } from '@/lib/server/work-shifts';
 import { 
@@ -16,6 +17,7 @@ import { getTimesheetWeekIsoBounds, resolveTimesheetOffDayStates } from '@/lib/u
 import { buildLeaveAwareTotals, buildLeaveDaysBreakdown } from '@/lib/utils/timesheet-leave-totals';
 import { normalizeTimesheetEntriesForDisplay } from '@/lib/utils/plant-timesheet-v2-normalization';
 import { collectUniqueJobNumbers } from '@/lib/utils/timesheet-job-codes';
+import { isSubsistencePaymentRequired } from '@/lib/utils/timesheet-subsistence';
 import type { TimesheetEntry } from '@/types/timesheet';
 import type { WorkShiftPattern } from '@/types/work-shifts';
 
@@ -36,6 +38,7 @@ type TimesheetEntryRow = {
   time_finished?: string | null;
   did_not_work?: boolean | null;
   working_in_yard?: boolean | null;
+  subsistence_payment_required?: boolean | null;
   daily_total?: number | null;
   job_number?: string | null;
   timesheet_entry_job_codes?: Array<{ job_number?: string | null; display_order?: number | null }> | null;
@@ -90,6 +93,7 @@ function buildTimesheetQuery(
         time_finished,
         daily_total,
         working_in_yard,
+        subsistence_payment_required,
         did_not_work,
         job_number,
         timesheet_entry_job_codes (
@@ -230,7 +234,9 @@ function transformTimesheetsToExcel(
 
     const dnwDetails: string[] = [];
     const dnwReasons = new Set<string>();
+    const subsistenceDetails: string[] = [];
     let dnwDays = 0;
+    let subsistenceDays = 0;
 
     sortedEntries.forEach((entry) => {
       const dayName = DAY_NAMES[entry.day_of_week] || '';
@@ -255,6 +261,11 @@ function transformTimesheetsToExcel(
       } else {
         row[`${day} Hours`] = formatExcelHours(rowTotal?.workedHours ?? entry.daily_total ?? null);
       }
+
+      if (!entry.did_not_work && isSubsistencePaymentRequired(entry)) {
+        subsistenceDays += 1;
+        subsistenceDetails.push(dayName);
+      }
     });
 
     row['Job Numbers'] = collectUniqueJobNumbers(sortedEntries, {
@@ -264,6 +275,8 @@ function transformTimesheetsToExcel(
     row['DNW Days'] = dnwDays > 0 ? String(dnwDays) : '-';
     row['DNW Reasons'] = dnwReasons.size > 0 ? [...dnwReasons].join(', ') : '-';
     row['DNW Details'] = dnwDetails.length > 0 ? dnwDetails.join('; ') : '-';
+    row['Subsistence Days'] = subsistenceDays > 0 ? String(subsistenceDays) : '-';
+    row['Subsistence Details'] = subsistenceDetails.length > 0 ? subsistenceDetails.join(', ') : '-';
     
     const employeeAbsences = absencesByEmployee.get(timesheet.user_id) || { paidDays: 0, unpaidDays: 0, reasons: [], rows: [] };
     row['Paid Absence (Days)'] = employeeAbsences.paidDays > 0 ? employeeAbsences.paidDays.toFixed(1) : '-';
@@ -300,8 +313,12 @@ export async function GET(request: NextRequest) {
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
-    const dateFrom = searchParams.get('dateFrom');
-    const dateTo = searchParams.get('dateTo');
+    const { range, error: dateRangeError } = parseReportDateRange(searchParams);
+    const requiredRangeError = validateRequiredReportDateRange(range, 366);
+    if (dateRangeError || requiredRangeError || !range) {
+      return NextResponse.json({ error: dateRangeError || requiredRangeError || 'Invalid date range.' }, { status: 400 });
+    }
+    const { dateFrom, dateTo } = range;
     const employeeId = searchParams.get('employeeId');
 
     // Fetch data
@@ -339,18 +356,19 @@ export async function GET(request: NextRequest) {
     if (approvedTimesheets.length > 0) {
       const totalHours = approvedTimesheets.reduce((sum, row) => sum + (parseFloat(row['Total Hours']) || 0), 0);
     const totalLeaveDays = approvedTimesheets.reduce((sum, row) => sum + (parseFloat(row['Leave Days']) || 0), 0);
+      const totalSubsistenceDays = approvedTimesheets.reduce((sum, row) => sum + (parseFloat(row['Subsistence Days']) || 0), 0);
 
       excelData.push({
       'Employee Name': '', 'Employee ID': '', 'Week Ending': '', 'Status': '', 'Total Hours': '', 'Leave Days': '', 'Weekly Total (Hours + Days)': '',
         'Mon Hours': '', 'Tue Hours': '', 'Wed Hours': '', 'Thu Hours': '', 'Fri Hours': '', 'Sat Hours': '', 'Sun Hours': '',
-        'Job Numbers': '', 'DNW Days': '', 'DNW Reasons': '', 'DNW Details': '', 'Paid Absence (Days)': '', 'Unpaid Absence (Days)': '', 'Absence Reasons': '', 'Submitted': '', 'Reviewed': '',
+        'Job Numbers': '', 'DNW Days': '', 'DNW Reasons': '', 'DNW Details': '', 'Subsistence Days': '', 'Subsistence Details': '', 'Paid Absence (Days)': '', 'Unpaid Absence (Days)': '', 'Absence Reasons': '', 'Submitted': '', 'Reviewed': '',
       });
 
       excelData.push({
         'Employee Name': 'TOTALS (Approved Only)', 'Employee ID': '', 'Week Ending': '',
       'Status': `${approvedTimesheets.length} timesheets`, 'Total Hours': totalHours.toFixed(2), 'Leave Days': totalLeaveDays.toFixed(1), 'Weekly Total (Hours + Days)': `${totalHours.toFixed(2)} hours + ${totalLeaveDays.toFixed(1)} days`,
         'Mon Hours': '', 'Tue Hours': '', 'Wed Hours': '', 'Thu Hours': '', 'Fri Hours': '', 'Sat Hours': '', 'Sun Hours': '',
-        'Job Numbers': '', 'DNW Days': '', 'DNW Reasons': '', 'DNW Details': '', 'Paid Absence (Days)': '', 'Unpaid Absence (Days)': '', 'Absence Reasons': '', 'Submitted': '', 'Reviewed': '',
+        'Job Numbers': '', 'DNW Days': '', 'DNW Reasons': '', 'DNW Details': '', 'Subsistence Days': totalSubsistenceDays > 0 ? totalSubsistenceDays.toFixed(0) : '-', 'Subsistence Details': '', 'Paid Absence (Days)': '', 'Unpaid Absence (Days)': '', 'Absence Reasons': '', 'Submitted': '', 'Reviewed': '',
       });
     }
 
@@ -376,6 +394,8 @@ export async function GET(request: NextRequest) {
         { header: 'DNW Days', key: 'DNW Days', width: 10 },
         { header: 'DNW Reasons', key: 'DNW Reasons', width: 26 },
         { header: 'DNW Details', key: 'DNW Details', width: 40 },
+        { header: 'Subsistence Days', key: 'Subsistence Days', width: 18 },
+        { header: 'Subsistence Details', key: 'Subsistence Details', width: 30 },
         { header: 'Paid Absence (Days)', key: 'Paid Absence (Days)', width: 16 },
         { header: 'Unpaid Absence (Days)', key: 'Unpaid Absence (Days)', width: 18 },
         { header: 'Absence Reasons', key: 'Absence Reasons', width: 25 },
@@ -386,8 +406,7 @@ export async function GET(request: NextRequest) {
     }]);
 
     // Generate filename
-    const dateRange = dateFrom && dateTo ? `${dateFrom}_to_${dateTo}` : new Date().toISOString().split('T')[0];
-    const filename = `Timesheet_Summary_${dateRange}.xlsx`;
+    const filename = buildSafeReportFilename('Timesheet_Summary', range.filenameDateRange, 'xlsx');
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

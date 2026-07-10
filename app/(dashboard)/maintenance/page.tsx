@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Wrench, Truck, HardHat, Settings } from 'lucide-react';
 import { PageLoader } from '@/components/ui/page-loader';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import type { VehicleMaintenanceWithStatus } from '@/types/maintenance';
 import { useMaintenance } from '@/lib/hooks/useMaintenance';
 import { MaintenanceSettings } from '@/app/(dashboard)/maintenance/components/MaintenanceSettings';
@@ -18,11 +19,7 @@ import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 const MaintenanceOverview = dynamic(
   () => import('@/app/(dashboard)/maintenance/components/MaintenanceOverview').then(mod => ({ default: mod.MaintenanceOverview })),
   { 
-    loading: () => (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    ),
+    loading: () => <PanelLoader message="Loading maintenance overview..." accent="maintenance" className="py-12" />,
     ssr: false
   }
 );
@@ -86,6 +83,22 @@ function MaintenanceContent() {
     router.replace(`/maintenance?tab=${value}`, { scroll: false });
   }
 
+  const filteredMaintenance = useMemo(() => {
+    const vehicles = (maintenanceData?.vehicles || []).filter((vehicle) => {
+      if (maintenanceFilter === 'both') return true;
+      return vehicle.vehicle?.asset_type === maintenanceFilter;
+    });
+
+    return {
+      vehicles,
+      summary: {
+        total: vehicles.length,
+        overdue: vehicles.filter((vehicle) => vehicle.overdue_count > 0).length,
+        due_soon: vehicles.filter((vehicle) => vehicle.due_soon_count > 0 && vehicle.overdue_count === 0).length,
+      },
+    };
+  }, [maintenanceData?.vehicles, maintenanceFilter]);
+
   const handleVehicleClick = (vehicle: VehicleMaintenanceWithStatus) => {
     const isPlant = vehicle.is_plant === true || vehicle.vehicle?.asset_type === 'plant';
     const isHgv = vehicle.vehicle?.asset_type === 'hgv' || !!(vehicle as VehicleMaintenanceWithStatus).hgv_id;
@@ -124,8 +137,8 @@ function MaintenanceContent() {
     <AppPageShell>
       {/* Header */}
       <div className={`bg-white dark:bg-slate-900 rounded-lg border border-border ${tabletModeEnabled ? 'p-5 md:p-6' : 'p-6'}`}>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-foreground mb-2">Maintenance &amp; Service</h1>
             <p className="text-muted-foreground">
               Track maintenance schedules, MOT, tax, and service status across all fleet assets
@@ -151,9 +164,7 @@ function MaintenanceContent() {
 
         <TabsContent value="overview" className="space-y-6 mt-0">
           {showInitialMaintenanceLoading ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <Loader2 className="h-8 w-8 animate-spin text-maintenance" />
-            </div>
+            <PanelLoader message="Loading maintenance..." accent="maintenance" className="min-h-[400px]" />
           ) : maintenanceError ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -196,26 +207,11 @@ function MaintenanceContent() {
                 </Tabs>
               </div>
 
-              {(() => {
-                const filteredVehicles = (maintenanceData?.vehicles || []).filter(v => {
-                  if (maintenanceFilter === 'both') return true;
-                  return v.vehicle?.asset_type === maintenanceFilter;
-                });
-
-                const filteredSummary = {
-                  total: filteredVehicles.length,
-                  overdue: filteredVehicles.filter(v => v.overdue_count > 0).length,
-                  due_soon: filteredVehicles.filter(v => v.due_soon_count > 0 && v.overdue_count === 0).length,
-                };
-
-                return (
-                  <MaintenanceOverview
-                    vehicles={filteredVehicles}
-                    summary={filteredSummary}
-                    onVehicleClick={handleVehicleClick}
-                  />
-                );
-              })()}
+              <MaintenanceOverview
+                vehicles={filteredMaintenance.vehicles}
+                summary={filteredMaintenance.summary}
+                onVehicleClick={handleVehicleClick}
+              />
             </>
           )}
         </TabsContent>

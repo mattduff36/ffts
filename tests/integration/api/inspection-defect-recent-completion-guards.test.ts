@@ -14,6 +14,7 @@ import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-acc
 import { POST as vanSyncPost } from '@/app/api/van-inspections/sync-defect-tasks/route';
 import { POST as hgvSyncPost } from '@/app/api/hgv-inspections/sync-defect-tasks/route';
 import { POST as plantSyncPost } from '@/app/api/plant-inspections/sync-defect-tasks/route';
+import { createSupabaseQueryMock } from '@/tests/utils/supabase-query-mock';
 
 type AssetKind = 'van' | 'hgv' | 'plant';
 
@@ -109,22 +110,18 @@ function buildActionsTable({
   return {
     select: () => {
       const filters: Record<string, unknown> = {};
-      const query = {
-        eq: (column: string, value: unknown) => {
+      const query = createSupabaseQueryMock(
+        () => (filters.inspection_id ? { data: existingTasks, error: null } : { data: [], error: null }),
+        []
+      );
+      query.eq = vi.fn((column: string, value: unknown) => {
           filters[column] = value;
           return query;
-        },
-        in: async () => ({ data: activeTasks, error: null }),
-        order: () => ({
+        });
+      query.in = vi.fn(async () => ({ data: activeTasks, error: null }));
+      query.order = vi.fn(() => ({
           limit: async () => ({ data: completedTasks, error: null }),
-        }),
-        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) => {
-          const payload = filters.inspection_id
-            ? { data: existingTasks, error: null }
-            : { data: [], error: null };
-          return Promise.resolve(payload).then(resolve);
-        },
-      };
+        }));
       return query;
     },
     update: () => ({
@@ -132,13 +129,10 @@ function buildActionsTable({
     }),
     insert: (payload: unknown) => {
       insertCalls.push(payload);
-      const insertQuery = {
-        select: () => ({
+      const insertQuery = createSupabaseQueryMock({ error: null }, []);
+      insertQuery.select = vi.fn(() => ({
           single: async () => ({ data: null, error: null }),
-        }),
-        then: (resolve: (value: { error: null }) => unknown) =>
-          Promise.resolve({ error: null }).then(resolve),
-      };
+        }));
       return insertQuery;
     },
   };

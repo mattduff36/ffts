@@ -26,7 +26,7 @@ describeOrSkip('Fleet Module Workflows', () => {
   let testVehicleId: string;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl!, supabaseKey!);
     
     // Authenticate as test user
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -69,16 +69,16 @@ describeOrSkip('Fleet Module Workflows', () => {
     });
 
     it('should fetch vehicle with maintenance data', async () => {
-      // SAFETY: ONLY get test vehicles starting with TE57
+      // SAFETY: ONLY get test vehicles starting with ZZ99
       const { data: vehicles } = await supabase
         .from('vans')
         .select('id')
-        .ilike('reg_number', 'TE57%')
+        .ilike('reg_number', 'ZZ99%')
         .neq('status', 'deleted')
         .limit(1);
 
       if (!vehicles || vehicles.length === 0) {
-        console.log('No TE57 test vehicles found, skipping test');
+        console.log('No ZZ99 test vehicles found, skipping test');
         return;
       }
 
@@ -266,7 +266,7 @@ describeOrSkip('Fleet Module Workflows', () => {
         if (data.category) {
           testCategoryId = data.category.id;
         }
-      } catch (error) {
+      } catch {
         console.log('API test skipped - server may not be reachable from test environment');
         return;
       }

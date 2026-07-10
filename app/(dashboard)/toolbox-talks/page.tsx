@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
+import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,114 +13,104 @@ import { CreateToolboxTalkForm } from '@/components/messages/CreateToolboxTalkFo
 import { CreateReminderForm } from '@/components/messages/CreateReminderForm';
 import { MessagesReportView } from '@/components/messages/MessagesReportView';
 
-export default function ToolboxTalksPage() {
+const DEFAULT_TAB = 'overview';
+const LEGACY_REPORTS_TAB = 'reports';
+const VALID_TABS = ['overview', 'create-toolbox-talk', 'create-reminder'] as const;
+const tabTriggerClassName = 'gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900';
+const tabletTabTriggerClassName = `${tabTriggerClassName} min-h-11 px-4 text-base [&_svg]:size-5`;
+
+function isValidToolboxTalksTab(value: string): value is (typeof VALID_TABS)[number] {
+  return VALID_TABS.includes(value as (typeof VALID_TABS)[number]);
+}
+
+function ToolboxTalksContent() {
   const { hasPermission: canViewToolboxTalks, loading: permissionLoading } = usePermissionCheck('toolbox-talks', false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { tabletModeEnabled } = useTabletMode();
+  const requestedTab = searchParams.get('tab') || DEFAULT_TAB;
   const activeTab = useMemo(() => {
-    const requestedTab = searchParams.get('tab') || 'create-toolbox-talk';
-    const validTabs = ['create-toolbox-talk', 'create-reminder', 'reports'];
-    return validTabs.includes(requestedTab) ? requestedTab : 'create-toolbox-talk';
-  }, [searchParams]);
+    return isValidToolboxTalksTab(requestedTab) ? requestedTab : DEFAULT_TAB;
+  }, [requestedTab]);
+
+  useEffect(() => {
+    if (!permissionLoading && !canViewToolboxTalks) {
+      router.replace('/dashboard');
+    }
+  }, [canViewToolboxTalks, permissionLoading, router]);
+
+  useEffect(() => {
+    if (requestedTab === LEGACY_REPORTS_TAB) {
+      router.replace(`/toolbox-talks?tab=${DEFAULT_TAB}`, { scroll: false });
+      return;
+    }
+
+    if (requestedTab && !isValidToolboxTalksTab(requestedTab)) {
+      router.replace(`/toolbox-talks?tab=${DEFAULT_TAB}`, { scroll: false });
+    }
+  }, [requestedTab, router]);
 
   function handleTabChange(value: string) {
     router.replace(`/toolbox-talks?tab=${value}`, { scroll: false });
   }
 
-  // Redirect non-managers/admins
-  if (!permissionLoading && !canViewToolboxTalks) {
-    router.push('/dashboard');
-    return null;
+  function handleMessageSent() {
+    router.replace('/toolbox-talks?tab=overview', { scroll: false });
   }
 
   if (permissionLoading) {
     return <PageLoader message="Loading toolbox talks..." />;
   }
 
+  if (!canViewToolboxTalks) {
+    return <PageLoader message="Redirecting..." />;
+  }
+
   return (
     <AppPageShell>
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-red-100 dark:bg-red-950 rounded-lg">
-            <MessageSquare className="h-6 w-6 text-red-600" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Toolbox Talks & Reminders
-            </h1>
-            <p className="text-muted-foreground">
-              Send important safety messages and reminders to employees
-            </p>
-          </div>
-        </div>
-      </div>
+      <AppPageHeader
+        title="Toolbox Talks"
+        description="Create safety toolbox talks, send reminders, and review message compliance."
+        icon={<MessageSquare className="h-5 w-5" />}
+        className={tabletModeEnabled ? 'p-5 md:p-6' : undefined}
+      />
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-800 p-0">
-          <TabsTrigger value="create-toolbox-talk" data-tab="toolbox-talk" className="gap-2 data-[state=active]:bg-red-600 data-[state=active]:text-white">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList className={tabletModeEnabled ? 'h-auto flex-wrap justify-start gap-2 p-1.5' : undefined}>
+          <TabsTrigger
+            value="overview"
+            data-tab="overview"
+            className={tabletModeEnabled ? tabletTabTriggerClassName : tabTriggerClassName}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="create-toolbox-talk"
+            data-tab="toolbox-talk"
+            className={tabletModeEnabled ? tabletTabTriggerClassName : tabTriggerClassName}
+          >
             <MessageSquare className="h-4 w-4" />
             Create Toolbox Talk
           </TabsTrigger>
-          <TabsTrigger value="create-reminder" data-tab="reminder" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
+          <TabsTrigger
+            value="create-reminder"
+            data-tab="reminder"
+            className={tabletModeEnabled ? tabletTabTriggerClassName : tabTriggerClassName}
+          >
             <Bell className="h-4 w-4" />
-            Create Reminder
-          </TabsTrigger>
-          <TabsTrigger value="reports" data-tab="reports" className="gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900">
-            <BarChart3 className="h-4 w-4" />
-            Reports
+            Create Notification / Reminder
           </TabsTrigger>
         </TabsList>
 
-        {/* Create Toolbox Talk Tab */}
-        <TabsContent value="create-toolbox-talk">
-          <Card className="">
+        <TabsContent value="overview" className="mt-0 space-y-6">
+          <Card className="border-border">
             <CardHeader>
               <CardTitle className="text-foreground">
-                Create Toolbox Talk Message
+                Overview
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                High priority safety message that requires employee signature. Recipients cannot use the app until signed.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CreateToolboxTalkForm onSuccess={() => {
-                // Optionally switch to reports tab after creation
-                // setActiveTab('reports');
-              }} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Create Reminder Tab */}
-        <TabsContent value="create-reminder">
-          <Card className="">
-            <CardHeader>
-              <CardTitle className="text-foreground">
-                Create Reminder Message
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Low priority informational message. Non-blocking - employees can dismiss after reading.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CreateReminderForm onSuccess={() => {
-                // Optionally switch to reports tab after creation
-              }} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Reports Tab */}
-        <TabsContent value="reports">
-          <Card className="">
-            <CardHeader>
-              <CardTitle className="text-foreground">
-                Message Reports
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                View all sent messages, recipient status, and compliance rates
+                View sent toolbox talks and notifications, recipient status, and compliance rates.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -127,8 +118,48 @@ export default function ToolboxTalksPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="create-toolbox-talk" className="mt-0 space-y-6">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">
+                Create Toolbox Talk Message
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Safety message requiring an employee signature, with priority controls for how urgently it is shown.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CreateToolboxTalkForm onSuccess={handleMessageSent} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="create-reminder" className="mt-0 space-y-6">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">
+                Create Notification / Reminder
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Send a dismissible notification or create a task in the Reminders module.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CreateReminderForm onSuccess={handleMessageSent} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </AppPageShell>
+  );
+}
+
+export default function ToolboxTalksPage() {
+  return (
+    <Suspense fallback={<PageLoader message="Loading toolbox talks..." />}>
+      <ToolboxTalksContent />
+    </Suspense>
   );
 }
 

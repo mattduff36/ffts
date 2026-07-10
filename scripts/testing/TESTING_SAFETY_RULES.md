@@ -1,38 +1,19 @@
 # Testing Safety Rules
 
-## ⚠️ CRITICAL: Test Scripts and Production Data
+## Critical: Test Scripts and Production Data
 
-### The Problem
+Test helpers can fire production triggers, update maintenance state, send email, or create workflow records. Treat every script as mutating unless its header and implementation prove otherwise.
 
-Test scripts in `scripts/testing/` use **hardcoded test values** that can corrupt real production data.
-
-**Example:** `test-inspection-draft.ts` uses `current_mileage: 50000` which triggers database triggers that automatically update vehicle maintenance records.
-
-### Incident Report: Example Vehicle Vehicle (AB12 CDE)
-
-**Date:** January 16, 2026  
-**Issue:** Vehicle mileage incorrectly set to 50,000 miles  
-**Actual Mileage:** ~26,700 miles  
-**Root Cause:** Unknown test script execution that set mileage to 50,000
-
-**Impact:**
-- Maintenance calculations became incorrect
-- Service intervals showed wrong values
-- Overdue tasks were incorrectly flagged
-
-**Resolution:**
-- Mileage restored to correct value (26,700)
-- Test scripts reviewed for safety
-
-### Rules for Test Scripts
+## Rules for Test Scripts
 
 1. **NEVER run test scripts against production database**
    - Test scripts should only run against local/test databases
    - Always check `NEXT_PUBLIC_SUPABASE_URL` before running
 
-2. **Use realistic test data**
-   - Don't use obvious test values like 50000, 99999, etc.
-   - Use randomized values within realistic ranges
+2. **Use deterministic fictional data**
+   - Prefix test fleet identifiers with `ZZ99`.
+   - Use `example.test` email addresses and fictional names.
+   - Never copy production employee, customer, quote, or fleet values.
 
 3. **Clean up after tests**
    - Always delete test data created by scripts
@@ -46,7 +27,7 @@ Test scripts in `scripts/testing/` use **hardcoded test values** that can corrup
    - Clearly mark files as TEST ONLY
    - Add warnings in script headers
 
-### Recommended Script Header
+## Recommended Script Header
 
 ```typescript
 /**
@@ -59,21 +40,21 @@ Test scripts in `scripts/testing/` use **hardcoded test values** that can corrup
  */
 
 // Safety check
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-if (supabaseUrl?.includes('your-production-domain')) {
+const allowLiveDb = process.env.RUN_LIVE_DB_TESTS === 'true';
+if (!allowLiveDb) {
   console.error('❌ SAFETY CHECK FAILED');
-  console.error('This test script cannot run against production database');
+  console.error('Set RUN_LIVE_DB_TESTS=true only for an approved isolated target.');
   process.exit(1);
 }
 ```
 
-### Database Triggers to Be Aware Of
+## Database Triggers to Be Aware Of
 
 1. **Mileage Auto-Update Trigger**
    - Location: `supabase/migrations/20251218_create_vehicle_maintenance_system.sql`
    - Function: `update_vehicle_maintenance_mileage()`
-   - Trigger: Fires on INSERT/UPDATE of `vehicle_inspections.current_mileage`
-   - Impact: **ALWAYS updates** `vehicle_maintenance.current_mileage` (even if lower)
+   - Trigger: Fires on inspection mileage changes.
+   - Impact: Can update maintenance mileage and service calculations.
 
 2. **Status History Trigger**
    - Tracks changes to workshop task statuses
@@ -82,7 +63,7 @@ if (supabaseUrl?.includes('your-production-domain')) {
 3. **Updated_at Triggers**
    - Auto-updates `updated_at` columns on record changes
 
-### Safe Testing Practices
+## Safe Testing Practices
 
 1. **Use a separate test database**
    ```bash
@@ -96,7 +77,7 @@ if (supabaseUrl?.includes('your-production-domain')) {
    - Never use real employee accounts in tests
 
 3. **Use test vehicles**
-   - Create vehicles with obvious test registrations (e.g., "TEST 123")
+   - Create vehicles with deterministic fictional registrations (for example, `ZZ99 TEST`)
    - Mark them clearly in the database
 
 4. **Run tests in isolation**
@@ -107,22 +88,14 @@ if (supabaseUrl?.includes('your-production-domain')) {
    - Always check that test data was deleted
    - Use unique identifiers to find test records
 
-### Scripts That Need Safety Updates
-
-- [ ] `scripts/testing/test-inspection-draft.ts` - Uses 50000 mileage
-- [ ] `scripts/seed/seed-sample-data.ts` - Uses random mileage 50000-150000
-- [ ] `scripts/seed/seed-inspections-sql.ts` - Uses 50000 + random
-
-### Action Items
+## Review Checklist
 
 1. Add production URL checks to all test scripts
-2. Update test scripts to use realistic, randomized values
+2. Use deterministic fictional values
 3. Create a separate test database for running tests
 4. Document which scripts are safe for production vs test-only
-5. Add pre-commit hooks to prevent accidental test script commits
+5. Confirm no generated test records remain
 
 ---
 
-**Last Updated:** January 16, 2026  
-**Incident:** Example Vehicle mileage corruption  
-**Status:** Rules documented, scripts need updates
+**Last Updated:** July 10, 2026

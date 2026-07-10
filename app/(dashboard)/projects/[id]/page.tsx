@@ -159,6 +159,7 @@ export default function RAMSDetailsPage() {
 
       setRamsDocument({
         ...doc,
+        created_at: doc.created_at ?? '',
         uploader_name: doc.uploader?.full_name || 'Unknown',
       });
       setRequiredSignature((doc as { document_type?: { required_signature?: boolean } | null }).document_type?.required_signature ?? true);
@@ -174,7 +175,17 @@ export default function RAMSDetailsPage() {
         .order('assigned_at', { ascending: false });
 
       if (!assignError && assignData) {
-        setAssignments(assignData);
+        setAssignments(assignData.map((assignment) => ({
+          ...assignment,
+          employee_id: assignment.employee_id ?? '',
+          status: assignment.status ?? 'pending',
+          assigned_at: assignment.assigned_at ?? '',
+          employee: {
+            id: assignment.employee?.id ?? assignment.employee_id ?? '',
+            full_name: assignment.employee?.full_name ?? 'Unknown',
+            role: assignment.employee?.role ?? '',
+          },
+        })));
       }
 
       // Fetch visitor signatures
@@ -188,7 +199,14 @@ export default function RAMSDetailsPage() {
         .order('signed_at', { ascending: false });
 
       if (!visitorError && visitorData) {
-        setVisitorSignatures(visitorData);
+        setVisitorSignatures(visitorData.map((signature) => ({
+          ...signature,
+          signed_at: signature.signed_at ?? '',
+          recorded_by: signature.recorded_by ?? '',
+          recorder: signature.recorder ?? {
+            full_name: 'Unknown',
+          },
+        })));
       }
 
       // Check if document is favourited

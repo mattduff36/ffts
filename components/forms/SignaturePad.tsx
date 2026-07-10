@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,26 +13,28 @@ interface SignaturePadProps {
   initialValue?: string | null;
   disabled?: boolean;
   variant?: 'default' | 'toolbox-talk';
+  resetKey?: string;
 }
 
-export function SignaturePad({ onSave, onCancel, initialValue, disabled = false, variant = 'default' }: SignaturePadProps) {
+export function SignaturePad({ onSave, onCancel, initialValue, disabled = false, variant = 'default', resetKey }: SignaturePadProps) {
   const sigCanvas = useRef<SignatureCanvas>(null);
 
-  const fillCanvasWhite = () => {
+  const fillCanvasWhite = useCallback(() => {
     const canvas = sigCanvas.current?.getCanvas();
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-  };
+  }, []);
 
   useEffect(() => {
+    sigCanvas.current?.clear();
     fillCanvasWhite();
     if (initialValue && sigCanvas.current) {
       sigCanvas.current.fromDataURL(initialValue);
     }
-  }, [initialValue]);
+  }, [fillCanvasWhite, initialValue, resetKey]);
 
   const handleClear = () => {
     sigCanvas.current?.clear();

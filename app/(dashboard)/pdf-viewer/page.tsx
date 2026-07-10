@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { PDFCanvasRenderer } from '@/components/pdf/PDFCanvasRenderer';
+import { isSafeInternalRedirectTarget } from '@/lib/routes/public-routes';
 
 function PDFViewerContent() {
   const searchParams = useSearchParams();
@@ -14,7 +15,8 @@ function PDFViewerContent() {
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
   
   const url = searchParams.get('url');
-  const returnUrl = searchParams.get('return') || '/rams';
+  const requestedReturnUrl = searchParams.get('return');
+  const returnUrl = isSafeInternalRedirectTarget(requestedReturnUrl) ? requestedReturnUrl : '/rams';
   const showSign = searchParams.get('sign') === '1';
 
   useEffect(() => {
@@ -113,7 +115,7 @@ function PDFViewerContent() {
             const sep = returnUrl.includes('?') ? '&' : '?';
             router.push(`${returnUrl}${sep}openSign=1`);
           }}
-          className={`fixed bottom-0 inset-x-0 z-50 flex items-center justify-center gap-2 text-white text-base font-medium h-24 transition-colors duration-200 ${
+          className={`fixed bottom-0 inset-x-0 z-50 flex min-h-24 flex-wrap items-center justify-center gap-2 px-4 py-4 text-center text-base font-medium text-white transition-colors duration-200 ${
             hasReachedBottom
               ? 'bg-green-600 hover:bg-green-700 active:bg-green-800'
               : 'bg-gray-500 cursor-not-allowed opacity-70'

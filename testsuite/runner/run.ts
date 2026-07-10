@@ -37,8 +37,9 @@ function exec(cmd: string, label: string): boolean {
   try {
     execSync(cmd, { stdio: 'inherit', cwd: ROOT });
     return true;
-  } catch (err) {
-    console.error(`\n${label} failed.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown command failure';
+    console.error(`\n${label} failed: ${message}`);
     return false;
   }
 }
@@ -76,7 +77,9 @@ async function main(): Promise<void> {
     console.warn('Report generation had issues, but continuing.');
   }
 
-  const issueGatePassed = await enforceAuthLifecycleIssueGate({ interactive: true });
+  const issueGatePassed = await enforceAuthLifecycleIssueGate({
+    interactive: process.stdin.isTTY === true && process.env.CI !== 'true',
+  });
 
   // Summary
   console.log('\n' + '='.repeat(60));

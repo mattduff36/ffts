@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEffectiveRole } from '@/lib/utils/view-as';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   buildFinancialYearBounds,
@@ -24,10 +24,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-    if (!canAccessUserAdmin) {
-      return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-    }
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const financialYearStartYear = getFinancialYearStartYear(new Date());
     const financialYear = buildFinancialYearBounds(financialYearStartYear);

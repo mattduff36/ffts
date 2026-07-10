@@ -1,4 +1,4 @@
--- DigiDocs Database Schema
+-- Forest Farm Operations Database Schema
 -- Execute this SQL in your Supabase SQL Editor to set up the database
 
 -- Enable UUID extension
@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS timesheet_entries (
   time_started TIME,
   time_finished TIME,
   working_in_yard BOOLEAN DEFAULT false,
+  subsistence_payment_required BOOLEAN NOT NULL DEFAULT false,
   daily_total DECIMAL(4,2), -- hours, e.g., 8.50
   remarks TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -339,13 +340,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- Insert sample vehicles (you can modify these)
-INSERT INTO vehicles (reg_number, vehicle_type, status) VALUES
-  ('YX65ABC', 'truck', 'active'),
-  ('YX65DEF', 'truck', 'active'),
-  ('YX65GHI', 'artic', 'active')
-ON CONFLICT (reg_number) DO NOTHING;
 
 -- =============================================
 -- STORAGE BUCKET FOR INSPECTION PHOTOS

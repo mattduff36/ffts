@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No error logs supplied' }, { status: 400 });
     }
 
-    const current = await getCurrentAuthenticatedProfile({ allowLocked: true, includeEmail: true });
+    const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
     const userId = current?.profile.id || null;
     const userEmail = current?.profile.email || null;
     const logs = rawLogs

@@ -7,6 +7,7 @@ import { GET } from '@/app/api/users/directory/route';
 vi.mock('@/lib/supabase/server');
 vi.mock('@/lib/supabase/admin');
 vi.mock('@/lib/utils/view-as');
+vi.mock('@/lib/utils/rbac');
 vi.mock('@/lib/server/team-permissions');
 
 describe('GET /api/users/directory', () => {
@@ -17,6 +18,7 @@ describe('GET /api/users/directory', () => {
     });
     const order = vi.fn().mockReturnValue({ range });
     const query = {
+      eq: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
       order,
@@ -129,6 +131,102 @@ describe('GET /api/users/directory', () => {
       limit: 200,
       has_more: false,
     });
+  });
+
+  it('allows actions assignment directory requests to include every team', async () => {
+    const { createClient } = await import('@/lib/supabase/server');
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const { canEffectiveRoleAccessModule } = await import('@/lib/utils/rbac');
+    const { getUsersWithModuleAccess } = await import('@/lib/server/team-permissions');
+
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'manager-1' } },
+          error: null,
+        }),
+      },
+    } as unknown as SupabaseClient);
+    await mockEffectiveRole({
+      role_id: 'role-manager',
+      role_name: 'manager',
+      display_name: 'Manager',
+      role_class: 'manager',
+      is_manager_admin: true,
+      team_id: 'team-workshop',
+      team_name: 'Workshop',
+    });
+    vi.mocked(canEffectiveRoleAccessModule).mockResolvedValue(true);
+    vi.mocked(getUsersWithModuleAccess).mockResolvedValue(new Set(['user-1', 'user-2']));
+
+    const { query } = createDirectoryQuery([
+      { id: 'user-1', full_name: 'Alex Able', employee_id: 'E001', team: { id: 'team-workshop', name: 'Workshop' } },
+      { id: 'user-2', full_name: 'Blake Baker', employee_id: 'E002', team: { id: 'team-fleet', name: 'Fleet' } },
+    ]);
+    const select = vi.fn().mockReturnValue(query);
+    const from = vi.fn().mockReturnValue({ select });
+
+    vi.mocked(createAdminClient).mockReturnValue({ from } as never);
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/users/directory?module=inspections&context=actions-assignment'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(canEffectiveRoleAccessModule).toHaveBeenCalledWith('actions');
+    expect(query.eq).not.toHaveBeenCalledWith('team_id', 'team-workshop');
+    expect(payload.users).toEqual([
+      expect.objectContaining({ id: 'user-1', has_module_access: true }),
+      expect.objectContaining({ id: 'user-2', has_module_access: true }),
+    ]);
+  });
+
+  it('allows toolbox talks assignment directory requests to include every team', async () => {
+    const { createClient } = await import('@/lib/supabase/server');
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const { canEffectiveRoleAccessModule } = await import('@/lib/utils/rbac');
+
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'manager-1' } },
+          error: null,
+        }),
+      },
+    } as unknown as SupabaseClient);
+    await mockEffectiveRole({
+      role_id: 'role-manager',
+      role_name: 'manager',
+      display_name: 'Manager',
+      role_class: 'manager',
+      is_manager_admin: true,
+      team_id: 'team-workshop',
+      team_name: 'Workshop',
+    });
+    vi.mocked(canEffectiveRoleAccessModule).mockResolvedValue(true);
+
+    const { query } = createDirectoryQuery([
+      { id: 'user-1', full_name: 'Alex Able', employee_id: 'E001', team: { id: 'team-workshop', name: 'Workshop' } },
+      { id: 'user-2', full_name: 'Blake Baker', employee_id: 'E002', team: { id: 'team-fleet', name: 'Fleet' } },
+    ]);
+    const select = vi.fn().mockReturnValue(query);
+    const from = vi.fn().mockReturnValue({ select });
+
+    vi.mocked(createAdminClient).mockReturnValue({ from } as never);
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/users/directory?context=toolbox-talks-assignment'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(canEffectiveRoleAccessModule).toHaveBeenCalledWith('toolbox-talks');
+    expect(query.eq).not.toHaveBeenCalledWith('team_id', 'team-workshop');
+    expect(payload.users).toEqual([
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ id: 'user-2' }),
+    ]);
   });
 
   it('filters deleted users out by default', async () => {

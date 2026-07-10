@@ -1,6 +1,5 @@
 'use client';
 
-import { isAccountSwitcherEnabled } from '@/lib/account-switch/feature-flag';
 import type { AuthTransitionReason } from '@/lib/app-auth/transition';
 
 const DEFERRED_UNAUTHENTICATED_REASONS = new Set<AuthTransitionReason>([
@@ -11,19 +10,9 @@ const DEFERRED_UNAUTHENTICATED_REASONS = new Set<AuthTransitionReason>([
   'recover',
 ]);
 
-export function shouldTreatAuthResponseAsLocked(options?: {
-  statusCode?: number | null;
-  payloadLocked?: boolean | null;
-}): boolean {
-  if (!isAccountSwitcherEnabled()) {
-    return false;
-  }
-
-  return options?.statusCode === 423 || options?.payloadLocked === true;
-}
-
 export function getAuthFailureRedirectPath(statusCode?: number | null): string {
-  return statusCode === 423 && isAccountSwitcherEnabled() ? '/lock' : '/login';
+  void statusCode;
+  return '/login';
 }
 
 export function shouldDeferUnauthenticatedHandling(

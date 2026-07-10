@@ -55,6 +55,34 @@ describe('timesheet off-day resolver', () => {
     expect(tuesday?.paidLeaveHours).toBe(PAID_LEAVE_DAILY_HOURS);
   });
 
+  it('clears subsistence markers from locked leave days', () => {
+    const entries = buildEntries();
+    entries[1] = {
+      ...entries[1],
+      time_started: '08:00',
+      time_finished: '17:00',
+      subsistence_payment_required: true,
+      remarks: 'Stayed away - subsistence payment required',
+    };
+    const states = resolveTimesheetOffDayStates(
+      '2026-03-29',
+      [
+        {
+          date: '2026-03-24',
+          end_date: null,
+          is_half_day: false,
+          absence_reasons: { name: 'Annual Leave', is_paid: true },
+        },
+      ],
+      STANDARD_WORK_SHIFT_PATTERN
+    );
+
+    const normalized = normalizeTimesheetEntriesForOffDays(entries, states);
+
+    expect(normalized[1].subsistence_payment_required).toBe(false);
+    expect(normalized[1].remarks).toBe('Annual Leave');
+  });
+
   it('keeps annual leave credit but unlocks work entry when override is enabled', () => {
     const states = resolveTimesheetOffDayStates(
       '2026-03-29',

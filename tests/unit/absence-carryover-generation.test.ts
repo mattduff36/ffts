@@ -51,7 +51,7 @@ function buildMockSupabase() {
           select() {
             let statusFilter: string[] | null = null;
             const chain = {
-              eq(field: string, value: string) {
+              eq(_field: string, _value: string) {
                 return chain;
               },
               in(field: string, value: string[]) {

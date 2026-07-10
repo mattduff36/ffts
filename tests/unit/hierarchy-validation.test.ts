@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   isBlockingHierarchyIssue,
   isMissingHierarchySchemaError,
@@ -60,7 +61,7 @@ function buildClient(
         }),
       };
     },
-  };
+  } as unknown as SupabaseClient;
 }
 
 describe('runHierarchyValidation', () => {

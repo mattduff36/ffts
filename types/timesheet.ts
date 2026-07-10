@@ -27,6 +27,7 @@ export interface TimesheetEntry {
   job_numbers?: string[];
   timesheet_entry_job_codes?: TimesheetEntryJobCode[];
   working_in_yard: boolean;
+  subsistence_payment_required?: boolean;
   did_not_work: boolean;
   night_shift?: boolean;
   bank_holiday?: boolean;

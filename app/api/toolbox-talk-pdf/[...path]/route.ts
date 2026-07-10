@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 /**
@@ -13,6 +15,7 @@ export async function GET(
 ) {
   try {
     const supabase = await createClient();
+    const admin = createAdminClient();
 
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -30,8 +33,47 @@ export async function GET(
       return NextResponse.json({ error: 'File path required' }, { status: 400 });
     }
 
+    const { data: message, error: messageError } = await admin
+      .from('messages')
+      .select('id, type, pdf_file_path')
+      .eq('pdf_file_path', filePath)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (messageError) {
+      console.error('Error resolving toolbox talk PDF message:', messageError);
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    }
+
+    if (!message || message.type !== 'TOOLBOX_TALK') {
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    }
+
+    const canManageToolboxTalks = await canEffectiveRoleAccessModule('toolbox-talks');
+    let isAssignedRecipient = false;
+
+    if (!canManageToolboxTalks) {
+      const { data: recipient, error: recipientError } = await admin
+        .from('message_recipients')
+        .select('id')
+        .eq('message_id', message.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (recipientError) {
+        console.error('Error checking toolbox talk PDF recipient access:', recipientError);
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
+      isAssignedRecipient = Boolean(recipient);
+    }
+
+    if (!canManageToolboxTalks && !isAssignedRecipient) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Download the file from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
+    const { data: fileData, error: downloadError } = await admin.storage
       .from('toolbox-talk-pdfs')
       .download(filePath);
 

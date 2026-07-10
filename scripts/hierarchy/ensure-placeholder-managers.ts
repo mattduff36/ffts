@@ -11,9 +11,9 @@ const PLACEHOLDER_MANAGERS = [
     email: 'placeholder+example-manager@example.local',
   },
   {
-    key: 'tim-weaver',
+    key: 'example-user-five',
     full_name: 'Example User Five',
-    email: 'placeholder+tim-weaver@digidocs.local',
+    email: 'placeholder+example-user-five@ffts.local',
   },
 ] as const;
 

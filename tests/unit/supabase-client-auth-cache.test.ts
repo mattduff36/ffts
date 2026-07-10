@@ -67,7 +67,6 @@ describe('supabase browser client', () => {
     loadClientAuthSessionMock.mockResolvedValue({
       payload: {
         authenticated: true,
-        locked: false,
         user: {
           id: 'user-123',
           email: 'worker@example.com',
@@ -90,9 +89,9 @@ describe('supabase browser client', () => {
       invalidateCachedDataToken,
     } = await import('@/lib/supabase/client');
 
-    const client = createClient() as typeof baseClient & {
+    const client = createClient() as unknown as typeof baseClient & {
       options: {
-        accessToken: () => Promise<string>;
+        accessToken: () => Promise<string | null>;
       };
     };
 
@@ -121,7 +120,10 @@ describe('supabase browser client', () => {
     getViewAsRoleIdMock.mockReturnValue('role-123');
     getViewAsTeamIdMock.mockReturnValue('team-456');
 
-    const fetchSpy = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchSpy = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) => new Response(null, { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
 
     createSupabaseClientMock.mockImplementation((_url, _key, options) => ({
@@ -131,7 +133,6 @@ describe('supabase browser client', () => {
     loadClientAuthSessionMock.mockResolvedValue({
       payload: {
         authenticated: true,
-        locked: false,
         user: {
           id: 'user-123',
           email: 'worker@example.com',
@@ -140,7 +141,7 @@ describe('supabase browser client', () => {
     });
 
     const { createClient } = await import('@/lib/supabase/client');
-    const client = createClient() as {
+    const client = createClient() as unknown as {
       options: {
         global: {
           fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -167,7 +168,6 @@ describe('supabase browser client', () => {
     loadClientAuthSessionMock.mockResolvedValue({
       payload: {
         authenticated: true,
-        locked: false,
         user: {
           id: 'user-123',
           email: 'worker@example.com',
@@ -184,14 +184,21 @@ describe('supabase browser client', () => {
     vi.stubGlobal('fetch', fetchSpy);
 
     const { createClient, getLastDataTokenFailureStatus } = await import('@/lib/supabase/client');
-    const client = createClient();
+    const client = createClient() as unknown as typeof baseClient & {
+      options: {
+        accessToken: () => Promise<string | null>;
+      };
+    };
 
     const {
       data: { session },
     } = await client.auth.getSession();
 
-    expect(session?.access_token).toBe('');
+    expect(session).toBeNull();
     expect(getLastDataTokenFailureStatus()).toBe(503);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    await expect(client.options.accessToken()).resolves.toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

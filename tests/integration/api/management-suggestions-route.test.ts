@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { GET } from '@/app/api/management/suggestions/route';
+import { createSupabaseQueryMock } from '@/tests/utils/supabase-query-mock';
 
 const { mockCreateClient, mockCanAccess, mockLogServerError } = vi.hoisted(() => ({
   mockCreateClient: vi.fn(),
@@ -23,10 +24,7 @@ vi.mock('@/lib/utils/server-error-logger', () => ({
 
 function createSuggestionsQuery(rows: Array<Record<string, unknown>>) {
   const result = { data: rows, error: null };
-  const query = {
-    eq: vi.fn().mockResolvedValue(result),
-    then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
-  };
+  const query = createSupabaseQueryMock(result, ['eq']);
   const range = vi.fn().mockReturnValue(query);
   const order = vi.fn().mockReturnValue({ range });
 

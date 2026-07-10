@@ -302,6 +302,8 @@ ${additional_context ? `**Additional Context:**\n${JSON.stringify(additional_con
 ---
 *View and manage this error report in the Errors Management section.*`,
                   sender_id: user.id,
+                  created_via: 'error_report',
+                  module_key: 'errors',
                 })
                 .select()
                 .single();

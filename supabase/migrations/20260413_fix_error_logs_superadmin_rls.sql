@@ -11,7 +11,7 @@ FOR SELECT
 TO authenticated
 USING (
   (SELECT is_actual_super_admin())
-  OR (((SELECT auth.jwt()) ->> 'email') = 'template-admin@example.com')
+  OR (((SELECT auth.jwt()) ->> 'email') = 'admin@mpdee.co.uk')
 );
 
 CREATE POLICY "SuperAdmin can delete error logs"
@@ -20,5 +20,5 @@ FOR DELETE
 TO authenticated
 USING (
   (SELECT is_actual_super_admin())
-  OR (((SELECT auth.jwt()) ->> 'email') = 'template-admin@example.com')
+  OR (((SELECT auth.jwt()) ->> 'email') = 'admin@mpdee.co.uk')
 );

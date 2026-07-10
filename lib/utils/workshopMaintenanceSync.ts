@@ -1,9 +1,17 @@
-import type { MaintenanceCategory, UpdateMaintenanceRequest } from '@/types/maintenance';
+import type {
+  CustomMaintenanceItemUpdate,
+  MaintenanceCategory,
+  UpdateMaintenanceRequest,
+} from '@/types/maintenance';
 import {
   addDatePeriod,
   normalizePeriodUnit,
   toDateOnlyString,
 } from '@/lib/utils/maintenancePeriods';
+import {
+  categoryAppliesToAsset,
+  type MaintenanceAssetType,
+} from '@/lib/utils/maintenanceCategoryRules';
 
 type LinkedMaintenanceField =
   | 'tax_due_date'
@@ -15,7 +23,8 @@ type LinkedMaintenanceField =
   | 'next_service_mileage'
   | 'cambelt_due_mileage'
   | 'loler_due_date'
-  | 'next_service_hours';
+  | 'next_service_hours'
+  | 'custom_mileage';
 
 type DateMaintenanceField =
   | 'tax_due_date'
@@ -44,11 +53,22 @@ export interface AutomaticMaintenanceState {
 
 export interface AutomaticMaintenancePlan {
   maintenanceUpdates: Partial<UpdateMaintenanceRequest>;
+  customItems: CustomMaintenanceItemUpdate[];
   plantUpdates: { loler_due_date?: string | null };
   linkedCategoryId: string | null;
 }
 
 const LINK_PATTERNS: Array<MaintenanceLinkMatch & { pattern: RegExp }> = [
+  {
+    categoryName: 'Full Service',
+    fieldName: 'custom_mileage',
+    pattern: /\b(major|full)\b.*\bservice\b|\bservice\b.*\b(major|full)\b/,
+  },
+  {
+    categoryName: 'Engine Service',
+    fieldName: 'custom_mileage',
+    pattern: /\b(engine|basic|small)\b.*\bservice\b|\bservice\b.*\b(engine|basic|small)\b/,
+  },
   {
     categoryName: '6 Weekly Inspection Due',
     fieldName: 'six_weekly_inspection_due_date',
@@ -136,20 +156,25 @@ export function buildAutomaticMaintenancePlan(params: {
   categories: MaintenanceCategory[];
   state: AutomaticMaintenanceState;
   completedAt: string;
+  assetType?: MaintenanceAssetType;
 }): AutomaticMaintenancePlan | null {
   const link = inferMaintenanceLink(params.context);
   if (!link) {
     return null;
   }
 
-  const category = params.categories.find(
-    (candidate) => candidate.name.toLowerCase() === link.categoryName.toLowerCase()
+  const findApplicableCategory = (categoryName: string) => params.categories.find(
+    (candidate) =>
+      candidate.name.toLowerCase() === categoryName.toLowerCase() &&
+      (!params.assetType || categoryAppliesToAsset(candidate, params.assetType, candidate.name))
   );
+  const category = findApplicableCategory(link.categoryName);
   if (!category) {
     return null;
   }
 
   const maintenanceUpdates: Partial<UpdateMaintenanceRequest> = {};
+  const customItems: CustomMaintenanceItemUpdate[] = [];
   const plantUpdates: { loler_due_date?: string | null } = {};
   const completedAt = new Date(params.completedAt);
 
@@ -172,6 +197,26 @@ export function buildAutomaticMaintenancePlan(params: {
   if (category.type === 'mileage' && params.state.currentMileage != null) {
     const nextDueMileage = params.state.currentMileage + category.period_value;
 
+    if (link.fieldName === 'custom_mileage') {
+      customItems.push({
+        category_id: category.id,
+        last_mileage: params.state.currentMileage,
+        due_mileage: nextDueMileage,
+      });
+
+      const engineServiceCategory = category.name.toLowerCase() === 'full service'
+        ? findApplicableCategory('Engine Service')
+        : null;
+
+      if (engineServiceCategory && engineServiceCategory.id !== category.id) {
+        customItems.push({
+          category_id: engineServiceCategory.id,
+          last_mileage: params.state.currentMileage,
+          due_mileage: params.state.currentMileage + engineServiceCategory.period_value,
+        });
+      }
+    }
+
     if (link.fieldName === 'next_service_mileage') {
       maintenanceUpdates.last_service_mileage = params.state.currentMileage;
       maintenanceUpdates.next_service_mileage = nextDueMileage;
@@ -193,6 +238,7 @@ export function buildAutomaticMaintenancePlan(params: {
 
   if (
     Object.keys(maintenanceUpdates).length === 0 &&
+    customItems.length === 0 &&
     Object.keys(plantUpdates).length === 0
   ) {
     return null;
@@ -200,6 +246,7 @@ export function buildAutomaticMaintenancePlan(params: {
 
   return {
     maintenanceUpdates,
+    customItems,
     plantUpdates,
     linkedCategoryId: category.id,
   };

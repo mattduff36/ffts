@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { enrichTrackerLocationWithVanNickname } from '@/lib/server/fleet-tracker-enrichment';
 
 const BASE = process.env.FLEETSMART_BASE_URL ?? 'https://www.fleetsmartlive.com';
 const CLIENT_ID = process.env.FLEETSMART_CLIENT_ID ?? '';
@@ -226,16 +227,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      vehicleId: matched.id,
-      name: matched.name,
-      vrn: matched.vrn,
-      lat: location.lat,
-      lng: location.lng,
-      speed: location.speed,
-      heading: location.heading,
-      updatedAt: location.updatedAt,
-    });
+    return NextResponse.json(
+      await enrichTrackerLocationWithVanNickname({
+        vehicleId: matched.id,
+        name: matched.name,
+        vrn: matched.vrn,
+        lat: location.lat,
+        lng: location.lng,
+        speed: location.speed,
+        heading: location.heading,
+        updatedAt: location.updatedAt,
+      })
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
 

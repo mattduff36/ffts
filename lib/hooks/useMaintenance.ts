@@ -229,6 +229,7 @@ export function useCreateCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: ['maintenance'] });
       toast.success('Category created successfully');
     },
     onError: (error: Error) => {
@@ -304,6 +305,7 @@ export function useDeleteCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: ['maintenance'] });
       toast.success('Category deleted successfully');
     },
     onError: (error: Error) => {

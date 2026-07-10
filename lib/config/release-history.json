@@ -1,0 +1,31 @@
+[
+  {
+    "version": "0726.1.0",
+    "updateKind": "major",
+    "title": "Forest Farm parity release",
+    "description": "Established the Forest Farm production application with the current operations platform and product modules.",
+    "summary": "Established the Forest Farm production application with the current operations platform and product modules.",
+    "details": [
+      "Added secure application sessions, biometric sign-in support, sensitive-module PIN protection, and role-based module access.",
+      "Updated dashboard, field operations, fleet, maintenance, inventory, quotes, training, reminders, display boards, analytics, and offline support.",
+      "Applied and validated the Forest-safe production schema while removing inherited demo data and customer-specific content."
+    ],
+    "areas": [
+      "Dashboard",
+      "Timesheets",
+      "Inventory",
+      "Quotes",
+      "Training",
+      "Reminders"
+    ],
+    "areaKeys": [
+      "dashboard",
+      "timesheets",
+      "inventory",
+      "quotes",
+      "training",
+      "reminders"
+    ],
+    "pushedAt": "2026-07-10T00:00:00.000Z"
+  }
+]

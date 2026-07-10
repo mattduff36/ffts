@@ -27,7 +27,7 @@ export function getTemplateEmailConfig(): TemplateEmailConfig {
     quotesFromEmail: readServerEnv('RESEND_FROM_EMAIL_2') || primaryFromEmail,
     adminEmail:
       readServerEnv('ADMIN_EMAIL') ||
-      readServerEnv('TEMPLATE_SUPERADMIN_EMAIL') ||
+      readServerEnv('FOREST_FARM_SUPERADMIN_EMAIL') ||
       templateConfig.branding.adminEmail,
     supportEmail: readServerEnv('SUPPORT_EMAIL') || templateConfig.branding.supportEmail,
   };
@@ -35,7 +35,7 @@ export function getTemplateEmailConfig(): TemplateEmailConfig {
 
 export function getTemplateSuperAdminEmail(): string {
   return (
-    readServerEnv('TEMPLATE_SUPERADMIN_EMAIL') ||
+    readServerEnv('FOREST_FARM_SUPERADMIN_EMAIL') ||
     readServerEnv('ADMIN_EMAIL') ||
     templateConfig.branding.adminEmail
   );

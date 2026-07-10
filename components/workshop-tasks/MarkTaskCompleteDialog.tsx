@@ -17,11 +17,14 @@ import { SignaturePad } from '@/components/forms/SignaturePad';
 import { CheckCircle2, Info } from 'lucide-react';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
+import { useWorkshopDraftPersistence } from '@/lib/hooks/useWorkshopDraftPersistence';
 import type { CompletionUpdateConfig, CompletionFieldValues } from '@/types/workshop-completion';
 
 export interface TaskForCompletion {
   id: string;
-  status: string;
+  status: string | null;
+  created_at?: string | null;
+  logged_at?: string | null;
   action_type?: string;
   van_id: string | null;
   hgv_id?: string | null;
@@ -36,6 +39,9 @@ export interface TaskForCompletion {
 export interface CompletionData {
   intermediateComment: string;
   completedComment: string;
+  completedAt: string;
+  createdAt?: string;
+  intermediateAt?: string;
   completedSignatureData?: string;
   completedSignedAt?: string;
   maintenanceUpdates?: CompletionFieldValues;
@@ -45,8 +51,50 @@ interface MarkTaskCompleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task: TaskForCompletion | null;
-  onConfirm: (data: CompletionData) => Promise<void>;
+  onConfirm: (data: CompletionData) => Promise<boolean | void>;
   isSubmitting?: boolean;
+  userId?: string | null;
+}
+
+function toLocalDateTimeInputValue(date: Date): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function parseLocalDateTimeInput(value: string): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseIsoDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function buildSuggestedTimelineDates(task: TaskForCompletion, completedAt: Date) {
+  const currentCreatedAt = parseIsoDate(task.created_at);
+  const currentInProgressAt = parseIsoDate(task.logged_at);
+  const completedAtMs = completedAt.getTime();
+  const suggestedCreatedAt =
+    currentCreatedAt && currentCreatedAt.getTime() < completedAtMs
+      ? currentCreatedAt
+      : new Date(completedAtMs - 2 * 60_000);
+  const suggestedInProgressAt =
+    currentInProgressAt &&
+    currentInProgressAt.getTime() > suggestedCreatedAt.getTime() &&
+    currentInProgressAt.getTime() < completedAtMs
+      ? currentInProgressAt
+      : new Date(completedAtMs - 60_000);
+
+  return {
+    needsConfirmation:
+      Boolean(currentCreatedAt && currentCreatedAt.getTime() > completedAtMs) ||
+      Boolean(currentInProgressAt && currentInProgressAt.getTime() > completedAtMs),
+    createdAtLocal: toLocalDateTimeInputValue(suggestedCreatedAt),
+    intermediateAtLocal: toLocalDateTimeInputValue(suggestedInProgressAt),
+  };
 }
 
 export function MarkTaskCompleteDialog({
@@ -55,11 +103,19 @@ export function MarkTaskCompleteDialog({
   task,
   onConfirm,
   isSubmitting = false,
+  userId = null,
 }: MarkTaskCompleteDialogProps) {
   const { tabletModeEnabled } = useTabletMode();
   const contentRef = useRef<HTMLDivElement>(null);
   const [intermediateComment, setIntermediateComment] = useState('');
   const [completedComment, setCompletedComment] = useState('');
+  const [completedAtLocal, setCompletedAtLocal] = useState('');
+  const [maxCompletedAtLocal, setMaxCompletedAtLocal] = useState('');
+  const [initialCompletedAtLocal, setInitialCompletedAtLocal] = useState('');
+  const [showTimelineConfirm, setShowTimelineConfirm] = useState(false);
+  const [confirmedCreatedAtLocal, setConfirmedCreatedAtLocal] = useState('');
+  const [confirmedIntermediateAtLocal, setConfirmedIntermediateAtLocal] = useState('');
+  const [pendingCompletionData, setPendingCompletionData] = useState<CompletionData | null>(null);
   const [completedSignatureData, setCompletedSignatureData] = useState<string | null>(null);
   const [completedSignedAt, setCompletedSignedAt] = useState<string | null>(null);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
@@ -83,8 +139,16 @@ export function MarkTaskCompleteDialog({
   useEffect(() => {
     if (open && task) {
       queueMicrotask(() => {
+        const defaultCompletedAtLocal = toLocalDateTimeInputValue(new Date());
+        setInitialCompletedAtLocal(defaultCompletedAtLocal);
+        setMaxCompletedAtLocal(defaultCompletedAtLocal);
+        setShowTimelineConfirm(false);
+        setConfirmedCreatedAtLocal('');
+        setConfirmedIntermediateAtLocal('');
+        setPendingCompletionData(null);
         setIntermediateComment('');
         setCompletedComment('');
+        setCompletedAtLocal(defaultCompletedAtLocal);
         setCompletedSignatureData(null);
         setCompletedSignedAt(null);
         setShowSignaturePad(false);
@@ -120,9 +184,7 @@ export function MarkTaskCompleteDialog({
     return true;
   };
 
-  const handleConfirm = async () => {
-    if (!task) return;
-
+  const buildCompletionData = (completedAtDate: Date): CompletionData => {
     // Prepare maintenance updates (convert string values to appropriate types)
     const processedMaintenanceUpdates: CompletionFieldValues = {};
     
@@ -140,20 +202,81 @@ export function MarkTaskCompleteDialog({
       }
     }
 
-    await onConfirm({
+    return {
       intermediateComment: intermediateComment.trim(),
       completedComment: completedComment.trim(),
+      completedAt: completedAtDate.toISOString(),
       completedSignatureData: completedSignatureData || undefined,
       completedSignedAt: completedSignedAt || undefined,
       maintenanceUpdates: Object.keys(processedMaintenanceUpdates).length > 0 
         ? processedMaintenanceUpdates 
         : undefined,
+    };
+  };
+
+  const submitCompletion = async (data: CompletionData) => {
+    const completed = await onConfirm(data);
+    if (completed !== false) {
+      await clearDraft();
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!task) return;
+    const completedAtDate = parseLocalDateTimeInput(completedAtLocal);
+    const maxCompletedAtDate = parseLocalDateTimeInput(maxCompletedAtLocal);
+    if (!completedAtDate || (maxCompletedAtDate && completedAtDate.getTime() > maxCompletedAtDate.getTime())) {
+      triggerShakeAnimation(contentRef.current);
+      return;
+    }
+
+    const completionData = buildCompletionData(completedAtDate);
+    const timelineSuggestions = buildSuggestedTimelineDates(task, completedAtDate);
+    if (timelineSuggestions.needsConfirmation) {
+      setPendingCompletionData(completionData);
+      setConfirmedCreatedAtLocal(timelineSuggestions.createdAtLocal);
+      setConfirmedIntermediateAtLocal(timelineSuggestions.intermediateAtLocal);
+      setShowTimelineConfirm(true);
+      return;
+    }
+
+    await submitCompletion(completionData);
+  };
+
+  const handleConfirmTimelineDates = async () => {
+    if (!pendingCompletionData) return;
+    const createdAtDate = parseLocalDateTimeInput(confirmedCreatedAtLocal);
+    const intermediateAtDate = parseLocalDateTimeInput(confirmedIntermediateAtLocal);
+    const completedAtDate = new Date(pendingCompletionData.completedAt);
+    if (
+      !createdAtDate ||
+      !intermediateAtDate ||
+      createdAtDate.getTime() > intermediateAtDate.getTime() ||
+      intermediateAtDate.getTime() > completedAtDate.getTime()
+    ) {
+      triggerShakeAnimation(contentRef.current);
+      return;
+    }
+
+    setShowTimelineConfirm(false);
+    await submitCompletion({
+      ...pendingCompletionData,
+      createdAt: createdAtDate.toISOString(),
+      intermediateAt: intermediateAtDate.toISOString(),
     });
   };
 
   const handleCancel = () => {
+    void clearDraft();
     setIntermediateComment('');
     setCompletedComment('');
+    setCompletedAtLocal('');
+    setInitialCompletedAtLocal('');
+    setMaxCompletedAtLocal('');
+    setShowTimelineConfirm(false);
+    setConfirmedCreatedAtLocal('');
+    setConfirmedIntermediateAtLocal('');
+    setPendingCompletionData(null);
     setCompletedSignatureData(null);
     setCompletedSignedAt(null);
     setShowSignaturePad(false);
@@ -161,24 +284,55 @@ export function MarkTaskCompleteDialog({
     onOpenChange(false);
   };
 
+  const completedAtDate = parseLocalDateTimeInput(completedAtLocal);
+  const maxCompletedAtDate = parseLocalDateTimeInput(maxCompletedAtLocal);
+  const isCompletedAtValid =
+    Boolean(completedAtDate) &&
+    (!maxCompletedAtDate || completedAtDate!.getTime() <= maxCompletedAtDate.getTime());
   const isValid =
     (!requiresIntermediateStep || (intermediateComment.trim() && intermediateComment.length <= 300)) &&
     completedComment.trim() &&
     completedComment.length <= 500 &&
+    isCompletedAtValid &&
     (!requiresCompletionSignature || Boolean(completedSignatureData)) &&
     validateMaintenanceFields();
   const isDirty = useMemo(
     () =>
       intermediateComment.trim().length > 0 ||
       completedComment.trim().length > 0 ||
+      (completedAtLocal !== '' && completedAtLocal !== initialCompletedAtLocal) ||
       Boolean(completedSignatureData) ||
       Object.values(maintenanceFields).some((value) => value !== undefined && value !== null && `${value}`.trim() !== ''),
-    [intermediateComment, completedComment, completedSignatureData, maintenanceFields]
+    [intermediateComment, completedComment, completedAtLocal, initialCompletedAtLocal, completedSignatureData, maintenanceFields]
   );
+  const { clearDraft } = useWorkshopDraftPersistence({
+    enabled: open && Boolean(task),
+    draftId: `workshop-task-complete:${userId || 'anonymous'}:${task?.id || 'none'}`,
+    kind: 'workshop-task-complete',
+    ownerId: userId,
+    value: {
+      intermediateComment,
+      completedComment,
+      completedAtLocal,
+      completedSignatureData,
+      completedSignedAt,
+      maintenanceFields,
+    },
+    isDirty,
+    onRestore: (draft) => {
+      setIntermediateComment(draft.intermediateComment || '');
+      setCompletedComment(draft.completedComment || '');
+      setCompletedAtLocal(draft.completedAtLocal || initialCompletedAtLocal || toLocalDateTimeInputValue(new Date()));
+      setCompletedSignatureData(draft.completedSignatureData || null);
+      setCompletedSignedAt(draft.completedSignedAt || null);
+      setMaintenanceFields(draft.maintenanceFields || {});
+    },
+  });
 
   if (!task) return null;
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
@@ -266,6 +420,26 @@ export function MarkTaskCompleteDialog({
               </p>
             </div>
           )}
+
+          {/* Completion Comment */}
+          <div className="space-y-2">
+            <Label htmlFor="completed-at">
+              Completed Date &amp; Time <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="completed-at"
+              type="datetime-local"
+              value={completedAtLocal}
+              max={maxCompletedAtLocal}
+              onFocus={() => setMaxCompletedAtLocal(toLocalDateTimeInputValue(new Date()))}
+              onChange={(e) => setCompletedAtLocal(e.target.value)}
+              className={tabletModeEnabled ? 'text-base' : undefined}
+              disabled={isSubmitting}
+            />
+            <p className="text-xs text-muted-foreground">
+              Confirm the real completion date. This date is used for future maintenance due dates.
+            </p>
+          </div>
 
           {/* Completion Comment */}
           <div className="space-y-2">
@@ -425,5 +599,69 @@ export function MarkTaskCompleteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={showTimelineConfirm} onOpenChange={setShowTimelineConfirm}>
+        <DialogContent className={`max-w-md ${tabletModeEnabled ? 'p-5 sm:p-6' : ''}`}>
+          <DialogHeader>
+            <DialogTitle>Confirm Earlier Task Dates</DialogTitle>
+            <DialogDescription>
+              The completed date is before the current created or in progress date.
+              Please confirm the suggested dates below before completing the task.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="confirmed-created-at">
+                Created Date &amp; Time <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="confirmed-created-at"
+                type="datetime-local"
+                value={confirmedCreatedAtLocal}
+                onChange={(event) => setConfirmedCreatedAtLocal(event.target.value)}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmed-intermediate-at">
+                In Progress Date &amp; Time <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="confirmed-intermediate-at"
+                type="datetime-local"
+                value={confirmedIntermediateAtLocal}
+                onChange={(event) => setConfirmedIntermediateAtLocal(event.target.value)}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Suggested dates are set just before the completed date so the task timeline stays in the correct order.
+            </p>
+          </div>
+
+          <DialogFooter className={tabletModeEnabled ? 'gap-3 pt-2' : undefined}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowTimelineConfirm(false)}
+              disabled={isSubmitting}
+            >
+              Go Back
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmTimelineDates}
+              disabled={isSubmitting}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              OK, Use These Dates
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }

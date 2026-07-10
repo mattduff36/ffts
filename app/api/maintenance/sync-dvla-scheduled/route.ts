@@ -32,10 +32,11 @@ async function loadActiveTargets(
   if (error) throw error;
 
   return (data || [])
-    .map((row: { id: string; reg_number: string }) => ({
+    .filter((row) => Boolean(row.reg_number))
+    .map((row) => ({
       assetType: mapTableToAssetType(tableName),
       assetId: row.id,
-      registrationNumber: row.reg_number,
+      registrationNumber: row.reg_number as string,
     }))
     .filter((target) => isRoadEligibleRegistration(target.registrationNumber));
 }

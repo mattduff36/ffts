@@ -26,7 +26,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
-import { FileText, Upload, Loader2 } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { FileText, Upload } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Monitor } from 'lucide-react';
 import {
@@ -515,9 +516,7 @@ export default function ProjectsManagePage() {
           </DialogHeader>
           <div className="flex-1 min-h-0">
             {pdfViewerLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
+              <PanelLoader message="Loading document preview..." accent="rams" className="h-full" />
             ) : pdfViewerUrl ? (
               <iframe
                 src={pdfViewerUrl}

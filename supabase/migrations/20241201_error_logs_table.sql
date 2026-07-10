@@ -28,7 +28,7 @@ CREATE POLICY "SuperAdmin can view all error logs" ON error_logs
   TO authenticated
   USING (
     auth.uid() IN (
-      SELECT id FROM auth.users WHERE email = 'template-admin@example.com'
+      SELECT id FROM auth.users WHERE email = 'admin@mpdee.co.uk'
     )
   );
 
@@ -44,6 +44,6 @@ CREATE POLICY "SuperAdmin can delete error logs" ON error_logs
   TO authenticated
   USING (
     auth.uid() IN (
-      SELECT id FROM auth.users WHERE email = 'template-admin@example.com'
+      SELECT id FROM auth.users WHERE email = 'admin@mpdee.co.uk'
     )
   );

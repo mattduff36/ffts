@@ -146,15 +146,21 @@ describe('Back Navigation', () => {
 });
 
 describe('Accent From Route', () => {
-  it('/van-inspections returns inspections accent', () => {
+  it('inspection routes return their specific accents', () => {
     expect(getAccentFromRoute('/van-inspections')).toBe('inspections');
     expect(getAccentFromRoute('/van-inspections/new')).toBe('inspections');
     expect(getAccentFromRoute('/van-inspections/some-id')).toBe('inspections');
+    expect(getAccentFromRoute('/plant-inspections')).toBe('plant-inspections');
+    expect(getAccentFromRoute('/hgv-inspections')).toBe('hgv-inspections');
   });
 
   it('other modules return their own accents (regression)', () => {
     expect(getAccentFromRoute('/timesheets')).toBe('timesheets');
     expect(getAccentFromRoute('/dashboard')).toBe('brand');
     expect(getAccentFromRoute('/fleet')).toBe('fleet');
+    expect(getAccentFromRoute('/inventory')).toBe('inventory');
+    expect(getAccentFromRoute('/reports')).toBe('reports');
+    expect(getAccentFromRoute('/debug')).toBe('debug');
+    expect(getAccentFromRoute('/debug?tab=notification-settings')).toBe('debug');
   });
 });

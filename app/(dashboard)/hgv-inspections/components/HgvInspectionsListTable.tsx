@@ -62,7 +62,7 @@ function getStatusBadge(status: string) {
 
 function getStatusIcon(inspection: HgvInspectionRow) {
   const iconColorClass = inspection.has_inform_workshop_task
-    ? 'text-inspection'
+    ? 'text-hgv-inspection'
     : inspection.has_reported_defect
       ? 'text-red-500'
       : 'text-green-500';
@@ -244,7 +244,7 @@ export function HgvInspectionsListTable({
                       disabled={downloadingId === inspection.id}
                       variant="outline"
                       size="sm"
-                      className="border-inspection text-inspection hover:bg-inspection hover:text-white"
+                      className="border-hgv-inspection text-hgv-inspection hover:bg-hgv-inspection hover:text-white"
                     >
                       <Download className="h-4 w-4 mr-1.5" />
                       {downloadingId === inspection.id ? 'Downloading...' : 'PDF'}

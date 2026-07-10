@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,8 @@ export function TaskAttachmentsSection({ taskId, taskStatus, onUpdate }: TaskAtt
   const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
   const [undoingAttachmentId, setUndoingAttachmentId] = useState<string | null>(null);
+  const [activeSectionKeyByAttachmentId, setActiveSectionKeyByAttachmentId] = useState<Record<string, string>>({});
+  const [scrollTopByAttachmentId, setScrollTopByAttachmentId] = useState<Record<string, number>>({});
 
   const isTaskCompleted = taskStatus === 'completed';
   const activeAttachment = useMemo(
@@ -86,6 +88,28 @@ export function TaskAttachmentsSection({ taskId, taskStatus, onUpdate }: TaskAtt
       setActiveAttachmentId(null);
     }
   };
+
+  const handleActiveSectionChange = useCallback((sectionKey: string) => {
+    if (!activeAttachmentId) return;
+    setActiveSectionKeyByAttachmentId((prev) => {
+      if (prev[activeAttachmentId] === sectionKey) return prev;
+      return {
+        ...prev,
+        [activeAttachmentId]: sectionKey,
+      };
+    });
+  }, [activeAttachmentId]);
+
+  const handleScrollPositionChange = useCallback((scrollTop: number) => {
+    if (!activeAttachmentId) return;
+    setScrollTopByAttachmentId((prev) => {
+      if (prev[activeAttachmentId] === scrollTop) return prev;
+      return {
+        ...prev,
+        [activeAttachmentId]: scrollTop,
+      };
+    });
+  }, [activeAttachmentId]);
 
   const handleSaveSchemaResponses = async (
     responses: AttachmentSchemaResponse[],
@@ -349,6 +373,10 @@ export function TaskAttachmentsSection({ taskId, taskStatus, onUpdate }: TaskAtt
               readOnly={isTaskCompleted || activeAttachment.status === 'completed'}
               isCompleted={activeAttachment.status === 'completed'}
               attachmentId={activeAttachment.id}
+              initialActiveSectionKey={activeSectionKeyByAttachmentId[activeAttachment.id]}
+              initialScrollTop={scrollTopByAttachmentId[activeAttachment.id] || 0}
+              onActiveSectionChange={handleActiveSectionChange}
+              onScrollPositionChange={handleScrollPositionChange}
               canUndoComplete={!isTaskCompleted && activeAttachment.status === 'completed' && canUndoAttachmentCompletion(activeAttachment.completed_at)}
               undoCompleteLabel={formatAttachmentUndoRemaining(activeAttachment.completed_at)}
               onUndoComplete={() => handleUndoComplete(activeAttachment)}

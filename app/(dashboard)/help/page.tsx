@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, type ChangeEvent, type ComponentType } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { templateConfig } from '@/lib/config/template-config';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   Dialog,
   DialogContent,
@@ -46,12 +48,15 @@ import Link from 'next/link';
 import { MODULE_PAGES, getPageLabel, getPageUrl } from '@/lib/config/module-pages';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { forceAppRefresh } from '@/lib/client/force-app-refresh';
+import { ReleaseVersionLink } from '@/components/layout/ReleaseVersionLink';
 import {
   MAX_ERROR_REPORT_SCREENSHOT_SIZE_BYTES,
   MAX_ERROR_REPORT_SCREENSHOTS,
   getErrorReportScreenshots,
   isAllowedErrorReportScreenshot,
 } from '@/lib/utils/error-report-screenshots';
+
+const appDisplayName = templateConfig.branding.shortAppName;
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -549,15 +554,23 @@ export default function HelpPage() {
     }
   };
 
-  // Render markdown content (simple version)
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Render a small, controlled markdown subset after escaping raw HTML.
   const renderMarkdown = (content: string) => {
-    // Simple markdown to HTML conversion
-    return content
+    return escapeHtml(content)
       .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2 text-foreground">$1</h3>')
       .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mt-6 mb-3 text-foreground">$1</h2>')
       .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-6 mb-4 text-foreground">$1</h1>')
-      .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/gim, '<em>$1</em>')
+      .replace(/\*\*([^*\n]+)\*\*/gim, '<strong>$1</strong>')
+      .replace(/\*([^*\n]+)\*/gim, '<em>$1</em>')
       .replace(/^- (.*$)/gim, '<li class="ml-4">$1</li>')
       .replace(/^(\d+)\. (.*$)/gim, '<li class="ml-4">$2</li>')
       .replace(/\n\n/g, '</p><p class="mb-3 text-foreground">')
@@ -612,9 +625,12 @@ export default function HelpPage() {
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Help & FAQ
           </h1>
-          <p className="text-muted-foreground">
-            Find answers to common questions and submit suggestions
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+            <p className="text-muted-foreground">
+              Find answers to common questions and submit suggestions
+            </p>
+            <ReleaseVersionLink className="sm:shrink-0" />
+          </div>
         </div>
       </div>
 
@@ -713,9 +729,7 @@ export default function HelpPage() {
 
           {/* FAQ Content */}
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
-            </div>
+            <PanelLoader message="Loading help articles..." className="py-12" />
           ) : filteredArticles.length === 0 ? (
             <Card className="">
               <CardContent className="py-12 text-center">
@@ -807,7 +821,7 @@ export default function HelpPage() {
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
                 <Smartphone className="h-5 w-5 text-brand-yellow" />
-                Install DigiDocs App
+                Install {appDisplayName} App
               </CardTitle>
               <CardDescription className="text-muted-foreground">
                 Follow the steps for your device and browser. If the install prompt is available, use the button below.
@@ -854,7 +868,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open DigiDocs in Chrome and sign in.</li>
+                <li>Open {appDisplayName} in Chrome and sign in.</li>
                 <li>Tap the three-dot menu in the top-right corner.</li>
                 <li>Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</li>
                 <li>Confirm by tapping <strong>Install</strong>.</li>
@@ -869,11 +883,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open DigiDocs in Firefox and sign in.</li>
+                <li>Open {appDisplayName} in Firefox and sign in.</li>
                 <li>Tap the menu button (three dots).</li>
                 <li>Tap <strong>Install</strong> or <strong>Add to Home screen</strong>.</li>
                 <li>Confirm the prompt to add it to your home screen.</li>
-                <li>Launch DigiDocs from the new home screen icon.</li>
+                <li>Launch {appDisplayName} from the new home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -884,11 +898,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open DigiDocs in Safari (not inside another browser tab view).</li>
+                <li>Open {appDisplayName} in Safari (not inside another browser tab view).</li>
                 <li>Tap the <strong>Share</strong> button.</li>
                 <li>Scroll and tap <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> in the top-right corner.</li>
-                <li>Open DigiDocs from your home screen icon.</li>
+                <li>Open {appDisplayName} from your home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -899,7 +913,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open DigiDocs in Chrome or Edge.</li>
+                <li>Open {appDisplayName} in Chrome or Edge.</li>
                 <li>Use the browser menu and choose <strong>Open in Safari</strong>.</li>
                 <li>In Safari, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> to finish installation.</li>
@@ -916,7 +930,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open DigiDocs in Chrome or Edge.</li>
+                <li>Open {appDisplayName} in Chrome or Edge.</li>
                 <li>Look for the install icon in the address bar (usually a monitor + down arrow).</li>
                 <li>Click it and confirm <strong>Install</strong>.</li>
                 <li>You can also use browser menu options: <strong>Install app</strong> / <strong>Apps</strong>.</li>
@@ -1128,9 +1142,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               {loadingErrors ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-red-500" />
-                </div>
+                <PanelLoader message="Loading error reports..." className="py-8" />
               ) : myErrors.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -1274,9 +1286,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               {loadingSuggestions ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-brand-yellow" />
-                </div>
+                <PanelLoader message="Loading suggestions..." className="py-8" />
               ) : mySuggestions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Lightbulb className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -1320,7 +1330,7 @@ export default function HelpPage() {
       </Tabs>
 
       <Dialog open={cacheGuideOpen} onOpenChange={setCacheGuideOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Guided Cache and Site-Data Clear Steps</DialogTitle>
             <DialogDescription>
@@ -1332,18 +1342,18 @@ export default function HelpPage() {
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Chrome</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Chrome and visit DigiDocs once.</li>
+                <li>Open Chrome and visit {appDisplayName} once.</li>
                 <li>Tap the padlock/site icon in the address bar.</li>
                 <li>Open <strong>Site settings</strong>.</li>
                 <li>Tap <strong>Clear & reset</strong>, then confirm.</li>
-                <li>Reload DigiDocs and sign in again.</li>
+                <li>Reload {appDisplayName} and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Firefox</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Firefox and go to DigiDocs.</li>
+                <li>Open Firefox and go to {appDisplayName}.</li>
                 <li>Tap the site settings icon from the address bar/menu.</li>
                 <li>Clear site data/cookies for this site.</li>
                 <li>Close and reopen the tab, then sign in again.</li>
@@ -1355,15 +1365,15 @@ export default function HelpPage() {
               <ol className="list-decimal pl-5 space-y-1">
                 <li>Open iOS <strong>Settings</strong> app.</li>
                 <li>Go to <strong>Safari &gt; Advanced &gt; Website Data</strong>.</li>
-                <li>Search for DigiDocs domain and swipe/delete it.</li>
-                <li>Reopen Safari, load DigiDocs, and sign in again.</li>
+                <li>Search for {appDisplayName} domain and swipe/delete it.</li>
+                <li>Reopen Safari, load {appDisplayName}, and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Desktop - Chrome / Edge</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open DigiDocs in browser.</li>
+                <li>Open {appDisplayName} in browser.</li>
                 <li>Click the padlock icon next to the URL.</li>
                 <li>Open site settings and clear stored data for this site.</li>
                 <li>Hard refresh the page and sign in again.</li>

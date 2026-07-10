@@ -30,11 +30,11 @@ describeOrSkip('Inform Workshop Endpoint', () => {
   const createdTaskIds: string[] = [];
 
   beforeAll(async () => {
-    // Create test vehicle with TE57 prefix (test vehicles only)
+    // Create test vehicle with ZZ99 prefix (test vehicles only)
     const { data: vehicle } = await supabase
       .from('vans')
       .insert({
-        reg_number: 'TE57INFORM',
+        reg_number: 'ZZ99INFORM',
         status: 'active',
       })
       .select()
@@ -81,17 +81,17 @@ describeOrSkip('Inform Workshop Endpoint', () => {
   });
 
   describe('Comment Validation', () => {
-    it('should reject comments shorter than 10 characters', async () => {
+    it('should reject comments shorter than 5 characters', async () => {
       // Test via direct DB simulation since we cannot make HTTP requests in test
       // The actual API validation happens at runtime
       
-      const shortComment = 'Short';
-      expect(shortComment.trim().length).toBeLessThan(10);
+      const shortComment = 'Bad';
+      expect(shortComment.trim().length).toBeLessThan(5);
     });
 
-    it('should accept comments of 10 characters or more', async () => {
+    it('should accept comments of 5 characters or more', async () => {
       const validComment = 'This is a valid comment for workshop';
-      expect(validComment.trim().length).toBeGreaterThanOrEqual(10);
+      expect(validComment.trim().length).toBeGreaterThanOrEqual(5);
     });
   });
 

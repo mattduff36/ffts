@@ -424,14 +424,17 @@ describe('POST /api/timesheets/[id]/reject', () => {
 
       expect(messageInsertMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: expect.stringContaining('Rejected'),
-          message_type: 'timesheet_rejection',
+          type: 'NOTIFICATION',
+          subject: expect.stringContaining('Rejected'),
+          created_via: 'timesheet_rejection',
+          module_key: 'timesheets',
         })
       );
       expect(recipientInsertMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          recipient_id: 'employee-id',
-          read: false,
+          message_id: 'message-id',
+          user_id: 'employee-id',
+          status: 'PENDING',
         })
       );
     });

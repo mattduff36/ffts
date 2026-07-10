@@ -4,9 +4,14 @@ import type {
   AttachmentSchemaResponse,
   AttachmentSchemaSnapshot,
 } from '@/types/workshop-attachments-v2';
+import { createStatusError, getErrorStatus } from '@/lib/utils/http-error';
 
 type TaskAttachment = Database['public']['Tables']['workshop_task_attachments']['Row'];
 type AttachmentTemplate = Database['public']['Tables']['workshop_attachment_templates']['Row'];
+
+interface ApiErrorResponse {
+  error?: string;
+}
 
 export type TaskAttachmentWithDetails = TaskAttachment & {
   workshop_attachment_templates: AttachmentTemplate | null;
@@ -27,6 +32,18 @@ interface UseTaskAttachmentsReturn {
   addAttachment: (templateId: string) => Promise<TaskAttachmentWithDetails | null>;
   saveSchemaResponses: (attachmentId: string, responses: AttachmentSchemaResponse[], markComplete?: boolean) => Promise<boolean>;
   undoCompleteAttachment: (attachmentId: string) => Promise<boolean>;
+}
+
+async function readJsonResponse<T extends object>(
+  response: Response,
+  fallbackMessage: string
+): Promise<T> {
+  const data = await response.json().catch(() => ({})) as T & ApiErrorResponse;
+  if (!response.ok) {
+    throw createStatusError(data.error || fallbackMessage, response.status);
+  }
+
+  return data as T;
 }
 
 export function useTaskAttachments({ 
@@ -58,10 +75,10 @@ export function useTaskAttachments({
         cache: 'no-store',
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch task attachments');
-      }
+      const data = await readJsonResponse<{ attachments?: TaskAttachmentWithDetails[] }>(
+        response,
+        'Failed to fetch task attachments'
+      );
 
       setAttachments((data.attachments || []) as TaskAttachmentWithDetails[]);
     } catch (err) {
@@ -79,10 +96,10 @@ export function useTaskAttachments({
       cache: 'no-store',
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to refresh attachment');
-    }
+    const data = await readJsonResponse<{ attachment: TaskAttachmentWithDetails }>(
+      response,
+      'Failed to refresh attachment'
+    );
 
     const attachment = data.attachment as TaskAttachmentWithDetails;
     mergeAttachment(attachment);
@@ -101,11 +118,10 @@ export function useTaskAttachments({
         body: JSON.stringify({ template_id: templateId }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add attachment');
-      }
+      const data = await readJsonResponse<{ attachment: TaskAttachmentWithDetails }>(
+        response,
+        'Failed to add attachment'
+      );
 
       // Refetch to get updated list
       await fetchAttachments();
@@ -129,19 +145,29 @@ export function useTaskAttachments({
         body: JSON.stringify({ responses, mark_complete: markComplete }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save schema responses');
-      }
+      await readJsonResponse<ApiErrorResponse>(
+        response,
+        'Failed to save schema responses'
+      );
 
       await refreshAttachment(attachmentId);
       return true;
     } catch (err) {
+      const status = getErrorStatus(err);
+      if (status === 404) {
+        await fetchAttachments();
+        console.warn('Attachment no longer exists while saving schema responses:', err);
+        throw err;
+      }
+      if (status === 409) {
+        console.warn('Attachment cannot be edited in its current state:', err);
+        throw err;
+      }
+
       console.error('Error saving schema responses:', err);
       throw err;
     }
-  }, [refreshAttachment]);
+  }, [fetchAttachments, refreshAttachment]);
 
   const undoCompleteAttachment = useCallback(async (attachmentId: string): Promise<boolean> => {
     try {
@@ -150,10 +176,10 @@ export function useTaskAttachments({
         headers: { 'Content-Type': 'application/json' },
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to undo attachment completion');
-      }
+      await readJsonResponse<ApiErrorResponse>(
+        response,
+        'Failed to undo attachment completion'
+      );
 
       await refreshAttachment(attachmentId);
       return true;

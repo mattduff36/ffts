@@ -121,6 +121,7 @@ describe('POST /api/absence/[id]/contact-line-manager', () => {
         priority: 'LOW',
         sender_id: 'employee-1',
         created_via: 'absence_contact_line_manager',
+        module_key: 'absence',
       })
     );
     expect(recipientInsert).toHaveBeenCalledWith(

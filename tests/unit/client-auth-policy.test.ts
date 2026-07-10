@@ -1,10 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 describe('client auth policy helpers', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it('defers unauthenticated handling for silent background refresh reasons', async () => {
     const { shouldDeferUnauthenticatedHandling } = await import('@/lib/app-auth/client-auth-policy');
 
@@ -14,21 +10,10 @@ describe('client auth policy helpers', () => {
     expect(shouldDeferUnauthenticatedHandling('focus', { silent: false })).toBe(false);
   });
 
-  it('only treats locked auth responses as lock redirects when the feature is enabled', async () => {
-    const {
-      getAuthFailureRedirectPath,
-      shouldTreatAuthResponseAsLocked,
-    } = await import('@/lib/app-auth/client-auth-policy');
+  it('redirects auth failures to login', async () => {
+    const { getAuthFailureRedirectPath } = await import('@/lib/app-auth/client-auth-policy');
 
-    expect(shouldTreatAuthResponseAsLocked({ statusCode: 423 })).toBe(false);
+    expect(getAuthFailureRedirectPath(401)).toBe('/login');
     expect(getAuthFailureRedirectPath(423)).toBe('/login');
-
-    vi.stubEnv('NEXT_PUBLIC_ACCOUNT_SWITCHER_ENABLED', 'true');
-    vi.resetModules();
-
-    const enabledPolicy = await import('@/lib/app-auth/client-auth-policy');
-    expect(enabledPolicy.shouldTreatAuthResponseAsLocked({ statusCode: 423 })).toBe(true);
-    expect(enabledPolicy.shouldTreatAuthResponseAsLocked({ payloadLocked: true })).toBe(true);
-    expect(enabledPolicy.getAuthFailureRedirectPath(423)).toBe('/lock');
   });
 });

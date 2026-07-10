@@ -25,6 +25,10 @@ vi.mock('@/lib/utils/rbac', () => ({
   canEffectiveRoleAccessModule: mockCanEffectiveRoleAccessModule,
 }));
 
+vi.mock('@/lib/server/sensitive-module-access', () => ({
+  requireSensitiveModuleAccess: vi.fn().mockResolvedValue(null),
+}));
+
 function createQuotesQuery() {
   const query = {
     eq: vi.fn().mockReturnThis(),

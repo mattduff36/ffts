@@ -1,7 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
-import { getEffectiveRole } from '@/lib/utils/view-as';
-import { canAccessDebugConsole } from '@/lib/utils/debug-access';
+import { requireDebugConsoleAccess } from '@/lib/server/debug-console-access';
 import type { Database } from '@/types/database';
 
 type ErrorLogInsertRow = Database['public']['Tables']['error_logs']['Insert'];
@@ -15,6 +13,8 @@ export interface ErrorLogAccessResult {
   ok: boolean;
   status: number;
   error: string | null;
+  code?: string;
+  sensitive_access?: unknown;
 }
 
 const ERROR_LOG_FETCH_LIMIT_MAX = 500;
@@ -24,33 +24,7 @@ function clampLimit(limit: number): number {
 }
 
 export async function requireErrorLogAdminAccess(): Promise<ErrorLogAccessResult> {
-  const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
-  if (!current) {
-    return {
-      ok: false,
-      status: 401,
-      error: 'Unauthorized',
-    };
-  }
-
-  const effectiveRole = await getEffectiveRole();
-  if (!canAccessDebugConsole({
-    email: current.profile.email,
-    isActualSuperAdmin: effectiveRole.is_actual_super_admin,
-    isViewingAs: effectiveRole.is_viewing_as,
-  })) {
-    return {
-      ok: false,
-      status: 403,
-      error: 'Forbidden',
-    };
-  }
-
-  return {
-    ok: true,
-    status: 200,
-    error: null,
-  };
+  return requireDebugConsoleAccess();
 }
 
 export async function listErrorLogs(limit = 200): Promise<ErrorLogListEntry[]> {

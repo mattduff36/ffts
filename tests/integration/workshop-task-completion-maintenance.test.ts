@@ -48,7 +48,7 @@ describeOrSkip('Workshop Task Completion with Maintenance Updates', () => {
     const { data: vehicle, error: vehicleError } = await supabase
       .from('vans')
       .insert({
-        reg_number: `TE57COMP${Date.now().toString().slice(-4)}`,
+        reg_number: `ZZ99COMP${Date.now().toString().slice(-4)}`,
         category_id: category?.id || null,
         status: 'active',
       })

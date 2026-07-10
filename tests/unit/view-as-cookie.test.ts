@@ -68,7 +68,8 @@ describe('view-as cookie helpers', () => {
 
     expect(getViewAsSelection()).toEqual({ roleId: 'role-1', teamId: 'team-9' });
     expect(dispatchEvent).toHaveBeenCalled();
-    expect(dispatchEvent.mock.calls[0]?.[0]).toBeInstanceOf(Event);
-    expect((dispatchEvent.mock.calls[0]?.[0] as Event).type).toBe(VIEW_AS_CHANGE_EVENT);
+    const dispatchedEvent = dispatchEvent.mock.calls[0]![0];
+    expect(dispatchedEvent).toBeInstanceOf(Event);
+    expect((dispatchedEvent as Event).type).toBe(VIEW_AS_CHANGE_EVENT);
   });
 });

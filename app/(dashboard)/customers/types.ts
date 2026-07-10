@@ -1,3 +1,16 @@
+export interface CustomerContact {
+  id: string;
+  customer_id: string;
+  name: string | null;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
 export interface Customer {
   id: string;
   company_name: string;
@@ -19,6 +32,15 @@ export interface Customer {
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+  secondary_contacts: CustomerContact[];
+}
+
+export interface CustomerContactFormData {
+  id?: string;
+  name: string;
+  job_title: string;
+  email: string;
+  phone: string;
 }
 
 export interface CustomerFormData {
@@ -37,6 +59,7 @@ export interface CustomerFormData {
   default_validity_days: number;
   status: 'active' | 'inactive';
   notes: string;
+  secondary_contacts: CustomerContactFormData[];
 }
 
 export const EMPTY_CUSTOMER_FORM: CustomerFormData = {
@@ -55,4 +78,5 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormData = {
   default_validity_days: 30,
   status: 'active',
   notes: '',
+  secondary_contacts: [],
 };

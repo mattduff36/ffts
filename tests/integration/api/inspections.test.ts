@@ -88,13 +88,13 @@ describeWithAuth('Inspections API payload validation (authenticated)', () => {
       body: JSON.stringify({
         inspectionId: 'fake-inspection-id',
         vehicleId: 'fake-vehicle-id',
-        comment: 'too short',
+        comment: 'bad',
       }),
     });
 
     expect([400, 401]).toContain(response.status);
     if (response.status === 400) {
-      expect(body?.error).toMatch(/at least 10 characters/i);
+      expect(body?.error).toMatch(/at least 5 characters/i);
     } else {
       expect(body?.error).toMatch(/unauthorized/i);
     }

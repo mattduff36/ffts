@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDatePeriod, toDateOnlyString } from '@/lib/utils/maintenancePeriods';
+import { addDatePeriod, formatDistancePeriodValue, toDateOnlyString } from '@/lib/utils/maintenancePeriods';
 
 describe('maintenance periods', () => {
   it('clamps Jan 31 plus one month to Feb end', () => {
@@ -18,5 +18,9 @@ describe('maintenance periods', () => {
     const result = addDatePeriod(new Date('2026-04-07T15:15:00.000Z'), 6, 'weeks');
 
     expect(toDateOnlyString(result)).toBe('2026-05-19');
+  });
+
+  it('formats distance periods with contextual labels', () => {
+    expect(formatDistancePeriodValue(10000, 'Miles / Kilometres')).toBe('10,000 miles / kilometres');
   });
 });

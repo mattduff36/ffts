@@ -5,8 +5,16 @@ import type { Database } from '@/types/database';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 type InspectionPhotoRow = Database['public']['Tables']['inspection_photos']['Row'];
+type NormalizedInspectionPhotoRow = Omit<InspectionPhotoRow, 'created_at'> & { created_at: string };
 type ActionRow = Database['public']['Tables']['actions']['Row'];
 type InspectionItemRow = Database['public']['Tables']['inspection_items']['Row'];
+
+function normalizeInspectionPhoto(photo: InspectionPhotoRow): NormalizedInspectionPhotoRow {
+  return {
+    ...photo,
+    created_at: photo.created_at ?? '',
+  };
+}
 
 function createServiceRoleClient() {
   return createSupabaseClient<Database>(
@@ -86,7 +94,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ photos: data ?? [] });
+  return NextResponse.json({ photos: (data ?? []).map(normalizeInspectionPhoto) });
 }
 
 export async function POST(request: NextRequest) {
@@ -177,9 +185,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: photosError.message }, { status: 500 });
   }
 
-  const typedPhotos = (photos ?? []) as InspectionPhotoRow[];
+  const typedPhotos = (photos ?? []).map(normalizeInspectionPhoto);
 
-  const photosByInspection = typedPhotos.reduce<Record<string, InspectionPhotoRow[]>>((acc, photo) => {
+  const photosByInspection = typedPhotos.reduce<Record<string, NormalizedInspectionPhotoRow[]>>((acc, photo) => {
     if (!acc[photo.inspection_id]) {
       acc[photo.inspection_id] = [];
     }
@@ -188,7 +196,7 @@ export async function POST(request: NextRequest) {
     return acc;
   }, {});
 
-  const photosByTask = typedTasks.reduce<Record<string, InspectionPhotoRow[]>>((acc, task) => {
+  const photosByTask = typedTasks.reduce<Record<string, NormalizedInspectionPhotoRow[]>>((acc, task) => {
     const inspectionItem = task.inspection_item_id ? itemsById.get(task.inspection_item_id) : null;
     if (!inspectionItem || !task.inspection_id) {
       acc[task.id] = [];
@@ -212,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     acc[task.id] = sortInspectionPhotos(
       exactMatches.length > 0 ? exactMatches : fallbackMatches
-    ) as InspectionPhotoRow[];
+    ) as NormalizedInspectionPhotoRow[];
     return acc;
   }, {});
 

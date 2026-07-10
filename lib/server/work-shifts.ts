@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cloneWorkShiftPattern, STANDARD_WORK_SHIFT_PATTERN, calculateDurationDaysForShiftPattern, serializePatternToTemplateSlots } from '@/lib/utils/work-shifts';
 import { getCurrentFinancialYear } from '@/lib/utils/date';
+import { filterHiddenSystemTestAccounts } from '@/lib/utils/system-test-accounts';
 import type {
   EmployeeWorkShiftRow,
   WorkShiftPattern,
@@ -461,7 +462,7 @@ export async function getWorkShiftMatrix(
     if (profileError) {
       throw profileError;
     }
-    profileRows = (profiles || []) as ProfileDirectoryRow[];
+    profileRows = filterHiddenSystemTestAccounts((profiles || []) as ProfileDirectoryRow[]);
   }
   await ensureEmployeeWorkShiftRecords(
     supabase,

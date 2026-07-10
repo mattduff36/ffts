@@ -120,8 +120,8 @@ export async function GET(request: NextRequest) {
       .lte('inspection.inspection_date', endOfMonth.toISOString());
 
     const typedInspectionItems = (inspectionItems || []) as Array<{ status?: string | null }>;
-    const passCount = typedInspectionItems.filter((i) => i.status === 'pass').length;
-    const failCount = typedInspectionItems.filter((i) => i.status === 'fail').length;
+    const passCount = typedInspectionItems.filter((i) => i.status === 'ok').length;
+    const failCount = typedInspectionItems.filter((i) => i.status === 'attention' || i.status === 'defect').length;
     const totalItems = passCount + failCount;
     const passRate = totalItems > 0 ? ((passCount / totalItems) * 100).toFixed(1) : 0;
 
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
           status
         )
       `)
-      .eq('status', 'fail')
+      .in('status', ['attention', 'defect'])
       .gte('inspection.inspection_date', thirtyDaysAgo.toISOString());
 
     const outstandingDefects = ((recentDefects || []) as Array<{ inspection?: { status?: string | null } | null }>)

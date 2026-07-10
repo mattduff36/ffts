@@ -4,7 +4,12 @@ import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { isAdminRole } from '@/lib/utils/role-access';
 import { ALL_MODULES } from '@/types/roles';
-import { getPermissionMapForUser, isMissingTeamPermissionSchemaError } from '@/lib/server/team-permissions';
+import {
+  getPermissionModules,
+  getPermissionLevelsForUser,
+  getPermissionMapForUser,
+  isMissingTeamPermissionSchemaError,
+} from '@/lib/server/team-permissions';
 
 interface EffectiveRoleSnapshot {
   role_name: string | null;
@@ -43,6 +48,13 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 1): Promise<T
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+async function getSensitivePinModules(admin: ReturnType<typeof createAdminClient>) {
+  const modules = await getPermissionModules(admin);
+  return modules
+    .filter((module) => module.requires_sensitive_pin)
+    .map((module) => module.module_name);
+}
+
 export async function GET() {
   const current = await getCurrentAuthenticatedProfile();
   if (!current) {
@@ -52,8 +64,10 @@ export async function GET() {
   try {
     const effectiveRole = await withRetry(() => getEffectiveRole());
     const hasFullAccessSnapshot = shouldGrantFullAccessSnapshot(effectiveRole);
+    const admin = createAdminClient();
 
     if (hasFullAccessSnapshot) {
+      const sensitivePinModules = await withRetry(() => getSensitivePinModules(admin));
       const fullAccessPermissions = ALL_MODULES.reduce<Record<string, boolean>>((acc, moduleName) => {
         acc[moduleName] = true;
         return acc;
@@ -62,23 +76,43 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         permissions: fullAccessPermissions,
+        permission_levels: ALL_MODULES.reduce<Record<string, number>>((acc, moduleName) => {
+          acc[moduleName] = 5;
+          return acc;
+        }, {}),
         enabled_modules: ALL_MODULES,
+        sensitive_pin_modules: sensitivePinModules,
         effective_team_id: effectiveRole.team_id,
         effective_team_name: effectiveRole.team_name,
       });
     }
 
-    const permissions = await withRetry(() => getPermissionMapForUser(
-      current.profile.id,
-      effectiveRole.role_id,
-      createAdminClient(),
-      effectiveRole.team_id
-    ));
+    const [permissions, permissionLevels, sensitivePinModules] = await withRetry(() =>
+      Promise.all([
+        getPermissionMapForUser(
+          current.profile.id,
+          effectiveRole.role_id,
+          admin,
+          effectiveRole.team_id,
+          { includeUserOverrides: effectiveRole.is_viewing_as !== true }
+        ),
+        getPermissionLevelsForUser(
+          current.profile.id,
+          effectiveRole.role_id,
+          admin,
+          effectiveRole.team_id,
+          { includeUserOverrides: effectiveRole.is_viewing_as !== true }
+        ),
+        getSensitivePinModules(admin),
+      ])
+    );
 
     return NextResponse.json({
       success: true,
       permissions,
+      permission_levels: permissionLevels,
       enabled_modules: ALL_MODULES.filter((moduleName) => permissions[moduleName]),
+      sensitive_pin_modules: sensitivePinModules,
       effective_team_id: effectiveRole.team_id,
       effective_team_name: effectiveRole.team_name,
     });
@@ -91,6 +125,7 @@ export async function GET() {
           return acc;
         }, {}),
         enabled_modules: [],
+        sensitive_pin_modules: [],
       });
     }
 

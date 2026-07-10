@@ -385,34 +385,32 @@ export default function PhotoUpload({
         </DialogFooter>
       </DialogContent>
 
-      <Dialog open={Boolean(selectedExistingPhoto)} onOpenChange={(open) => !open && setSelectedExistingPhoto(null)}>
-        <DialogContent className="max-w-4xl border-border">
-          {selectedExistingPhoto && (
-            <>
-              <DialogHeader>
-                <DialogTitle>
-                  Photo for Item #{itemNumber}
-                  {dayOfWeek ? ` - ${dayNames[dayOfWeek - 1]}` : ''}
-                </DialogTitle>
-                <DialogDescription>
-                  {selectedExistingPhoto.caption || 'Inspection photo'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="overflow-hidden rounded-lg border border-border bg-slate-950">
-                <Image
-                  src={selectedExistingPhoto.photo_url}
-                  alt={selectedExistingPhoto.caption || 'Inspection photo'}
-                  width={1600}
-                  height={1200}
-                  unoptimized
-                  loader={({ src }) => src}
-                  className="max-h-[75vh] w-full object-contain"
-                />
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {selectedExistingPhoto && (
+        <Dialog open onOpenChange={(open) => !open && setSelectedExistingPhoto(null)}>
+          <DialogContent className="max-w-4xl border-border">
+            <DialogHeader>
+              <DialogTitle>
+                Photo for Item #{itemNumber}
+                {dayOfWeek ? ` - ${dayNames[dayOfWeek - 1]}` : ''}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedExistingPhoto.caption || 'Inspection photo'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-hidden rounded-lg border border-border bg-slate-950">
+              <Image
+                src={selectedExistingPhoto.photo_url}
+                alt={selectedExistingPhoto.caption || 'Inspection photo'}
+                width={1600}
+                height={1200}
+                unoptimized
+                loader={({ src }) => src}
+                className="max-h-[75vh] w-full object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

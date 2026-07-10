@@ -8,12 +8,20 @@ import { MessageBlockingCheck } from '@/components/messages/MessageBlockingCheck
 import { MobileNavBar } from '@/components/layout/MobileNavBar';
 import { PullToRefresh } from '@/components/layout/PullToRefresh';
 import { Button } from '@/components/ui/button';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getAccentFromRoute } from '@/lib/theme/getAccentFromRoute';
 import { TabletModeProvider, useTabletMode } from '@/components/layout/tablet-mode-context';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useClientServiceOutage } from '@/lib/hooks/useClientServiceOutage';
 import { fetchWithAuth } from '@/lib/utils/fetch-with-auth';
+import { trackUsageEvent } from '@/lib/analytics/client';
+import { templateConfig } from '@/lib/config/template-config';
+import {
+  MOBILE_TEXT_SIZE_CHANGED_EVENT,
+  applyMobileTextSizePreference,
+  readMobileTextSizePreference,
+} from '@/lib/config/mobile-text-size-preference';
 
 const PAGE_VISIT_DEBOUNCE_MS = 250;
 const PAGE_VISIT_HEARTBEAT_MS = 5 * 60_000;
@@ -77,13 +85,15 @@ function DashboardLayoutShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { profile, loading: authLoading, locked } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const clientServiceOutage = useClientServiceOutage();
   const { tabletModeEnabled, tabletModeInfoOpen, dismissTabletModeInfo } = useTabletMode();
   const lastTrackedPathRef = useRef<string>('');
   const lastPageVisitRef = useRef<{ path: string; trackedAt: number }>({ path: '', trackedAt: 0 });
   const heartbeatIntervalRef = useRef<number | null>(null);
   const heartbeatOwnerTabIdRef = useRef<string>(createPageVisitTabId());
+  const sessionStartedRef = useRef(false);
+  const showLoadingOnly = authLoading || !profile?.id;
   
   const getCurrentTrackedPath = useCallback(() => {
     if (!pathname) return '';
@@ -92,7 +102,7 @@ function DashboardLayoutShell({
   }, [pathname, searchParams]);
 
   const trackPageVisit = useCallback((path: string, minimumGapMs = 0) => {
-    if (!path || authLoading || locked || clientServiceOutage || !profile?.id) return;
+    if (!path || authLoading || clientServiceOutage || !profile?.id) return;
 
     const now = Date.now();
     const lastVisit = lastPageVisitRef.current;
@@ -112,7 +122,7 @@ function DashboardLayoutShell({
     }).catch(() => {
       // Avoid noisy console logs for non-critical tracking telemetry.
     });
-  }, [authLoading, clientServiceOutage, locked, profile?.id]);
+  }, [authLoading, clientServiceOutage, profile?.id]);
 
   const stopHeartbeat = useCallback(() => {
     if (!heartbeatIntervalRef.current) return;
@@ -153,11 +163,18 @@ function DashboardLayoutShell({
   }, []);
 
   const sendHeartbeat = useCallback(() => {
-    if (document.hidden || authLoading || locked || clientServiceOutage || !profile?.id) return;
+    if (document.hidden || authLoading || clientServiceOutage || !profile?.id) return;
     const currentPath = getCurrentTrackedPath();
     if (!currentPath) return;
     trackPageVisit(currentPath, PAGE_VISIT_RESUME_MIN_GAP_MS);
-  }, [authLoading, clientServiceOutage, getCurrentTrackedPath, locked, profile?.id, trackPageVisit]);
+    trackUsageEvent({
+      eventName: 'session_heartbeat',
+      path: currentPath,
+      metadata: {
+        source: 'dashboard_layout',
+      },
+    });
+  }, [authLoading, clientServiceOutage, getCurrentTrackedPath, profile?.id, trackPageVisit]);
 
   const startHeartbeat = useCallback(() => {
     stopHeartbeat();
@@ -177,13 +194,48 @@ function DashboardLayoutShell({
   const accent = getAccentFromRoute(pathname, searchParams);
 
   useEffect(() => {
+    if (authLoading || clientServiceOutage || !profile?.id || sessionStartedRef.current) return;
+    const currentPath = getCurrentTrackedPath();
+    if (!currentPath) return;
+
+    sessionStartedRef.current = true;
+    trackUsageEvent({
+      eventName: 'session_started',
+      path: currentPath,
+      referrerPath: typeof document !== 'undefined' ? document.referrer || null : null,
+      metadata: {
+        source: 'dashboard_layout',
+      },
+    });
+  }, [authLoading, clientServiceOutage, getCurrentTrackedPath, profile?.id]);
+
+  useEffect(() => {
     const nextPath = getCurrentTrackedPath();
     if (!nextPath) return;
     if (lastTrackedPathRef.current === nextPath) return;
+    const previousPath = lastTrackedPathRef.current;
     lastTrackedPathRef.current = nextPath;
 
     const timer = window.setTimeout(() => {
       trackPageVisit(nextPath);
+      if (previousPath) {
+        trackUsageEvent({
+          eventName: 'route_changed',
+          path: nextPath,
+          referrerPath: previousPath,
+          metadata: {
+            source: 'dashboard_layout',
+          },
+        });
+      }
+      trackUsageEvent({
+        eventName: 'page_view',
+        path: nextPath,
+        referrerPath: previousPath || (typeof document !== 'undefined' ? document.referrer || null : null),
+        metadata: {
+          source: 'dashboard_layout',
+        },
+      });
     }, PAGE_VISIT_DEBOUNCE_MS);
 
     return () => {
@@ -199,6 +251,13 @@ function DashboardLayoutShell({
         return;
       }
 
+      trackUsageEvent({
+        eventName: 'visibility_resume',
+        path: getCurrentTrackedPath(),
+        metadata: {
+          source: 'dashboard_layout',
+        },
+      });
       sendHeartbeat();
       startHeartbeat();
     };
@@ -223,11 +282,31 @@ function DashboardLayoutShell({
       stopHeartbeat();
       releaseHeartbeatOwnership();
     };
-  }, [releaseHeartbeatOwnership, sendHeartbeat, startHeartbeat, stopHeartbeat]);
+  }, [getCurrentTrackedPath, releaseHeartbeatOwnership, sendHeartbeat, startHeartbeat, stopHeartbeat]);
+
+  useEffect(() => {
+    const syncMobileTextSizePreference = () => {
+      applyMobileTextSizePreference(readMobileTextSizePreference());
+    };
+
+    syncMobileTextSizePreference();
+    window.addEventListener('storage', syncMobileTextSizePreference);
+    window.addEventListener(MOBILE_TEXT_SIZE_CHANGED_EVENT, syncMobileTextSizePreference);
+
+    return () => {
+      window.removeEventListener('storage', syncMobileTextSizePreference);
+      window.removeEventListener(MOBILE_TEXT_SIZE_CHANGED_EVENT, syncMobileTextSizePreference);
+      document.documentElement.removeAttribute('data-mobile-text-size');
+    };
+  }, []);
+
+  if (showLoadingOnly) {
+    return <PageLoader message={`Loading ${templateConfig.branding.shortAppName}`} />;
+  }
 
   return (
     <div 
-      className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative"
+      className="min-h-dvh bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative"
       data-accent={accent}
       data-tablet-mode={tabletModeEnabled ? 'on' : undefined}
     >
@@ -246,7 +325,7 @@ function DashboardLayoutShell({
       <MobileNavBar />
 
       <Dialog open={tabletModeInfoOpen} onOpenChange={(open) => !open && dismissTabletModeInfo()}>
-        <DialogContent className="max-w-lg border-border text-white p-7 sm:p-8 gap-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border text-white p-7 sm:p-8 gap-5">
           <DialogHeader className="space-y-3">
             <DialogTitle className="text-xl">Information</DialogTitle>
             <DialogDescription className="text-base leading-relaxed">

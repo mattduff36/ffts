@@ -122,7 +122,7 @@ export function DeletePlantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border text-white max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto border-border text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-blue-500">
             <Archive className="h-5 w-5" />

@@ -103,6 +103,18 @@ describe('Timesheets Complete Workflows', () => {
       expect(noWork.did_not_work).toBe(true);
       expect(noWork.daily_total).toBe(0);
     });
+
+    it('should support subsistence payment flag on worked days', () => {
+      const stayedAway = createMockTimesheetEntry({
+        subsistence_payment_required: true,
+        remarks: 'Stayed away - subsistence payment required',
+      });
+
+      expect(stayedAway.subsistence_payment_required).toBe(true);
+      expect(stayedAway.did_not_work).toBe(false);
+      expect(stayedAway.time_started).toBe('08:00');
+      expect(stayedAway.time_finished).toBe('17:00');
+    });
   });
 
   describe('Weekly Hours Calculation', () => {

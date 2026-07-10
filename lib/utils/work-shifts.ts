@@ -26,7 +26,7 @@ export const STANDARD_WORK_SHIFT_PATTERN: WorkShiftPattern = {
 export function cloneWorkShiftPattern(pattern?: Partial<WorkShiftPattern> | null): WorkShiftPattern {
   return {
     ...STANDARD_WORK_SHIFT_PATTERN,
-    ...(pattern || {}),
+    ...pattern,
   };
 }
 

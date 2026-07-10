@@ -35,7 +35,7 @@ export async function GET() {
   const isActualSuperAdmin =
     typedProfile.super_admin === true ||
     typedProfile.role?.is_super_admin === true ||
-    userEmail === 'template-admin@example.com';
+    userEmail === 'admin@mpdee.co.uk';
 
   if (!isActualSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -44,7 +44,7 @@ export async function GET() {
   const [{ data: roles, error: rolesError }, { data: teams, error: teamsError }] = await Promise.all([
     admin
       .from('roles')
-      .select('id, name, display_name, is_super_admin, is_manager_admin')
+      .select('id, name, display_name, role_class, is_super_admin, is_manager_admin')
       .order('is_super_admin', { ascending: false })
       .order('is_manager_admin', { ascending: false })
       .order('display_name', { ascending: true }),

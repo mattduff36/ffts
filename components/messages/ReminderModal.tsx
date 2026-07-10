@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Label } from '@/components/ui/label';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { extractSuggestionTitleFromNotificationBody, parseSuggestionIdFromCreatedVia } from '@/lib/utils/suggestion-notifications';
@@ -234,7 +235,7 @@ export function ReminderModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-hidden">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="p-2 bg-blue-100 dark:bg-blue-950 rounded">
@@ -278,10 +279,7 @@ export function ReminderModal({
               </div>
 
               {loadingSuggestionThread ? (
-                <div className="flex items-center justify-center py-6 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Loading suggestion thread...
-                </div>
+                <PanelLoader message="Loading suggestion thread..." accent="reminders" className="py-6" />
               ) : suggestionThreadError ? (
                 <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200">
                   {suggestionThreadError}

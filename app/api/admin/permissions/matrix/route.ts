@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { logServerError } from '@/lib/utils/server-error-logger';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { getTeamPermissionMatrix, isMissingTeamPermissionSchemaError } from '@/lib/server/team-permissions';
 
 export async function GET(request: Request) {
@@ -19,10 +19,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
+
     const effectiveRole = await getEffectiveRole();
     const actorIsAdmin = hasEffectiveRoleFullAccess(effectiveRole);
-    if (!canAccessUserAdmin || !actorIsAdmin) {
+    if (!actorIsAdmin) {
       return NextResponse.json({ error: 'Forbidden - admin access required' }, { status: 403 });
     }
 

@@ -25,7 +25,7 @@ describeOrSkip('Plant Maintenance API Tests', () => {
   let supabase: SupabaseClient;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl!, supabaseKey!);
     
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: process.env.TEST_USER_EMAIL || 'test@example.com',

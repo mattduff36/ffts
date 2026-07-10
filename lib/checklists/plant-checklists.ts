@@ -2,11 +2,11 @@
  * Plant Inspection Checklists Configuration
  * 
  * This file defines inspection checklist items for plant machinery/equipment.
- * Based on the physical Plant Inspection Pad form with 22 checklist items.
+ * Based on the physical Plant Inspection Pad form, extended with current checklist additions.
  */
 
 /**
- * Standard plant inspection checklist (22 items)
+ * Standard plant inspection checklist (23 items)
  * Based on the operated plant inspection pad form
  */
 export const PLANT_INSPECTION_ITEMS = [
@@ -32,6 +32,7 @@ export const PLANT_INSPECTION_ITEMS = [
   'Blade/Bucket',
   'Spill Kit',
   'Greased',
+  'Transmission',
 ];
 
 /**

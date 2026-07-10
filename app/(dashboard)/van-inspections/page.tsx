@@ -10,28 +10,23 @@ import { AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { PageLoader } from '@/components/ui/page-loader';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { getRecentVehicleIds, splitVehiclesByRecent } from '@/lib/utils/recentVehicles';
 import { isUuid } from '@/lib/utils/uuid';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Clipboard, Clock, User, Download, Trash2, Filter, FileText, Truck, Loader2, LayoutGrid, Table2, Settings2 } from 'lucide-react';
+import { Plus, Clipboard, Clock, User, Download, Trash2, Filter, FileText, Truck, Loader2, AlertTriangle } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
 import { toast } from 'sonner';
 import { VanInspection } from '@/types/inspection';
 import { Employee, InspectionStatusFilter } from '@/types/common';
 import { useQueryState } from 'nuqs';
 import { canEditDraftInspection, getInspectionVisibilityFlags } from '@/lib/utils/inspection-access';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ColumnVisibilityMenu, DataViewToggle } from '@/components/ui/data-view-controls';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +46,11 @@ import {
 } from './components/VanInspectionsListTable';
 import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
 import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import {
+  isVanInspectionsMaintenancePaused,
+  VAN_INSPECTIONS_MAINTENANCE_MESSAGE,
+  VAN_INSPECTIONS_MAINTENANCE_TITLE,
+} from '@/lib/config/van-inspections-maintenance';
 
 interface InspectionWithVehicle extends VanInspection {
   vans: {
@@ -152,6 +152,7 @@ function InspectionsContent() {
   const [columnVisibility, setColumnVisibility] = useState<VanInspectionsColumnVisibility>(
     DEFAULT_VAN_INSPECTIONS_COLUMN_VISIBILITY
   );
+  const inspectionsPaused = isVanInspectionsMaintenancePaused();
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   if (typeof window !== 'undefined' && !supabaseRef.current) {
     supabaseRef.current = createClient();
@@ -193,7 +194,9 @@ function InspectionsContent() {
         } catch (err) {
           if (isNetworkFetchError(err)) {
             console.warn('Unable to load employees (network):', err);
-          } else if (!isAuthErrorStatus(getErrorStatus(err))) {
+          } else {
+            const status = getErrorStatus(err);
+            if (isAuthErrorStatus(status) || status === 403) return;
             console.error('Error fetching employees:', err);
           }
         }
@@ -222,7 +225,10 @@ function InspectionsContent() {
           .order('reg_number');
         
         if (error) throw error;
-        setVehicles(data || []);
+        setVehicles((data || []).map((vehicle) => ({
+          ...vehicle,
+          reg_number: vehicle.reg_number || 'Unknown',
+        })));
       } catch (err) {
         if (isNetworkFetchError(err)) {
           console.warn('Unable to load vans (network):', err);
@@ -643,25 +649,49 @@ function InspectionsContent() {
       {/* Header */}
       <div className={`bg-slate-900 rounded-lg border border-border ${tabletModeEnabled ? 'p-5 md:p-6' : 'p-6'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-white mb-2">Van Daily Checks</h1>
             <p className="text-muted-foreground">
               Daily safety check sheets
             </p>
           </div>
-          <Link href="/van-inspections/new">
-            <Button className={`bg-inspection hover:bg-inspection-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
+          <Link
+            href={inspectionsPaused ? '#' : '/van-inspections/new'}
+            aria-disabled={inspectionsPaused}
+            className={`w-full md:w-auto ${inspectionsPaused ? 'pointer-events-none' : ''}`}
+          >
+            <Button
+              disabled={inspectionsPaused}
+              className={`w-full bg-inspection hover:bg-inspection-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg md:w-auto ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}
+            >
               <Plus className="h-4 w-4 mr-2" />
               New Daily Check
             </Button>
           </Link>
         </div>
+        {inspectionsPaused && (
+          <Alert className="mb-4 border-amber-500/40 bg-amber-500/10 text-amber-100">
+            <AlertTriangle className="h-4 w-4 text-amber-300" />
+            <AlertTitle>{VAN_INSPECTIONS_MAINTENANCE_TITLE}</AlertTitle>
+            <AlertDescription>{VAN_INSPECTIONS_MAINTENANCE_MESSAGE}</AlertDescription>
+          </Alert>
+        )}
+        {inspectionsPaused && (
+          <Card className="mb-4 border-amber-500/30 bg-slate-950/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-white">Van checks are in read-only mode</CardTitle>
+              <CardDescription>
+                You can review existing van checks below, but new drafts, edits, submissions, deletes, defect sync, and workshop notifications are paused until the update is complete.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
         
         {/* Manager: Employee Filter */}
         {canViewCrossUserInspections && employees.length > 0 && (
           <div className="pt-4 border-t border-border">
-            <div className={`flex items-center gap-3 ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
-              <Label htmlFor="employee-filter" className="text-white text-sm flex items-center gap-2 whitespace-nowrap">
+            <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
+              <Label htmlFor="employee-filter" className="text-white text-sm flex items-center gap-2">
                 <User className="h-4 w-4" />
                 View daily checks for:
               </Label>
@@ -691,9 +721,9 @@ function InspectionsContent() {
           <CardContent className="pt-6">
             <div className={`grid grid-cols-1 gap-6 ${tabletModeEnabled ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
               {/* Status Filter */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Filter className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-slate-400 mr-2">Filter by status:</span>
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by status:</span>
                 <div className="flex gap-2 flex-wrap">
                   {(['all', 'draft', 'submitted'] as InspectionStatusFilter[]).map((filter) => (
                     <Button
@@ -712,9 +742,9 @@ function InspectionsContent() {
               </div>
 
               {/* Van Filter */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Truck className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-slate-400 mr-2 whitespace-nowrap">Filter by van:</span>
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by van:</span>
                 <Select value={normalizedVehicleFilter} onValueChange={setVehicleFilter}>
                 <SelectTrigger className={`${tabletModeEnabled ? 'min-h-11 text-base' : 'h-9'} border-border text-white bg-slate-900/50`}>
                     <SelectValue placeholder="All vans" />
@@ -767,12 +797,7 @@ function InspectionsContent() {
       )}
 
       {showInitialLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-inspection mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">Loading daily checks...</p>
-          </div>
-        </div>
+        <PanelLoader message="Loading daily checks..." accent="inspection" className="py-20" />
       ) : inspections.length === 0 ? (
         <Card className="border-border">
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -781,8 +806,15 @@ function InspectionsContent() {
             <p className="text-slate-400 mb-4">
               Create your first van daily check
             </p>
-            <Link href="/van-inspections/new">
-              <Button className="bg-inspection hover:bg-inspection-dark text-white transition-all duration-200 active:scale-95">
+            <Link
+              href={inspectionsPaused ? '#' : '/van-inspections/new'}
+              aria-disabled={inspectionsPaused}
+              className={inspectionsPaused ? 'pointer-events-none' : undefined}
+            >
+              <Button
+                disabled={inspectionsPaused}
+                className="bg-inspection hover:bg-inspection-dark text-white transition-all duration-200 active:scale-95"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Daily Check
               </Button>
@@ -800,70 +832,24 @@ function InspectionsContent() {
 
           {canViewCrossUserInspections && (
             <div className="hidden md:flex items-center justify-end gap-2">
-              {viewMode === 'table' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="border-slate-600">
-                      <Settings2 className="h-4 w-4 mr-2" />
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-slate-900 border border-border">
-                    <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.employeeId}
-                      onCheckedChange={() => toggleColumn('employeeId')}
-                    >
-                      Employee ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.vehicleCategory}
-                      onCheckedChange={() => toggleColumn('vehicleCategory')}
-                    >
-                      Vehicle Category
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.status}
-                      onCheckedChange={() => toggleColumn('status')}
-                    >
-                      Status
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.submittedAt}
-                      onCheckedChange={() => toggleColumn('submittedAt')}
-                    >
-                      Submitted
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('table');
-                    localStorage.setItem('van-inspections-view-mode', 'table');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'table' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <Table2 className="h-4 w-4 mr-1.5" />
-                  Table
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('cards');
-                    localStorage.setItem('van-inspections-view-mode', 'cards');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'cards' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <LayoutGrid className="h-4 w-4 mr-1.5" />
-                  Cards
-                </Button>
-              </div>
+              {viewMode === 'table' ? (
+                <ColumnVisibilityMenu
+                  options={[
+                    { id: 'employeeId', label: 'Employee ID', checked: columnVisibility.employeeId },
+                    { id: 'vehicleCategory', label: 'Vehicle Category', checked: columnVisibility.vehicleCategory },
+                    { id: 'status', label: 'Status', checked: columnVisibility.status },
+                    { id: 'submittedAt', label: 'Submitted', checked: columnVisibility.submittedAt },
+                  ]}
+                  onToggle={toggleColumn}
+                />
+              ) : null}
+              <DataViewToggle
+                value={viewMode}
+                onValueChange={(nextViewMode) => {
+                  setViewMode(nextViewMode);
+                  localStorage.setItem('van-inspections-view-mode', nextViewMode);
+                }}
+              />
             </div>
           )}
 
@@ -908,10 +894,7 @@ function InspectionsContent() {
                           </span>
                         )}
                         {inspection.vans?.van_categories?.name && `${inspection.vans.van_categories.name} • `}
-                        {inspection.inspection_end_date && inspection.inspection_end_date !== inspection.inspection_date
-                          ? `${formatDate(inspection.inspection_date)} - ${formatDate(inspection.inspection_end_date)}`
-                          : formatDate(inspection.inspection_date)
-                        }
+                        {formatDate(inspection.inspection_date)}
                       </CardDescription>
                     </div>
                   </div>

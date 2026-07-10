@@ -18,6 +18,8 @@ const pages = [
   { name: 'Dashboard', path: '/dashboard' },
   { name: 'Workshop Tasks', path: '/workshop-tasks' },
   { name: 'Fleet', path: '/fleet' },
+  { name: 'Inventory', path: '/inventory' },
+  { name: 'Van Daily Check Form', path: '/van-inspections/new' },
 ];
 
 async function gotoWithInfraSkip(
@@ -56,6 +58,21 @@ for (const viewport of viewports) {
 
         const errors = capture.getErrors();
         expect(errors, `No console errors on ${name} at ${viewport.name}`).toHaveLength(0);
+      });
+    }
+
+    if (viewport.name === 'Mobile') {
+      test('mobile navigation can expose dashboard controls', async ({ page }) => {
+        await gotoWithInfraSkip(page, '/dashboard', 'Dashboard', viewport.name);
+
+        const menuButton = page.getByRole('button', { name: /menu|open navigation|navigation/i }).first();
+        const hasNamedMenuButton = await menuButton.isVisible({ timeout: 5_000 }).catch(() => false);
+        const mobileIconButton = page.locator('button.md\\:hidden').first();
+        const hasMobileIconButton = await mobileIconButton.isVisible({ timeout: 1_000 }).catch(() => false);
+        expect(
+          hasNamedMenuButton || hasMobileIconButton,
+          'Mobile dashboard should expose a navigation/menu control'
+        ).toBeTruthy();
       });
     }
   });

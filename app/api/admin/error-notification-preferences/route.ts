@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { getEffectiveRole } from '@/lib/utils/view-as';
+import { isEffectiveSupervisorOrHigherRole } from '@/lib/utils/role-access';
 
 export interface ErrorNotificationPreferences {
   user_id: string;
@@ -108,6 +110,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Invalid request: notify_in_app and notify_email must be boolean' 
       }, { status: 400 });
+    }
+
+    if (notify_in_app === false || notify_email === false) {
+      const effectiveRole = await getEffectiveRole();
+      if (!isEffectiveSupervisorOrHigherRole(effectiveRole)) {
+        return NextResponse.json({ error: 'Only supervisors and above can disable notifications' }, { status: 403 });
+      }
     }
 
     // Upsert preferences

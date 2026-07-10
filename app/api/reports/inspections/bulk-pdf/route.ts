@@ -3,18 +3,16 @@ import { createClient } from '@/lib/supabase/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
-import { InspectionPDF } from '@/lib/pdf/inspection-pdf';
 import { VanInspectionPDF } from '@/lib/pdf/van-inspection-pdf';
 import { PlantInspectionPDF } from '@/lib/pdf/plant-inspection-pdf';
 import { HgvInspectionPDF } from '@/lib/pdf/hgv-inspection-pdf';
-import { isVanCategory } from '@/lib/checklists/vehicle-checklists';
-import { getVehicleCategoryName } from '@/lib/utils/deprecation-logger';
 import type { VanInspection } from '@/types/inspection';
 import type { InspectionItem } from '@/types/inspection';
 import type { ModuleName } from '@/types/roles';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { getReportScopeContext, getScopedProfileIdsForModule } from '@/lib/server/report-scope';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { getReportDateRangeSpanDays } from '@/lib/server/report-date-range';
 
 const MAX_INSPECTIONS_PER_PDF = 80;
 
@@ -122,25 +120,12 @@ async function getScopedModuleProfileIds(
 }
 
 function resolveVanTemplate(inspection: VanInspectionWithRelations, items: InspectionItem[]) {
-  const vehicleType = getVehicleCategoryName({
-    van_categories: inspection.vehicle?.van_categories ?? null,
-    vehicle_type: inspection.vehicle?.vehicle_type ?? null,
+  return VanInspectionPDF({
+    inspection: inspection as unknown as VanInspection,
+    items,
+    vehicleReg: inspection.vehicle?.reg_number || undefined,
+    employeeName: inspection.profile?.full_name || undefined,
   });
-  const useVanTemplate = isVanCategory(vehicleType);
-
-  return useVanTemplate
-    ? VanInspectionPDF({
-        inspection: inspection as unknown as VanInspection,
-        items,
-        vehicleReg: inspection.vehicle?.reg_number || undefined,
-        employeeName: inspection.profile?.full_name || undefined,
-      })
-    : InspectionPDF({
-        inspection: inspection as unknown as VanInspection,
-        items,
-        vehicleReg: inspection.vehicle?.reg_number || undefined,
-        employeeName: inspection.profile?.full_name || undefined,
-      });
 }
 
 function resolvePlantTemplate(
@@ -231,38 +216,52 @@ function resolveInspectionPdfTemplate(
   return resolveVanTemplate(inspection, items);
 }
 
-async function fetchInspectionItems(
+async function fetchInspectionItemsByInspectionId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  inspectionId: string
-): Promise<InspectionItem[]> {
+  inspectionIds: string[]
+): Promise<Map<string, InspectionItem[]>> {
+  if (inspectionIds.length === 0) return new Map();
+
   const { data, error } = await supabase
     .from('inspection_items')
     .select('*')
-    .eq('inspection_id', inspectionId)
+    .in('inspection_id', inspectionIds)
     .order('item_number', { ascending: true });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
-  return (data || []) as InspectionItem[];
+  const itemsByInspectionId = new Map<string, InspectionItem[]>();
+  ((data || []) as InspectionItem[]).forEach((item) => {
+    const existing = itemsByInspectionId.get(item.inspection_id) || [];
+    existing.push(item);
+    itemsByInspectionId.set(item.inspection_id, existing);
+  });
+
+  return itemsByInspectionId;
 }
 
-async function fetchPlantDailyHours(
+async function fetchPlantDailyHoursByInspectionId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  inspectionId: string
-): Promise<Array<{ day_of_week: number; hours: number | null }>> {
+  inspectionIds: string[]
+): Promise<Map<string, Array<{ day_of_week: number; hours: number | null }>>> {
+  if (inspectionIds.length === 0) return new Map();
+
   const { data, error } = await supabase
     .from('inspection_daily_hours')
-    .select('day_of_week, hours')
-    .eq('inspection_id', inspectionId)
+    .select('inspection_id, day_of_week, hours')
+    .in('inspection_id', inspectionIds)
     .order('day_of_week', { ascending: true });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
-  return (data || []) as Array<{ day_of_week: number; hours: number | null }>;
+  const hoursByInspectionId = new Map<string, Array<{ day_of_week: number; hours: number | null }>>();
+  ((data || []) as Array<{ inspection_id: string; day_of_week: number; hours: number | null }>).forEach((row) => {
+    const existing = hoursByInspectionId.get(row.inspection_id) || [];
+    existing.push({ day_of_week: row.day_of_week, hours: row.hours });
+    hoursByInspectionId.set(row.inspection_id, existing);
+  });
+
+  return hoursByInspectionId;
 }
 
 async function fetchScopedInspections(
@@ -433,6 +432,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'dateFrom cannot be after dateTo' }, { status: 400 });
   }
 
+  const spanDays = getReportDateRangeSpanDays({ dateFrom, dateTo });
+  if (spanDays === null || spanDays > 366) {
+    return NextResponse.json({ error: 'Date range must be 366 days or fewer' }, { status: 400 });
+  }
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -501,25 +505,32 @@ export async function POST(request: NextRequest) {
           numParts,
         });
 
-        const pdfBuffers: Array<{ name: string; buffer: Buffer }> = [];
+        let singlePdfFile: { name: string; buffer: Buffer } | null = null;
+        const zip = chunks.length > 1 ? new JSZip() : null;
         let processedCount = 0;
 
         for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
           const chunk = chunks[chunkIndex];
           const mergedPdf = await PDFDocument.create();
+          const chunkInspectionIds = chunk.map((inspection) => inspection.id);
+          const plantInspectionIds = chunk
+            .filter((inspection): inspection is PlantInspectionWithRelations => inspection.source === 'plant')
+            .map((inspection) => inspection.id);
+          let itemsByInspectionId = new Map<string, InspectionItem[]>();
+          let plantHoursByInspectionId = new Map<string, Array<{ day_of_week: number; hours: number | null }>>();
+
+          try {
+            [itemsByInspectionId, plantHoursByInspectionId] = await Promise.all([
+              fetchInspectionItemsByInspectionId(supabase, chunkInspectionIds),
+              fetchPlantDailyHoursByInspectionId(supabase, plantInspectionIds),
+            ]);
+          } catch (error) {
+            console.error(`Failed to fetch daily check data for PDF part ${chunkIndex + 1}:`, error);
+          }
 
           for (const inspection of chunk) {
-            let items: InspectionItem[] = [];
-            let dailyHours: Array<{ day_of_week: number; hours: number | null }> = [];
-
-            try {
-              items = await fetchInspectionItems(supabase, inspection.id);
-              if (inspection.source === 'plant') {
-                dailyHours = await fetchPlantDailyHours(supabase, inspection.id);
-              }
-            } catch (error) {
-              console.error(`Failed to fetch data for daily check ${inspection.id}:`, error);
-            }
+            const items = itemsByInspectionId.get(inspection.id) || [];
+            const dailyHours = plantHoursByInspectionId.get(inspection.id) || [];
 
             processedCount += 1;
             if (items.length === 0) {
@@ -550,24 +561,27 @@ export async function POST(request: NextRequest) {
 
           const mergedPdfBytes = await mergedPdf.save();
           const suffix = chunks.length > 1 ? `_Part${chunkIndex + 1}` : '';
-          pdfBuffers.push({
+          const file = {
             name: `All_Daily_Checks_${dateFrom}_to_${dateTo}${suffix}.pdf`,
             buffer: Buffer.from(mergedPdfBytes),
-          });
+          };
+          if (zip) {
+            zip.file(file.name, file.buffer);
+          } else {
+            singlePdfFile = file;
+          }
         }
 
         let completePayload: BulkPdfCompletePayload;
-        if (pdfBuffers.length === 1) {
+        if (singlePdfFile) {
           completePayload = {
             type: 'complete',
-            data: pdfBuffers[0].buffer.toString('base64'),
-            fileName: pdfBuffers[0].name,
+            data: singlePdfFile.buffer.toString('base64'),
+            fileName: singlePdfFile.name,
             contentType: 'application/pdf',
           };
         } else {
-          const zip = new JSZip();
-          pdfBuffers.forEach((file) => zip.file(file.name, file.buffer));
-          const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+          const zipBuffer = await zip!.generateAsync({ type: 'nodebuffer' });
           completePayload = {
             type: 'complete',
             data: zipBuffer.toString('base64'),

@@ -29,6 +29,7 @@ export const createMockTimesheetEntry = (overrides?: Partial<TimesheetEntry>): T
   time_finished: '17:00',
   job_number: 'JOB123',
   working_in_yard: false,
+  subsistence_payment_required: false,
   did_not_work: false,
   daily_total: 8.0,
   remarks: null,
@@ -79,9 +80,9 @@ export const createMockAdmin = () =>
 
 export const createPriorityManager = () =>
   createMockProfile({
-    id: 'suzanne-id',
+    id: 'priority-manager-id',
     full_name: 'Priority Manager',
-    email: 'priority.manager@example.com',
+    email: 'admin@mpdee.co.uk',
     roles: {
       id: 'manager-role-id',
       name: 'manager',
@@ -104,9 +105,9 @@ export const createManagerApiResponse = (overrides?: Record<string, unknown>) =>
 });
 
 export const createPriorityManagerApiResponse = () => ({
-  id: 'suzanne-id',
+  id: 'priority-manager-id',
   full_name: 'Priority Manager',
-  email: 'priority.manager@example.com',
+  email: 'admin@mpdee.co.uk',
   role: {
     name: 'manager',
     display_name: 'Manager',

@@ -22,6 +22,11 @@ export default defineWorkspace([
     test: {
       name: 'ui',
       environment: 'happy-dom',
+      environmentOptions: {
+        happyDOM: {
+          url: process.env.TESTSUITE_BASE_URL || 'http://127.0.0.1:4000',
+        },
+      },
       include: ['tests/ui/**/*.test.tsx'],
       globals: true,
       setupFiles: ['./tests/ui/setup.ts'],

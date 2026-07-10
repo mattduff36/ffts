@@ -4,9 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { logServerError } from '@/lib/utils/server-error-logger';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { ALL_MODULES, type ModuleName, type ShiftPermissionModuleRequest } from '@/types/roles';
-import { isMissingTeamPermissionSchemaError, shiftPermissionModuleTier } from '@/lib/server/team-permissions';
+import {
+  isMissingTeamPermissionSchemaError,
+  shiftPermissionModuleTier,
+  updatePermissionModuleSensitivePinRequirement,
+} from '@/lib/server/team-permissions';
 
 export async function PATCH(
   request: NextRequest,
@@ -23,10 +27,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
+
     const effectiveRole = await getEffectiveRole();
     const actorIsAdmin = hasEffectiveRoleFullAccess(effectiveRole);
-    if (!canAccessUserAdmin || !actorIsAdmin) {
+    if (!actorIsAdmin) {
       return NextResponse.json({ error: 'Forbidden - admin access required' }, { status: 403 });
     }
 
@@ -36,8 +42,24 @@ export async function PATCH(
     }
 
     const body = (await request.json()) as ShiftPermissionModuleRequest;
+    if (typeof body.requires_sensitive_pin === 'boolean') {
+      const updatedModule = await updatePermissionModuleSensitivePinRequirement(
+        createAdminClient(),
+        moduleName as ModuleName,
+        body.requires_sensitive_pin
+      );
+
+      return NextResponse.json({
+        success: true,
+        module: updatedModule,
+      });
+    }
+
     if (body.direction !== 'left' && body.direction !== 'right') {
-      return NextResponse.json({ error: 'Direction must be left or right' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Direction must be left or right, or requires_sensitive_pin must be boolean' },
+        { status: 400 }
+      );
     }
 
     const updatedModule = await shiftPermissionModuleTier(

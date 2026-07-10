@@ -112,7 +112,7 @@ export function AdjustTaskTimestampDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
-      <DialogContent className={`max-w-md ${tabletModeEnabled ? 'p-5 sm:p-6' : ''}`}>
+      <DialogContent className={`max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto ${tabletModeEnabled ? 'p-5 sm:p-6' : ''}`}>
         <DialogHeader>
           <DialogTitle>Adjust Timestamp</DialogTitle>
           <DialogDescription>

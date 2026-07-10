@@ -15,7 +15,6 @@ describe('loadClientAuthSession', () => {
       return new Response(
         JSON.stringify({
           authenticated: true,
-          locked: false,
           user: { id: 'user-123', email: 'test@example.com' },
         }),
         {
@@ -40,65 +39,12 @@ describe('loadClientAuthSession', () => {
     expect(first.status).toBe('authenticated');
   });
 
-  it('returns a locked result when the session payload is locked', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ACCOUNT_SWITCHER_ENABLED', 'true');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(
-        JSON.stringify({
-          authenticated: true,
-          locked: true,
-          user: { id: 'user-123', email: 'locked@example.com' },
-        }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      ))
-    );
-
-    const { loadClientAuthSession } = await import('@/lib/app-auth/client-session');
-    const result = await loadClientAuthSession();
-
-    expect(result.status).toBe('locked');
-    expect(result.payload?.locked).toBe(true);
-  });
-
-  it('treats a locked payload as authenticated when account switch is disabled', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(
-        JSON.stringify({
-          authenticated: true,
-          locked: true,
-          user: { id: 'user-123', email: 'locked@example.com' },
-        }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      ))
-    );
-
-    const { loadClientAuthSession } = await import('@/lib/app-auth/client-session');
-    const result = await loadClientAuthSession();
-
-    expect(result.status).toBe('authenticated');
-    expect(result.payload?.locked).toBe(true);
-  });
-
   it('returns an unauthenticated result for a 401 response', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(
         JSON.stringify({
           authenticated: false,
-          locked: false,
           user: null,
         }),
         {
@@ -132,7 +78,6 @@ describe('loadClientAuthSession', () => {
       .mockImplementationOnce(async () => new Response(
         JSON.stringify({
           authenticated: true,
-          locked: false,
           user: { id: 'user-123', email: 'restored@example.com' },
         }),
         {

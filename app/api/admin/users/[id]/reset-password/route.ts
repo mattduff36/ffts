@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { generateSecurePassword } from '@/lib/utils/password';
 import { sendPasswordEmail } from '@/lib/utils/email';
-import { canEffectiveRoleAccessModule, canEffectiveRoleAssignRole } from '@/lib/utils/rbac';
+import { canEffectiveRoleAssignRole } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 // Helper to create admin client with service role key
@@ -25,13 +26,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-    if (!canAccessUserAdmin) {
-      return NextResponse.json(
-        { error: 'Forbidden: admin-users access required' },
-        { status: 403 }
-      );
-    }
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const userId = (await params).id;
 

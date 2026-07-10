@@ -25,6 +25,10 @@ import { InformWorkshopSummary } from '@/components/inspections/InformWorkshopSu
 import { useInspectionPhotos } from '@/lib/hooks/useInspectionPhotos';
 import { getInspectionPhotoKey } from '@/lib/inspection-photos';
 import { formatReferenceId, getReferenceIdSuffix, getWorkshopTaskHref } from '@/lib/utils/reference-ids';
+import {
+  getInspectionEnteredComment,
+  type InspectionCommentTask,
+} from '@/lib/utils/inspection-item-comments';
 
 interface InspectionItemWithDay extends InspectionItem {
   day_of_week: number | null;
@@ -171,9 +175,19 @@ export default function ViewHgvInspectionPage() {
 
       setInspection(inspectionData as HgvInspectionDetails);
       const typedItems = (itemsData || []) as InspectionItemWithDay[];
-      setItems(typedItems);
+      const linkedDefectTasks = linkedTasksData.filter(
+        (task): task is LinkedInspectionTaskSummary & InspectionCommentTask =>
+          task.action_type === 'inspection_defect'
+      );
+
+      const displayItems = typedItems.map((item) => ({
+        ...item,
+        comments: getInspectionEnteredComment(item, linkedDefectTasks),
+      }));
+
+      setItems(displayItems);
       setLinkedTasks(linkedTasksData);
-      const attentionItems = typedItems
+      const attentionItems = displayItems
         .filter((item) => item.status === 'attention')
         .map((item) => ({
           id: item.id,
@@ -348,7 +362,7 @@ export default function ViewHgvInspectionPage() {
       <Card className="">
         <CardHeader>
           <CardTitle>Checklist Items</CardTitle>
-          <CardDescription>25-point HGV checklist results</CardDescription>
+          <CardDescription>HGV checklist results</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="hidden md:block overflow-x-auto">

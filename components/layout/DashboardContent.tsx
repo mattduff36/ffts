@@ -15,19 +15,6 @@ interface DashboardContentProps {
 export function DashboardContent({ children }: DashboardContentProps) {
   const { isManager, isActualSuperAdmin } = useAuth();
   const { tabletModeEnabled } = useTabletMode();
-  const [isPWA] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    // Check if running as PWA (standalone mode)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    const isIOSStandalone =
-      'standalone' in window.navigator &&
-      (window.navigator as { standalone?: boolean }).standalone === true;
-
-    return isStandalone || isIOSStandalone;
-  });
   const [appWidescreenEnabled, setAppWidescreenEnabled] = useState(false);
 
   useEffect(() => {
@@ -58,11 +45,11 @@ export function DashboardContent({ children }: DashboardContentProps) {
   return (
     <div className={`transition-all duration-300 ${shouldApplySidebarOffset ? 'md:pl-16' : ''}`}>
       <main
-        className={`relative z-10 py-8 md:pb-8 ${
+        className={`app-content relative pt-[calc(68px+2rem)] pb-8 md:py-8 ${
           appWidescreenEnabled
             ? 'max-w-none mx-0'
             : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'
-        } ${isPWA ? 'pb-24' : 'pb-8'}`}
+        }`}
         style={
           appWidescreenEnabled
             ? {

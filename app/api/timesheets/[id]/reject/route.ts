@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { sendTimesheetRejectionEmail } from '@/lib/utils/email';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import type { Database } from '@/types/database';
 
 export async function POST(
   request: NextRequest,
@@ -128,15 +129,18 @@ export async function POST(
     const { data: message, error: messageInsertError } = await db
       .from('messages')
       .insert({
-        title: 'Timesheet Rejected',
-        content: `Your timesheet for week ending ${new Date(typedTimesheet.week_ending).toLocaleDateString('en-GB', {
+        type: 'NOTIFICATION',
+        subject: 'Timesheet Rejected',
+        body: `Your timesheet for week ending ${new Date(typedTimesheet.week_ending).toLocaleDateString('en-GB', {
           day: 'numeric',
           month: 'short',
           year: 'numeric',
         })} has been rejected.\n\nManager's Comments: ${comments.trim()}`,
-        message_type: 'timesheet_rejection',
-        created_by: user.id,
-      } as never)
+        priority: 'HIGH',
+        sender_id: user.id,
+        created_via: 'timesheet_rejection',
+        module_key: 'timesheets',
+      } satisfies Database['public']['Tables']['messages']['Insert'])
       .select('id')
       .single();
     let messageError = messageInsertError;
@@ -146,9 +150,9 @@ export async function POST(
         .from('message_recipients')
         .insert({
           message_id: typedMessage.id,
-          recipient_id: typedTimesheet.user_id,
-          read: false,
-        } as never);
+          user_id: typedTimesheet.user_id,
+          status: 'PENDING' as const,
+        });
       messageError = recipientError;
     }
 

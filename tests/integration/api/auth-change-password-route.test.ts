@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { updateUserById, profileEq, profileUpdate, from, verifyUserPassword } = vi.hoisted(() => {
+const { updateUserById, profileEq, from, verifyUserPassword } = vi.hoisted(() => {
   const updateUserById = vi.fn();
   const profileEq = vi.fn();
   const profileUpdate = vi.fn(() => ({ eq: profileEq }));
   const from = vi.fn(() => ({ update: profileUpdate }));
   const verifyUserPassword = vi.fn();
-  return { updateUserById, profileEq, profileUpdate, from, verifyUserPassword };
+  return { updateUserById, profileEq, from, verifyUserPassword };
 });
 
 vi.mock('@/lib/server/app-auth/session', () => ({
   getCurrentAuthenticatedProfile: vi.fn(),
 }));
 
-vi.mock('@/lib/server/account-switch-auth', () => ({
+vi.mock('@/lib/server/password-auth', () => ({
   verifyUserPassword,
 }));
 

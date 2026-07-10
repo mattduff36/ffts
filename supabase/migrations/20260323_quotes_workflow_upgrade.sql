@@ -258,36 +258,4 @@ DROP POLICY IF EXISTS quote_invoice_allocations_insert ON quote_invoice_allocati
 CREATE POLICY quote_invoice_allocations_insert ON quote_invoice_allocations
   FOR INSERT WITH CHECK (effective_is_manager_admin());
 
-INSERT INTO quote_manager_series (
-  profile_id,
-  initials,
-  next_number,
-  number_start,
-  signoff_name,
-  manager_email,
-  is_active
-)
-SELECT
-  p.id,
-  seed.initials,
-  seed.number_start,
-  seed.number_start,
-  p.full_name,
-  seed.email,
-  TRUE
-FROM (
-  VALUES
-    ('GH', 40000, 'George', 'george@example.com'),
-    ('LC', 50000, 'Louis', 'louis@example.com'),
-    ('NF', 60000, 'Neil', 'neil@example.com'),
-    ('AH', 70000, 'Andy', 'andy@example.com')
-) AS seed(initials, number_start, first_name, email)
-JOIN profiles p ON LOWER(COALESCE(p.full_name, '')) LIKE LOWER(seed.first_name || '%')
-ON CONFLICT (profile_id) DO UPDATE
-SET
-  initials = EXCLUDED.initials,
-  number_start = EXCLUDED.number_start,
-  manager_email = COALESCE(quote_manager_series.manager_email, EXCLUDED.manager_email),
-  signoff_name = COALESCE(quote_manager_series.signoff_name, EXCLUDED.signoff_name);
-
 COMMIT;

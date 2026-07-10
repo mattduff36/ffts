@@ -1,8 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
-import type { ModuleName } from '@/types/roles';
-import { getPermissionSetForUser } from '@/lib/server/team-permissions';
+import type { ModuleName, PermissionAccessLevel } from '@/types/roles';
+import { getPermissionLevelsForUser } from '@/lib/server/team-permissions';
 
 interface RoleRecord {
   id: string;
@@ -12,23 +12,37 @@ interface RoleRecord {
 }
 
 export async function canEffectiveRoleAccessModule(moduleName: ModuleName): Promise<boolean> {
+  const accessLevel = await getEffectiveModuleAccessLevel(moduleName);
+  return accessLevel > 0;
+}
+
+export async function getEffectiveModuleAccessLevel(moduleName: ModuleName): Promise<PermissionAccessLevel> {
   const effectiveRole = await getEffectiveRole();
   if (!effectiveRole.user_id || !effectiveRole.role_id) {
-    return false;
+    return 0;
   }
 
   if (hasEffectiveRoleFullAccess(effectiveRole)) {
-    return true;
+    return 5;
   }
 
-  const permissionSet = await getPermissionSetForUser(
+  const permissionLevels = await getPermissionLevelsForUser(
     effectiveRole.user_id,
     effectiveRole.role_id,
     createAdminClient(),
-    effectiveRole.team_id
+    effectiveRole.team_id,
+    { includeUserOverrides: effectiveRole.is_viewing_as !== true }
   );
 
-  return permissionSet.has(moduleName);
+  return permissionLevels[moduleName] || 0;
+}
+
+export async function canEffectiveRoleUseModuleLevel(
+  moduleName: ModuleName,
+  minimumLevel: PermissionAccessLevel
+): Promise<boolean> {
+  const accessLevel = await getEffectiveModuleAccessLevel(moduleName);
+  return accessLevel >= minimumLevel;
 }
 
 export async function canEffectiveRoleAssignRole(targetRoleId: string): Promise<boolean> {

@@ -1,5 +1,6 @@
 import { calculateHours } from '@/lib/utils/time-calculations';
 import { getEntryJobNumbers } from '@/lib/utils/timesheet-job-codes';
+import { syncSubsistenceRemark } from '@/lib/utils/timesheet-subsistence';
 import { getWorkingSessionsForDate } from '@/lib/utils/work-shifts';
 import type { WorkShiftPattern } from '@/types/work-shifts';
 
@@ -70,6 +71,7 @@ export interface TimesheetEntryLike {
   job_number: string;
   job_numbers?: string[];
   working_in_yard: boolean;
+  subsistence_payment_required?: boolean;
   did_not_work: boolean;
   didNotWorkReason: TimesheetDidNotWorkReason | null;
   daily_total: number | null;
@@ -367,6 +369,7 @@ export function normalizeTimesheetEntriesForOffDays(
         job_number: '',
         job_numbers: [],
         working_in_yard: false,
+        subsistence_payment_required: false,
         did_not_work: true,
         didNotWorkReason: parseDidNotWorkReason(primaryReason),
         daily_total: offDay.paidLeaveHours,
@@ -376,12 +379,16 @@ export function normalizeTimesheetEntriesForOffDays(
 
     if (offDay.isPartialLeave) {
       const workedHours = computeWorkedHours(entry, offDay);
+      const requiresSubsistence = Boolean(
+        entry.subsistence_payment_required && entry.time_started && entry.time_finished
+      );
       return {
         ...entry,
         did_not_work: false,
         didNotWorkReason: null,
+        subsistence_payment_required: requiresSubsistence,
         daily_total: roundHours(workedHours + offDay.paidLeaveHours),
-        remarks: offDay.displayRemarks || entry.remarks,
+        remarks: offDay.displayRemarks || syncSubsistenceRemark(entry.remarks, requiresSubsistence),
       };
     }
 
@@ -396,6 +403,7 @@ export function normalizeTimesheetEntriesForOffDays(
         ...entry,
         did_not_work: true,
         didNotWorkReason: 'Off Shift',
+        subsistence_payment_required: false,
         daily_total: 0,
         remarks: 'Not on Shift',
       };

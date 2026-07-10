@@ -3,10 +3,11 @@
 /* Tailwind v4: enable class-based dark variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Template Brand Colors */
+/* Forest Farm brand colors */
 @layer base {
   :root {
     color-scheme: dark;
+    --top-nav-h: 68px;
     
     /* Semantic theme tokens - Dark theme by default */
     --background: 222 47% 11%; /* slate-900 */
@@ -16,7 +17,7 @@
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
     
-    /* Primary - Brand Yellow */
+    /* Primary - Forest Farm brand yellow */
     --primary: 48 87% 69%;
     --primary-foreground: 222 47% 11%;
     
@@ -68,6 +69,10 @@
     --maintenance-light: 0 100% 96%;
     --maintenance-dark: 0 84% 45%;
 
+    --debug-primary: 0 84% 60%;
+    --debug-light: 0 100% 96%;
+    --debug-dark: 0 84% 45%;
+
     --fleet-primary: 190 70% 42%;
     --fleet-light: 190 70% 96%;
     --fleet-dark: 190 70% 30%;
@@ -79,6 +84,10 @@
     --inventory-primary: 226 8.47% 39.3%;
     --inventory-light: 226 9% 94%;
     --inventory-dark: 226 8.5% 31%;
+
+    --reminders-primary: 187 85% 42%;
+    --reminders-light: 187 80% 95%;
+    --reminders-dark: 187 85% 30%;
     
     --report-primary: 150 70% 45%;
     --report-light: 150 100% 96%;
@@ -94,7 +103,7 @@
     --ring: 48 87% 69%;
     --radius: 0.625rem;
     
-    /* Brand Yellow variants */
+    /* brand yellow variants */
     --brand-yellow: 48 87% 69%;
     --brand-yellow-hover: 48 73% 56%;
     --brand-yellow-light: 48 100% 94%;
@@ -169,6 +178,12 @@
     --ring: var(--maintenance-primary);
   }
 
+  [data-accent="debug"] {
+    --primary: var(--debug-primary);
+    --primary-foreground: 210 40% 98%;
+    --ring: var(--debug-primary);
+  }
+
   [data-accent="fleet"] {
     --primary: var(--fleet-primary);
     --primary-foreground: 210 40% 98%;
@@ -187,6 +202,12 @@
     --ring: var(--inventory-primary);
   }
 
+  [data-accent="reminders"] {
+    --primary: var(--reminders-primary);
+    --primary-foreground: 210 40% 98%;
+    --ring: var(--reminders-primary);
+  }
+
   [data-accent="reports"] {
     --primary: var(--report-primary);
     --primary-foreground: 210 40% 98%;
@@ -195,9 +216,9 @@
 
   /* Brand (yellow) remains the default for non-module pages */
   [data-accent="brand"] {
-    --primary: var(--brand-yellow);
+    --primary: 48 87% 69%;
     --primary-foreground: 222 47% 11%; /* dark text for yellow */
-    --ring: var(--brand-yellow);
+    --ring: 48 87% 69%;
   }
 }
 
@@ -205,9 +226,14 @@
   * {
     border-color: hsl(var(--border));
   }
+
+  html {
+    background-color: #0f172a;
+  }
   
   body {
-    background: linear-gradient(135deg, hsl(var(--background)) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
+    background-color: #0f172a;
+    background-image: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
     background-attachment: fixed;
     color: hsl(var(--foreground));
     font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
@@ -231,24 +257,173 @@
   /* Grid pattern removed - keeping plain gradient background */
 }
 
+.app-top-navbar {
+  position: fixed !important;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+@media (min-width: 768px) {
+  .app-top-navbar {
+    position: sticky !important;
+    right: auto;
+    left: auto;
+  }
+}
+
+@supports (padding-top: env(safe-area-inset-top, 0px)) {
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    :root {
+      --top-nav-h: calc(68px + env(safe-area-inset-top, 0px));
+    }
+  }
+
+  :root[data-standalone-pwa="true"] {
+    --top-nav-h: calc(68px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    .app-top-navbar {
+      height: var(--top-nav-h);
+      padding-top: env(safe-area-inset-top, 0px);
+      position: fixed !important;
+      right: 0;
+      left: 0;
+    }
+
+    .app-content {
+      padding-top: calc(var(--top-nav-h) + 2rem) !important;
+    }
+  }
+
+  :root[data-standalone-pwa="true"] .app-top-navbar {
+    height: var(--top-nav-h);
+    padding-top: env(safe-area-inset-top, 0px);
+    position: fixed !important;
+    right: 0;
+    left: 0;
+  }
+
+  :root[data-standalone-pwa="true"] .app-content {
+    padding-top: calc(var(--top-nav-h) + 2rem) !important;
+  }
+
+  .app-top-navbar {
+    background-color: rgba(15, 23, 42, 0.5) !important;
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    box-sizing: border-box;
+  }
+}
+
+/* Mobile text size preference. Step 2 is the existing default size. */
+@media (max-width: 767px) {
+  html[data-mobile-text-size="1"] {
+    font-size: 93.75%;
+  }
+
+  html[data-mobile-text-size="2"] {
+    font-size: 100%;
+  }
+
+  html[data-mobile-text-size="3"] {
+    font-size: 106.25%;
+  }
+
+  html[data-mobile-text-size="4"] {
+    font-size: 112.5%;
+  }
+
+  html[data-mobile-text-size="5"] {
+    font-size: 118.75%;
+  }
+}
+
+/* Display board text size preference. Step 3 is the HD display-board default. */
+html[data-display-board-text-size="1"] {
+  font-size: 50%;
+}
+
+html[data-display-board-text-size="2"] {
+  font-size: 75%;
+}
+
+html[data-display-board-text-size="3"] {
+  font-size: 100%;
+}
+
+html[data-display-board-text-size="4"] {
+  font-size: 150%;
+}
+
+html[data-display-board-text-size="5"] {
+  font-size: 200%;
+}
+
+.mobile-text-size-slider {
+  width: 100%;
+  height: 2rem;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.mobile-text-size-slider::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(161 161 170);
+}
+
+.mobile-text-size-slider::-webkit-slider-thumb {
+  width: 2.75rem;
+  height: 1.75rem;
+  margin-top: -0.625rem;
+  appearance: none;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+.mobile-text-size-slider::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(161 161 170);
+}
+
+.mobile-text-size-slider::-moz-range-progress {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(161 161 170);
+}
+
+.mobile-text-size-slider::-moz-range-thumb {
+  width: 2.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
 /* Module-specific color utilities */
 @layer utilities {
   .bg-brand-yellow {
-    background-color: hsl(var(--brand-yellow));
+    background-color: #F1D64A;
   }
   
   .bg-brand-yellow-hover:hover {
-    background-color: hsl(var(--brand-yellow-hover));
+    background-color: #d1b82f;
   }
   
   .text-brand-yellow {
-    color: hsl(var(--brand-yellow));
+    color: #F1D64A;
   }
   
   .border-brand-yellow {
-    border-color: hsl(var(--brand-yellow));
+    border-color: #F1D64A;
   }
-  
+
   /* Timesheet */
   .bg-timesheet { background-color: hsl(var(--timesheet-primary)); }
   .bg-timesheet-light { background-color: hsl(var(--timesheet-light)); }
@@ -333,6 +508,14 @@
   .bg-inventory-dark { background-color: hsl(var(--inventory-dark)); }
   .text-inventory { color: hsl(var(--inventory-primary)); }
   .border-inventory { border-color: hsl(var(--inventory-primary)); }
+
+  /* Reminders */
+  .bg-reminders { background-color: hsl(var(--reminders-primary)); }
+  .bg-reminders-light { background-color: hsl(var(--reminders-light)); }
+  .bg-reminders-soft { background-color: hsl(var(--reminders-primary) / 0.12); }
+  .bg-reminders-dark { background-color: hsl(var(--reminders-dark)); }
+  .text-reminders { color: hsl(var(--reminders-primary)); }
+  .border-reminders { border-color: hsl(var(--reminders-primary)); }
   
   /* Tab styling */
   [role="tab"][data-state="active"] {
@@ -356,6 +539,7 @@
   [role="tab"][data-state="active"][data-tab="toolbox-talk"] * {
     color: white !important;
   }
+
 }
 
 /* Debug-specific styling */
@@ -371,8 +555,17 @@
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #f1f1f1; }
-::-webkit-scrollbar-thumb { background: hsl(var(--brand-yellow)); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(var(--brand-yellow-hover)); }
+::-webkit-scrollbar-thumb { background: #F1D64A; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #d1b82f; }
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
 
 /* Smooth scrolling */
 html { scroll-behavior: smooth; }
@@ -467,6 +660,12 @@ input[type="date"]::-webkit-datetime-edit-year-field {
   .px-3 { padding-left: 0.6rem !important; padding-right: 0.6rem !important; }
   .px-4 { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
   .px-6 { padding-left: 1.2rem !important; padding-right: 1.2rem !important; }
+
+  /* Preserve full leading-icon input clearance when base px-* padding is compacted. */
+  .pl-9 { padding-left: 2.25rem !important; }
+  .pl-10 { padding-left: 2.5rem !important; }
+  .pl-11 { padding-left: 2.75rem !important; }
+  .pl-12 { padding-left: 3rem !important; }
   
   .gap-2 { gap: 0.4rem !important; }
   .gap-3 { gap: 0.6rem !important; }
@@ -502,6 +701,51 @@ input[type="date"]::-webkit-datetime-edit-year-field {
   .rounded-xl { border-radius: 0.6rem !important; }
   
   .border-2 { border-width: 1.6px !important; }
+}
+
+/* Login screen opts out of the app-wide mobile scale reduction for readability. */
+@media (max-width: 768px) {
+  .login-card-content {
+    padding: clamp(1.5rem, 5.5vw, 2rem) !important;
+  }
+
+  .login-form > * + * {
+    margin-top: clamp(1.25rem, 4vw, 1.5rem) !important;
+  }
+
+  .login-field-group > * + * {
+    margin-top: 0.625rem !important;
+  }
+
+  .login-field-label,
+  .login-remember-label {
+    font-size: clamp(0.95rem, 3.8vw, 1.0625rem) !important;
+    line-height: 1.35 !important;
+  }
+
+  .login-form-input {
+    height: clamp(3.25rem, 12vw, 3.75rem) !important;
+    padding-right: 1rem !important;
+    padding-left: 1rem !important;
+    font-size: clamp(1rem, 4vw, 1.125rem) !important;
+    line-height: 1.35 !important;
+  }
+
+  .login-checkbox {
+    width: clamp(1.25rem, 4.8vw, 1.5rem) !important;
+    height: clamp(1.25rem, 4.8vw, 1.5rem) !important;
+    flex: 0 0 auto;
+  }
+
+  .login-remember-row {
+    gap: 0.75rem !important;
+  }
+
+  .login-submit {
+    height: clamp(3.25rem, 12vw, 3.75rem) !important;
+    font-size: clamp(1rem, 4vw, 1.125rem) !important;
+    line-height: 1.35 !important;
+  }
 }
 
 /* Selectable Card Component */
@@ -666,6 +910,36 @@ button.bg-primary * {
 .animate-card-fade {
   animation: card-fade-in 0.4s ease-out forwards;
   opacity: 0;
+}
+
+@keyframes mobile-menu-slide-down {
+  0% {
+    max-height: 0;
+    transform: translateY(-0.75rem);
+  }
+  100% {
+    max-height: calc(100dvh - var(--top-nav-h));
+    transform: translateY(0);
+  }
+}
+
+.animate-mobile-menu-slide-down {
+  animation: mobile-menu-slide-down 300ms ease-out forwards;
+}
+
+@keyframes mobile-menu-slide-up {
+  0% {
+    max-height: calc(100dvh - var(--top-nav-h));
+    transform: translateY(0);
+  }
+  100% {
+    max-height: 0;
+    transform: translateY(-0.75rem);
+  }
+}
+
+.animate-mobile-menu-slide-up {
+  animation: mobile-menu-slide-up 300ms ease-in forwards;
 }
 
 /* Workshop tasks module: ensure all module action buttons have a visible border */

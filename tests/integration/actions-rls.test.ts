@@ -36,21 +36,21 @@ describeOrSkip('Actions RLS Policy Fix', () => {
     if (!users) throw new Error('No test user found');
     testUserId = users.id;
 
-    // SAFETY: ONLY use test vehicles starting with TE57
+    // SAFETY: ONLY use deterministic fictional vehicles starting with ZZ99
     const vehicle = await supabase
       .from('vans')
       .select('id')
-      .ilike('reg_number', 'TE57%')
+      .ilike('reg_number', 'ZZ99%')
       .limit(1)
       .single();
     
-    // If no TE57 test vehicle exists, create one
+    // If no fictional test vehicle exists, create one
     if (!vehicle.data) {
       const categoryId = (await supabase.from('van_categories').select('id').limit(1).single()).data?.id;
       const newVehicle = await supabase
         .from('vans')
         .insert({
-          reg_number: 'TE57ACTRL',
+          reg_number: 'ZZ99ACTRL',
           status: 'active',
           category_id: categoryId,
         })

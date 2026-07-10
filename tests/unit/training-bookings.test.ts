@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: vi.fn(),
@@ -14,6 +14,10 @@ vi.mock('@/lib/utils/email', () => ({
 
 import { declineTrainingBookings } from '@/lib/server/training-bookings';
 
+const originalCoordinatorProfileId = process.env.TRAINING_COORDINATOR_PROFILE_ID;
+const originalCoordinatorName = process.env.TRAINING_COORDINATOR_NAME;
+const originalCoordinatorEmail = process.env.TRAINING_COORDINATOR_EMAIL;
+
 describe('training booking decline helper', () => {
   const state = {
     deletedAbsenceIds: [] as string[],
@@ -26,6 +30,9 @@ describe('training booking decline helper', () => {
     state.deletedAbsenceIds = [];
     state.createdMessage = null;
     state.createdRecipients = [];
+    process.env.TRAINING_COORDINATOR_PROFILE_ID = 'coordinator-profile';
+    process.env.TRAINING_COORDINATOR_NAME = 'Training Coordinator';
+    process.env.TRAINING_COORDINATOR_EMAIL = 'coordinator@example.test';
 
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getProfileWithRole } = await import('@/lib/utils/permissions');
@@ -60,7 +67,7 @@ describe('training booking decline helper', () => {
             data: {
               user: profileId === 'manager-1'
                 ? { email: 'manager@example.com' }
-                : { email: 'sarah@example.com' },
+                : { email: 'coordinator@example.test' },
             },
             error: null,
           })),
@@ -105,13 +112,9 @@ describe('training booking decline helper', () => {
                 maybeSingle: vi.fn(async () => ({
                   data: value === 'manager-1'
                     ? { id: 'manager-1', full_name: 'Molly Manager' }
+                    : value === 'coordinator-profile'
+                      ? { id: 'coordinator-profile', full_name: 'Training Coordinator' }
                     : null,
-                  error: null,
-                })),
-              })),
-              ilike: vi.fn(() => ({
-                maybeSingle: vi.fn(async () => ({
-                  data: { id: 'sarah-profile', full_name: 'Sarah Hubbard' },
                   error: null,
                 })),
               })),
@@ -177,7 +180,13 @@ describe('training booking decline helper', () => {
     vi.mocked(createAdminClient).mockReturnValue(adminClient as never);
   });
 
-  it('deletes the booking and notifies the manager plus Sarah Hubbard', async () => {
+  afterEach(() => {
+    restoreEnv('TRAINING_COORDINATOR_PROFILE_ID', originalCoordinatorProfileId);
+    restoreEnv('TRAINING_COORDINATOR_NAME', originalCoordinatorName);
+    restoreEnv('TRAINING_COORDINATOR_EMAIL', originalCoordinatorEmail);
+  });
+
+  it('deletes the booking and notifies the manager plus configured coordinator', async () => {
     const { sendTrainingBookingDeclinedEmail } = await import('@/lib/utils/email');
 
     const result = await declineTrainingBookings('employee-1', ['absence-1']);
@@ -189,17 +198,21 @@ describe('training booking decline helper', () => {
     expect(state.createdMessage).toMatchObject({
       type: 'NOTIFICATION',
       created_via: 'timesheet_training_decline',
+      module_key: 'training',
     });
     expect(state.createdRecipients).toEqual([
       { message_id: 'message-1', user_id: 'manager-1', status: 'PENDING' },
-      { message_id: 'message-1', user_id: 'sarah-profile', status: 'PENDING' },
+      { message_id: 'message-1', user_id: 'coordinator-profile', status: 'PENDING' },
     ]);
     expect(sendTrainingBookingDeclinedEmail).toHaveBeenCalledTimes(2);
     expect(sendTrainingBookingDeclinedEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'manager@example.com', recipientName: 'Molly Manager' })
     );
     expect(sendTrainingBookingDeclinedEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'sarah@example.com', recipientName: 'Sarah Hubbard' })
+      expect.objectContaining({
+        to: 'coordinator@example.test',
+        recipientName: 'Training Coordinator',
+      })
     );
   });
 
@@ -334,3 +347,11 @@ describe('training booking decline helper', () => {
     );
   });
 });
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}

@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BackButton } from '@/components/ui/back-button';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { AlertCircle, Save, Send, User } from 'lucide-react';
 import { DAY_NAMES } from '@/types/timesheet';
 import { formatHours, roundTimeToNearestQuarterHour } from '@/lib/utils/time-calculations';
@@ -21,6 +22,7 @@ import { Database } from '@/types/database';
 import { isAdminRole } from '@/lib/utils/role-access';
 import { Employee } from '@/types/common';
 import { toast } from 'sonner';
+import { isSubsistencePaymentRequired } from '@/lib/utils/timesheet-subsistence';
 import {
   buildValidationErrors,
   createBlankEntry,
@@ -29,6 +31,7 @@ import {
   toHoursInput,
   type PlantEntryDraft,
 } from './plant-timesheet-v2-utils';
+import { isDuplicateTimesheetWeekError } from '@/lib/utils/timesheet-errors';
 
 interface PlantTimesheetV2Props {
   weekEnding: string;
@@ -194,6 +197,7 @@ export function PlantTimesheetV2({
             job_number: existingEntry.job_number || '',
             job_numbers: existingEntry.job_number ? [existingEntry.job_number] : [],
             working_in_yard: existingEntry.working_in_yard || false,
+            subsistence_payment_required: isSubsistencePaymentRequired(existingEntry),
             time_started: existingEntry.time_started || '',
             time_finished: existingEntry.time_finished || '',
             operator_travel_hours: toHoursInput(existingEntry.operator_travel_hours),
@@ -356,6 +360,7 @@ export function PlantTimesheetV2({
           daily_total: recalculated.daily_total,
           job_number: null,
           working_in_yard: (operatorYard || 0) > 0,
+          subsistence_payment_required: false,
           did_not_work: recalculated.did_not_work,
           night_shift: false,
           bank_holiday: false,
@@ -377,11 +382,13 @@ export function PlantTimesheetV2({
 
       router.push('/timesheets');
     } catch (saveError) {
-      console.error('Error saving plant timesheet:', saveError);
-      const typedError = saveError as { message?: string; code?: string };
+      const isDuplicateTimesheetError = isDuplicateTimesheetWeekError(saveError);
+      if (!isDuplicateTimesheetError) {
+        console.error('Error saving plant timesheet:', saveError);
+      }
       if (
         !existingTimesheetId &&
-        (typedError?.code === '23505' || typedError?.message?.includes('timesheets_user_id_week_ending_key'))
+        isDuplicateTimesheetError
       ) {
         const { data: duplicate } = await supabase
           .from('timesheets')
@@ -425,11 +432,7 @@ export function PlantTimesheetV2({
   };
 
   if (initialExistingId && !existingTimesheetLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-[320px]">
-        <p className="text-muted-foreground">Loading plant timesheet...</p>
-      </div>
-    );
+    return <PanelLoader message="Loading plant timesheet..." accent="timesheet" className="min-h-[320px]" />;
   }
 
   return (
@@ -778,7 +781,7 @@ export function PlantTimesheetV2({
       </div>
 
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border text-white">
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Sign Plant Timesheet</DialogTitle>
             <DialogDescription className="text-muted-foreground">

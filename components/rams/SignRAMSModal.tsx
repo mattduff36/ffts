@@ -91,7 +91,7 @@ export function SignRAMSModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Confirm RAMS Acknowledgment</DialogTitle>
           <DialogDescription>

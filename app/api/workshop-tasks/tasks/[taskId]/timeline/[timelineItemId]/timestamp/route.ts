@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { userHasPermission } from '@/lib/utils/permissions';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { syncWorkshopTaskCompletionDependents, type RelatedName } from '@/lib/server/workshop-task-completion-sync';
 import {
   AdjustWorkshopTaskTimestampSchema,
   UUIDSchema,
@@ -31,6 +32,9 @@ type ActionRow = Pick<
   Database['public']['Tables']['actions']['Row'],
   | 'id'
   | 'action_type'
+  | 'title'
+  | 'description'
+  | 'workshop_comments'
   | 'created_at'
   | 'created_by'
   | 'logged_at'
@@ -43,7 +47,13 @@ type ActionRow = Pick<
   | 'actioned_signature_data'
   | 'actioned_signed_at'
   | 'status_history'
->;
+  | 'van_id'
+  | 'hgv_id'
+  | 'plant_id'
+> & {
+  workshop_task_categories: RelatedName | RelatedName[] | null;
+  workshop_task_subcategories: RelatedName | RelatedName[] | null;
+};
 
 type ActionUpdate = Database['public']['Tables']['actions']['Update'];
 
@@ -105,7 +115,7 @@ export async function PATCH(
     const { taskId, timelineItemId } = paramsValidation.data;
     const { itemType, timestamp } = bodyValidation.data;
 
-    const supabaseAdmin = createSupabaseClient(
+    const supabaseAdmin = createSupabaseClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
@@ -121,6 +131,9 @@ export async function PATCH(
       .select(`
         id,
         action_type,
+        title,
+        description,
+        workshop_comments,
         created_at,
         created_by,
         logged_at,
@@ -132,7 +145,16 @@ export async function PATCH(
         actioned_comment,
         actioned_signature_data,
         actioned_signed_at,
-        status_history
+        status_history,
+        van_id,
+        hgv_id,
+        plant_id,
+        workshop_task_categories (
+          name
+        ),
+        workshop_task_subcategories (
+          name
+        )
       `)
       .eq('id', taskId)
       .single();
@@ -176,7 +198,7 @@ export async function PATCH(
       (comment): WorkshopTaskTimelineComment => ({
         id: comment.id,
         body: comment.body,
-        created_at: comment.created_at,
+        created_at: comment.created_at ?? '',
         updated_at: comment.updated_at,
         author: pickProfile(comment.profiles),
       })
@@ -184,6 +206,7 @@ export async function PATCH(
 
     const taskForTimeline: WorkshopTaskTimelineTask = {
       ...typedTask,
+      created_at: typedTask.created_at ?? '',
       status_history: Array.isArray(typedTask.status_history)
         ? typedTask.status_history
         : null,
@@ -345,6 +368,21 @@ export async function PATCH(
 
     if (updateError) {
       throw updateError;
+    }
+
+    const didAdjustLatestCompletedEvent =
+      targetStatusEvent.status === 'completed' &&
+      latestCompletedEvent?.id === targetStatusEvent.id &&
+      Boolean(latestCompletedEvent.created_at);
+
+    if (didAdjustLatestCompletedEvent) {
+      await syncWorkshopTaskCompletionDependents({
+        supabaseAdmin,
+        task: typedTask,
+        completedAt: latestCompletedEvent.created_at,
+        userId: user.id,
+        historyComment: `Updated from workshop task completed timestamp adjustment: ${typedTask.title || 'Task'}`,
+      });
     }
 
     return NextResponse.json({

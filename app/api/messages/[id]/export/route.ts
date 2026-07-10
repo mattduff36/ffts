@@ -5,6 +5,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { ToolboxTalkExportDocument } from '@/lib/pdf/ToolboxTalkExportDocument';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { loadTemplateLogoDataUrl } from '@/lib/pdf/template-logo';
 
 interface SenderProfileShape {
   full_name?: string | null;
@@ -101,10 +102,10 @@ export async function GET(
       );
     }
 
-    // Construct absolute logo URL
-    const protocol = request.headers.get('x-forwarded-proto') || 'https';
-    const host = request.headers.get('host') || 'localhost:4000';
-    const logoUrl = `${protocol}://${host}/images/logo.png`;
+    const logoUrl = await loadTemplateLogoDataUrl();
+    if (!logoUrl) {
+      throw new Error('Configured branding logo could not be loaded');
+    }
 
     // Generate PDF
     const messageSender = pickSenderProfile(
@@ -115,7 +116,7 @@ export async function GET(
         id: message.id,
         subject: message.subject,
         body: message.body,
-        created_at: message.created_at,
+        created_at: message.created_at ?? '',
         sender_name: messageSender?.full_name ?? 'Unknown',
         pdf_file_path: message.pdf_file_path,
       },

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Save, Copy } from 'lucide-react';
@@ -286,7 +287,7 @@ export function AttachmentSchemaBuilderPanel({
         </div>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading schema...</p>
+          <PanelLoader message="Loading schema..." accent="workshop" className="py-6" />
         ) : (
           <div className="space-y-4">
             {sections.length === 0 ? (

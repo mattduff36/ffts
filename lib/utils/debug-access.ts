@@ -4,11 +4,10 @@ export interface DebugConsoleAccessParams {
   isViewingAs?: boolean | null | undefined;
 }
 
-const ADDITIONAL_DEBUG_ACCESS_EMAIL =
-  process.env.NEXT_PUBLIC_DEBUG_ACCESS_EMAIL?.trim().toLowerCase() || 'debug.user@example.com';
-
 export function isAdditionalDebugAccessUser(email: string | null | undefined): boolean {
-  return (email || '').trim().toLowerCase() === ADDITIONAL_DEBUG_ACCESS_EMAIL;
+  const configuredEmail =
+    process.env.NEXT_PUBLIC_DEBUG_ACCESS_EMAIL?.trim().toLowerCase() || 'admin@mpdee.co.uk';
+  return (email || '').trim().toLowerCase() === configuredEmail;
 }
 
 export function canAccessDebugConsole(params: DebugConsoleAccessParams): boolean {

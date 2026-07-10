@@ -3,28 +3,19 @@
 const AUTH_EVENT_STORAGE_KEY = 'avs_auth_event_v1';
 const LEGACY_SHORTCUT_STORAGE_KEY = 'account_switch_shortcuts_v1';
 const LEGACY_TRANSITION_STORAGE_KEY = 'account_switch_transition_until';
-const LEGACY_LOCK_COOKIE_NAME = 'avs_account_locked';
 const AUTH_CHANNEL_NAME = 'avs-auth-session';
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
 }
 
-function setCookie(name: string, value: string, maxAgeSeconds?: number): void {
-  if (!isBrowser()) return;
-
-  const maxAgePart = typeof maxAgeSeconds === 'number' ? `; Max-Age=${maxAgeSeconds}` : '';
-  document.cookie = `${name}=${value}; Path=/; SameSite=Lax${maxAgePart}`;
-}
-
-export function clearLegacyAccountSwitchClientState(): void {
+export function clearRetiredAccountSwitchClientState(): void {
   if (!isBrowser()) {
     return;
   }
 
   localStorage.removeItem(LEGACY_SHORTCUT_STORAGE_KEY);
   localStorage.removeItem(LEGACY_TRANSITION_STORAGE_KEY);
-  setCookie(LEGACY_LOCK_COOKIE_NAME, '', 0);
 }
 
 export function broadcastAuthStateChange(eventName: string): void {

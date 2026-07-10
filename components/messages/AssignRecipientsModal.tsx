@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TeamToggleMenu } from '@/components/ui/team-toggle-menu';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Loader2, Send, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchUserDirectory } from '@/lib/client/user-directory';
@@ -250,7 +251,7 @@ export function AssignRecipientsModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] bg-white dark:bg-slate-900 border-border z-[100]">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-white dark:bg-slate-900 border-border z-[100] sm:max-w-[700px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
@@ -286,7 +287,7 @@ export function AssignRecipientsModal({
                       className={`justify-start text-sm transition-all ${
                         allRoleSelected 
                           ? 'bg-brand-yellow text-slate-900 font-semibold border-2 border-brand-yellow shadow-lg' 
-                          : 'hover:bg-slate-800'
+                          : 'hover:bg-muted/40'
                       }`}
                     >
                       {allRoleSelected && '✓ '}{role.display_name} ({roleCount})
@@ -323,12 +324,8 @@ export function AssignRecipientsModal({
                 onToggleAllTeams={handleToggleAllTeams}
                 disabled={loading || fetching || teamOptions.length === 0}
                 triggerLabel="Select Teams"
-                triggerClassName={
-                  messageType === 'TOOLBOX_TALK'
-                    ? 'border-red-600 text-red-500 hover:bg-red-600 hover:text-white text-xs'
-                    : 'border-blue-600 text-blue-500 hover:bg-blue-600 hover:text-white text-xs'
-                }
-                activeItemClassName={messageType === 'TOOLBOX_TALK' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'}
+                triggerClassName="border-brand-yellow text-brand-yellow hover:bg-brand-yellow hover:text-slate-900 text-xs"
+                activeItemClassName="bg-brand-yellow text-slate-900"
               />
               <span className="text-sm text-muted-foreground">
                 {selectedIds.size} selected
@@ -337,9 +334,7 @@ export function AssignRecipientsModal({
 
             {/* Employees List */}
             {fetching ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
+              <PanelLoader message="Loading recipients..." className="py-8" />
             ) : (
               <ScrollArea className="h-[300px] pr-4">
                 <div className="space-y-2">
@@ -389,10 +384,7 @@ export function AssignRecipientsModal({
             <Button 
               type="submit" 
               disabled={loading || selectedIds.size === 0}
-              className={messageType === 'TOOLBOX_TALK' 
-                ? 'bg-red-600 hover:bg-red-700 text-white' 
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }
+              className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover"
             >
               {loading ? (
                 <>

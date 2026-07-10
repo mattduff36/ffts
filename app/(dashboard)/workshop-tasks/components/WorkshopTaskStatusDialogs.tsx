@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -6,9 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Clock, Pause } from 'lucide-react';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
+import { useWorkshopDraftPersistence } from '@/lib/hooks/useWorkshopDraftPersistence';
 import type { Action } from '../types';
 
 interface WorkshopTaskStatusDialogsProps {
+  userId?: string | null;
+  statusTask: Action | null;
   showStatusModal: boolean;
   onShowStatusModalChange: (open: boolean) => void;
   loggedComment: string;
@@ -33,6 +36,8 @@ interface WorkshopTaskStatusDialogsProps {
 }
 
 export function WorkshopTaskStatusDialogs({
+  userId,
+  statusTask,
   showStatusModal,
   onShowStatusModalChange,
   loggedComment,
@@ -62,6 +67,45 @@ export function WorkshopTaskStatusDialogs({
   const isStatusDirty = loggedComment.trim().length > 0;
   const isOnHoldDirty = onHoldComment.trim().length > 0;
   const isResumeDirty = resumeComment.trim().length > 0;
+  const { clearDraft: clearStatusDraft } = useWorkshopDraftPersistence({
+    enabled: showStatusModal && Boolean(statusTask),
+    draftId: `workshop-task-status:${userId || 'anonymous'}:${statusTask?.id || 'none'}`,
+    kind: 'workshop-task-status',
+    ownerId: userId,
+    value: { loggedComment },
+    isDirty: isStatusDirty,
+    onRestore: (draft) => onLoggedCommentChange(draft.loggedComment || ''),
+  });
+  const { clearDraft: clearOnHoldDraft } = useWorkshopDraftPersistence({
+    enabled: showOnHoldModal && Boolean(onHoldingTask),
+    draftId: `workshop-task-on-hold:${userId || 'anonymous'}:${onHoldingTask?.id || 'none'}`,
+    kind: 'workshop-task-on-hold',
+    ownerId: userId,
+    value: { onHoldComment },
+    isDirty: isOnHoldDirty,
+    onRestore: (draft) => onOnHoldCommentChange(draft.onHoldComment || ''),
+  });
+  const { clearDraft: clearResumeDraft } = useWorkshopDraftPersistence({
+    enabled: showResumeModal && Boolean(resumingTask),
+    draftId: `workshop-task-resume:${userId || 'anonymous'}:${resumingTask?.id || 'none'}`,
+    kind: 'workshop-task-resume',
+    ownerId: userId,
+    value: { resumeComment },
+    isDirty: isResumeDirty,
+    onRestore: (draft) => onResumeCommentChange(draft.resumeComment || ''),
+  });
+
+  useEffect(() => {
+    if (!showStatusModal && !isStatusDirty) void clearStatusDraft();
+  }, [clearStatusDraft, isStatusDirty, showStatusModal]);
+
+  useEffect(() => {
+    if (!showOnHoldModal && !isOnHoldDirty) void clearOnHoldDraft();
+  }, [clearOnHoldDraft, isOnHoldDirty, showOnHoldModal]);
+
+  useEffect(() => {
+    if (!showResumeModal && !isResumeDirty) void clearResumeDraft();
+  }, [clearResumeDraft, isResumeDirty, showResumeModal]);
 
   return (
     <>
@@ -131,7 +175,10 @@ export function WorkshopTaskStatusDialogs({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={onCancelStatusModal}
+              onClick={() => {
+                void clearStatusDraft();
+                onCancelStatusModal();
+              }}
               className={`border-border text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
             >
               {isStatusDirty ? 'Discard Changes' : 'Cancel'}
@@ -214,7 +261,10 @@ export function WorkshopTaskStatusDialogs({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={onCancelOnHoldModal}
+              onClick={() => {
+                void clearOnHoldDraft();
+                onCancelOnHoldModal();
+              }}
               disabled={onHoldingTask ? updatingStatus.has(onHoldingTask.id) : false}
               className={`border-border text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
             >
@@ -302,7 +352,10 @@ export function WorkshopTaskStatusDialogs({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={onCancelResumeModal}
+              onClick={() => {
+                void clearResumeDraft();
+                onCancelResumeModal();
+              }}
               disabled={resumingTask ? updatingStatus.has(resumingTask.id) : false}
               className={`border-border text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
             >

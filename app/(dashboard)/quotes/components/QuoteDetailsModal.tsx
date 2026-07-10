@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   Select,
   SelectContent,
@@ -43,11 +44,24 @@ import {
   GitBranch,
   CircleDot,
   ArrowRight,
+  ExternalLink,
+  RefreshCw,
+  Check,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils/cn';
-import type { Quote, QuoteCompletionStatus, QuoteRevisionType } from '../types';
+import { buildQuoteDisplayName, buildQuotePdfFilename } from '@/lib/quotes/quote-display-name';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
+import {
+  deleteQuoteAttachment,
+  getQuoteAttachmentUrl,
+  replaceQuoteAttachment,
+  uploadQuoteAttachment,
+} from '../quote-attachment-client';
+import { FormattedQuoteText } from './FormattedQuoteText';
+import type { Quote, QuoteAttachment, QuoteCompletionStatus, QuoteManagerOption, QuoteRevisionType } from '../types';
 import { getQuoteStatusConfig } from '../types';
 
 const PO_EDITABLE_STATUSES = new Set([
@@ -67,9 +81,70 @@ interface QuoteDetailsModalProps {
   onQuoteChange: (quoteId: string) => void;
   onEdit: (quote: Quote) => void;
   onRefresh: () => void;
+  managerOptions: QuoteManagerOption[];
 }
 
 type DetailFieldErrors = Record<string, string>;
+interface QuoteRecipientOption {
+  email: string;
+  label: string;
+}
+
+interface QuoteDetailsDirtySnapshot {
+  poNumber: string;
+  poValue: string;
+  startDate: string;
+  startAlertDays: string;
+  completionStatus: QuoteCompletionStatus;
+  completionComments: string;
+  invoiceNumber: string;
+  invoiceAmount: string;
+  invoiceDate: string;
+  invoiceScope: 'full' | 'partial';
+  invoiceComments: string;
+  invoiceRequestAmount: string;
+  invoiceRequestDate: string;
+  invoiceRequestScope: 'full' | 'partial';
+  invoiceRequestComments: string;
+  selectedInvoiceRequestId: string;
+  invoiceMatchesRequest: boolean;
+  revisionType: QuoteRevisionType;
+  revisionNotes: string;
+}
+
+function buildDirtySnapshot(value: QuoteDetailsDirtySnapshot) {
+  return JSON.stringify(value);
+}
+
+function buildEmailSelectionSnapshot(emails: string[]) {
+  return JSON.stringify(emails.map(email => email.trim().toLowerCase()).sort());
+}
+
+function buildQuoteRecipientOptions(quote: Quote | null): QuoteRecipientOption[] {
+  if (!quote) {
+    return [];
+  }
+
+  const options: QuoteRecipientOption[] = [];
+  const seen = new Set<string>();
+  const addOption = (email: string | null | undefined, label: string) => {
+    const normalizedEmail = email?.trim();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) return;
+
+    const key = normalizedEmail.toLowerCase();
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    options.push({ email: normalizedEmail, label });
+  };
+
+  addOption(quote.attention_email || quote.customer?.contact_email, quote.attention_name || quote.customer?.contact_name || 'Primary contact');
+  (quote.selected_secondary_contacts || []).forEach(contact => {
+    addOption(contact.email, contact.name || contact.email || 'Secondary contact');
+  });
+
+  return options;
+}
 
 function getTimelineEventMeta(eventType: string) {
   switch (eventType) {
@@ -104,6 +179,11 @@ function getTimelineEventMeta(eventType: string) {
         icon: FolderKanban,
         iconClassName: 'text-violet-300 bg-violet-500/10 border-violet-500/20',
       };
+    case 'po_request_sent':
+      return {
+        icon: Mail,
+        iconClassName: 'text-violet-300 bg-violet-500/10 border-violet-500/20',
+      };
     case 'rams_triggered':
       return {
         icon: FolderKanban,
@@ -130,9 +210,22 @@ function getTimelineEventMeta(eventType: string) {
         iconClassName: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
       };
     case 'invoice_added':
+    case 'invoice_requested':
       return {
         icon: Receipt,
         iconClassName: 'text-fuchsia-300 bg-fuchsia-500/10 border-fuchsia-500/20',
+      };
+    case 'invoice_marked_on_sage':
+    case 'quote_marked_on_sage':
+      return {
+        icon: CheckCircle2,
+        iconClassName: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
+      };
+    case 'invoice_removed_from_sage':
+    case 'quote_removed_from_sage':
+      return {
+        icon: CircleDot,
+        iconClassName: 'text-slate-300 bg-slate-500/10 border-slate-500/20',
       };
     case 'attachment_uploaded':
       return {
@@ -162,6 +255,19 @@ function getTimelineEventMeta(eventType: string) {
   }
 }
 
+function getBillingStatusConfig(status: NonNullable<Quote['invoice_summary']>['status'] | undefined) {
+  switch (status) {
+    case 'ready_to_invoice':
+      return { label: 'Ready to invoice', color: 'border-violet-500/30 text-violet-300 bg-violet-500/10' };
+    case 'partially_invoiced':
+      return { label: 'Part billed', color: 'border-fuchsia-500/30 text-fuchsia-300 bg-fuchsia-500/10' };
+    case 'invoiced':
+      return { label: 'Fully billed', color: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' };
+    default:
+      return { label: 'Not billed', color: 'border-slate-500/30 text-slate-300 bg-slate-500/10' };
+  }
+}
+
 async function buildResponseError(response: Response, fallback: string) {
   const payload = await response.json().catch(() => null) as { error?: string; field_errors?: DetailFieldErrors } | null;
   const error = new Error(payload?.error || fallback) as Error & { fieldErrors?: DetailFieldErrors };
@@ -169,7 +275,8 @@ async function buildResponseError(response: Response, fallback: string) {
   return error;
 }
 
-export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdit, onRefresh }: QuoteDetailsModalProps) {
+export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdit, onRefresh, managerOptions }: QuoteDetailsModalProps) {
+  const { profile } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [currentQuoteId, setCurrentQuoteId] = useState<string | null>(quoteId);
   const [activeTab, setActiveTab] = useState('overview');
@@ -186,20 +293,42 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [invoiceScope, setInvoiceScope] = useState<'full' | 'partial'>('partial');
   const [invoiceComments, setInvoiceComments] = useState('');
+  const [invoiceRequestAmount, setInvoiceRequestAmount] = useState('');
+  const [invoiceRequestDate, setInvoiceRequestDate] = useState(new Date().toISOString().slice(0, 10));
+  const [invoiceRequestScope, setInvoiceRequestScope] = useState<'full' | 'partial'>('full');
+  const [invoiceRequestComments, setInvoiceRequestComments] = useState('');
+  const [selectedInvoiceRequestId, setSelectedInvoiceRequestId] = useState('');
+  const [invoiceMatchesRequest, setInvoiceMatchesRequest] = useState(false);
   const [revisionType, setRevisionType] = useState<QuoteRevisionType>('revision');
   const [revisionNotes, setRevisionNotes] = useState('');
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [duplicateManagerProfileId, setDuplicateManagerProfileId] = useState('');
+  const [poRequestDialogOpen, setPoRequestDialogOpen] = useState(false);
+  const [poRequestRecipientEmails, setPoRequestRecipientEmails] = useState<string[]>([]);
   const [ramsComments, setRamsComments] = useState('');
   const [ramsDialogOpen, setRamsDialogOpen] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowFieldErrors, setWorkflowFieldErrors] = useState<DetailFieldErrors>({});
+  const [invoiceRequestError, setInvoiceRequestError] = useState<string | null>(null);
+  const [invoiceRequestFieldErrors, setInvoiceRequestFieldErrors] = useState<DetailFieldErrors>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoiceFieldErrors, setInvoiceFieldErrors] = useState<DetailFieldErrors>({});
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [removingAttachmentId, setRemovingAttachmentId] = useState<string | null>(null);
+  const [replacingAttachmentId, setReplacingAttachmentId] = useState<string | null>(null);
+  const [detailsBaselineSnapshot, setDetailsBaselineSnapshot] = useState('');
+  const [poRequestBaselineSnapshot, setPoRequestBaselineSnapshot] = useState('');
+  const [duplicateBaselineSnapshot, setDuplicateBaselineSnapshot] = useState('');
+  const [ramsBaselineSnapshot, setRamsBaselineSnapshot] = useState('');
+  const fetchRequestIdRef = useRef(0);
+  const activeFetchAbortRef = useRef<AbortController | null>(null);
   const activeQuoteId = currentQuoteId || quoteId || quote?.id || null;
   const recipientEmail = quote?.attention_email || quote?.customer?.contact_email || '';
+  const customerToContacts = quote?.selected_secondary_contacts || [];
+  const quoteDisplayName = quote ? buildQuoteDisplayName(quote) : '';
   const isLatestVersion = Boolean(quote?.is_latest_version);
   const isHistoricalVersion = Boolean(quote && !quote.is_latest_version);
   const canEditPoDetails = quote ? isLatestVersion && PO_EDITABLE_STATUSES.has(quote.status) : false;
@@ -210,8 +339,135 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   const canManageInvoices = isLatestVersion;
   const canManageAttachments = isLatestVersion;
   const canCreateVersions = isLatestVersion;
+  const canManageSage = Boolean(quote?.can_manage_sage);
+  const canRequestPo = Boolean(isLatestVersion && quote && !quote.po_number && recipientEmail && (quote.sent_at || quote.customer_sent_at || quote.status === 'sent'));
   const hasMultipleVersions = (quote?.versions?.length ?? 0) > 1;
+  const availableToRequest = Number(quote?.invoice_summary?.availableToRequest ?? quote?.invoice_summary?.remainingBalance ?? quote?.total ?? 0);
   const suggestedInvoiceAmount = Number(quote?.invoice_summary?.remainingBalance ?? quote?.total ?? 0);
+  const isQuoteOnSage = Boolean(quote?.sage_posted_at);
+  const sagePostedDateLabel = quote?.sage_posted_at ? format(new Date(quote.sage_posted_at), 'dd MMM yyyy') : null;
+  const sageCardClassName = cn(
+    'rounded-lg border p-4 text-left transition-colors',
+    isQuoteOnSage
+      ? 'border-emerald-500/30 bg-emerald-500/10'
+      : 'border-slate-700 bg-slate-800/30',
+    canManageSage && !actionLoading ? 'cursor-pointer hover:bg-emerald-500/15' : '',
+    canManageSage && actionLoading ? 'cursor-wait opacity-70' : ''
+  );
+  const pendingInvoiceRequests = useMemo(
+    () => (quote?.invoice_requests || []).filter(request => request.status === 'pending'),
+    [quote?.invoice_requests]
+  );
+  const selectedInvoiceRequest = pendingInvoiceRequests.find(request => request.id === selectedInvoiceRequestId) || null;
+  const pendingFullInvoiceRequest = pendingInvoiceRequests.find(request => request.requested_invoice_scope === 'full') || null;
+  const billingStatusConfig = getBillingStatusConfig(quote?.invoice_summary?.status);
+  const duplicateManagerOptions = useMemo(
+    () => managerOptions.filter(option => option.is_active || option.profile_id === quote?.requester_id),
+    [managerOptions, quote?.requester_id]
+  );
+  const poRequestRecipientOptions = useMemo(() => buildQuoteRecipientOptions(quote), [quote]);
+  const poRequestPdfFilename = quote ? buildQuotePdfFilename(quote) : 'Quote.pdf';
+  const poRequestGreetingName = quote?.attention_name || quote?.customer?.contact_name || 'there';
+  const poRequestSenderName = profile?.full_name || 'user';
+  const managerRequestCtaLabel = pendingInvoiceRequests.length > 0 ? 'Request Another Invoice' : 'Mark Ready To Invoice';
+  const managerRequestControlsDisabled = !canManageInvoices || availableToRequest <= 0 || Boolean(pendingFullInvoiceRequest);
+  const currentDetailsSnapshot = buildDirtySnapshot({
+    poNumber,
+    poValue,
+    startDate,
+    startAlertDays,
+    completionStatus,
+    completionComments,
+    invoiceNumber,
+    invoiceAmount,
+    invoiceDate,
+    invoiceScope,
+    invoiceComments,
+    invoiceRequestAmount,
+    invoiceRequestDate,
+    invoiceRequestScope,
+    invoiceRequestComments,
+    selectedInvoiceRequestId,
+    invoiceMatchesRequest,
+    revisionType,
+    revisionNotes,
+  });
+  const isDetailsDirty = Boolean(
+    open
+    && quote
+    && detailsBaselineSnapshot
+    && currentDetailsSnapshot !== detailsBaselineSnapshot
+  );
+  const isPoRequestDirty = poRequestDialogOpen
+    && buildEmailSelectionSnapshot(poRequestRecipientEmails) !== poRequestBaselineSnapshot;
+  const isDuplicateDialogDirty = duplicateDialogOpen
+    && duplicateManagerProfileId !== duplicateBaselineSnapshot;
+  const isRamsDialogDirty = ramsDialogOpen
+    && ramsComments !== ramsBaselineSnapshot;
+  const {
+    contentRef: detailsDialogContentRef,
+    handleOpenChange: handleDetailsDialogOpenChange,
+    handleInteractOutside: handleDetailsDialogInteractOutside,
+    handleEscapeKeyDown: handleDetailsDialogEscapeKeyDown,
+    discard: discardDetailsDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isDetailsDirty,
+    disabled: loading || actionLoading || uploadingAttachment,
+    onOpenChange: (isOpen) => {
+      if (!isOpen) onClose();
+    },
+  });
+  const {
+    contentRef: poRequestDialogContentRef,
+    handleOpenChange: handlePoRequestDialogOpenChange,
+    handleInteractOutside: handlePoRequestDialogInteractOutside,
+    handleEscapeKeyDown: handlePoRequestDialogEscapeKeyDown,
+    discard: discardPoRequestDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isPoRequestDirty,
+    disabled: actionLoading,
+    onOpenChange: (isOpen) => {
+      setPoRequestDialogOpen(isOpen);
+      if (!isOpen) {
+        setPoRequestRecipientEmails([]);
+        setPoRequestBaselineSnapshot('');
+      }
+    },
+  });
+  const {
+    contentRef: duplicateDialogContentRef,
+    handleOpenChange: handleDuplicateDialogOpenChange,
+    handleInteractOutside: handleDuplicateDialogInteractOutside,
+    handleEscapeKeyDown: handleDuplicateDialogEscapeKeyDown,
+    discard: discardDuplicateDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isDuplicateDialogDirty,
+    disabled: actionLoading,
+    onOpenChange: (isOpen) => {
+      setDuplicateDialogOpen(isOpen);
+      if (!isOpen) {
+        setDuplicateManagerProfileId('');
+        setDuplicateBaselineSnapshot('');
+      }
+    },
+  });
+  const {
+    contentRef: ramsDialogContentRef,
+    handleOpenChange: handleRamsDialogOpenChange,
+    handleInteractOutside: handleRamsDialogInteractOutside,
+    handleEscapeKeyDown: handleRamsDialogEscapeKeyDown,
+    discard: discardRamsDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isRamsDialogDirty,
+    disabled: actionLoading,
+    onOpenChange: (isOpen) => {
+      setRamsDialogOpen(isOpen);
+      if (!isOpen) {
+        setRamsComments('');
+        setRamsBaselineSnapshot('');
+      }
+    },
+  });
 
   const groupedTimeline = useMemo(() => {
     const timeline = quote?.timeline ?? [];
@@ -300,19 +556,68 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     });
   }
 
+  function clearInvoiceRequestError(field?: string) {
+    setInvoiceRequestError(null);
+    if (!field) {
+      setInvoiceRequestFieldErrors({});
+      return;
+    }
+
+    setInvoiceRequestFieldErrors(prev => {
+      if (!(field in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateInvoiceRequestFields() {
+    const errors: DetailFieldErrors = {};
+    const amount = Number(invoiceRequestAmount);
+
+    if (!invoiceRequestAmount || !Number.isFinite(amount) || amount <= 0) {
+      errors.requested_amount = 'Enter an invoice request amount greater than 0.';
+    }
+
+    if (!invoiceRequestDate) {
+      errors.requested_invoice_date = 'Enter the requested invoice date.';
+    }
+
+    if (Number.isFinite(amount) && amount - availableToRequest > 0.005) {
+      errors.requested_amount = `This quote has £${availableToRequest.toLocaleString('en-GB', { minimumFractionDigits: 2 })} available to request.`;
+    }
+
+    if (Number.isFinite(amount) && invoiceRequestScope === 'full' && Math.abs(amount - availableToRequest) > 0.005) {
+      errors.requested_amount = `Full invoice request must be £${availableToRequest.toLocaleString('en-GB', { minimumFractionDigits: 2 })}.`;
+    }
+
+    if (Number.isFinite(amount) && invoiceRequestScope === 'partial' && amount >= availableToRequest - 0.005) {
+      errors.requested_invoice_scope = 'Select full invoice for the remaining balance.';
+    }
+
+    return errors;
+  }
+
   function validateInvoiceFields() {
     const errors: DetailFieldErrors = {};
     if (!invoiceNumber.trim()) {
       errors.invoice_number = 'Enter an invoice number.';
     }
 
-    const amount = Number(invoiceAmount);
-    if (!invoiceAmount || !Number.isFinite(amount) || amount <= 0) {
-      errors.amount = 'Enter an invoice amount greater than 0.';
-    }
+    const amount = selectedInvoiceRequest ? Number(selectedInvoiceRequest.requested_amount) : Number(invoiceAmount);
+    if (!selectedInvoiceRequest) {
+      if (!invoiceAmount || !Number.isFinite(amount) || amount <= 0) {
+        errors.amount = 'Enter an invoice amount greater than 0.';
+      }
 
-    if (!invoiceDate) {
-      errors.invoice_date = 'Enter an invoice date.';
+      if (!invoiceDate) {
+        errors.invoice_date = 'Enter an invoice date.';
+      }
+    } else if (!invoiceMatchesRequest) {
+      errors.confirm_matches_request = 'Confirm the invoice details match the manager request.';
     }
 
     if (Number.isFinite(amount) && amount - suggestedInvoiceAmount > 0.005) {
@@ -323,6 +628,12 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   }
 
   const applyQuoteState = useCallback((nextQuote: Quote) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const nextInvoiceAmount = nextQuote.invoice_summary?.remainingBalance ? String(nextQuote.invoice_summary.remainingBalance) : '';
+    const nextInvoiceRequestAmount = nextQuote.invoice_summary?.availableToRequest ? String(nextQuote.invoice_summary.availableToRequest) : '';
+    const nextInvoiceRequestScope = nextQuote.invoice_summary?.availableToRequest === nextQuote.invoice_summary?.remainingBalance ? 'full' : 'partial';
+    const nextSelectedInvoiceRequestId = (nextQuote.invoice_requests || []).find(request => request.status === 'pending')?.id || '';
+
     setQuote(nextQuote);
     setPoNumber(nextQuote.po_number || '');
     setPoValue(nextQuote.po_value ? String(nextQuote.po_value) : '');
@@ -331,16 +642,51 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     setCompletionStatus(nextQuote.completion_status === 'approved_in_part' ? 'approved_in_part' : 'approved_in_full');
     setCompletionComments(nextQuote.completion_comments || '');
     setInvoiceNumber('');
-    setInvoiceAmount(nextQuote.invoice_summary?.remainingBalance ? String(nextQuote.invoice_summary.remainingBalance) : '');
-    setInvoiceDate(new Date().toISOString().slice(0, 10));
+    setInvoiceAmount(nextInvoiceAmount);
+    setInvoiceDate(today);
     setInvoiceScope(nextQuote.invoice_summary?.remainingBalance === 0 ? 'partial' : 'full');
     setInvoiceComments('');
+    setInvoiceRequestAmount(nextInvoiceRequestAmount);
+    setInvoiceRequestDate(today);
+    setInvoiceRequestScope(nextInvoiceRequestScope);
+    setInvoiceRequestComments('');
+    setSelectedInvoiceRequestId(nextSelectedInvoiceRequestId);
+    setInvoiceMatchesRequest(false);
+    setRevisionType('revision');
+    setRevisionNotes('');
+    setDuplicateManagerProfileId(nextQuote.requester_id || '');
+    setPoRequestRecipientEmails(buildQuoteRecipientOptions(nextQuote).map(option => option.email));
     setWorkflowError(null);
     setWorkflowFieldErrors({});
+    setInvoiceRequestError(null);
+    setInvoiceRequestFieldErrors({});
     setInvoiceError(null);
     setInvoiceFieldErrors({});
     setAttachmentError(null);
     setDeleteError(null);
+    setRemovingAttachmentId(null);
+    setReplacingAttachmentId(null);
+    setDetailsBaselineSnapshot(buildDirtySnapshot({
+      poNumber: nextQuote.po_number || '',
+      poValue: nextQuote.po_value ? String(nextQuote.po_value) : '',
+      startDate: nextQuote.start_date || '',
+      startAlertDays: nextQuote.start_alert_days ? String(nextQuote.start_alert_days) : '',
+      completionStatus: nextQuote.completion_status === 'approved_in_part' ? 'approved_in_part' : 'approved_in_full',
+      completionComments: nextQuote.completion_comments || '',
+      invoiceNumber: '',
+      invoiceAmount: nextInvoiceAmount,
+      invoiceDate: today,
+      invoiceScope: nextQuote.invoice_summary?.remainingBalance === 0 ? 'partial' : 'full',
+      invoiceComments: '',
+      invoiceRequestAmount: nextInvoiceRequestAmount,
+      invoiceRequestDate: today,
+      invoiceRequestScope: nextInvoiceRequestScope,
+      invoiceRequestComments: '',
+      selectedInvoiceRequestId: nextSelectedInvoiceRequestId,
+      invoiceMatchesRequest: false,
+      revisionType: 'revision',
+      revisionNotes: '',
+    }));
   }, []);
 
   const selectQuoteVersion = useCallback((nextQuoteId: string) => {
@@ -351,21 +697,31 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   const fetchQuote = useCallback(async () => {
     const idToLoad = activeQuoteId;
     if (!idToLoad) return;
+    activeFetchAbortRef.current?.abort();
+    const abortController = new AbortController();
+    activeFetchAbortRef.current = abortController;
+    const requestId = fetchRequestIdRef.current + 1;
+    fetchRequestIdRef.current = requestId;
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/quotes/${idToLoad}`);
+      const res = await fetch(`/api/quotes/${idToLoad}`, { signal: abortController.signal });
       if (!res.ok) {
         throw await buildResponseError(res, 'Unable to load quote details right now.');
       }
       const data = await res.json();
+      if (fetchRequestIdRef.current !== requestId) return;
       applyQuoteState(data.quote);
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       const message = error instanceof Error ? error.message : 'Unable to load quote details right now.';
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (fetchRequestIdRef.current === requestId) {
+        activeFetchAbortRef.current = null;
+        setLoading(false);
+      }
     }
   }, [activeQuoteId, applyQuoteState]);
 
@@ -390,18 +746,34 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
 
   useEffect(() => {
     if (!open) {
+      activeFetchAbortRef.current?.abort();
+      activeFetchAbortRef.current = null;
       setCurrentQuoteId(null);
       setActiveTab('overview');
       setQuote(null);
       setLoadError(null);
       setWorkflowError(null);
       setWorkflowFieldErrors({});
+      setInvoiceRequestError(null);
+      setInvoiceRequestFieldErrors({});
       setInvoiceError(null);
       setInvoiceFieldErrors({});
+      setSelectedInvoiceRequestId('');
+      setInvoiceMatchesRequest(false);
       setAttachmentError(null);
       setDeleteError(null);
+      setRemovingAttachmentId(null);
+      setReplacingAttachmentId(null);
       setRamsDialogOpen(false);
       setRamsComments('');
+      setDuplicateDialogOpen(false);
+      setDuplicateManagerProfileId('');
+      setPoRequestDialogOpen(false);
+      setPoRequestRecipientEmails([]);
+      setDetailsBaselineSnapshot('');
+      setPoRequestBaselineSnapshot('');
+      setDuplicateBaselineSnapshot('');
+      setRamsBaselineSnapshot('');
     }
   }, [open]);
 
@@ -409,7 +781,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     updates: Record<string, unknown>,
     scope: 'workflow' | 'versions' | 'general' = 'workflow'
   ) {
-    if (!activeQuoteId) return;
+    if (!activeQuoteId) return false;
     setActionLoading(true);
     if (scope === 'workflow') {
       clearWorkflowError();
@@ -432,6 +804,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       }
       toast.success('Quote updated');
       onRefresh();
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update this quote right now.';
       const fieldErrors = error instanceof Error && 'fieldErrors' in error
@@ -444,40 +817,91 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       }
 
       toast.error(message);
+      return false;
     } finally {
       setActionLoading(false);
     }
   }
 
   async function callAction(action: string, payload?: Record<string, unknown>, scope: 'workflow' | 'versions' | 'general' = 'workflow') {
-    await updateQuote({ action, ...(payload || {}) }, scope);
+    return updateQuote({ action, ...payload }, scope);
+  }
+
+  async function toggleQuoteSage(onSage: boolean) {
+    if (!activeQuoteId) return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/quotes/${activeQuoteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_sage',
+          on_sage: onSage,
+        }),
+      });
+
+      if (!res.ok) {
+        throw await buildResponseError(res, 'Unable to update Sage status right now.');
+      }
+
+      toast.success(onSage ? 'Quote marked on Sage' : 'Quote removed from Sage');
+      await fetchQuote();
+      onRefresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update Sage status right now.';
+      toast.error(message);
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function handleTriggerRams() {
-    await callAction('trigger_rams', { rams_comments: ramsComments.trim() || null });
-    setRamsDialogOpen(false);
-    setRamsComments('');
+    const ok = await callAction('trigger_rams', { rams_comments: ramsComments.trim() || null });
+    if (ok) {
+      setRamsDialogOpen(false);
+      setRamsComments('');
+    }
+  }
+
+  async function handleDuplicateQuote() {
+    const ok = await callAction('duplicate', {
+      version_notes: revisionNotes,
+      manager_profile_id: duplicateManagerProfileId || quote?.requester_id || null,
+    }, 'versions');
+    if (ok) {
+      setDuplicateDialogOpen(false);
+    }
+  }
+
+  function togglePoRequestRecipient(email: string, checked: boolean) {
+    setPoRequestRecipientEmails(prev => checked
+      ? Array.from(new Set([...prev, email]))
+      : prev.filter(item => item.toLowerCase() !== email.toLowerCase())
+    );
+  }
+
+  async function handlePoRequestEmail() {
+    const ok = await callAction('request_po', {
+      po_request_recipient_emails: poRequestRecipientEmails,
+    });
+    if (ok) {
+      setPoRequestDialogOpen(false);
+    }
   }
 
   async function handleAttachmentUpload(file: File) {
     if (!activeQuoteId) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('is_client_visible', 'false');
-    formData.append('attachment_purpose', 'internal');
-
     setUploadingAttachment(true);
     setAttachmentError(null);
     try {
-      const res = await fetch(`/api/quotes/${activeQuoteId}/attachments`, {
-        method: 'POST',
-        body: formData,
+      await uploadQuoteAttachment({
+        quoteId: activeQuoteId,
+        file,
+        isClientVisible: false,
+        attachmentPurpose: 'internal',
       });
-
-      if (!res.ok) {
-        throw await buildResponseError(res, 'Unable to upload this attachment right now.');
-      }
 
       toast.success('Attachment uploaded');
       await fetchQuote();
@@ -494,11 +918,9 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   async function deleteAttachment(attachmentId: string) {
     if (!activeQuoteId) return;
 
+    setRemovingAttachmentId(attachmentId);
     try {
-      const res = await fetch(`/api/quotes/${activeQuoteId}/attachments/${attachmentId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        throw await buildResponseError(res, 'Unable to remove this attachment right now.');
-      }
+      await deleteQuoteAttachment(activeQuoteId, attachmentId);
       toast.success('Attachment removed');
       await fetchQuote();
       onRefresh();
@@ -506,6 +928,115 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       const message = error instanceof Error ? error.message : 'Unable to remove this attachment right now.';
       setAttachmentError(message);
       toast.error(message);
+    } finally {
+      setRemovingAttachmentId(null);
+    }
+  }
+
+  function openAttachment(attachmentId: string) {
+    if (!activeQuoteId) return;
+    window.open(getQuoteAttachmentUrl(activeQuoteId, attachmentId), '_blank', 'noopener,noreferrer');
+  }
+
+  async function replaceAttachment(attachment: QuoteAttachment, file: File) {
+    if (!activeQuoteId) return;
+
+    setReplacingAttachmentId(attachment.id);
+    setAttachmentError(null);
+    try {
+      await replaceQuoteAttachment({
+        quoteId: activeQuoteId,
+        attachmentId: attachment.id,
+        file,
+        isClientVisible: attachment.is_client_visible,
+        attachmentPurpose: attachment.attachment_purpose,
+      });
+      toast.success('Attachment replaced');
+      await fetchQuote();
+      onRefresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to replace this attachment right now.';
+      setAttachmentError(message);
+      toast.error(message);
+    } finally {
+      setReplacingAttachmentId(null);
+    }
+  }
+
+  async function createInvoiceRequest() {
+    if (!activeQuoteId) return;
+
+    const nextRequestErrors = validateInvoiceRequestFields();
+    if (Object.keys(nextRequestErrors).length > 0) {
+      setInvoiceRequestFieldErrors(nextRequestErrors);
+      setInvoiceRequestError('Please correct the highlighted fields and try again.');
+      toast.error('Please correct the highlighted fields and try again.');
+      return;
+    }
+
+    setActionLoading(true);
+    clearInvoiceRequestError();
+    try {
+      const res = await fetch(`/api/quotes/${activeQuoteId}/invoice-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requested_amount: Number(invoiceRequestAmount),
+          requested_invoice_date: invoiceRequestDate,
+          requested_invoice_scope: invoiceRequestScope,
+          manager_comments: invoiceRequestComments,
+        }),
+      });
+
+      if (!res.ok) {
+        throw await buildResponseError(res, 'Unable to mark this quote ready to invoice right now.');
+      }
+
+      toast.success('Accounts notified');
+      setInvoiceRequestComments('');
+      await fetchQuote();
+      onRefresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to mark this quote ready to invoice right now.';
+      const fieldErrors = error instanceof Error && 'fieldErrors' in error
+        ? ((error as Error & { fieldErrors?: DetailFieldErrors }).fieldErrors || {})
+        : {};
+      setInvoiceRequestFieldErrors(fieldErrors);
+      setInvoiceRequestError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function retractInvoiceRequest(invoiceRequestId: string) {
+    if (!activeQuoteId || !invoiceRequestId) return;
+
+    setActionLoading(true);
+    clearInvoiceRequestError();
+    try {
+      const res = await fetch(`/api/quotes/${activeQuoteId}/invoice-requests`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel',
+          invoice_request_id: invoiceRequestId,
+        }),
+      });
+
+      if (!res.ok) {
+        throw await buildResponseError(res, 'Unable to retract this invoice request right now.');
+      }
+
+      toast.success('Invoice request retracted');
+      await fetchQuote();
+      onRefresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to retract this invoice request right now.';
+      setInvoiceRequestError(message);
+      toast.error(message);
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -527,10 +1058,12 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          invoice_request_id: selectedInvoiceRequest?.id || undefined,
           invoice_number: invoiceNumber,
-          invoice_date: invoiceDate,
-          amount: Number(invoiceAmount),
-          invoice_scope: invoiceScope,
+          invoice_date: selectedInvoiceRequest?.requested_invoice_date || invoiceDate,
+          amount: selectedInvoiceRequest ? Number(selectedInvoiceRequest.requested_amount) : Number(invoiceAmount),
+          invoice_scope: selectedInvoiceRequest?.requested_invoice_scope || invoiceScope,
+          confirm_matches_request: Boolean(selectedInvoiceRequest) ? invoiceMatchesRequest : undefined,
           comments: invoiceComments,
         }),
       });
@@ -543,6 +1076,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       setInvoiceNumber('');
       setInvoiceAmount('');
       setInvoiceComments('');
+      setInvoiceMatchesRequest(false);
       await fetchQuote();
       onRefresh();
     } catch (error) {
@@ -597,20 +1131,23 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
 
   return (
     <>
-    <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white">
+    <Dialog open={open} onOpenChange={handleDetailsDialogOpenChange}>
+      <DialogContent
+        ref={detailsDialogContentRef}
+        className="w-[calc(100vw-2rem)] max-w-3xl xl:max-w-[60rem] max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
+        onInteractOutside={handleDetailsDialogInteractOutside}
+        onEscapeKeyDown={handleDetailsDialogEscapeKeyDown}
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Quote Details</DialogTitle>
         </DialogHeader>
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-yellow" />
-          </div>
+          <PanelLoader message="Loading quote details..." className="py-12" />
         ) : !quote ? (
           <div className="space-y-4 py-8 text-center">
             <p className="text-sm text-red-200">{loadError || 'Unable to load quote details right now.'}</p>
             <div className="flex justify-center gap-2">
-              <Button variant="outline" onClick={onClose} className="border-slate-600 text-muted-foreground">
+              <Button variant="outline" onClick={discardDetailsDialog} className="border-slate-600 text-muted-foreground">
                 Close
               </Button>
               {quoteId ? (
@@ -623,17 +1160,17 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         ) : (
           <>
             <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle className="text-white flex items-center gap-2">
-                  <span className="font-mono text-brand-yellow">{quote.quote_reference}</span>
-                  <Badge variant="outline" className={statusConfig?.color}>
-                    {statusConfig?.label}
-                  </Badge>
-                  {quote.commercial_status === 'closed' && (
-                    <Badge variant="outline" className="border-slate-300/30 text-slate-200 bg-slate-400/10">
-                      Archived
+              <div className="flex min-w-0 items-center justify-between">
+                <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 text-white">
+                    <span className="font-mono text-sm text-brand-yellow">{quote.quote_reference}</span>
+                    <Badge variant="outline" className={statusConfig?.color}>
+                      {statusConfig?.label}
                     </Badge>
-                  )}
+                    {quote.commercial_status === 'closed' && (
+                      <Badge variant="outline" className="border-slate-300/30 text-slate-200 bg-slate-400/10">
+                        Archived
+                      </Badge>
+                    )}
                 </DialogTitle>
               </div>
             </DialogHeader>
@@ -664,6 +1201,18 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                   <span className="text-muted-foreground">For the attention of</span>
                   <p className="text-white">{quote.attention_name || '—'}</p>
                   {quote.attention_email && <p className="text-xs text-muted-foreground">{quote.attention_email}</p>}
+                  {customerToContacts.length > 0 && (
+                    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/30 p-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Additional customer To</p>
+                      <div className="mt-1 space-y-1">
+                        {customerToContacts.map(contact => (
+                          <p key={contact.id} className="text-xs text-slate-300">
+                            {(contact.name || contact.email || 'Unnamed contact')}{contact.email ? ` <${contact.email}>` : ' (no email on file)'}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Title</span>
@@ -683,24 +1232,34 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 </div>
               </div>
 
-              {quote.site_address && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Site Address</span>
-                  <p className="text-slate-300 whitespace-pre-wrap">{quote.site_address}</p>
-                </div>
-              )}
+              {(quote.site_address || quote.project_description) && (
+                <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                  <div>
+                    <span className="text-muted-foreground">Site Address</span>
+                    {quote.site_address ? (
+                      <p className="text-slate-300 whitespace-pre-wrap">{quote.site_address}</p>
+                    ) : (
+                      <p className="text-slate-500">—</p>
+                    )}
+                  </div>
 
-              {quote.project_description && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Summary</span>
-                  <p className="text-slate-300 whitespace-pre-wrap">{quote.project_description}</p>
+                  <div>
+                    <span className="text-muted-foreground">Summary</span>
+                    {quote.project_description ? (
+                      <FormattedQuoteText value={quote.project_description} className="mt-1" />
+                    ) : (
+                      <p className="text-slate-500">—</p>
+                    )}
+                  </div>
                 </div>
               )}
 
               {quote.scope && (
                 <div className="text-sm">
                   <span className="text-muted-foreground">Scope</span>
-                  <p className="text-slate-300 whitespace-pre-wrap">{quote.scope}</p>
+                  <div className="mt-1 max-h-44 overflow-y-auto overscroll-contain rounded-md border border-slate-700/70 bg-slate-950/20 p-3 pr-4">
+                    <FormattedQuoteText value={quote.scope} omitLeadingHeading="scope of works" />
+                  </div>
                 </div>
               )}
 
@@ -774,7 +1333,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
                     <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
                       <p className="text-muted-foreground">Quote Total</p>
                       <p className="mt-1 text-lg font-semibold text-white">£{Number(quote.total).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
@@ -787,6 +1346,60 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                       <p className="text-muted-foreground">Remaining Balance</p>
                       <p className="mt-1 text-lg font-semibold text-white">£{Number(quote.invoice_summary?.remainingBalance ?? quote.total).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
                     </div>
+                    {canManageSage ? (
+                      <button
+                        type="button"
+                        className={sageCardClassName}
+                        onClick={() => void toggleQuoteSage(!isQuoteOnSage)}
+                        disabled={actionLoading}
+                        aria-pressed={isQuoteOnSage}
+                        aria-label={isQuoteOnSage ? 'Remove quote from Sage' : 'Mark quote on Sage'}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-muted-foreground">Sage</p>
+                          {sagePostedDateLabel ? (
+                            <span className="text-xs font-medium text-emerald-300">{sagePostedDateLabel}</span>
+                          ) : null}
+                        </div>
+                        <p className={cn('mt-1 flex items-center gap-2 text-lg font-semibold', isQuoteOnSage ? 'text-emerald-100' : 'text-white')}>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                              isQuoteOnSage
+                                ? 'border-emerald-300 bg-emerald-400 text-slate-950'
+                                : 'border-slate-500 bg-slate-900/60'
+                            )}
+                          >
+                            {isQuoteOnSage ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                          </span>
+                          <span>{isQuoteOnSage ? 'On Sage' : 'Not on Sage'}</span>
+                        </p>
+                      </button>
+                    ) : (
+                      <div className={sageCardClassName}>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-muted-foreground">Sage</p>
+                          {sagePostedDateLabel ? (
+                            <span className="text-xs font-medium text-emerald-300">{sagePostedDateLabel}</span>
+                          ) : null}
+                        </div>
+                        <p className={cn('mt-1 flex items-center gap-2 text-lg font-semibold', isQuoteOnSage ? 'text-emerald-100' : 'text-white')}>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                              isQuoteOnSage
+                                ? 'border-emerald-300 bg-emerald-400 text-slate-950'
+                                : 'border-slate-500 bg-slate-900/60'
+                            )}
+                          >
+                            {isQuoteOnSage ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                          </span>
+                          <span>{isQuoteOnSage ? 'On Sage' : 'Not on Sage'}</span>
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {(quote.signoff_name || quote.signoff_title) && (
@@ -920,9 +1533,28 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                         <FolderKanban className="mr-2 h-4 w-4" /> Save PO
                       </Button>
                     )}
+                    {canRequestPo && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const nextRecipients = poRequestRecipientOptions.map(option => option.email);
+                          setPoRequestRecipientEmails(nextRecipients);
+                          setPoRequestBaselineSnapshot(buildEmailSelectionSnapshot(nextRecipients));
+                          setPoRequestDialogOpen(true);
+                        }}
+                        disabled={actionLoading || poRequestRecipientOptions.length === 0}
+                        className="border-slate-600 text-muted-foreground"
+                      >
+                        <Mail className="mr-2 h-4 w-4" /> Request PO
+                      </Button>
+                    )}
                     {canTriggerRams && (
                       <Button
-                        onClick={() => setRamsDialogOpen(true)}
+                        onClick={() => {
+                          setRamsComments('');
+                          setRamsBaselineSnapshot('');
+                          setRamsDialogOpen(true);
+                        }}
                         disabled={actionLoading}
                         className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                       >
@@ -966,7 +1598,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
 
                   {['draft', 'changes_requested', 'pending_internal_approval'].includes(quote.status) && !recipientEmail && (
                     <p className="text-sm text-amber-300">
-                      Add a customer contact email before confirming and sending this quote.
+                      Add a primary customer contact email before confirming and sending this quote.
                     </p>
                   )}
 
@@ -978,101 +1610,344 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 </TabsContent>
 
                 <TabsContent value="invoices" className="space-y-4">
+                  {invoiceRequestError ? (
+                    <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                      {invoiceRequestError}
+                    </div>
+                  ) : null}
                   {invoiceError ? (
                     <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
                       {invoiceError}
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label>Invoice Number *</Label>
-                      <Input
-                        value={invoiceNumber}
-                        disabled={!canManageInvoices}
-                        onChange={e => {
-                          clearInvoiceError('invoice_number');
-                          setInvoiceNumber(e.target.value);
-                        }}
-                        className={getFieldClassName(invoiceFieldErrors, 'invoice_number')}
-                      />
-                      {renderFieldError(invoiceFieldErrors, 'invoice_number')}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 text-sm">
+                      <p className="text-muted-foreground">Quote Total</p>
+                      <p className="mt-1 text-lg font-semibold text-white">£{Number(quote.total).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Amount *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={invoiceAmount}
-                        disabled={!canManageInvoices}
-                        onChange={e => {
-                          clearInvoiceError('amount');
-                          const nextValue = e.target.value;
-                          setInvoiceAmount(nextValue);
-
-                          const numericValue = Number(nextValue);
-                          if (nextValue && Number.isFinite(numericValue) && numericValue < suggestedInvoiceAmount) {
-                            setInvoiceScope('partial');
-                          }
-                        }}
-                        className={getFieldClassName(invoiceFieldErrors, 'amount')}
-                      />
-                      {renderFieldError(invoiceFieldErrors, 'amount')}
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 text-sm">
+                      <p className="text-muted-foreground">Actual Invoiced</p>
+                      <p className="mt-1 text-lg font-semibold text-white">£{Number(quote.invoice_summary?.invoicedTotal || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Date *</Label>
-                      <Input
-                        type="date"
-                        value={invoiceDate}
-                        disabled={!canManageInvoices}
-                        onChange={e => {
-                          clearInvoiceError('invoice_date');
-                          setInvoiceDate(e.target.value);
-                        }}
-                        className={getFieldClassName(invoiceFieldErrors, 'invoice_date')}
-                      />
-                      {renderFieldError(invoiceFieldErrors, 'invoice_date')}
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 text-sm">
+                      <p className="text-muted-foreground">Pending Requested</p>
+                      <p className="mt-1 text-lg font-semibold text-white">£{Number(quote.invoice_summary?.pendingRequestedTotal || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 text-sm">
+                      <p className="text-muted-foreground">Available To Request</p>
+                      <p className="mt-1 text-lg font-semibold text-white">£{availableToRequest.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Invoice Scope</Label>
-                      <Select value={invoiceScope} onValueChange={(value: 'full' | 'partial') => setInvoiceScope(value)} disabled={!canManageInvoices}>
-                        <SelectTrigger className={getSelectClassName(invoiceFieldErrors, 'invoice_scope')}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="full">Invoice in full</SelectItem>
-                          <SelectItem value="partial">Partial invoice</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {renderFieldError(invoiceFieldErrors, 'invoice_scope')}
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h4 className="font-semibold text-white">Manager request</h4>
+                        <p className="text-xs text-muted-foreground">Mark this quote as ready for Accounts to create invoice details.</p>
+                      </div>
+                      <Badge variant="outline" className={billingStatusConfig.color}>
+                        {billingStatusConfig.label}
+                      </Badge>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Comments</Label>
-                      <Textarea
-                        value={invoiceComments}
-                      disabled={!canManageInvoices}
-                        onChange={e => {
-                          clearInvoiceError('comments');
-                          setInvoiceComments(e.target.value);
-                        }}
-                        rows={2}
-                        className={getFieldClassName(invoiceFieldErrors, 'comments')}
-                      />
-                      {renderFieldError(invoiceFieldErrors, 'comments')}
-                    </div>
+
+                    {pendingFullInvoiceRequest ? (
+                      <div className="rounded-md border border-violet-500/30 bg-violet-500/10 p-3 text-sm text-violet-100">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-medium">Full amount has already been requested.</p>
+                            <p className="text-xs text-violet-100/80">
+                              Marked ready: {format(new Date(pendingFullInvoiceRequest.requested_at), 'dd MMM yyyy')}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => retractInvoiceRequest(pendingFullInvoiceRequest.id)}
+                            disabled={actionLoading || !canManageInvoices}
+                            className="border-violet-400/40 text-violet-100 hover:bg-violet-500/20"
+                          >
+                            Retract request
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                          <div className="space-y-2">
+                            <Label>Amount *</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={invoiceRequestAmount}
+                              disabled={managerRequestControlsDisabled}
+                              onChange={e => {
+                                clearInvoiceRequestError('requested_amount');
+                                const nextValue = e.target.value;
+                                setInvoiceRequestAmount(nextValue);
+
+                                const numericValue = Number(nextValue);
+                                if (nextValue && Number.isFinite(numericValue) && numericValue < availableToRequest) {
+                                  setInvoiceRequestScope('partial');
+                                }
+                              }}
+                              className={getFieldClassName(invoiceRequestFieldErrors, 'requested_amount')}
+                            />
+                            {renderFieldError(invoiceRequestFieldErrors, 'requested_amount')}
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Date *</Label>
+                            <Input
+                              type="date"
+                              value={invoiceRequestDate}
+                              disabled={managerRequestControlsDisabled}
+                              onChange={e => {
+                                clearInvoiceRequestError('requested_invoice_date');
+                                setInvoiceRequestDate(e.target.value);
+                              }}
+                              className={getFieldClassName(invoiceRequestFieldErrors, 'requested_invoice_date')}
+                            />
+                            {renderFieldError(invoiceRequestFieldErrors, 'requested_invoice_date')}
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Invoice Scope</Label>
+                            <Select
+                              value={invoiceRequestScope}
+                              onValueChange={(value: 'full' | 'partial') => {
+                                clearInvoiceRequestError('requested_invoice_scope');
+                                setInvoiceRequestScope(value);
+                              }}
+                              disabled={managerRequestControlsDisabled}
+                            >
+                              <SelectTrigger className={getSelectClassName(invoiceRequestFieldErrors, 'requested_invoice_scope')}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="full">Invoice in full</SelectItem>
+                                <SelectItem value="partial">Partial invoice</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {renderFieldError(invoiceRequestFieldErrors, 'requested_invoice_scope')}
+                          </div>
+                          <div className="flex items-end">
+                            <Button
+                              onClick={createInvoiceRequest}
+                              disabled={actionLoading || managerRequestControlsDisabled}
+                              className="w-full bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
+                            >
+                              <Send className="mr-2 h-4 w-4" /> {managerRequestCtaLabel}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Internal Comments</Label>
+                          <Textarea
+                            value={invoiceRequestComments}
+                            disabled={managerRequestControlsDisabled}
+                            onChange={e => {
+                              clearInvoiceRequestError('manager_comments');
+                              setInvoiceRequestComments(e.target.value);
+                            }}
+                            rows={2}
+                            className={getFieldClassName(invoiceRequestFieldErrors, 'manager_comments')}
+                          />
+                          {renderFieldError(invoiceRequestFieldErrors, 'manager_comments')}
+                        </div>
+                      </>
+                    )}
+
+                    {pendingInvoiceRequests.length > 0 && !pendingFullInvoiceRequest ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending invoice requests</p>
+                        {pendingInvoiceRequests.map(request => (
+                          <div key={request.id} className="flex flex-col gap-2 rounded-md border border-slate-700 bg-slate-900/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="font-medium text-slate-100">
+                                £{Number(request.requested_amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })} • {request.requested_invoice_scope === 'full' ? 'Full invoice' : 'Partial invoice'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Marked ready: {format(new Date(request.requested_at), 'dd MMM yyyy')} • Requested date: {format(new Date(request.requested_invoice_date), 'dd MMM yyyy')}
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => retractInvoiceRequest(request.id)}
+                              disabled={actionLoading || !canManageInvoices}
+                            >
+                              Retract request
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {availableToRequest <= 0 && !pendingFullInvoiceRequest ? (
+                      <p className="text-xs text-muted-foreground">No remaining balance is available to request.</p>
+                    ) : null}
                   </div>
 
-                  <Button
-                    onClick={addInvoice}
-                    disabled={actionLoading || !canManageInvoices}
-                    className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
-                  >
-                    <Receipt className="mr-2 h-4 w-4" /> Add Invoice
-                  </Button>
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-white">Accounts invoice details</h4>
+                      <p className="text-xs text-muted-foreground">Create the invoice, then record the invoice number here.</p>
+                    </div>
+
+                    {pendingInvoiceRequests.length ? (
+                      <div className="space-y-2">
+                        <Label>Pending Request</Label>
+                        <Select
+                          value={selectedInvoiceRequestId}
+                          onValueChange={(value) => {
+                            clearInvoiceError();
+                            setSelectedInvoiceRequestId(value);
+                            setInvoiceMatchesRequest(false);
+                          }}
+                          disabled={!canManageInvoices}
+                        >
+                          <SelectTrigger className="bg-slate-800 border-slate-600">
+                            <SelectValue placeholder="Select pending request" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pendingInvoiceRequests.map(request => (
+                              <SelectItem key={request.id} value={request.id}>
+                                {format(new Date(request.requested_invoice_date), 'dd MMM yyyy')} • £{Number(request.requested_amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })} • {request.requested_invoice_scope}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No pending invoice requests. Accounts can still record ad-hoc invoice details if needed.</p>
+                    )}
+
+                    {selectedInvoiceRequest ? (
+                      <div className="rounded-md border border-violet-500/30 bg-violet-500/10 p-3 text-sm text-violet-100">
+                        <p className="font-medium">Manager requested {selectedInvoiceRequest.requested_invoice_scope} invoice for £{Number(selectedInvoiceRequest.requested_amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-xs text-violet-100/80">Requested date: {format(new Date(selectedInvoiceRequest.requested_invoice_date), 'dd MMM yyyy')}</p>
+                        {selectedInvoiceRequest.manager_comments ? (
+                          <p className="mt-2 whitespace-pre-wrap text-sm">{selectedInvoiceRequest.manager_comments}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Invoice Number *</Label>
+                        <Input
+                          value={invoiceNumber}
+                          disabled={!canManageInvoices}
+                          onChange={e => {
+                            clearInvoiceError('invoice_number');
+                            setInvoiceNumber(e.target.value);
+                          }}
+                          className={getFieldClassName(invoiceFieldErrors, 'invoice_number')}
+                        />
+                        {renderFieldError(invoiceFieldErrors, 'invoice_number')}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Amount *</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={selectedInvoiceRequest ? String(selectedInvoiceRequest.requested_amount) : invoiceAmount}
+                          disabled={!canManageInvoices || Boolean(selectedInvoiceRequest)}
+                          onChange={e => {
+                            clearInvoiceError('amount');
+                            const nextValue = e.target.value;
+                            setInvoiceAmount(nextValue);
+
+                            const numericValue = Number(nextValue);
+                            if (nextValue && Number.isFinite(numericValue) && numericValue < suggestedInvoiceAmount) {
+                              setInvoiceScope('partial');
+                            }
+                          }}
+                          className={getFieldClassName(invoiceFieldErrors, 'amount')}
+                        />
+                        {renderFieldError(invoiceFieldErrors, 'amount')}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Date *</Label>
+                        <Input
+                          type="date"
+                          value={selectedInvoiceRequest?.requested_invoice_date || invoiceDate}
+                          disabled={!canManageInvoices || Boolean(selectedInvoiceRequest)}
+                          onChange={e => {
+                            clearInvoiceError('invoice_date');
+                            setInvoiceDate(e.target.value);
+                          }}
+                          className={getFieldClassName(invoiceFieldErrors, 'invoice_date')}
+                        />
+                        {renderFieldError(invoiceFieldErrors, 'invoice_date')}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Invoice Scope</Label>
+                        <Select
+                          value={selectedInvoiceRequest?.requested_invoice_scope || invoiceScope}
+                          onValueChange={(value: 'full' | 'partial') => setInvoiceScope(value)}
+                          disabled={!canManageInvoices || Boolean(selectedInvoiceRequest)}
+                        >
+                          <SelectTrigger className={getSelectClassName(invoiceFieldErrors, 'invoice_scope')}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full">Invoice in full</SelectItem>
+                            <SelectItem value="partial">Partial invoice</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {renderFieldError(invoiceFieldErrors, 'invoice_scope')}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Accounts Comments</Label>
+                        <Textarea
+                          value={invoiceComments}
+                          disabled={!canManageInvoices}
+                          onChange={e => {
+                            clearInvoiceError('comments');
+                            setInvoiceComments(e.target.value);
+                          }}
+                          rows={2}
+                          className={getFieldClassName(invoiceFieldErrors, 'comments')}
+                        />
+                        {renderFieldError(invoiceFieldErrors, 'comments')}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-h-10 flex-1">
+                        {selectedInvoiceRequest ? (
+                          <label className="flex items-start gap-2 text-sm text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={invoiceMatchesRequest}
+                              disabled={!canManageInvoices}
+                              onChange={event => {
+                                clearInvoiceError('confirm_matches_request');
+                                setInvoiceMatchesRequest(event.target.checked);
+                              }}
+                              className="mt-1"
+                            />
+                            <span>I confirm the invoice details and total match the manager request.</span>
+                          </label>
+                        ) : null}
+                        {renderFieldError(invoiceFieldErrors, 'confirm_matches_request')}
+                      </div>
+
+                      <Button
+                        onClick={addInvoice}
+                        disabled={actionLoading || !canManageInvoices}
+                        className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 sm:self-start"
+                      >
+                        <Receipt className="mr-2 h-4 w-4" /> Add Invoice Details
+                      </Button>
+                    </div>
+                  </div>
 
                   {!canManageInvoices ? (
                     <p className="text-xs text-muted-foreground">
@@ -1081,20 +1956,29 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                   ) : null}
 
                   <div className="space-y-2">
-                    {quote.invoices?.length ? quote.invoices.map(invoice => (
-                      <div key={invoice.id} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="font-medium text-white">{invoice.invoice_number}</p>
-                            <p className="text-xs text-muted-foreground">{format(new Date(invoice.invoice_date), 'dd MMM yyyy')} • {invoice.invoice_scope.replace('_', ' ')}</p>
+                    {quote.invoices?.length ? quote.invoices.map(invoice => {
+                      const linkedRequest = quote.invoice_requests?.find(request => request.id === invoice.invoice_request_id) || null;
+                      return (
+                        <div key={invoice.id} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="font-medium text-white">{invoice.invoice_number}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Invoice date: {format(new Date(invoice.invoice_date), 'dd MMM yyyy')} • {invoice.invoice_scope === 'full' ? 'Full invoice' : 'Partial invoice'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {linkedRequest ? `Marked ready: ${format(new Date(linkedRequest.requested_at), 'dd MMM yyyy')} • ` : ''}
+                                Added by Accounts: {format(new Date(invoice.created_at), 'dd MMM yyyy')}
+                              </p>
+                            </div>
+                            <div className="space-y-2 text-right">
+                              <p className="font-semibold text-white">£{Number(invoice.amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-white">£{Number(invoice.amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</p>
-                          </div>
+                          {invoice.comments && <p className="mt-2 text-sm text-slate-300 whitespace-pre-wrap">{invoice.comments}</p>}
                         </div>
-                        {invoice.comments && <p className="mt-2 text-sm text-slate-300 whitespace-pre-wrap">{invoice.comments}</p>}
-                      </div>
-                    )) : (
+                      );
+                    }) : (
                       <p className="text-sm text-muted-foreground">No invoices recorded yet.</p>
                     )}
                   </div>
@@ -1151,15 +2035,50 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                             {attachment.content_type || 'File'}{attachment.file_size ? ` • ${(attachment.file_size / 1024).toFixed(1)} KB` : ''}
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={!canManageAttachments}
-                          className="border-slate-600 text-muted-foreground"
-                          onClick={() => deleteAttachment(attachment.id)}
-                        >
-                          Remove
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-slate-600 text-muted-foreground"
+                            onClick={() => openAttachment(attachment.id)}
+                          >
+                            <ExternalLink className="mr-1 h-3 w-3" />
+                            Open
+                          </Button>
+                          <label
+                            className={cn(
+                              'inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-slate-600 px-3 text-xs text-muted-foreground hover:bg-slate-800',
+                              (!canManageAttachments || replacingAttachmentId === attachment.id) && 'pointer-events-none opacity-50'
+                            )}
+                          >
+                            {replacingAttachmentId === attachment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                            Replace
+                            <input
+                              type="file"
+                              className="hidden"
+                              disabled={!canManageAttachments || replacingAttachmentId === attachment.id}
+                              onChange={event => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  setAttachmentError(null);
+                                  void replaceAttachment(attachment, file);
+                                  event.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!canManageAttachments || removingAttachmentId === attachment.id}
+                            className="border-slate-600 text-muted-foreground"
+                            onClick={() => deleteAttachment(attachment.id)}
+                          >
+                            {removingAttachmentId === attachment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                            Remove
+                          </Button>
+                        </div>
                       </div>
                     )) : (
                       <p className="text-sm text-muted-foreground">No supporting files attached yet.</p>
@@ -1205,7 +2124,12 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => callAction('duplicate', { version_notes: revisionNotes }, 'versions')}
+                      onClick={() => {
+                          const nextManagerId = quote.requester_id || '';
+                          setDuplicateManagerProfileId(nextManagerId);
+                          setDuplicateBaselineSnapshot(nextManagerId);
+                        setDuplicateDialogOpen(true);
+                      }}
                       disabled={actionLoading || !canCreateVersions}
                       className="border-slate-600 text-muted-foreground"
                     >
@@ -1374,8 +2298,131 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         )}
       </DialogContent>
     </Dialog>
-    <Dialog open={ramsDialogOpen} onOpenChange={setRamsDialogOpen}>
-      <DialogContent className="bg-slate-900 border-slate-700 text-white">
+    <Dialog open={poRequestDialogOpen} onOpenChange={handlePoRequestDialogOpenChange}>
+      <DialogContent
+        ref={poRequestDialogContentRef}
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-slate-900 border-slate-700 text-white sm:max-w-2xl"
+        onInteractOutside={handlePoRequestDialogInteractOutside}
+        onEscapeKeyDown={handlePoRequestDialogEscapeKeyDown}
+      >
+        <DialogHeader>
+          <DialogTitle>Request purchase order</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Review the recipients and email preview before sending the attached quote PDF.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="rounded-md border border-slate-700 bg-slate-950/30 p-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subject</p>
+            <p className="mt-1 text-white">{quoteDisplayName || quote?.quote_reference || 'Quote'}</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer recipients</p>
+            {poRequestRecipientOptions.length > 0 ? (
+              <div className="space-y-2">
+                {poRequestRecipientOptions.map(option => (
+                  <label key={option.email} className="flex items-start gap-3 rounded-md border border-slate-700 bg-slate-950/30 p-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={poRequestRecipientEmails.some(email => email.toLowerCase() === option.email.toLowerCase())}
+                      onChange={event => togglePoRequestRecipient(option.email, event.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-white">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.email}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-amber-300">No saved customer email recipients are available for this quote.</p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-slate-700 bg-slate-950/30 p-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email preview</p>
+            <div className="mt-2 space-y-3 whitespace-pre-wrap text-slate-200">
+              <p>Hello {poRequestGreetingName},</p>
+              <p>Please can I have a purchase order for the attached quotation.</p>
+              <p>Kind Regards<br />{poRequestSenderName}</p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-slate-700 bg-slate-950/30 p-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Attachment</p>
+            <p className="mt-1 text-slate-200">{poRequestPdfFilename}</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={discardPoRequestDialog} className="border-slate-600 text-muted-foreground">
+            {isPoRequestDirty ? 'Discard Changes' : 'Cancel'}
+          </Button>
+          <Button
+            onClick={() => void handlePoRequestEmail()}
+            disabled={actionLoading || poRequestRecipientEmails.length === 0}
+            className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
+          >
+            {actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</> : 'Send PO request'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={duplicateDialogOpen} onOpenChange={handleDuplicateDialogOpenChange}>
+      <DialogContent
+        ref={duplicateDialogContentRef}
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-slate-900 border-slate-700 text-white sm:max-w-lg"
+        onInteractOutside={handleDuplicateDialogInteractOutside}
+        onEscapeKeyDown={handleDuplicateDialogEscapeKeyDown}
+      >
+        <DialogHeader>
+          <DialogTitle>Duplicate quote</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            This creates a new standalone quote with the next quote number from the selected manager series.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="rounded-md border border-slate-700 bg-slate-950/30 p-3 text-sm">
+            <p className="text-muted-foreground">Source quote</p>
+            <p className="font-medium text-white">{quoteDisplayName || quote?.quote_reference || 'Current quote'}</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Number series manager</Label>
+            <Select value={duplicateManagerProfileId} onValueChange={setDuplicateManagerProfileId}>
+              <SelectTrigger className="bg-slate-800 border-slate-600">
+                <SelectValue placeholder="Use original quote manager" />
+              </SelectTrigger>
+              <SelectContent>
+                {duplicateManagerOptions.map(option => (
+                  <SelectItem key={option.profile_id} value={option.profile_id}>
+                    {(option.profile?.full_name || option.signoff_name || option.initials)} ({option.initials})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Leave as the original manager unless the copied quote belongs under a different manager.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={discardDuplicateDialog} className="border-slate-600 text-muted-foreground">
+            {isDuplicateDialogDirty ? 'Discard Changes' : 'Cancel'}
+          </Button>
+          <Button onClick={() => void handleDuplicateQuote()} disabled={actionLoading} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
+            {actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Duplicating...</> : 'Duplicate quote'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={ramsDialogOpen} onOpenChange={handleRamsDialogOpenChange}>
+      <DialogContent
+        ref={ramsDialogContentRef}
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-slate-900 border-slate-700 text-white"
+        onInteractOutside={handleRamsDialogInteractOutside}
+        onEscapeKeyDown={handleRamsDialogEscapeKeyDown}
+      >
         <DialogHeader>
           <DialogTitle>Trigger RAMS</DialogTitle>
           <DialogDescription className="text-muted-foreground">
@@ -1390,8 +2437,8 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
           className="bg-slate-800 border-slate-600"
         />
         <DialogFooter>
-          <Button variant="outline" onClick={() => setRamsDialogOpen(false)} className="border-slate-600 text-muted-foreground">
-            Cancel
+          <Button variant="outline" onClick={discardRamsDialog} className="border-slate-600 text-muted-foreground">
+            {isRamsDialogDirty ? 'Discard Changes' : 'Cancel'}
           </Button>
           <Button onClick={() => void handleTriggerRams()} disabled={actionLoading} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
             {actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</> : 'Send RAMS Request'}

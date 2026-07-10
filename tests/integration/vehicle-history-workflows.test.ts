@@ -65,11 +65,11 @@ describeVehicleHistorySuite('Vehicle History Page Workflows', () => {
     if (authError) throw authError;
     void authData.user!.id;
 
-    // SAFETY: ONLY get TE57 test vehicles
+    // SAFETY: ONLY get ZZ99 test vehicles
     const { data: vehicles } = await supabase
       .from('vans')
       .select('id')
-      .ilike('reg_number', 'TE57%')
+      .ilike('reg_number', 'ZZ99%')
       .neq('status', 'deleted')
       .limit(1);
 

@@ -219,6 +219,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             body: bodyParts.join('\n'),
             sender_id: user.id,
             created_via: buildSuggestionNotificationCreatedVia(id),
+            module_key: 'suggestions',
           })
           .select('id')
           .single();

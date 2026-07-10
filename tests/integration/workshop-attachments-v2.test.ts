@@ -33,7 +33,7 @@ describeOrSkip('Workshop Attachments V2 schema compatibility', () => {
     testUserId = authData.user!.id;
 
     testVanId = (await resolveTestVanId(supabase)) || '';
-    if (!testVanId) throw new Error('No TE57 test van available');
+    if (!testVanId) throw new Error('No ZZ99 test van available');
   });
 
   afterAll(async () => {

@@ -66,11 +66,11 @@ async function checkAllVehicles() {
   console.log('========================================================\n');
   console.log(`Mode: ${FIX_MODE ? '⚠️  FIX MODE (WILL MODIFY DATA)' : '📊 READ-ONLY (NO CHANGES)'}\n`);
 
-  // Get all non-TE57 vehicles with maintenance data
+  // Get all non-ZZ99 vehicles with maintenance data
   const { data: vehicles, error } = await supabase
     .from('vans')
     .select('id, reg_number, nickname, status, vehicle_maintenance(id, current_mileage, updated_at)')
-    .not('reg_number', 'ilike', 'TE57%')
+    .not('reg_number', 'ilike', 'ZZ99%')
     .neq('status', 'deleted')
     .order('reg_number');
 

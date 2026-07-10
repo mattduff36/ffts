@@ -43,7 +43,7 @@ describeOrSkip('Error Details API - Subcategory Tasks', () => {
     const { data: existingVehicle } = await supabase
       .from('vans')
       .select('id')
-      .ilike('reg_number', 'TE57ERRTEST')
+      .ilike('reg_number', 'ZZ99ERRTEST')
       .single();
 
     if (existingVehicle) {
@@ -58,7 +58,7 @@ describeOrSkip('Error Details API - Subcategory Tasks', () => {
       const { data: newVehicle } = await supabase
         .from('vans')
         .insert({
-          reg_number: 'TE57ERRTEST',
+          reg_number: 'ZZ99ERRTEST',
           status: 'active',
           category_id: categories?.id,
         })
@@ -222,7 +222,7 @@ describeOrSkip('Error Details API - Subcategory Tasks', () => {
     const firstItem = data.items[0];
 
     expect(firstItem.vehicle).toHaveProperty('reg_number');
-    expect(firstItem.vehicle.reg_number).toBe('TE57ERRTEST');
+    expect(firstItem.vehicle.reg_number).toBe('ZZ99ERRTEST');
   });
 
   it('should include status breakdown in summary', async () => {

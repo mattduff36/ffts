@@ -4,7 +4,7 @@
  * Tests for the new required period_value field on maintenance categories.
  * period_value represents the due interval:
  *   - Date type: weeks or months (e.g. 6 weeks, 12 months)
- *   - Mileage type: miles (e.g. 10000 = every 10,000 miles)
+ *   - Distance type: miles for vans or kilometres for HGVs
  *   - Hours type: hours (e.g. 250 = every 250 hours)
  */
 
@@ -44,7 +44,7 @@ const categorySchema = z.object({
     if (data.alert_threshold_miles == null || data.alert_threshold_miles <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Mileage-based categories need miles threshold',
+        message: 'Distance-based categories need a threshold',
         path: ['alert_threshold_miles']
       });
     }

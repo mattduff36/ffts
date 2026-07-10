@@ -5,7 +5,7 @@ import { closeCurrentFinancialYearBookings } from '@/lib/services/absence-bank-h
 import { getActorAbsenceSecondaryPermissions } from '@/lib/server/absence-secondary-permissions';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
-import { canEffectiveRoleAccessModule, isEffectiveRoleManagerOrHigher } from '@/lib/utils/rbac';
+import { canEffectiveRoleAccessModule, canEffectiveRoleUseModuleLevel } from '@/lib/utils/rbac';
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     const profile = await getProfileWithRole(user.id);
     const canAccessAbsence = await canEffectiveRoleAccessModule('absence');
-    const isManagerOrHigher = await isEffectiveRoleManagerOrHigher();
+    const isManagerOrHigher = await canEffectiveRoleUseModuleLevel('absence', 4);
     if (!profile || !canAccessAbsence || !isManagerOrHigher) {
       return NextResponse.json(
         { error: 'Forbidden: Manager or admin absence access required' },

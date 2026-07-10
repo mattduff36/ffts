@@ -78,7 +78,7 @@ async function runMigration() {
         const result = await client.query(query);
         const count = result.rows[0].count;
         console.log(`   ✓ ${name}: ${count} records`);
-      } catch (error) {
+      } catch {
         console.log(`   ❌ ${name}: Table not found or inaccessible`);
       }
     }
@@ -97,10 +97,8 @@ async function runMigration() {
     
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📝 Next Steps:');
-    console.log('   1. Run Excel import script:');
-    console.log('      npx tsx scripts/migrations/import-maintenance-spreadsheet.ts');
-    console.log('   2. Build API endpoints (Phase 1 continues)');
-    console.log('   3. Build UI components (Phase 2)');
+    console.log('   1. Run npm run db:validate');
+    console.log('   2. Verify maintenance categories and permissions in the app');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   } catch (err: unknown) {

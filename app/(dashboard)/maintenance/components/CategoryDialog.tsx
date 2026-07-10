@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { Loader2, Save, Plus, Briefcase, Wrench, Bell, Mail, Eye, Truck, HardHat } from 'lucide-react';
 import type { MaintenanceCategory, CreateCategoryRequest, UpdateCategoryRequest } from '@/types/maintenance';
 import { useCreateCategory, useUpdateCategory } from '@/lib/hooks/useMaintenance';
@@ -25,6 +26,7 @@ import {
   formatPeriodValue,
   normalizePeriodUnit,
 } from '@/lib/utils/maintenancePeriods';
+import { getDistanceTypeLabel } from '@/lib/utils/maintenanceCategoryRules';
 
 // ============================================================================
 // Zod Validation Schema
@@ -81,7 +83,7 @@ const createCategorySchema = z.object({
     if (data.alert_threshold_miles == null || data.alert_threshold_miles <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Mileage-based categories need miles threshold',
+        message: 'Distance-based categories need a threshold',
         path: ['alert_threshold_miles']
       });
     }
@@ -102,11 +104,56 @@ const editCategorySchema = createCategorySchema.partial().extend({
 
 type CategoryFormData = z.infer<typeof createCategorySchema>;
 
+function buildCategoryDialogSnapshot(value: Partial<CategoryFormData> | undefined) {
+  return JSON.stringify(value || {});
+}
+
 function normalizeAppliesTo(values?: string[] | null): Array<'van' | 'plant' | 'hgv'> {
   const normalized = (values || []).filter(
     (value): value is 'van' | 'plant' | 'hgv' => value === 'van' || value === 'plant' || value === 'hgv',
   );
   return normalized.length > 0 ? normalized : ['van'];
+}
+
+function buildInitialCategoryFormValues(
+  mode: 'create' | 'edit',
+  category?: MaintenanceCategory | null
+): CategoryFormData {
+  if (mode === 'edit' && category) {
+    return {
+      name: category.name,
+      description: category.description || '',
+      type: category.type,
+      period_unit: normalizePeriodUnit(category.type, category.period_unit),
+      period_value: category.period_value,
+      alert_threshold_days: category.alert_threshold_days || undefined,
+      alert_threshold_miles: category.alert_threshold_miles || undefined,
+      alert_threshold_hours: category.alert_threshold_hours || undefined,
+      applies_to: normalizeAppliesTo(category.applies_to),
+      is_active: category.is_active,
+      responsibility: category.responsibility || 'workshop',
+      show_on_overview: category.show_on_overview !== false,
+      reminder_in_app_enabled: category.reminder_in_app_enabled || false,
+      reminder_email_enabled: category.reminder_email_enabled || false,
+    };
+  }
+
+  return {
+    name: '',
+    description: '',
+    type: 'date',
+    period_unit: 'months',
+    period_value: 12,
+    alert_threshold_days: 30,
+    alert_threshold_miles: undefined,
+    alert_threshold_hours: undefined,
+    applies_to: ['van'],
+    is_active: true,
+    responsibility: 'workshop',
+    show_on_overview: true,
+    reminder_in_app_enabled: false,
+    reminder_email_enabled: false,
+  };
 }
 
 // ============================================================================
@@ -157,43 +204,32 @@ export function CategoryDialog({
   const reminderEmail = useWatch({ control, name: 'reminder_email_enabled' });
   const appliesTo = useWatch({ control, name: 'applies_to' });
   const selectedPeriodUnit = useWatch({ control, name: 'period_unit' });
+  const formValues = useWatch({ control });
+  const distanceTypeLabel = getDistanceTypeLabel(appliesTo);
+  const initialDirtySnapshot = useMemo(
+    () => buildCategoryDialogSnapshot(buildInitialCategoryFormValues(mode, category)),
+    [category, mode]
+  );
+  const currentDirtySnapshot = buildCategoryDialogSnapshot(formValues);
+  const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: isSubmitting || createMutation.isPending || updateMutation.isPending,
+    onOpenChange,
+  });
 
   // Reset form when dialog opens/closes or category changes
   useEffect(() => {
     if (open && mode === 'edit' && category) {
-      reset({
-        name: category.name,
-        description: category.description || '',
-        type: category.type,
-        period_unit: normalizePeriodUnit(category.type, category.period_unit),
-        period_value: category.period_value,
-        alert_threshold_days: category.alert_threshold_days || undefined,
-        alert_threshold_miles: category.alert_threshold_miles || undefined,
-        alert_threshold_hours: category.alert_threshold_hours || undefined,
-        applies_to: normalizeAppliesTo(category.applies_to),
-        is_active: category.is_active,
-        responsibility: category.responsibility || 'workshop',
-        show_on_overview: category.show_on_overview !== false,
-        reminder_in_app_enabled: category.reminder_in_app_enabled || false,
-        reminder_email_enabled: category.reminder_email_enabled || false,
-      });
+      reset(buildInitialCategoryFormValues(mode, category));
     } else if (open && mode === 'create') {
-      reset({
-        name: '',
-        description: '',
-        type: 'date',
-        period_unit: 'months',
-        period_value: 12,
-        alert_threshold_days: 30,
-        alert_threshold_miles: undefined,
-        alert_threshold_hours: undefined,
-        applies_to: ['van'],
-        is_active: true,
-        responsibility: 'workshop',
-        show_on_overview: true,
-        reminder_in_app_enabled: false,
-        reminder_email_enabled: false,
-      });
+      reset(buildInitialCategoryFormValues(mode, category));
     }
   }, [open, mode, category, reset]);
 
@@ -275,9 +311,14 @@ export function CategoryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border text-white max-w-2xl">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="border-border text-white max-w-5xl max-h-[90vh] overflow-hidden flex flex-col p-0"
+        onInteractOutside={handleInteractOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle className="text-2xl">
             {mode === 'create' ? 'Add New Category' : 'Edit Category'}
           </DialogTitle>
@@ -289,8 +330,11 @@ export function CategoryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="min-h-0 flex-1 flex flex-col">
           <input type="hidden" {...register('period_unit')} />
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-6">
+              <div className="space-y-5">
 
           {/* Category Name */}
           <div className="space-y-2">
@@ -328,7 +372,7 @@ export function CategoryDialog({
             <Label>
               Type <span className="text-red-400">*</span>
             </Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
                 disabled={mode === 'edit'}
@@ -380,7 +424,7 @@ export function CategoryDialog({
                     )}
                   </div>
                   <p className={`font-medium ${selectedType === 'mileage' ? 'text-blue-400' : 'text-white'}`}>
-                    Mileage
+                    Miles / KM
                   </p>
                 </div>
               </button>
@@ -442,7 +486,7 @@ export function CategoryDialog({
             ) : selectedType === 'mileage' ? (
               <>
                 <Label htmlFor="alert_threshold_miles">
-                  Alert Threshold (Miles) <span className="text-red-400">*</span>
+                  Alert Threshold ({distanceTypeLabel}) <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="alert_threshold_miles"
@@ -452,7 +496,7 @@ export function CategoryDialog({
                   className="bg-input border-border text-white"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Show &quot;Due Soon&quot; alert when this many miles before the due mileage
+                  Show &quot;Due Soon&quot; alert when this many {distanceTypeLabel.toLowerCase()} before the due reading.
                 </p>
                 {errors.alert_threshold_miles && (
                   <p className="text-sm text-red-400">{errors.alert_threshold_miles.message}</p>
@@ -517,7 +561,7 @@ export function CategoryDialog({
               {selectedType === 'date'
                 ? `Period (${selectedPeriodUnit === 'weeks' ? 'Weeks' : 'Months'})`
                 : selectedType === 'mileage'
-                ? 'Period (Miles)'
+                ? `Period (${distanceTypeLabel})`
                 : 'Period (Hours)'} <span className="text-red-400">*</span>
             </Label>
             <Input
@@ -539,7 +583,7 @@ export function CategoryDialog({
               {selectedType === 'date'
                 ? `How often this is due, in ${selectedPeriodUnit === 'weeks' ? 'weeks' : 'months'} (e.g. ${selectedPeriodUnit === 'weeks' ? formatPeriodValue(6, 'weeks') : formatPeriodValue(12, 'months')})`
                 : selectedType === 'mileage'
-                ? 'How often this is due, in miles (e.g. 10,000 = every 10,000 miles)'
+                ? `How often this is due, in ${distanceTypeLabel.toLowerCase()} (e.g. 10,000 = every 10,000 ${distanceTypeLabel.toLowerCase()})`
                 : 'How often this is due, in engine hours (e.g. 250 = every 250 hours)'}
             </p>
             {errors.period_value && (
@@ -613,15 +657,17 @@ export function CategoryDialog({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {selectedType === 'mileage' && 'Mileage-based categories apply to vans and HGVs (HGV frontend displays KM).'}
+              {selectedType === 'mileage' && 'Distance-based categories apply to vans and HGVs. Vans display miles; HGVs display kilometres.'}
               {selectedType === 'hours' && 'Hours-based categories only apply to plant machinery.'}
               {selectedType === 'date' && 'Select which asset types this category applies to (at least one required).'}
             </p>
           </div>
 
+              </div>
+              <div className="space-y-5">
           {/* Divider */}
-          <div className="border-t border-slate-700 pt-4 mt-4">
-            <h3 className="text-lg font-medium text-white mb-4">Duty & Notification Settings</h3>
+          <div className="border-b border-slate-700 pb-3">
+            <h3 className="text-lg font-medium text-white">Duty & Notification Settings</h3>
           </div>
 
           {/* Responsibility */}
@@ -820,15 +866,19 @@ export function CategoryDialog({
             </div>
           )}
 
-          <DialogFooter>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t border-border bg-background/95">
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={discard}
               className="border-slate-600 text-white hover:bg-slate-800"
               disabled={isSubmitting}
             >
-              Cancel
+              {isFormDirty ? 'Discard Changes' : 'Cancel'}
             </Button>
             <Button
               type="submit"

@@ -8,14 +8,27 @@ import type {
   MaintenanceCategory,
   MaintenanceListResponse,
   UpdateMaintenanceRequest,
-  MaintenanceUpdateResponse
+  MaintenanceUpdateResponse,
+  MaintenanceItem,
+  MaintenanceItemStatus
 } from '@/types/maintenance';
 import {
   getDateBasedStatus,
   getMileageBasedStatus,
   getHoursBasedStatus,
-  calculateAlertCounts
+  calculateAlertCounts,
+  formatMaintenanceDate,
+  formatMileage,
+  formatHours
 } from '@/lib/utils/maintenanceCalculations';
+import {
+  MAINTENANCE_CATEGORY_NAMES,
+  categoryAppliesToAsset,
+  createMaintenanceCategoryMap,
+  getDistanceUnitLabel,
+  getMaintenanceCategory,
+  isMaintenanceCategoryVisibleOnOverview,
+} from '@/lib/utils/maintenanceCategoryRules';
 
 interface InspectionLookupRow {
   inspection_date: string | null;
@@ -56,6 +69,180 @@ interface MaintenanceRow {
   notes: string | null;
 }
 
+interface CustomMaintenanceValueRow {
+  id: string;
+  maintenance_category_id: string;
+  van_id: string | null;
+  hgv_id: string | null;
+  plant_id: string | null;
+  due_date: string | null;
+  due_mileage: number | null;
+  last_mileage: number | null;
+  due_hours: number | null;
+  last_hours: number | null;
+}
+
+interface CustomCategoryRow {
+  id: string;
+  name: string;
+  type: 'date' | 'mileage' | 'hours';
+  field_key: string | null;
+}
+
+function getAssetValueKey(assetType: 'van' | 'hgv' | 'plant', assetId: string): string {
+  return `${assetType}:${assetId}`;
+}
+
+function getCustomValueAssetKey(value: CustomMaintenanceValueRow): string | null {
+  if (value.van_id) return getAssetValueKey('van', value.van_id);
+  if (value.hgv_id) return getAssetValueKey('hgv', value.hgv_id);
+  if (value.plant_id) return getAssetValueKey('plant', value.plant_id);
+  return null;
+}
+
+function getCategoryThreshold(category: MaintenanceCategory): number {
+  if (category.type === 'date') return category.alert_threshold_days || 30;
+  if (category.type === 'hours') return category.alert_threshold_hours || 50;
+  return category.alert_threshold_miles || 1000;
+}
+
+function getStatusForCategory(params: {
+  category: MaintenanceCategory;
+  maintenance: MaintenanceRow | null;
+  lolerDueDate: string | null;
+  customValue?: CustomMaintenanceValueRow;
+}): MaintenanceItemStatus {
+  const { category, maintenance, customValue } = params;
+  const threshold = getCategoryThreshold(category);
+
+  if (category.field_key) {
+    if (category.field_key === 'tax_due_date') return getDateBasedStatus(maintenance?.tax_due_date || null, threshold);
+    if (category.field_key === 'mot_due_date') return getDateBasedStatus(maintenance?.mot_due_date || null, threshold);
+    if (category.field_key === 'first_aid_kit_expiry') return getDateBasedStatus(maintenance?.first_aid_kit_expiry || null, threshold);
+    if (category.field_key === 'six_weekly_inspection_due_date') return getDateBasedStatus(maintenance?.six_weekly_inspection_due_date || null, threshold);
+    if (category.field_key === 'fire_extinguisher_due_date') return getDateBasedStatus(maintenance?.fire_extinguisher_due_date || null, threshold);
+    if (category.field_key === 'taco_calibration_due_date') return getDateBasedStatus(maintenance?.taco_calibration_due_date || null, threshold);
+    if (category.field_key === 'loler_due_date') return getDateBasedStatus(params.lolerDueDate, threshold);
+    if (category.field_key === 'next_service_mileage') {
+      return getMileageBasedStatus(maintenance?.current_mileage ?? null, maintenance?.next_service_mileage ?? null, threshold);
+    }
+    if (category.field_key === 'cambelt_due_mileage') {
+      return getMileageBasedStatus(maintenance?.current_mileage ?? null, maintenance?.cambelt_due_mileage ?? null, threshold);
+    }
+    if (category.field_key === 'next_service_hours') {
+      return getHoursBasedStatus(maintenance?.current_hours ?? null, maintenance?.next_service_hours ?? null, threshold);
+    }
+  }
+
+  if (category.type === 'date') return getDateBasedStatus(customValue?.due_date || null, threshold);
+  if (category.type === 'hours') {
+    return getHoursBasedStatus(maintenance?.current_hours ?? null, customValue?.due_hours ?? null, threshold);
+  }
+  return getMileageBasedStatus(maintenance?.current_mileage ?? null, customValue?.due_mileage ?? null, threshold);
+}
+
+function getDueValuesForCategory(params: {
+  category: MaintenanceCategory;
+  maintenance: MaintenanceRow | null;
+  lolerDueDate: string | null;
+  customValue?: CustomMaintenanceValueRow;
+}) {
+  const { category, maintenance, customValue } = params;
+
+  if (category.field_key === 'tax_due_date') return { dueDate: maintenance?.tax_due_date || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'mot_due_date') return { dueDate: maintenance?.mot_due_date || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'first_aid_kit_expiry') return { dueDate: maintenance?.first_aid_kit_expiry || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'six_weekly_inspection_due_date') return { dueDate: maintenance?.six_weekly_inspection_due_date || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'fire_extinguisher_due_date') return { dueDate: maintenance?.fire_extinguisher_due_date || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'taco_calibration_due_date') return { dueDate: maintenance?.taco_calibration_due_date || null, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'loler_due_date') return { dueDate: params.lolerDueDate, dueMileage: null, lastMileage: null, dueHours: null, lastHours: null };
+  if (category.field_key === 'next_service_mileage') {
+    return { dueDate: null, dueMileage: maintenance?.next_service_mileage ?? null, lastMileage: maintenance?.last_service_mileage ?? null, dueHours: null, lastHours: null };
+  }
+  if (category.field_key === 'cambelt_due_mileage') {
+    return { dueDate: null, dueMileage: maintenance?.cambelt_due_mileage ?? null, lastMileage: null, dueHours: null, lastHours: null };
+  }
+  if (category.field_key === 'next_service_hours') {
+    return { dueDate: null, dueMileage: null, lastMileage: null, dueHours: maintenance?.next_service_hours ?? null, lastHours: maintenance?.last_service_hours ?? null };
+  }
+
+  return {
+    dueDate: customValue?.due_date || null,
+    dueMileage: customValue?.due_mileage ?? null,
+    lastMileage: customValue?.last_mileage ?? null,
+    dueHours: customValue?.due_hours ?? null,
+    lastHours: customValue?.last_hours ?? null,
+  };
+}
+
+function formatMaintenanceItemValue(
+  itemType: MaintenanceCategory['type'],
+  values: ReturnType<typeof getDueValuesForCategory>
+): string {
+  if (itemType === 'date') return formatMaintenanceDate(values.dueDate);
+  if (itemType === 'hours') return formatHours(values.dueHours);
+  return formatMileage(values.dueMileage);
+}
+
+function buildMaintenanceItems(params: {
+  assetType: 'van' | 'hgv' | 'plant';
+  assetId: string;
+  categories: MaintenanceCategory[];
+  maintenance: MaintenanceRow | null;
+  lolerDueDate: string | null;
+  customValuesByAsset: Map<string, CustomMaintenanceValueRow[]>;
+}): MaintenanceItem[] {
+  const assetValues = params.customValuesByAsset.get(getAssetValueKey(params.assetType, params.assetId)) || [];
+  const valuesByCategoryId = new Map(assetValues.map(value => [value.maintenance_category_id, value]));
+
+  return params.categories
+    .filter(category => category.is_active !== false)
+    .filter(category => categoryAppliesToAsset(category, params.assetType, category.name))
+    .map(category => {
+      const customValue = valuesByCategoryId.get(category.id);
+      const status = getStatusForCategory({
+        category,
+        maintenance: params.maintenance,
+        lolerDueDate: params.lolerDueDate,
+        customValue,
+      });
+      const values = getDueValuesForCategory({
+        category,
+        maintenance: params.maintenance,
+        lolerDueDate: params.lolerDueDate,
+        customValue,
+      });
+      const displayUnit = category.type === 'date'
+        ? 'date'
+        : category.type === 'hours'
+          ? 'hours'
+          : getDistanceUnitLabel(params.assetType);
+
+      return {
+        id: `${params.assetId}:${category.id}`,
+        category_id: category.id,
+        category_name: category.name,
+        category_type: category.type,
+        category_field_key: category.field_key || null,
+        source: category.field_key ? 'system' : 'custom',
+        is_system: category.is_system ?? false,
+        is_delete_protected: category.is_delete_protected ?? false,
+        sort_order: category.sort_order,
+        asset_type: params.assetType,
+        status,
+        due_date: values.dueDate,
+        due_mileage: values.dueMileage,
+        last_mileage: values.lastMileage,
+        due_hours: values.dueHours,
+        last_hours: values.lastHours,
+        display_value: formatMaintenanceItemValue(category.type, values),
+        display_unit: displayUnit,
+        value_id: customValue?.id || null,
+      } satisfies MaintenanceItem;
+    })
+    .sort((a, b) => a.sort_order - b.sort_order || a.category_name.localeCompare(b.category_name));
+}
+
 /**
  * GET /api/maintenance
  * Returns all vehicle maintenance records with calculated status
@@ -83,11 +270,10 @@ export async function GET() {
 
     const admin = createAdminClient();
     
-    // Get all maintenance categories (for threshold values)
+    // Get all maintenance categories so disabled/hidden rows can suppress alerts.
     const { data: categories, error: categoriesError } = await admin
       .from('maintenance_categories')
       .select('*')
-      .eq('is_active', true)
       .order('sort_order');
     
     if (categoriesError) {
@@ -95,23 +281,20 @@ export async function GET() {
       throw categoriesError;
     }
     
-    // Create lookup for categories
-    const categoryMap = new Map<string, MaintenanceCategory>();
-    (categories || []).forEach(cat => {
-      categoryMap.set(cat.name.toLowerCase(), cat);
-    });
+    const maintenanceCategories = (categories || []) as MaintenanceCategory[];
+    const categoryMap = createMaintenanceCategoryMap(maintenanceCategories);
     
     // Get thresholds (with defaults)
-    const taxThreshold = categoryMap.get('tax due date')?.alert_threshold_days || 30;
-    const motThreshold = categoryMap.get('mot due date')?.alert_threshold_days || 30;
-    const serviceThreshold = categoryMap.get('service due')?.alert_threshold_miles || 1000;
-    const cambeltThreshold = categoryMap.get('cambelt replacement')?.alert_threshold_miles || 5000;
-    const firstAidThreshold = categoryMap.get('first aid kit expiry')?.alert_threshold_days || 30;
-    const sixWeeklyThreshold = categoryMap.get('6 weekly inspection due')?.alert_threshold_days || 7;
-    const fireExtinguisherThreshold = categoryMap.get('fire extinguisher due')?.alert_threshold_days || 30;
-    const tacoCalibrationThreshold = categoryMap.get('taco calibration due')?.alert_threshold_days || 60;
-    const lolerThreshold = categoryMap.get('loler due')?.alert_threshold_days || 30;
-    const serviceHoursThreshold = categoryMap.get('service due (hours)')?.alert_threshold_hours || 50;
+    const taxThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.tax)?.alert_threshold_days || 30;
+    const motThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.mot)?.alert_threshold_days || 30;
+    const serviceThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.service)?.alert_threshold_miles || 1000;
+    const cambeltThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.cambelt)?.alert_threshold_miles || 5000;
+    const firstAidThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.firstAid)?.alert_threshold_days || 30;
+    const sixWeeklyThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.sixWeekly)?.alert_threshold_days || 7;
+    const fireExtinguisherThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.fireExtinguisher)?.alert_threshold_days || 30;
+    const tacoCalibrationThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.tacoCalibration)?.alert_threshold_days || 60;
+    const lolerThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.loler)?.alert_threshold_days || 30;
+    const serviceHoursThreshold = getMaintenanceCategory(categoryMap, MAINTENANCE_CATEGORY_NAMES.serviceHours)?.alert_threshold_hours || 50;
     
     // ---------------------------------------------------------------
     // Fetch all three asset tables with their maintenance records
@@ -180,6 +363,27 @@ export async function GET() {
     if (hgvsResult.error) { logger.error('Failed to fetch hgvs', hgvsResult.error); throw hgvsResult.error; }
     if (plantResult.error) { logger.error('Failed to fetch plant', plantResult.error); throw plantResult.error; }
 
+    const { data: customValues, error: customValuesError } = await (admin as never as { from: (table: string) => { select: (columns: string) => Promise<{ data: unknown; error: unknown }> } })
+      .from('asset_maintenance_category_values')
+      .select('*');
+
+    if (customValuesError) {
+      logger.error('Failed to fetch custom maintenance category values', customValuesError);
+      throw customValuesError;
+    }
+
+    const customValuesByAsset = ((customValues || []) as CustomMaintenanceValueRow[]).reduce(
+      (map, value) => {
+        const assetKey = getCustomValueAssetKey(value);
+        if (!assetKey) return map;
+        const assetValues = map.get(assetKey) || [];
+        assetValues.push(value);
+        map.set(assetKey, assetValues);
+        return map;
+      },
+      new Map<string, CustomMaintenanceValueRow[]>()
+    );
+
     // Tag each asset with its source type
     interface TaggedAsset {
       _assetType: 'van' | 'hgv' | 'plant';
@@ -239,14 +443,30 @@ export async function GET() {
       const loler_status = assetType === 'plant'
         ? getDateBasedStatus(loler_due_date, lolerThreshold)
         : { status: 'not_set' as const };
+      const maintenanceItems = buildMaintenanceItems({
+        assetType,
+        assetId: asset.id,
+        categories: maintenanceCategories,
+        maintenance,
+        lolerDueDate: loler_due_date,
+        customValuesByAsset,
+      });
 
       if (!maintenance) {
-        const noMaintenanceAlertCounts = assetType === 'plant'
-          ? calculateAlertCounts([loler_status])
-          : { overdue: 0, due_soon: 0 };
+        const noMaintenanceAlertCounts = calculateAlertCounts(
+          maintenanceItems
+            .filter(item => isMaintenanceCategoryVisibleOnOverview(
+              maintenanceCategories.find(category => category.id === item.category_id),
+              assetType,
+              item.category_name
+            ))
+            .map(item => item.status)
+        );
 
         return {
-          id: asset.id,
+          // No vehicle_maintenance row exists yet. Keep the maintenance id null
+          // so edit dialogs create a record instead of PUT-ing to the asset id.
+          id: null,
           van_id: assetType === 'van' ? asset.id : null,
           hgv_id: assetType === 'hgv' ? asset.id : null,
           plant_id: assetType === 'plant' ? asset.id : null,
@@ -285,6 +505,7 @@ export async function GET() {
           taco_calibration_status: { status: 'not_set' as const },
           loler_status,
           service_hours_status: { status: 'not_set' as const },
+          maintenance_items: maintenanceItems,
           overdue_count: noMaintenanceAlertCounts.overdue,
           due_soon_count: noMaintenanceAlertCounts.due_soon
         };
@@ -326,18 +547,15 @@ export async function GET() {
           )
         : { status: 'not_set' as const };
 
-      const alertCounts = calculateAlertCounts([
-        tax_status,
-        mot_status,
-        service_status,
-        cambelt_status,
-        first_aid_status,
-        six_weekly_status,
-        fire_extinguisher_status,
-        taco_calibration_status,
-        loler_status,
-        service_hours_status,
-      ]);
+      const alertCounts = calculateAlertCounts(
+        maintenanceItems
+          .filter(item => isMaintenanceCategoryVisibleOnOverview(
+            maintenanceCategories.find(category => category.id === item.category_id),
+            assetType,
+            item.category_name
+          ))
+          .map(item => item.status)
+      );
 
       return {
         ...maintenance,
@@ -356,6 +574,7 @@ export async function GET() {
         loler_status,
         loler_due_date,
         service_hours_status,
+        maintenance_items: maintenanceItems,
         overdue_count: alertCounts.overdue,
         due_soon_count: alertCounts.due_soon
       };
@@ -500,6 +719,86 @@ export async function POST(request: NextRequest) {
     
     // Create history entry for initial creation
     const historyEntries = [];
+
+    const customItems = body.custom_items || [];
+    if (customItems.length > 0) {
+      const categoryIds = [...new Set(customItems.map(item => item.category_id))];
+      const { data: customCategories, error: customCategoriesError } = await (supabase as never as { from: (table: string) => { select: (columns: string) => { in: (column: string, values: string[]) => Promise<{ data: unknown; error: unknown }> } } })
+        .from('maintenance_categories')
+        .select('id, name, type, field_key')
+        .in('id', categoryIds);
+
+      if (customCategoriesError) {
+        logger.error('Failed to fetch custom categories for create', customCategoriesError);
+        throw customCategoriesError;
+      }
+
+      const categoriesById = new Map(((customCategories || []) as CustomCategoryRow[]).map(category => [category.id, category]));
+      const customRows = customItems
+        .filter(item => {
+          const category = categoriesById.get(item.category_id);
+          return category && !category.field_key && (
+            item.due_date != null
+            || item.due_mileage != null
+            || item.last_mileage != null
+            || item.due_hours != null
+            || item.last_hours != null
+            || item.notes
+          );
+        })
+        .map(item => ({
+          maintenance_category_id: item.category_id,
+          van_id: body.van_id || null,
+          hgv_id: body.hgv_id || null,
+          due_date: item.due_date ?? null,
+          due_mileage: item.due_mileage ?? null,
+          last_mileage: item.last_mileage ?? null,
+          due_hours: item.due_hours ?? null,
+          last_hours: item.last_hours ?? null,
+          notes: item.notes ?? null,
+          last_updated_by: user.id,
+          last_updated_at: new Date().toISOString(),
+        }));
+
+      if (customRows.length > 0) {
+        const { error: customValuesError } = await (supabase as never as { from: (table: string) => { insert: (rows: unknown[]) => Promise<{ error: unknown }> } })
+          .from('asset_maintenance_category_values')
+          .insert(customRows);
+
+        if (customValuesError) {
+          logger.error('Failed to create custom category values', customValuesError);
+          throw customValuesError;
+        }
+
+        customRows.forEach(row => {
+          const category = categoriesById.get(row.maintenance_category_id);
+          if (!category) return;
+
+          const dueValue = row.due_date ?? row.due_mileage ?? row.due_hours ?? null;
+          const lastValue = row.last_mileage ?? row.last_hours ?? null;
+          const newValue = lastValue != null && dueValue != null
+            ? `${lastValue} -> ${dueValue}`
+            : dueValue != null
+              ? String(dueValue)
+              : lastValue != null
+                ? String(lastValue)
+                : row.notes?.slice(0, 50) || null;
+
+          historyEntries.push({
+            van_id: body.van_id || null,
+            hgv_id: body.hgv_id || null,
+            maintenance_category_id: row.maintenance_category_id,
+            field_name: `category:${category.name}`,
+            old_value: null,
+            new_value: newValue,
+            value_type: category.type === 'date' ? 'date' as const : category.type === 'mileage' ? 'mileage' as const : 'text' as const,
+            comment: body.comment,
+            updated_by: user.id,
+            updated_by_name: userName
+          });
+        });
+      }
+    }
     
     if (body.tax_due_date) {
       historyEntries.push({
@@ -627,7 +926,12 @@ export async function POST(request: NextRequest) {
     
     const response: MaintenanceUpdateResponse = {
       success: true,
-      maintenance: createdMaintenance
+      maintenance: {
+        ...createdMaintenance,
+        last_updated_at: createdMaintenance.last_updated_at ?? '',
+        created_at: createdMaintenance.created_at ?? '',
+        updated_at: createdMaintenance.updated_at ?? '',
+      }
     };
     
     return NextResponse.json(response);

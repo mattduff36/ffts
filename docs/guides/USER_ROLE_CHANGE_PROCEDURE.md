@@ -196,8 +196,9 @@ When changing a user's role as an admin:
 ## Related Files
 
 - `lib/hooks/useAuth.ts` - Authentication and profile fetching
-- `scripts/diagnose-user-permissions.ts` - Diagnostic tool
-- `app/(dashboard)/inspections/page.tsx` - Uses `isManager` flag
+- `app/(dashboard)/van-inspections/page.tsx` - Van daily-check permissions
+- `app/(dashboard)/plant-inspections/page.tsx` - Plant daily-check permissions
+- `app/(dashboard)/hgv-inspections/page.tsx` - HGV daily-check permissions
 
 ## Common Issues
 
@@ -229,6 +230,5 @@ Then user must log out/in to fetch updated role.
 
 ---
 
-**Last Updated:** December 2, 2025  
-**Related Issue:** Example User Seven - andy@example.com
+**Last Updated:** July 10, 2026
 

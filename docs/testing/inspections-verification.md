@@ -38,7 +38,7 @@ npm run test:run -- tests/unit/inspections
 ```
 
 **Pass criteria**: All tests pass. Covers:
-- Checklist selection logic (van 14-item, truck 26-item, plant 22-item)
+- Checklist selection logic (van 15-item, HGV/truck 26-item, plant 23-item)
 - Navigation/form config rename verification
 - Type contract assertions (VanInspection, PlantInspection)
 - Static guard: no `vehicle_inspections` in runtime code

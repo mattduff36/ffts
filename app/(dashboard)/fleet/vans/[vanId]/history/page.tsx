@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, use, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -9,12 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { 
   Wrench, 
   ClipboardCheck, 
   FileText, 
   MessageSquare,
-  Calendar,
   AlertTriangle,
   CheckCircle,
   XCircle,
@@ -26,17 +26,20 @@ import {
   Edit
 } from 'lucide-react';
 import { BackButton } from '@/components/ui/back-button';
-import { formatDateTime } from '@/lib/utils/date';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { formatMileage, formatMaintenanceDate } from '@/lib/utils/maintenanceCalculations';
 import type { VehicleMaintenanceWithStatus } from '@/types/maintenance';
 import { useWorkshopTaskComments } from '@/lib/hooks/useWorkshopTaskComments';
 import { useTaskInspectionPhotos } from '@/lib/hooks/useTaskInspectionPhotos';
+import type { TrackerLocationData } from '@/types/fleet-tracker';
+import { fetchDailyChecks, type DailyCheckHistoryItem } from '@/components/fleet/DailyChecksHistoryTab';
+import { AssetHistoryTable } from '@/components/fleet/AssetHistoryTable';
+import { buildAssetHistoryRows } from '@/lib/fleet/asset-history-events';
+import { getAssetHistoryFieldLabel } from '@/lib/fleet/asset-history-field-labels';
 
 // Dynamic imports for dialog components
 const EditMaintenanceDialog = dynamic(() => import('@/app/(dashboard)/maintenance/components/EditMaintenanceDialog').then(m => ({ default: m.EditMaintenanceDialog })), { ssr: false });
 const DeleteVehicleDialog = dynamic(() => import('@/app/(dashboard)/maintenance/components/DeleteVehicleDialog').then(m => ({ default: m.DeleteVehicleDialog })), { ssr: false });
-const WorkshopTaskHistoryCard = dynamic(() => import('@/components/workshop-tasks/WorkshopTaskHistoryCard').then(m => ({ default: m.WorkshopTaskHistoryCard })), { ssr: false });
 import { Paperclip } from 'lucide-react';
 import { AttachmentHistoryViewer } from '@/components/workshop-tasks/AttachmentHistoryViewer';
 
@@ -350,8 +353,9 @@ export default function VanHistoryPage({
   const [loading, setLoading] = useState(true);
   const [maintenanceHistory, setMaintenanceHistory] = useState<MaintenanceHistoryEntry[]>([]);
   const [workshopTasks, setWorkshopTasks] = useState<WorkshopTask[]>([]);
+  const [dailyChecks, setDailyChecks] = useState<DailyCheckHistoryItem[]>([]);
+  const [dailyChecksLoading, setDailyChecksLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('maintenance');
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [motData, setMotData] = useState<{
     currentStatus?: {
       expiryDate?: string | null;
@@ -375,14 +379,9 @@ export default function VanHistoryPage({
   const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [showWorkshopTasks, setShowWorkshopTasks] = useState(true);
-  const [showRecordUpdates, setShowRecordUpdates] = useState(true);
   const [hasMapMatch, setHasMapMatch] = useState(false);
   const [mapModalOpen, setMapModalOpen] = useState(false);
-  const [mapLocationData, setMapLocationData] = useState<{
-    lat: number; lng: number; speed: number; heading: number;
-    updatedAt: string; name: string; vrn: string; vehicleId: string;
-  } | null>(null);
+  const [mapLocationData, setMapLocationData] = useState<TrackerLocationData | null>(null);
 
   // Fetch comments for all workshop tasks
   const { comments: taskComments } = useWorkshopTaskComments({
@@ -609,14 +608,34 @@ export default function VanHistoryPage({
     }
   }, [supabase, resolvedParams.vanId]);
 
+  const fetchDailyCheckHistory = useCallback(async () => {
+    if (!resolvedParams.vanId) {
+      setDailyChecks([]);
+      setDailyChecksLoading(false);
+      return;
+    }
+
+    try {
+      setDailyChecksLoading(true);
+      const rows = await fetchDailyChecks('van', resolvedParams.vanId);
+      setDailyChecks(rows);
+    } catch (error) {
+      console.error('Error fetching van daily checks:', error);
+      setDailyChecks([]);
+    } finally {
+      setDailyChecksLoading(false);
+    }
+  }, [resolvedParams.vanId]);
+
   useEffect(() => {
     if (user && resolvedParams.vanId) {
       fetchVehicleData();
       fetchMaintenanceRecord();
       fetchMaintenanceHistory();
       fetchWorkshopTasks();
+      fetchDailyCheckHistory();
     }
-  }, [user, resolvedParams.vanId, fetchVehicleData, fetchMaintenanceRecord, fetchMaintenanceHistory, fetchWorkshopTasks]);
+  }, [user, resolvedParams.vanId, fetchVehicleData, fetchMaintenanceRecord, fetchMaintenanceHistory, fetchWorkshopTasks, fetchDailyCheckHistory]);
 
   useEffect(() => {
     if (activeTab === 'mot' && !motData && vehicle?.reg_number) {
@@ -638,6 +657,20 @@ export default function VanHistoryPage({
       fetchMotHistory();
     }
   }, [activeTab, motData, vehicle?.reg_number, resolvedParams.vanId]);
+
+  const handleEditSuccess = useCallback(() => {
+    setEditDialogOpen(false);
+    setMotData(null);
+    setExpandedTestId(null);
+
+    void Promise.all([
+      fetchVehicleData(),
+      fetchMaintenanceRecord(),
+      fetchMaintenanceHistory(),
+    ]).then(() => {
+      router.refresh();
+    });
+  }, [fetchMaintenanceHistory, fetchMaintenanceRecord, fetchVehicleData, router]);
 
   const getDefectColor = (type: string) => {
     switch (type) {
@@ -678,18 +711,16 @@ export default function VanHistoryPage({
     });
   };
 
-  const getFieldLabel = (fieldName: string): string => {
-    const labels: Record<string, string> = {
-      mot_expiry_date: 'MOT Expiry',
-      tax_due_date: 'Tax Due Date',
-      service_due_date: 'Service Due',
-      service_due_mileage: 'Service Due Mileage',
-      last_service_date: 'Last Service',
-      last_service_mileage: 'Last Service Mileage',
-      notes: 'Notes',
-    };
-    return labels[fieldName] || fieldName.replace(/_/g, ' ');
-  };
+  const assetHistoryRows = useMemo(
+    () => buildAssetHistoryRows({
+      assetType: 'van',
+      records: maintenanceHistory,
+      workshopTasks,
+      dailyTasks: dailyChecks,
+      getFieldLabel: (fieldName) => getAssetHistoryFieldLabel('van', fieldName),
+    }),
+    [maintenanceHistory, workshopTasks, dailyChecks]
+  );
 
   if (!vehicle && !loading) {
     return (
@@ -745,8 +776,8 @@ export default function VanHistoryPage({
         /* Plant Data Card */
         <Card className="bg-gradient-to-r from-amber-900/20 to-amber-800/10 border-amber-700/30">
           <CardContent className="pt-6">
-            <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[3fr_2fr]' : 'grid-cols-1'}`}>
-              <div className={hasMapMatch ? 'space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
+            <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[fit-content(calc(50%_-_0.75rem))_minmax(calc(50%_-_0.75rem),_1fr)]' : 'grid-cols-1'}`}>
+              <div className={hasMapMatch ? 'min-w-0 space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
                 {vehicle.plant_id && (
                   <div className="flex items-baseline gap-2">
                     <span className="text-muted-foreground text-xs uppercase tracking-wide min-w-[100px]">Plant ID</span>
@@ -789,7 +820,9 @@ export default function VanHistoryPage({
                 plantId={vehicle.plant_id ?? undefined}
                 regNumber={vehicle.reg_number ?? undefined}
                 assetLabel={vehicle.plant_id || vehicle.reg_number || 'Unknown'}
-                className="h-full min-h-[265px]"
+                locationProvider="velocityfleet"
+                loadingVariant="compact"
+                className="min-w-0 h-full min-h-[265px]"
                 onMatchResult={setHasMapMatch}
                 onLocationData={setMapLocationData}
                 onClick={() => setMapModalOpen(true)}
@@ -802,8 +835,8 @@ export default function VanHistoryPage({
         vehicleData && (vehicleData.ves_make || vehicleData.mot_make) ? (
           <Card className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border-blue-700/30">
             <CardContent className="pt-6">
-              <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[3fr_2fr]' : 'grid-cols-1'}`}>
-                <div className={hasMapMatch ? 'space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
+              <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[fit-content(calc(50%_-_0.75rem))_minmax(calc(50%_-_0.75rem),_1fr)]' : 'grid-cols-1'}`}>
+                <div className={hasMapMatch ? 'min-w-0 space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
                   {(vehicleData.ves_make || vehicleData.mot_make) && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-muted-foreground text-xs uppercase tracking-wide min-w-[100px]">Make</span>
@@ -888,7 +921,9 @@ export default function VanHistoryPage({
                   regNumber={vehicle?.reg_number ?? undefined}
                   plantId={vehicle?.plant_id ?? undefined}
                   assetLabel={vehicle?.reg_number || vehicle?.plant_id || 'Unknown'}
-                  className="h-full min-h-[265px]"
+                  locationProvider="velocityfleet"
+                  loadingVariant="compact"
+                  className="min-w-0 h-full min-h-[265px]"
                   onMatchResult={setHasMapMatch}
                   onLocationData={setMapLocationData}
                   onClick={() => setMapModalOpen(true)}
@@ -903,6 +938,8 @@ export default function VanHistoryPage({
               regNumber={vehicle.reg_number ?? undefined}
               plantId={vehicle.plant_id ?? undefined}
               assetLabel={vehicle.reg_number || vehicle.plant_id || 'Unknown'}
+              locationProvider="velocityfleet"
+              loadingVariant="compact"
               className="h-[180px] rounded-lg"
               onMatchResult={setHasMapMatch}
               onLocationData={setMapLocationData}
@@ -917,12 +954,13 @@ export default function VanHistoryPage({
         open={mapModalOpen}
         onOpenChange={setMapModalOpen}
         assetLabel={vehicle?.reg_number || vehicle?.plant_id || 'Unknown'}
+        locationProvider="velocityfleet"
         location={mapLocationData}
       />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <TabsList className={`grid w-full ${vehicle?.reg_number ? 'grid-cols-4' : 'grid-cols-3'} lg:w-auto lg:inline-grid`}>
           <TabsTrigger value="maintenance" className="gap-2">
             <Wrench className="h-4 w-4" />
             History
@@ -1098,121 +1136,13 @@ export default function VanHistoryPage({
             </Card>
           )}
 
-          <Card className="bg-slate-800/50 border-border">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Maintenance & Workshop History</CardTitle>
-                  <CardDescription>
-                    Complete timeline of maintenance updates and workshop tasks
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowWorkshopTasks(!showWorkshopTasks)}
-                    className={`h-8 w-8 p-0 transition-all ${
-                      showWorkshopTasks
-                        ? 'bg-workshop/20 hover:bg-workshop/30 border-workshop text-workshop'
-                        : 'bg-muted/50 hover:bg-muted border-border text-muted-foreground'
-                    }`}
-                    title="Toggle Workshop Tasks"
-                  >
-                    <Wrench className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRecordUpdates(!showRecordUpdates)}
-                    className={`h-8 w-8 p-0 transition-all ${
-                      showRecordUpdates
-                        ? 'bg-blue-500/20 hover:bg-blue-500/30 border-blue-500 text-blue-400'
-                        : 'bg-muted/50 hover:bg-muted border-border text-muted-foreground'
-                    }`}
-                    title="Toggle Record Updates"
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3].map(i => (
-                    <Skeleton key={i} className="h-32 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Workshop Tasks */}
-                  {showWorkshopTasks && workshopTasks.map((task: WorkshopTask) => (
-                    <WorkshopTaskHistoryCard
-                      key={task.id}
-                      task={task}
-                      comments={taskComments[task.id] || []}
-                      inspectionPhotos={taskInspectionPhotos[task.id] || []}
-                      defaultExpanded={expandedTasks.has(task.id)}
-                      onToggle={(taskId, isExpanded) => {
-                        setExpandedTasks(prev => {
-                          const newSet = new Set(prev);
-                          if (isExpanded) {
-                            newSet.add(taskId);
-                          } else {
-                            newSet.delete(taskId);
-                          }
-                          return newSet;
-                        });
-                      }}
-                    />
-                  ))}
-
-                  {/* Maintenance History Entries */}
-                  {showRecordUpdates && maintenanceHistory.map((entry: MaintenanceHistoryEntry) => (
-                    <Card key={entry.id} className="bg-slate-800/50 border-slate-700 border-l-4 border-l-blue-500">
-                      <CardContent className="pt-6">
-                        <div className="flex items-start gap-3">
-                          <Calendar className="h-5 w-5 text-blue-400 mt-0.5" />
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-medium">{entry.updated_by_name || 'System'}</span>
-                              <span className="text-xs text-muted-foreground">updated</span>
-                              <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
-                                {getFieldLabel(entry.field_name)}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              <span className="line-through">{entry.old_value || 'None'}</span>
-                              {' → '}
-                              <span className="text-slate-200">{entry.new_value || 'None'}</span>
-                            </div>
-                            {entry.comment && (
-                              <p className="text-sm text-muted-foreground italic">&quot;{entry.comment}&quot;</p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              {formatDateTime(entry.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {(!showWorkshopTasks || workshopTasks.length === 0) && (!showRecordUpdates || maintenanceHistory.length === 0) && (
-                    <div className="text-center py-12">
-                      <Wrench className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">
-                        {!showWorkshopTasks && !showRecordUpdates 
-                          ? 'Enable filters to view history' 
-                          : 'No maintenance history yet'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <AssetHistoryTable
+            assetType="van"
+            rows={assetHistoryRows}
+            loading={loading || dailyChecksLoading}
+            taskComments={taskComments}
+            taskInspectionPhotos={taskInspectionPhotos}
+          />
         </TabsContent>
 
         {/* MOT Tab */}
@@ -1224,9 +1154,7 @@ export default function VanHistoryPage({
             </CardHeader>
             <CardContent>
               {motLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
+                <PanelLoader message="Loading MOT history..." accent="fleet" className="py-12" />
               ) : !motData || motData.tests?.length === 0 ? (
                 <div className="text-center py-12">
                   <ClipboardCheck className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -1487,11 +1415,7 @@ export default function VanHistoryPage({
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
           vehicle={maintenanceRecord}
-          onSuccess={() => {
-            setEditDialogOpen(false);
-            fetchMaintenanceRecord();
-            fetchMaintenanceHistory();
-          }}
+          onSuccess={handleEditSuccess}
           onRetire={() => {
             setDeleteDialogOpen(true);
           }}

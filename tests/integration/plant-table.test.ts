@@ -27,7 +27,7 @@ describeOrSkip('Plant Table Integration Tests', () => {
   let createdPlantId: string | null = null;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabase = createClient(supabaseUrl!, supabaseServiceKey!);
 
     // Get a manager user for creating test data
     const { data: manager } = await supabase
@@ -154,8 +154,8 @@ describeOrSkip('Plant Table Integration Tests', () => {
       const { data, error } = await supabase
         .from('plant')
         .insert({
-          plant_id: `TE57PLANT${Date.now().toString().slice(-4)}`,
-          reg_number: `TE57PL${Date.now().toString().slice(-4)}`,
+          plant_id: `ZZ99PLANT${Date.now().toString().slice(-4)}`,
+          reg_number: `ZZ99PL${Date.now().toString().slice(-4)}`,
           nickname: 'Test Excavator',
           make: 'Caterpillar',
           model: '320',

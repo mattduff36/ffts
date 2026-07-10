@@ -15,7 +15,6 @@ vi.mock('@/lib/hooks/useAuth', () => ({
   useAuth: () => ({
     profile: mockedUserId ? { id: mockedUserId } : null,
     loading: false,
-    locked: false,
   }),
 }));
 

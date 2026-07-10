@@ -52,4 +52,4 @@ Use the `.bat` version:
 bin\fixerrors.bat
 ```
 
-Or add `D:\Websites\digidocs\bin` to your Windows PATH environment variable.
+Or add `D:\Websites\ffts\bin` to your Windows PATH environment variable.

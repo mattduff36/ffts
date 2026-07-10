@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TeamToggleMenu } from '@/components/ui/team-toggle-menu';
 import { Loader2, Save, Users, X, Search } from 'lucide-react';
@@ -263,7 +264,7 @@ export function CategoryRecipientsDialog({
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border text-white max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border text-white">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -275,9 +276,7 @@ export function CategoryRecipientsDialog({
         </DialogHeader>
         
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+          <PanelLoader message="Loading reminder recipients..." accent="maintenance" className="py-12" />
         ) : (
           <div className="space-y-4">
             {/* Search */}

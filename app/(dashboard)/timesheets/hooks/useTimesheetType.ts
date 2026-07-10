@@ -9,12 +9,21 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { isNetworkFetchError } from '@/lib/utils/http-error';
 import { DEFAULT_TIMESHEET_TYPE, TimesheetType } from '../types/registry';
+
+export type TimesheetTypeResolutionMode = 'fixed' | 'choice';
 
 interface UseTimesheetTypeReturn {
   timesheetType: TimesheetType | null;
+  mode: TimesheetTypeResolutionMode;
   loading: boolean;
   error: string | null;
+}
+
+export interface TimesheetTypeResolution {
+  timesheetType: TimesheetType | null;
+  mode: TimesheetTypeResolutionMode;
 }
 
 interface ProfileTimesheetTypeRow {
@@ -58,15 +67,24 @@ export function normalizeTimesheetType(value: unknown): TimesheetType | null {
   return null;
 }
 
+export function normalizeTimesheetTypeOverride(value: unknown): TimesheetType | 'user_choice' | null {
+  if (value === 'user_choice') return 'user_choice';
+  return normalizeTimesheetType(value);
+}
+
 export function resolveTimesheetTypeWithOverride(params: {
   overrideType?: unknown;
   teamType?: unknown;
   roleType?: unknown;
-}): TimesheetType {
-  const overrideType = normalizeTimesheetType(params.overrideType);
+}): TimesheetTypeResolution {
+  const overrideType = normalizeTimesheetTypeOverride(params.overrideType);
+  if (overrideType === 'user_choice') {
+    return { timesheetType: null, mode: 'choice' };
+  }
+
   const teamType = normalizeTimesheetType(params.teamType);
   const roleType = normalizeTimesheetType(params.roleType);
-  return overrideType || teamType || roleType || DEFAULT_TIMESHEET_TYPE;
+  return { timesheetType: overrideType || teamType || roleType || DEFAULT_TIMESHEET_TYPE, mode: 'fixed' };
 }
 
 async function fetchRoleTimesheetType(supabase: ReturnType<typeof createClient>, userId: string) {
@@ -89,6 +107,7 @@ async function fetchRoleTimesheetType(supabase: ReturnType<typeof createClient>,
 
 export function useTimesheetType(userId?: string): UseTimesheetTypeReturn {
   const [timesheetType, setTimesheetType] = useState<TimesheetType | null>(null);
+  const [mode, setMode] = useState<TimesheetTypeResolutionMode>('fixed');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
@@ -97,6 +116,7 @@ export function useTimesheetType(userId?: string): UseTimesheetTypeReturn {
     async function fetchTimesheetType() {
       if (!userId) {
         setTimesheetType(DEFAULT_TIMESHEET_TYPE);
+        setMode('fixed');
         setLoading(false);
         return;
       }
@@ -138,12 +158,18 @@ export function useTimesheetType(userId?: string): UseTimesheetTypeReturn {
             userId,
           });
         }
-        const overrideType = normalizeTimesheetType(overrideRow?.timesheet_type);
+        const overrideType = normalizeTimesheetTypeOverride(overrideRow?.timesheet_type);
 
         if (fetchError) {
           if (isMissingTeamTimesheetTypeError(fetchError)) {
             const fallbackType = await fetchRoleTimesheetType(supabase, userId);
-            setTimesheetType((overrideType || fallbackType) as TimesheetType);
+            if (overrideType === 'user_choice') {
+              setTimesheetType(null);
+              setMode('choice');
+            } else {
+              setTimesheetType((overrideType || fallbackType) as TimesheetType);
+              setMode('fixed');
+            }
             setError(null);
             return;
           }
@@ -152,27 +178,39 @@ export function useTimesheetType(userId?: string): UseTimesheetTypeReturn {
 
         const profileRow = pickFirstRow((data || []) as ProfileTimesheetTypeRow[]);
         if (!profileRow) {
-          setTimesheetType((overrideType || DEFAULT_TIMESHEET_TYPE) as TimesheetType);
+          if (overrideType === 'user_choice') {
+            setTimesheetType(null);
+            setMode('choice');
+          } else {
+            setTimesheetType((overrideType || DEFAULT_TIMESHEET_TYPE) as TimesheetType);
+            setMode('fixed');
+          }
           setError(null);
           return;
         }
 
         const teamData = pickSingleRelation(profileRow.team);
         const roleData = pickSingleRelation(profileRow.role);
-        const type = resolveTimesheetTypeWithOverride({
+        const resolution = resolveTimesheetTypeWithOverride({
           overrideType,
           teamType: teamData?.timesheet_type,
           roleType: roleData?.timesheet_type,
         });
 
-        setTimesheetType(type);
+        setTimesheetType(resolution.timesheetType);
+        setMode(resolution.mode);
         setError(null);
       } catch (err) {
-        console.error('Error fetching timesheet type:', err);
-        setError(getErrorMessage(err) || 'Failed to fetch timesheet type');
+        if (!isNetworkFetchError(err)) {
+          console.error('Error fetching timesheet type:', err);
+          setError(getErrorMessage(err) || 'Failed to fetch timesheet type');
+        } else {
+          setError(null);
+        }
         
         // Fallback to default on error
         setTimesheetType(DEFAULT_TIMESHEET_TYPE);
+        setMode('fixed');
       } finally {
         setLoading(false);
       }
@@ -181,5 +219,5 @@ export function useTimesheetType(userId?: string): UseTimesheetTypeReturn {
     fetchTimesheetType();
   }, [userId, supabase]);
 
-  return { timesheetType, loading, error };
+  return { timesheetType, mode, loading, error };
 }

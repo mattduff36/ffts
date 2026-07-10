@@ -8,7 +8,7 @@
 
 ## 🎉 Overview
 
-A comprehensive reporting system has been implemented for DigiDocs, providing managers and admins with powerful tools to download, analyze, and manage timesheet and inspection data through Excel reports and real-time statistics.
+A comprehensive reporting system has been implemented for Forest Farm Operations, providing managers and admins with powerful tools to download, analyze, and manage timesheet and inspection data through Excel reports and real-time statistics.
 
 ---
 

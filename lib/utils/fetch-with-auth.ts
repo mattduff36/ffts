@@ -7,6 +7,11 @@ export interface AuthAwareRequestInit extends RequestInit {
   skipAuthRecovery?: boolean;
 }
 
+export type AuthAwareFetch = (
+  input: string | URL | Request,
+  init?: AuthAwareRequestInit
+) => Promise<Response>;
+
 type BrowserFetch = typeof window.fetch & {
   __avsAuthAwareOriginalFetch__?: typeof window.fetch;
   __avsAuthAwarePatched__?: boolean;
@@ -45,7 +50,7 @@ function shouldHandleAuthRecovery(input: string | URL | Request): boolean {
   return true;
 }
 
-export function createAuthAwareFetch(baseFetch: typeof fetch): typeof fetch {
+export function createAuthAwareFetch(baseFetch: typeof fetch): AuthAwareFetch {
   return (async (input: string | URL | Request, init?: AuthAwareRequestInit) => {
     const { skipAuthRecovery = false, ...requestInit } = init ?? {};
     const response = await baseFetch(input, requestInit);
@@ -55,7 +60,7 @@ export function createAuthAwareFetch(baseFetch: typeof fetch): typeof fetch {
     }
 
     return response;
-  }) as typeof fetch;
+  }) as AuthAwareFetch;
 }
 
 export function installGlobalAuthAwareFetch(): () => void {

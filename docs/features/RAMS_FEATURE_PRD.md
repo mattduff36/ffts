@@ -230,7 +230,7 @@ Replace one of the placeholder cards with:
 │  ☑️ Select All                           │
 │                                          │
 │  ☑️ John Smith (Employee)                │
-│  ☑️ Sarah Jones (Employee)               │
+│  ☑️ Alex Example (Employee)              │
 │  ☐ Mike Davis (Manager) ⚠️ Already signed│
 │  ☑️ Emma Wilson (Employee)               │
 │  ☑️ Tom Brown (Employee)                 │
@@ -358,7 +358,7 @@ Button appears for employees who have already signed:
 │                                              │
 │  ✅ Signed (12)                              │
 │  • John Smith - Oct 16, 2025 [View Sig]     │
-│  • Sarah Jones - Oct 16, 2025 [View Sig]    │
+│  • Alex Example - Oct 16, 2025 [View Sig]   │
 │  • Emma Wilson - Oct 17, 2025 [View Sig]    │
 │  ... (9 more)                                │
 │                                              │
@@ -369,7 +369,7 @@ Button appears for employees who have already signed:
 │                                              │
 │  👥 Visitor Signatures (2)                   │
 │  • Mike Johnson (ABC Contractors) - Oct 17  │
-│  • Sarah Williams (XYZ Ltd) - Oct 18        │
+│  • Jamie Example (XYZ Ltd) - Oct 18         │
 │                                              │
 └──────────────────────────────────────────────┘
 ```

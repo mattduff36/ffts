@@ -19,7 +19,7 @@ describe('fleet-inspection-workflow-settings', () => {
     const current = getDefaultFleetInspectionWorkflowConfig();
     const merged = mergeFleetInspectionWorkflowConfig(current, {
       overdue_days_threshold: 14,
-      asset_types: { van: false },
+      asset_types: { van: false, plant: true, hgv: true },
     });
 
     expect(merged.overdue_days_threshold).toBe(14);

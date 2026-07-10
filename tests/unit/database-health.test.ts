@@ -64,7 +64,7 @@ describe('database health server handling', () => {
     await expect(
       probeDatabaseHealth({
         connectionString: 'postgres://user:pass@localhost:5432/postgres',
-        createClient: () => client,
+        createClient: () => client as never,
       })
     ).resolves.toMatchObject({
       ok: false,
@@ -413,7 +413,7 @@ describe('database health recovery dedupe', () => {
       },
       {
         connectionString: 'postgres://user:pass@localhost:5432/postgres',
-        createClient: () => client,
+        createClient: () => client as never,
       }
     );
     const second = await recordDatabaseRecoveryEvent(
@@ -425,7 +425,7 @@ describe('database health recovery dedupe', () => {
       },
       {
         connectionString: 'postgres://user:pass@localhost:5432/postgres',
-        createClient: () => client,
+        createClient: () => client as never,
       }
     );
 

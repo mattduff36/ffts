@@ -7,8 +7,7 @@
  * where they'll load the current bundle.
  *
  * Usage:
- *   npx tsx scripts/force-signout-user.ts sarah@example.com
- *   npx tsx scripts/force-signout-user.ts             (defaults to sarah@example.com)
+ *   npx tsx scripts/force-signout-user.ts user@example.test
  */
 
 import { config } from 'dotenv';
@@ -18,7 +17,12 @@ import pg from 'pg';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
-const TARGET_EMAIL = process.argv[2] || 'sarah@example.com';
+const TARGET_EMAIL = process.argv[2]?.trim();
+if (!TARGET_EMAIL || !TARGET_EMAIL.includes('@')) {
+  throw new Error(
+    'Provide the user email explicitly: npx tsx scripts/force-signout-user.ts user@example.test'
+  );
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

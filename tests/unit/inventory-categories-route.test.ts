@@ -31,7 +31,10 @@ function createCountAdmin(counts: Record<string, number>, errorSlug?: string) {
     },
   };
 
-  return { admin: admin as Parameters<typeof loadCategoryItemCounts>[0], queries };
+  return {
+    admin: admin as unknown as Parameters<typeof loadCategoryItemCounts>[0],
+    queries,
+  };
 }
 
 describe('inventory category route helpers', () => {

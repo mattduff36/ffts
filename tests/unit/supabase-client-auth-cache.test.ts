@@ -120,7 +120,10 @@ describe('supabase browser client', () => {
     getViewAsRoleIdMock.mockReturnValue('role-123');
     getViewAsTeamIdMock.mockReturnValue('team-456');
 
-    const fetchSpy = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchSpy = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) => new Response(null, { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
 
     createSupabaseClientMock.mockImplementation((_url, _key, options) => ({
@@ -148,7 +151,7 @@ describe('supabase browser client', () => {
 
     await client.options.global.fetch('https://example.supabase.co/rest/v1/profiles', {});
 
-    const [, init] = fetchSpy.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
+    const [, init] = fetchSpy.mock.calls[0];
     const headers = new Headers(init?.headers);
     expect(headers.get('x-view-as-role-id')).toBe('role-123');
     expect(headers.get('x-view-as-team-id')).toBe('team-456');

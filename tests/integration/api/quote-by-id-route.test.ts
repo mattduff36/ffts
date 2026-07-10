@@ -105,7 +105,7 @@ describe('PATCH /api/quotes/[id]', () => {
     mockGetQuoteManagerOption.mockResolvedValue({
       profile_id: 'manager-2',
       initials: 'CD',
-      manager_email: 'charlotte@example.test',
+      manager_email: 'workflow-copy@example.test',
       signoff_name: 'Example Approver',
       signoff_title: 'Accounts Manager',
       profile: { full_name: 'Example Approver' },
@@ -293,7 +293,7 @@ describe('PATCH /api/quotes/[id]', () => {
     expect(response.status).toBe(200);
     expect(mockSendQuoteToCustomerEmail).toHaveBeenCalledWith(
       expect.anything(),
-      ['manager@example.test', 'ops-copy@example.test'],
+      ['manager@example.com', 'ops-copy@example.test'],
       'sender@example.test'
     );
     expect(mockQuoteUpdate).toHaveBeenCalledWith(expect.objectContaining({
@@ -312,7 +312,7 @@ describe('PATCH /api/quotes/[id]', () => {
     async (action) => {
       const { PATCH } = await import('@/app/api/quotes/[id]/route');
       mockGetQuoteEmailCcEmails.mockResolvedValueOnce([
-        'charlotte@example.test',
+        'workflow-copy@example.test',
         'ops-copy@example.test',
       ]);
       mockFetchQuoteBundle.mockResolvedValue({
@@ -324,8 +324,8 @@ describe('PATCH /api/quotes/[id]', () => {
           quote_thread_id: 'thread-1',
           subject_line: 'Fence repairs',
           pricing_mode: 'itemized',
-          requester_id: 'manager-neil',
-          manager_email: 'neil@example.test',
+          requester_id: 'manager-example',
+          manager_email: 'manager@example.test',
           attention_email: 'alex@example.com',
           customer: {
             id: 'customer-1',
@@ -359,11 +359,11 @@ describe('PATCH /api/quotes/[id]', () => {
       expect(mockGetQuoteEmailCcEmails).toHaveBeenCalledWith(
         expect.anything(),
         'quote_customer_email_copy',
-        ['manager-neil']
+        ['manager-example']
       );
       expect(mockSendQuoteToCustomerEmail).toHaveBeenCalledWith(
         expect.anything(),
-        ['neil@example.test', 'charlotte@example.test', 'ops-copy@example.test'],
+        ['manager@example.test', 'workflow-copy@example.test', 'ops-copy@example.test'],
         'sender@example.test'
       );
     }
@@ -439,7 +439,7 @@ describe('PATCH /api/quotes/[id]', () => {
       requester_id: 'manager-2',
       requester_initials: 'CD',
       manager_name: 'Example Approver',
-      manager_email: 'charlotte@example.test',
+      manager_email: 'workflow-copy@example.test',
       duplicate_source_quote_id: 'quote-1',
       status: 'draft',
       sage_posted_at: null,

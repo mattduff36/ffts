@@ -20,16 +20,14 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing required Supabase environment variables for integration tests');
-}
+const runLiveDbTests = process.env.RUN_LIVE_DB_TESTS === 'true';
+const describeLive = runLiveDbTests && supabaseUrl && supabaseKey ? describe : describe.skip;
 
 // Import the actual function we want to test
 // Note: We'll need to test this manually with a real Supabase client
 // For now, let's create a simpler direct test
 
-describe('Service Task Creation Integration', () => {
+describeLive('Service Task Creation Integration', () => {
   let supabase: SupabaseClient;
   let testUserId: string;
   let testVehicleId: string;
@@ -43,7 +41,7 @@ describe('Service Task Creation Integration', () => {
   const makeTitle = (baseTitle: string) => `${testCasePrefix} | ${baseTitle}`;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl!, supabaseKey!);
     
     // Authenticate as test user
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({

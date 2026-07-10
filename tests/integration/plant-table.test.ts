@@ -27,7 +27,7 @@ describeOrSkip('Plant Table Integration Tests', () => {
   let createdPlantId: string | null = null;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabase = createClient(supabaseUrl!, supabaseServiceKey!);
 
     // Get a manager user for creating test data
     const { data: manager } = await supabase

@@ -121,6 +121,9 @@ describe('GET /api/dashboard/summary', () => {
       'admin-settings': false,
       'admin-vans': false,
       customers: false,
+      inventory: false,
+      training: false,
+      reminders: false,
       quotes: true,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -338,6 +341,9 @@ describe('GET /api/dashboard/summary', () => {
       'admin-settings': false,
       'admin-vans': false,
       customers: false,
+      inventory: false,
+      training: false,
+      reminders: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -469,6 +475,9 @@ describe('GET /api/dashboard/summary', () => {
       'admin-settings': false,
       'admin-vans': false,
       customers: false,
+      inventory: false,
+      training: false,
+      reminders: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -494,7 +503,7 @@ describe('GET /api/dashboard/summary', () => {
     const supabase = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: 'charlotte-id' } },
+          data: { user: { id: 'accounts-user-id' } },
           error: null,
         }),
       },
@@ -588,6 +597,9 @@ describe('GET /api/dashboard/summary', () => {
       'admin-settings': false,
       'admin-vans': false,
       customers: false,
+      inventory: false,
+      training: false,
+      reminders: false,
       quotes: false,
     });
 
@@ -741,6 +753,9 @@ describe('GET /api/dashboard/summary', () => {
       'admin-settings': false,
       'admin-vans': false,
       customers: false,
+      inventory: false,
+      training: false,
+      reminders: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({

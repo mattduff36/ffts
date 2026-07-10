@@ -76,7 +76,7 @@ describeSuite('HGV mileage sync trigger — database integration', () => {
   });
 
   it('trigger_update_maintenance_mileage_hgv trigger exists on hgv_inspections', async () => {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('pg_trigger' as string)
       .select('tgname')
       .eq('tgname', 'trigger_update_maintenance_mileage_hgv')

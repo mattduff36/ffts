@@ -18,10 +18,12 @@ describe('absence onboarding action services', () => {
     const { getBankHolidaysForYear } = await import('@/lib/utils/bank-holidays');
     vi.mocked(getBankHolidaysForYear)
       .mockResolvedValueOnce([
-        { title: 'Good Friday', date: '2025-04-18' },
-        { title: 'Christmas Day', date: '2025-12-25' },
+        { title: 'Good Friday', date: '2025-04-18', notes: '', bunting: true },
+        { title: 'Christmas Day', date: '2025-12-25', notes: '', bunting: true },
       ])
-      .mockResolvedValueOnce([{ title: 'New Year', date: '2026-01-01' }]);
+      .mockResolvedValueOnce([
+        { title: 'New Year', date: '2026-01-01', notes: '', bunting: true },
+      ]);
 
     const insertedRows: Array<Record<string, unknown>> = [];
     const supabase = {

@@ -187,12 +187,6 @@ export const ORGANOGRAM_PEOPLE: OrganogramPersonMapping[] = [
     roleType: 'member',
   },
   {
-    fullName: 'Aileen Hurrell',
-    teamId: 'finance_payroll',
-    primaryManagerName: 'Example User Four',
-    roleType: 'member',
-  },
-  {
     fullName: 'Example User Five',
     teamId: 'heavy_plant_earthworks',
     roleType: 'leader',
@@ -211,12 +205,6 @@ export const ORGANOGRAM_PEOPLE: OrganogramPersonMapping[] = [
     fullName: 'Example User Six',
     teamId: 'transport',
     roleType: 'leader',
-  },
-  {
-    fullName: 'Sarah Hubbard',
-    teamId: 'transport',
-    primaryManagerName: 'Example User Six',
-    roleType: 'member',
   },
   {
     fullName: 'Example User Seven',

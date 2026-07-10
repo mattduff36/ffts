@@ -26,7 +26,7 @@ describeOrSkip('Fleet Module Workflows', () => {
   let testVehicleId: string;
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl!, supabaseKey!);
     
     // Authenticate as test user
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({

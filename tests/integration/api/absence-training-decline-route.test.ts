@@ -59,7 +59,8 @@ describe('POST /api/absence/training-decline', () => {
       deletedAbsenceIds: ['absence-1'],
       employeeName: 'Alice Employee',
       trainingDate: 'Wednesday 15 April 2026',
-      notifiedProfileIds: ['manager-1', 'sarah-profile'],
+      notifiedProfileIds: ['manager-1', 'example-profile'],
+      returnedTimesheetIds: [],
     });
 
     const response = await POST(

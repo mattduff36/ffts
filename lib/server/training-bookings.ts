@@ -12,8 +12,22 @@ import type { Database } from '@/types/database';
 
 type AdminClient = SupabaseClient<Database>;
 
-const SARAH_HUBBARD_EMAIL = 'sarah@example.com';
-const SARAH_HUBBARD_NAME = 'Sarah Hubbard';
+interface TrainingCoordinatorConfig {
+  profileId: string;
+  name: string;
+  email: string | null;
+}
+
+function getTrainingCoordinatorConfig(): TrainingCoordinatorConfig | null {
+  const profileId = process.env.TRAINING_COORDINATOR_PROFILE_ID?.trim();
+  if (!profileId) return null;
+
+  return {
+    profileId,
+    name: process.env.TRAINING_COORDINATOR_NAME?.trim() || 'Training Coordinator',
+    email: process.env.TRAINING_COORDINATOR_EMAIL?.trim() || null,
+  };
+}
 
 interface ProfileRow {
   id: string;
@@ -108,15 +122,20 @@ async function resolvePrimaryManager(admin: AdminClient, profile: ProfileRow): P
   return team?.manager_1_profile_id ?? team?.manager_2_profile_id ?? null;
 }
 
-async function resolveSarahProfile(admin: AdminClient): Promise<NotificationRecipient | null> {
+async function resolveTrainingCoordinator(
+  admin: AdminClient
+): Promise<NotificationRecipient | null> {
+  const config = getTrainingCoordinatorConfig();
+  if (!config) return null;
+
   const { data, error } = await admin
     .from('profiles')
     .select('id, full_name')
-    .ilike('full_name', SARAH_HUBBARD_NAME)
+    .eq('id', config.profileId)
     .maybeSingle();
 
   if (error) {
-    console.error('Failed to resolve Sarah Hubbard profile:', error);
+    console.error('Failed to resolve the configured training coordinator profile:', error);
     return null;
   }
 
@@ -127,8 +146,8 @@ async function resolveSarahProfile(admin: AdminClient): Promise<NotificationReci
 
   return {
     profileId: profile.id,
-    name: profile.full_name || SARAH_HUBBARD_NAME,
-    email: SARAH_HUBBARD_EMAIL,
+    name: profile.full_name || config.name,
+    email: config.email || await getAuthEmail(admin, profile.id),
   };
 }
 
@@ -157,9 +176,9 @@ async function resolveNotificationRecipients(
     }
   }
 
-  const sarahRecipient = await resolveSarahProfile(admin);
-  if (sarahRecipient) {
-    recipients.push(sarahRecipient);
+  const trainingCoordinator = await resolveTrainingCoordinator(admin);
+  if (trainingCoordinator) {
+    recipients.push(trainingCoordinator);
   }
 
   return recipients.filter(
@@ -329,8 +348,7 @@ export async function declineTrainingBookings(
 
   await Promise.all(
     recipients.map(async (recipient) => {
-      const recipientEmail =
-        recipient.name === SARAH_HUBBARD_NAME ? SARAH_HUBBARD_EMAIL : recipient.email;
+      const recipientEmail = recipient.email;
       if (!recipientEmail) {
         return;
       }

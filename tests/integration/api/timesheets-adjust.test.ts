@@ -48,6 +48,7 @@ async function mockEffectiveRole(overrides: Partial<EffectiveRoleInfo> = {}) {
     role_id: null,
     role_name: null,
     display_name: null,
+    role_class: null,
     is_manager_admin: false,
     is_super_admin: false,
     is_viewing_as: false,

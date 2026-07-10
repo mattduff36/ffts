@@ -171,11 +171,13 @@ describe('@permissions API Endpoint Access Control', () => {
       requireTestUsers(testUsers);
 
       const { data: session } = await employeeClient.auth.getSession();
-      expect(session?.session?.access_token, 'Employee session token should be available').toBeTruthy();
+      const accessToken = session?.session?.access_token;
+      expect(accessToken, 'Employee session token should be available').toBeTruthy();
+      if (!accessToken) throw new Error('Employee session token should be available');
 
       const res = expectReachable(await fetchRoute('/api/admin/users', {
         headers: {
-          'Authorization': `Bearer ${session.session.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
       }), '/api/admin/users');
       // Should be 401 or 403

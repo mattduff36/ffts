@@ -25,8 +25,9 @@ import { GET, PUT } from '@/app/api/notification-preferences/admin/route';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getEffectiveRole } from '@/lib/utils/view-as';
+import type { EffectiveRoleInfo } from '@/lib/utils/view-as';
 
-const baseEffectiveRole = {
+const baseEffectiveRole: EffectiveRoleInfo = {
   role_id: 'role-admin',
   role_name: 'admin',
   display_name: 'Admin',
@@ -35,7 +36,7 @@ const baseEffectiveRole = {
   is_super_admin: false,
   is_viewing_as: false,
   is_actual_super_admin: false,
-  user_id: 'charlotte-id',
+  user_id: 'debug-admin-id',
   team_id: null,
   team_name: null,
 };
@@ -45,9 +46,9 @@ describe('notification preferences admin route', () => {
     vi.clearAllMocks();
   });
 
-  it('allows Charlotte debug access to fetch notification preferences', async () => {
+  it('allows configured debug access to fetch notification preferences', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@example.test' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue(baseEffectiveRole);
 
@@ -103,9 +104,9 @@ describe('notification preferences admin route', () => {
     ]);
   });
 
-  it('allows Charlotte debug access to update notification preferences', async () => {
+  it('allows configured debug access to update notification preferences', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@example.test' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue(baseEffectiveRole);
 
@@ -160,7 +161,7 @@ describe('notification preferences admin route', () => {
 
   it('blocks Toolbox Talk notification disables through debug updates', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@example.test' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue(baseEffectiveRole);
 
@@ -183,7 +184,7 @@ describe('notification preferences admin route', () => {
 
   it('blocks below-supervisor debug users from disabling notification preferences', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@example.test' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue({
       ...baseEffectiveRole,
@@ -213,7 +214,7 @@ describe('notification preferences admin route', () => {
 
   it('blocks debug access while viewing as another role', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
-      profile: { id: 'charlotte-id', email: 'charlotte@example.test' },
+      profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
     vi.mocked(getEffectiveRole).mockResolvedValue({
       ...baseEffectiveRole,

@@ -12,7 +12,7 @@
  *
  * Usage: node scripts/guards/no-vehicle-inspections.mjs
  */
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -34,43 +34,51 @@ const checks = [
     name: '"Vehicle Tasks" UI label',
     pattern: 'Vehicle Tasks',
     dirs: ['app/', 'lib/', 'components/'],
-    glob: '--glob "!*.test.*"',
+    glob: '!*.test.*',
   },
   {
     name: '"Vehicle Inspection(s)" UI text',
     pattern: 'Vehicle Inspections?',
     dirs: ['app/', 'lib/', 'components/'],
-    glob: '--glob "!*.test.*"',
+    glob: '!*.test.*',
   },
   {
     name: '"Unknown Vehicle" fallback text',
     pattern: 'Unknown Vehicle',
     dirs: ['app/', 'lib/', 'components/'],
-    glob: '--glob "!*.test.*"',
+    glob: '!*.test.*',
   },
 ];
 
 let failed = false;
 
 for (const check of checks) {
-  try {
-    const dirs = check.dirs.join(' ');
-    const globFlag = check.glob || '';
-    const result = execSync(
-      `rg "${check.pattern}" -l ${globFlag} ${dirs} 2>/dev/null || true`,
-      { cwd: ROOT, encoding: 'utf-8' }
-    ).trim();
+  const args = [
+    check.pattern,
+    '-l',
+    ...(check.glob ? ['--glob', check.glob] : []),
+    ...check.dirs,
+  ];
+  const result = spawnSync('rg', args, {
+    cwd: ROOT,
+    encoding: 'utf-8',
+  });
 
-    if (result) {
-      const files = result.split('\n').filter(Boolean);
-      console.error(`❌ GUARD FAILED: ${check.name} found in:`);
-      files.forEach(f => console.error(`   ${f}`));
-      failed = true;
-    } else {
-      console.log(`✅ ${check.name}: clean`);
-    }
-  } catch {
-    console.log(`✅ ${check.name}: clean (no rg matches)`);
+  if (result.error || (result.status !== 0 && result.status !== 1)) {
+    console.error(`❌ GUARD ERROR: ${check.name} could not be checked.`);
+    if (result.error) console.error(`   ${result.error.message}`);
+    if (result.stderr?.trim()) console.error(`   ${result.stderr.trim()}`);
+    failed = true;
+    continue;
+  }
+
+  const files = result.stdout.trim().split(/\r?\n/u).filter(Boolean);
+  if (files.length > 0) {
+    console.error(`❌ GUARD FAILED: ${check.name} found in:`);
+    files.forEach(f => console.error(`   ${f}`));
+    failed = true;
+  } else {
+    console.log(`✅ ${check.name}: clean`);
   }
 }
 

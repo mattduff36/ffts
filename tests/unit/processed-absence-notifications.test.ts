@@ -77,7 +77,7 @@ describe('processed absence notifications', () => {
   });
 
   it('creates current-schema notification messages and recipient rows', async () => {
-    const messagesInsert = vi.fn(() => ({
+    const messagesInsert = vi.fn((_payload: { body: string } & Record<string, unknown>) => ({
       select: vi.fn(() => ({
         single: vi.fn().mockResolvedValue({ data: { id: 'message-id' }, error: null }),
       })),
@@ -127,7 +127,7 @@ describe('processed absence notifications', () => {
   });
 
   it('notifies when a timesheet adjustment overlaps processed absence leave', async () => {
-    const messagesInsert = vi.fn(() => ({
+    const messagesInsert = vi.fn((_payload: { body: string } & Record<string, unknown>) => ({
       select: vi.fn(() => ({
         single: vi.fn().mockResolvedValue({ data: { id: 'message-id' }, error: null }),
       })),

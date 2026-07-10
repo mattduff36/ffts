@@ -400,7 +400,7 @@ describe('QuoteFormDialog', () => {
         },
       ],
       line_items: [],
-    } as Quote;
+    } as unknown as Quote;
 
     render(<QuoteFormDialog {...baseProps} quote={quote} />);
 

@@ -20,7 +20,7 @@ describe('absence message API route', () => {
     const adminClient = {} as never;
     vi.mocked(createAdminClient).mockReturnValue(adminClient);
     vi.mocked(requireAbsenceUser).mockResolvedValue({
-      user: { id: 'user-1' },
+      user: { id: 'user-1' } as never,
       response: null,
     });
     vi.mocked(getAbsenceAnnouncement).mockResolvedValue({
@@ -63,7 +63,7 @@ describe('absence message API route', () => {
     const adminClient = {} as never;
     vi.mocked(createAdminClient).mockReturnValue(adminClient);
     vi.mocked(requireAdminAbsenceAccess).mockResolvedValue({
-      user: { id: 'admin-1' },
+      user: { id: 'admin-1' } as never,
       response: null,
     });
     vi.mocked(saveAbsenceAnnouncement).mockResolvedValue({
@@ -91,7 +91,7 @@ describe('absence message API route', () => {
     const { requireAdminAbsenceAccess } = await import('@/lib/server/absence-work-shift-auth');
 
     vi.mocked(requireAdminAbsenceAccess).mockResolvedValue({
-      user: { id: 'admin-1' },
+      user: { id: 'admin-1' } as never,
       response: null,
     });
 

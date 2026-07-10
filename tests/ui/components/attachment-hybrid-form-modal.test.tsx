@@ -235,7 +235,7 @@ describe('AttachmentHybridFormModal', () => {
   });
 
   it('renders sections and saves completed payload', async () => {
-    const onSave = vi.fn(async () => undefined);
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => undefined);
     const onOpenChange = vi.fn();
 
     render(
@@ -279,7 +279,7 @@ describe('AttachmentHybridFormModal', () => {
   });
 
   it('persists signer name in response_json without existing signature payload', async () => {
-    const onSave = vi.fn(async () => undefined);
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => undefined);
 
     render(
       <TabletModeProvider>
@@ -312,7 +312,7 @@ describe('AttachmentHybridFormModal', () => {
   });
 
   it('preserves spaces while typing attention notes', async () => {
-    const onSave = vi.fn(async () => undefined);
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => undefined);
 
     render(
       <TabletModeProvider>
@@ -396,7 +396,7 @@ describe('AttachmentHybridFormModal', () => {
   });
 
   it('saves dirty drafts before dismissing the modal', async () => {
-    const onSave = vi.fn(async () => undefined);
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => undefined);
     const onOpenChange = vi.fn();
     render(renderInspectionModal(existingInspectionResponses, { onSave, onOpenChange }));
 
@@ -422,7 +422,7 @@ describe('AttachmentHybridFormModal', () => {
 
   it('keeps dirty modal open when dismissal save fails', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const onSave = vi.fn(async () => {
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => {
       throw new Error('Save failed');
     });
     const onOpenChange = vi.fn();
@@ -445,7 +445,7 @@ describe('AttachmentHybridFormModal', () => {
   });
 
   it('explicit discard closes dirty modal without saving', () => {
-    const onSave = vi.fn(async () => undefined);
+    const onSave = vi.fn(async (_responses: AttachmentSchemaResponse[], _markComplete: boolean) => undefined);
     const onOpenChange = vi.fn();
     render(renderInspectionModal(existingInspectionResponses, { onSave, onOpenChange }));
 

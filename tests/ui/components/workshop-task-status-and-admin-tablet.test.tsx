@@ -94,6 +94,7 @@ describe('Workshop status/admin tablet safeguards', () => {
     render(
       <TabletModeProvider>
         <WorkshopTaskStatusDialogs
+          statusTask={null}
           showStatusModal
           onShowStatusModalChange={onShowStatusModalChange}
           loggedComment="started"

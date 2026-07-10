@@ -89,7 +89,11 @@ describe('workshop task completion date confirmation', () => {
       }),
     };
     const fetchTasks = vi.fn().mockResolvedValue(undefined);
-    const setUpdatingStatus = vi.fn((updater: (previous: Set<string>) => Set<string>) => updater(new Set()));
+    const setUpdatingStatus = vi.fn((
+      value: Set<string> | ((previous: Set<string>) => Set<string>)
+    ) => {
+      if (typeof value === 'function') value(new Set());
+    });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({}),
@@ -212,7 +216,11 @@ describe('workshop task completion date confirmation', () => {
       resumingTask: null,
       resumeComment: '',
       completingTask: task,
-      setUpdatingStatus: vi.fn((updater: (previous: Set<string>) => Set<string>) => updater(new Set())),
+      setUpdatingStatus: vi.fn((
+        value: Set<string> | ((previous: Set<string>) => Set<string>)
+      ) => {
+        if (typeof value === 'function') value(new Set());
+      }),
       setShowStatusModal: vi.fn(),
       setSelectedTask: vi.fn(),
       setLoggedComment: vi.fn(),

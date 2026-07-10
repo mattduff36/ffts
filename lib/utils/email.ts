@@ -1234,7 +1234,7 @@ export async function sendTestTimesheetEmails(adminEmail: string): Promise<{
       employeeName: 'Jane Doe',
       weekEnding: 'Sunday, 1st December 2024',
       adjustmentComments: 'Adjusted Thursday hours from 9.5 to 8.0 hours to match the confirmed job completion time with the client. Break time was not properly recorded, so this has been corrected.',
-      adjustedBy: 'Sarah Manager'
+      adjustedBy: 'Example Manager'
     });
 
     return adjustmentResult;

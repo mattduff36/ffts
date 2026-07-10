@@ -48,6 +48,8 @@ const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
 const originalResendApiKey2 = process.env.RESEND_API_KEY_2;
 const originalResendFromEmail2 = process.env.RESEND_FROM_EMAIL_2;
+const originalQuoteEmailRecordCc = process.env.QUOTE_EMAIL_RECORD_CC;
+const originalQuoteRamsRequestEmail = process.env.QUOTE_RAMS_REQUEST_EMAIL;
 const VAT_NOTICE = 'All prices are subject to the current V.A.T. rates applicable at the time of invoice.';
 
 function buildQuoteBundle(overrides: Partial<QuoteBundle['quote']> = {}): QuoteBundle {
@@ -105,6 +107,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.RESEND_API_KEY = 'test-key';
   process.env.RESEND_FROM_EMAIL = 'Quotes <quotes@example.com>';
+  process.env.QUOTE_EMAIL_RECORD_CC = 'no-reply@example.test';
+  process.env.QUOTE_RAMS_REQUEST_EMAIL = 'rams@example.test';
   delete process.env.RESEND_API_KEY_2;
   delete process.env.RESEND_FROM_EMAIL_2;
   mockGetUsersWithModuleAccess.mockResolvedValue(new Set(['copy-1']));
@@ -140,6 +144,8 @@ afterEach(() => {
   restoreEnv('RESEND_FROM_EMAIL', originalResendFromEmail);
   restoreEnv('RESEND_API_KEY_2', originalResendApiKey2);
   restoreEnv('RESEND_FROM_EMAIL_2', originalResendFromEmail2);
+  restoreEnv('QUOTE_EMAIL_RECORD_CC', originalQuoteEmailRecordCc);
+  restoreEnv('QUOTE_RAMS_REQUEST_EMAIL', originalQuoteRamsRequestEmail);
 });
 
 function restoreEnv(key: string, value: string | undefined) {
@@ -238,7 +244,7 @@ describe('sendQuoteToCustomerEmail', () => {
     const result = await sendQuotePoRequestEmail({
       bundle: buildQuoteBundle(),
       recipientEmails: ['alex@example.com', ' alex@example.com '],
-      cc: ['charlotte@example.test', 'alex@example.com'],
+      cc: ['workflow-copy@example.test', 'alex@example.com'],
       senderEmail: 'sender@example.test',
       senderName: 'Example Manager',
     });
@@ -251,8 +257,8 @@ describe('sendQuoteToCustomerEmail', () => {
     expect(body).toEqual(expect.objectContaining({
       from: 'Quotes <quotes@example.com>',
       to: ['alex@example.com'],
-      cc: ['charlotte@example.test', 'no-reply@example.test'],
-      reply_to: ['sender@example.test', 'charlotte@example.test'],
+      cc: ['workflow-copy@example.test', 'no-reply@example.test'],
+      reply_to: ['sender@example.test', 'workflow-copy@example.test'],
       subject: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs',
     }));
     expect(String(body.html)).toContain('Please can I have a purchase order for the attached quotation.');
@@ -330,7 +336,7 @@ describe('quote workflow direct emails', () => {
       quoteReference: 'Q-001',
       customerName: 'Acme Ltd',
       subjectLine: 'Concrete repairs',
-      cc: ['charlotte@example.test'],
+      cc: ['workflow-copy@example.test'],
       poNumber: 'PO-123',
       managerName: 'Example Manager',
     });
@@ -341,8 +347,8 @@ describe('quote workflow direct emails', () => {
     const body = JSON.parse(String(init?.body));
 
     expect(body).toEqual(expect.objectContaining({
-      to: ['conway@example.test'],
-      cc: ['charlotte@example.test', 'no-reply@example.test'],
+      to: ['rams@example.test'],
+      cc: ['workflow-copy@example.test', 'no-reply@example.test'],
     }));
   });
 
@@ -351,7 +357,7 @@ describe('quote workflow direct emails', () => {
 
     const result = await sendQuoteStartAlertEmail({
       to: 'manager@example.test',
-      cc: ['charlotte@example.test'],
+      cc: ['workflow-copy@example.test'],
       managerName: 'Example Manager',
       quoteReference: 'Q-001',
       customerName: 'Acme Ltd',
@@ -366,7 +372,7 @@ describe('quote workflow direct emails', () => {
 
     expect(body).toEqual(expect.objectContaining({
       to: ['manager@example.test'],
-      cc: ['charlotte@example.test', 'no-reply@example.test'],
+      cc: ['workflow-copy@example.test', 'no-reply@example.test'],
     }));
   });
 });

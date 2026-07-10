@@ -38,7 +38,7 @@ interface ImportException {
 }
 
 interface DedupedItem extends SourceRow {
-  targetBucket: 'Yard' | 'NoLocation';
+  targetBucket: 'Yard' | 'Unknown';
   groupedRows: SourceRow[];
 }
 
@@ -255,7 +255,7 @@ function buildDedupedItems(rows: SourceRow[]): {
     const hasYardLocation = groupedRows.some((row) => row.location.trim().toLowerCase() === 'yard');
     const item: DedupedItem = {
       ...chosen,
-      targetBucket: hasYardLocation ? 'Yard' : 'NoLocation',
+      targetBucket: hasYardLocation ? 'Yard' : 'Unknown',
       groupedRows,
     };
 
@@ -440,15 +440,15 @@ async function importInventory() {
       name: 'Yard',
       description: 'Main yard location bucket.',
     });
-    const noLocationId = await getOrCreateLocation(client, {
-      name: 'NoLocation',
-      description: 'Temporary bucket for items that need manager/admin allocation.',
+    const unknownLocationId = await getOrCreateLocation(client, {
+      name: 'Unknown',
+      description: 'System location for inventory items that cannot currently be found.',
     });
     const vanBucketCount = await createVanBuckets(client);
 
     let importedCount = 0;
     for (const item of items) {
-      const locationId = item.targetBucket === 'Yard' ? yardLocationId : noLocationId;
+      const locationId = item.targetBucket === 'Yard' ? yardLocationId : unknownLocationId;
       await client.query(
         `
           INSERT INTO public.inventory_items (

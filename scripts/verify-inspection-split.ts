@@ -51,7 +51,11 @@ async function run() {
       `SELECT 1 FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'`,
       [tbl]
     );
-    rows.length ? pass(`${tbl} exists`) : fail(`${tbl} MISSING`);
+    if (rows.length) {
+      pass(`${tbl} exists`);
+    } else {
+      fail(`${tbl} MISSING`);
+    }
   }
 
   // ── 2. Row counts ──
@@ -65,17 +69,21 @@ async function run() {
   const { rows: vanPlant } = await client.query(
     `SELECT COUNT(*) AS cnt FROM van_inspections WHERE plant_id IS NOT NULL OR is_hired_plant = TRUE`
   );
-  Number(vanPlant[0].cnt) === 0
-    ? pass('van_inspections has no plant rows')
-    : fail(`van_inspections has ${vanPlant[0].cnt} plant rows!`);
+  if (Number(vanPlant[0].cnt) === 0) {
+    pass('van_inspections has no plant rows');
+  } else {
+    fail(`van_inspections has ${vanPlant[0].cnt} plant rows!`);
+  }
 
   // Verify plant rows have no van data
   const { rows: plantVan } = await client.query(
     `SELECT COUNT(*) AS cnt FROM plant_inspections WHERE van_id IS NOT NULL`
   );
-  Number(plantVan[0].cnt) === 0
-    ? pass('plant_inspections has no van rows')
-    : fail(`plant_inspections has ${plantVan[0].cnt} van rows!`);
+  if (Number(plantVan[0].cnt) === 0) {
+    pass('plant_inspections has no van rows');
+  } else {
+    fail(`plant_inspections has ${plantVan[0].cnt} van rows!`);
+  }
 
   // ── 3. RLS ──
   console.log('\n═══ 3. RLS POLICIES ═══');
@@ -83,14 +91,20 @@ async function run() {
     const { rows: rls } = await client.query(
       `SELECT relrowsecurity FROM pg_class WHERE relname = $1`, [tbl]
     );
-    rls[0]?.relrowsecurity ? pass(`RLS enabled on ${tbl}`) : fail(`RLS NOT enabled on ${tbl}`);
+    if (rls[0]?.relrowsecurity) {
+      pass(`RLS enabled on ${tbl}`);
+    } else {
+      fail(`RLS NOT enabled on ${tbl}`);
+    }
 
     const { rows: policies } = await client.query(
       `SELECT policyname FROM pg_policies WHERE tablename = $1`, [tbl]
     );
-    policies.length > 0
-      ? pass(`${tbl} has ${policies.length} policies`)
-      : fail(`${tbl} has NO policies`);
+    if (policies.length > 0) {
+      pass(`${tbl} has ${policies.length} policies`);
+    } else {
+      fail(`${tbl} has NO policies`);
+    }
   }
 
   // ── 4. Triggers ──
@@ -100,9 +114,11 @@ async function run() {
       SELECT tgname FROM pg_trigger
       WHERE tgrelid = $1::regclass AND NOT tgisinternal`, [tbl]
     );
-    triggers.length > 0
-      ? pass(`${tbl} has ${triggers.length} triggers: ${triggers.map(t => t.tgname).join(', ')}`)
-      : fail(`${tbl} has NO triggers`);
+    if (triggers.length > 0) {
+      pass(`${tbl} has ${triggers.length} triggers: ${triggers.map(t => t.tgname).join(', ')}`);
+    } else {
+      fail(`${tbl} has NO triggers`);
+    }
   }
 
   // ── 5. Compatibility view ──
@@ -111,9 +127,11 @@ async function run() {
     SELECT table_name FROM information_schema.views
     WHERE table_name = 'vehicle_inspections' AND table_schema = 'public'`
   );
-  views.length > 0
-    ? pass('vehicle_inspections compatibility view exists')
-    : pass('vehicle_inspections view already removed (post-cutover)');
+  if (views.length > 0) {
+    pass('vehicle_inspections compatibility view exists');
+  } else {
+    pass('vehicle_inspections view already removed (post-cutover)');
+  }
 
   // ── 6. Child table integrity ──
   console.log('\n═══ 6. CHILD TABLE INTEGRITY ═══');
@@ -123,9 +141,11 @@ async function run() {
       WHERE NOT EXISTS (SELECT 1 FROM van_inspections v WHERE v.id = c.inspection_id)
         AND NOT EXISTS (SELECT 1 FROM plant_inspections p WHERE p.id = c.inspection_id)
     `);
-    Number(orphans[0].cnt) === 0
-      ? pass(`${childTable}: 0 orphan rows`)
-      : fail(`${childTable}: ${orphans[0].cnt} ORPHAN rows`);
+    if (Number(orphans[0].cnt) === 0) {
+      pass(`${childTable}: 0 orphan rows`);
+    } else {
+      fail(`${childTable}: ${orphans[0].cnt} ORPHAN rows`);
+    }
   }
 
   // ── 7. Constraints ──

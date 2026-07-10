@@ -78,7 +78,7 @@ async function runMigration() {
         const result = await client.query(query);
         const count = result.rows[0].count;
         console.log(`   ✓ ${name}: ${count} records`);
-      } catch (error) {
+      } catch {
         console.log(`   ❌ ${name}: Table not found or inaccessible`);
       }
     }

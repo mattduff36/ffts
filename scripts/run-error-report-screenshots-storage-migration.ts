@@ -5,12 +5,12 @@ import pg from 'pg';
 
 const { Client } = pg;
 
+const TARGET_PROJECT_REF = 'lrhufzqfzeutgvudcowy';
 const SQL_FILE = 'supabase/migrations/20260511_error_report_screenshots_storage.sql';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
 const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-const targetProjectRef = process.env.DEMO_SUPABASE_PROJECT_REF || process.env.SUPABASE_PROJECT_REF;
 
 if (!connectionString) {
   console.error('Missing database connection string');
@@ -18,9 +18,9 @@ if (!connectionString) {
   process.exit(1);
 }
 
-if (targetProjectRef && !connectionString.includes(targetProjectRef)) {
+if (!connectionString.includes(TARGET_PROJECT_REF)) {
   console.error('Database connection string does not target the approved Supabase project.');
-  console.error(`Expected project ref: ${targetProjectRef}`);
+  console.error(`Expected project ref: ${TARGET_PROJECT_REF}`);
   process.exit(1);
 }
 

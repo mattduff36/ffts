@@ -278,25 +278,12 @@ BEFORE UPDATE ON quote_line_items
 FOR EACH ROW EXECUTE FUNCTION update_quote_line_items_updated_at();
 
 -- =============================================================================
--- Part 8: Seed Placeholder Customers
--- =============================================================================
-
-INSERT INTO customers (company_name, short_name, contact_name, contact_email, contact_phone, contact_job_title, address_line_1, city, county, postcode, status)
-VALUES
-  ('Saint-Gobain', 'Saint-Gobain', 'Philip Harris', 'philip.harris@saint-gobain.com', '01onal 555001', 'Site Manager', 'Newark Works', 'Newark', 'Nottinghamshire', 'NG24 1AA', 'active'),
-  ('Omexom UK', 'Omexom', 'Tony Horne', 'tony.horne@omexom.co.uk', '01onal 555002', 'Project Manager', 'Omexom House', 'Nottingham', 'Nottinghamshire', 'NG1 1AA', 'active'),
-  ('Tarmac Trading Ltd', 'Tarmac', 'Philip Weller', 'philip.weller@tarmac.com', '01onal 555003', 'Contracts Manager', 'Portland House', 'Birmingham', 'West Midlands', 'B2 4AA', 'active'),
-  ('Exolum Pipeline System', 'Exolum', 'Dennis Warriner', 'dennis.warriner.ext@exolum.com', '01onal 555004', 'Engineering Manager', 'Exolum Terminal', 'Immingham', 'Lincolnshire', 'DN40 2AA', 'active'),
-  ('BPB / British Gypsum', 'BPB', 'David Wood', 'david.wood2@saint-gobain.com', '01onal 555005', 'Works Manager', 'Gotham Plant', 'Gotham', 'Nottinghamshire', 'NG11 0AA', 'active')
-ON CONFLICT DO NOTHING;
-
--- =============================================================================
 -- Verification
 -- =============================================================================
 
 DO $$ BEGIN
   RAISE NOTICE 'Migration complete: customers, quotes, quote_line_items, quote_sequences tables created.';
-  RAISE NOTICE 'RLS policies applied. 5 placeholder customers seeded.';
+  RAISE NOTICE 'RLS policies applied. No customer records were seeded.';
 END $$;
 
 COMMIT;

@@ -1,4 +1,4 @@
--- DigiDocs Database Schema
+-- Forest Farm Operations Database Schema
 -- Execute this SQL in your Supabase SQL Editor to set up the database
 
 -- Enable UUID extension
@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS timesheet_entries (
   time_started TIME,
   time_finished TIME,
   working_in_yard BOOLEAN DEFAULT false,
+  subsistence_payment_required BOOLEAN NOT NULL DEFAULT false,
   daily_total DECIMAL(4,2), -- hours, e.g., 8.50
   remarks TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),

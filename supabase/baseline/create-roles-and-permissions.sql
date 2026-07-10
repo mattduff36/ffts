@@ -112,7 +112,7 @@ WHERE id IN (
   FROM roles r
   INNER JOIN profiles p ON p.role_id = r.id
   INNER JOIN auth.users u ON u.id = p.id
-  WHERE u.email = 'template-admin@example.com'
+  WHERE u.email = 'admin@mpdee.co.uk'
   LIMIT 1
 );
 

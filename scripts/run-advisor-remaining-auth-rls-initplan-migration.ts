@@ -71,7 +71,6 @@ async function main() {
         WHERE schemaname = 'public'
           AND tablename = ANY (ARRAY[
             'absence_module_settings',
-            'account_switch_settings',
             'admin_error_notification_prefs',
             'inspection_photos',
             'message_recipients',
@@ -87,9 +86,6 @@ async function main() {
             'absence_allowance_carryovers',
             'absence_secondary_permission_exceptions',
             'absences_archive',
-            'account_switch_audit_events',
-            'account_switch_device_credentials',
-            'account_switch_devices',
             'error_report_updates',
             'error_reports',
             'hgv_categories',

@@ -6,11 +6,13 @@ const {
   validateAppSession,
   issueAppSession,
   revokeAppSession,
+  isWebAuthnConfigured,
 } = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   validateAppSession: vi.fn(),
   issueAppSession: vi.fn(),
   revokeAppSession: vi.fn(),
+  isWebAuthnConfigured: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -31,12 +33,17 @@ vi.mock('@/lib/server/app-auth/session', () => ({
   revokeAppSession,
 }));
 
+vi.mock('@/lib/server/webauthn/config', () => ({
+  isWebAuthnConfigured,
+}));
+
 import { POST as loginPost } from '@/app/api/auth/login/route';
 import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 
 describe('auth login route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isWebAuthnConfigured.mockReturnValue(true);
     validateAppSession.mockResolvedValue({
       status: 'missing',
       session: null,
@@ -123,6 +130,44 @@ describe('auth login route', () => {
     expect(payload.success).toBe(true);
     expect(getAppAuthProfile).toHaveBeenCalledWith('user-1', 'user-1@example.com');
     expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBeTruthy();
+  });
+
+  it('does not block password login with WebAuthn device metadata when biometrics are disabled', async () => {
+    isWebAuthnConfigured.mockReturnValue(false);
+    signInWithPassword.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'user-1@example.com',
+        },
+      },
+      error: null,
+    });
+
+    const request = new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'user-1@example.com',
+        password: 'correct-password',
+        rememberMe: true,
+        deviceId: 'device-1234567890abcdef',
+        deviceLabel: 'Browser (Windows)',
+      }),
+    });
+
+    const response = await loginPost(request as never);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(issueAppSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'password_login',
+        rawDeviceId: null,
+        deviceLabel: null,
+      })
+    );
   });
 
   it('retries with a trimmed password when only edge whitespace differs', async () => {

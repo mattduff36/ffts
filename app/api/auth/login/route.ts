@@ -6,6 +6,7 @@ import {
 import { clearAllAuthCookies } from '@/lib/server/app-auth/response';
 import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 import { issueAppSession, validateAppSession, revokeAppSession } from '@/lib/server/app-auth/session';
+import { isWebAuthnConfigured } from '@/lib/server/webauthn/config';
 import { createClient } from '@/lib/supabase/server';
 import { trackServerUsageEvent } from '@/lib/server/user-analytics';
 import type { Database } from '@/types/database';
@@ -90,12 +91,13 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = await validateAppSession();
+    const shouldTrackWebAuthnDevice = isWebAuthnConfigured();
     const nextSession = await issueAppSession({
       profileId: user.id,
       source: 'password_login',
       rememberMe: body.rememberMe === true,
-      rawDeviceId: body.deviceId || null,
-      deviceLabel: body.deviceLabel || null,
+      rawDeviceId: shouldTrackWebAuthnDevice ? body.deviceId || null : null,
+      deviceLabel: shouldTrackWebAuthnDevice ? body.deviceLabel || null : null,
       actorProfileId: user.id,
     });
 

@@ -3,20 +3,32 @@ import { config } from 'dotenv';
 import { existsSync, readFileSync, rmSync } from 'fs';
 import path from 'path';
 import pg from 'pg';
+import { parseCommitsFromMessages, selectPrimaryCommitMessage } from '../lib/config/release-version-logic';
+import { AutomationRun } from './automation/logger';
+import { checkFinaliseBlockingActivity, formatBlockingActivity } from './finalise-activity-guard';
+import { getSkippableFinaliseTasks, type RecentFinaliseTaskRun } from './finalise-recent-tasks';
+import {
+  type FinaliseChangedFile,
+  formatReleaseVersionCommitMessage,
+  getFinaliseTimingSummaryLines,
+  summarizeFinaliseChanges,
+  type FinaliseTimingEntry,
+} from './finalise-summary';
 
 config({ path: path.resolve(process.cwd(), '.env.local') });
-
-if (process.env.NODE_ENV === 'development') {
-  Reflect.deleteProperty(process.env, 'NODE_ENV');
-}
 
 const { Client } = pg;
 const REPO_ROOT = process.cwd();
 const NEXT_BUILD_DIR = path.join(REPO_ROOT, '.next');
+const NEXT_BUILD_ARTIFACT_PATH = path.join(NEXT_BUILD_DIR, 'BUILD_ID');
+const RELEASE_VERSION_JSON_PATH = path.join(REPO_ROOT, 'lib/config/release-version.json');
+const RELEASE_VERSION_FILES = [
+  'lib/config/release-version.json',
+  'lib/config/release-history.json',
+  'docs_private/release-log.md',
+] as const;
 const DEV_SERVER_PORT = 4000;
-const DEFAULT_COMMIT_MESSAGE = 'chore(finalise): repo finalisation';
-const FULL_COMMIT_MESSAGE = 'chore(finalise): full repo finalisation';
-const PRIVATE_PATH_PREFIX = 'private/';
+let automationRun: AutomationRun | null = null;
 
 interface FinaliseOptions {
   full: boolean;
@@ -40,12 +52,20 @@ interface ProcessInfo {
 interface RunCommandOptions {
   allowFailure?: boolean;
   captureOutput?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 interface ManagedProcess {
   child: ChildProcess;
   label: string;
   output: string[];
+}
+
+interface ReleaseVersionState {
+  mmyy: string;
+  major: number;
+  minor: number;
+  lastProcessedSha: string;
 }
 
 function parseArgs(argv: string[]): FinaliseOptions {
@@ -91,6 +111,11 @@ function getExecutable(command: string): string {
   return command;
 }
 
+function shouldUseShell(command: string): boolean {
+  if (process.platform !== 'win32') return false;
+  return !['git', 'powershell.exe', 'pwsh.exe'].includes(command.toLowerCase());
+}
+
 function appendManagedOutput(managedProcess: ManagedProcess, chunk: string | Buffer | null | undefined): void {
   if (!chunk) {
     return;
@@ -108,11 +133,14 @@ function appendManagedOutput(managedProcess: ManagedProcess, chunk: string | Buf
 }
 
 function runCommand(command: string, args: string[], options: RunCommandOptions = {}): CommandResult {
-  const useShell = process.platform === 'win32' && command !== 'git';
+  if (automationRun) {
+    return automationRun.runCommand(command, args, options);
+  }
+
   const result = spawnSync(getExecutable(command), args, {
     cwd: REPO_ROOT,
-    env: process.env,
-    shell: useShell,
+    env: options.env ?? process.env,
+    shell: shouldUseShell(command),
     encoding: 'utf8',
     stdio: options.captureOutput ? 'pipe' : 'inherit',
   });
@@ -140,38 +168,36 @@ function getTrimmedLines(output: string): string[] {
     .filter(Boolean);
 }
 
-function getChangedFiles(): string[] {
-  const tracked = runCommand('git', ['diff', '--name-only', 'HEAD', '--'], {
+function getChangedFileStats(): FinaliseChangedFile[] {
+  const tracked = runCommand('git', ['diff', '--numstat', 'HEAD', '--'], {
     captureOutput: true,
   });
   const untracked = runCommand('git', ['ls-files', '--others', '--exclude-standard'], {
     captureOutput: true,
   });
+  const statsByPath = new Map<string, FinaliseChangedFile>();
 
-  return Array.from(new Set([...getTrimmedLines(tracked.stdout), ...getTrimmedLines(untracked.stdout)]));
-}
+  getTrimmedLines(tracked.stdout).forEach((line) => {
+    const [rawAdditions, rawDeletions, rawPath] = line.split(/\t/u);
+    const filePath = rawPath || '';
+    if (!filePath) return;
 
-function getTrackedPrivateFiles(): string[] {
-  return getTrimmedLines(
-    runCommand('git', ['ls-files', '--', 'private'], {
-      captureOutput: true,
-    }).stdout
-  ).filter((relativePath) => normalizeForMatch(relativePath).startsWith(PRIVATE_PATH_PREFIX));
-}
+    const additions = Number.parseInt(rawAdditions || '0', 10);
+    const deletions = Number.parseInt(rawDeletions || '0', 10);
+    statsByPath.set(filePath, {
+      path: filePath,
+      additions: Number.isFinite(additions) ? additions : 0,
+      deletions: Number.isFinite(deletions) ? deletions : 0,
+    });
+  });
 
-function assertNoTrackedPrivateFiles(): void {
-  const trackedPrivateFiles = getTrackedPrivateFiles();
-  if (trackedPrivateFiles.length === 0) {
-    return;
-  }
+  getTrimmedLines(untracked.stdout).forEach((filePath) => {
+    if (!statsByPath.has(filePath)) {
+      statsByPath.set(filePath, { path: filePath, additions: 0, deletions: 0 });
+    }
+  });
 
-  throw new Error(
-    [
-      'Refusing to finalise while private/ files are tracked or staged.',
-      'Remove them from the index with: git rm -r --cached -- private/',
-      `First matches: ${trackedPrivateFiles.slice(0, 10).join(', ')}`,
-    ].join(' ')
-  );
+  return Array.from(statsByPath.values());
 }
 
 function getGitStatusPorcelain(): string {
@@ -199,7 +225,59 @@ function getCurrentBranch(): string {
   }).stdout.trim();
 }
 
+function getHeadSha(): string {
+  return runCommand('git', ['rev-parse', 'HEAD'], {
+    captureOutput: true,
+  }).stdout.trim();
+}
+
+function readReleaseVersionState(): ReleaseVersionState {
+  const raw = readFileSync(RELEASE_VERSION_JSON_PATH, 'utf8');
+  return JSON.parse(raw) as ReleaseVersionState;
+}
+
+function formatReleaseVersionLabel(state: Pick<ReleaseVersionState, 'mmyy' | 'major' | 'minor'>): string {
+  return `${state.mmyy}.${state.major}.${state.minor}`;
+}
+
+function hasReleaseVersionChanges(): boolean {
+  const status = runCommand('git', ['status', '--porcelain', '--', ...RELEASE_VERSION_FILES], {
+    captureOutput: true,
+  });
+
+  return status.stdout.trim().length > 0;
+}
+
+function getReleaseCommitPrimaryMessage(beforeSha: string, afterSha: string): string | null {
+  if (!beforeSha || beforeSha === '0000000000000000000000000000000000000000') {
+    return null;
+  }
+
+  const log = runCommand('git', ['log', '--format=%s', `${beforeSha}..${afterSha}`], {
+    captureOutput: true,
+  });
+  const commits = parseCommitsFromMessages(getTrimmedLines(log.stdout));
+
+  return selectPrimaryCommitMessage(commits);
+}
+
+function commitReleaseVersionChanges(primaryCommitMessage: string | null): string | null {
+  if (!hasReleaseVersionChanges()) {
+    return null;
+  }
+
+  const version = formatReleaseVersionLabel(readReleaseVersionState());
+  runCommand('git', ['add', ...RELEASE_VERSION_FILES]);
+  runCommand('git', ['commit', '-m', formatReleaseVersionCommitMessage(primaryCommitMessage, version)]);
+
+  return version;
+}
+
 function getPushModeDescription(options: FinaliseOptions): string {
+  if (options.dryRun) {
+    return 'dry-run';
+  }
+
   if (options.full && options.push) {
     return 'full + push';
   }
@@ -213,6 +291,169 @@ function getPushModeDescription(options: FinaliseOptions): string {
   }
 
   return 'standard';
+}
+
+function printProgress(message: string, percent: number): void {
+  console.log(`- ${message} [${percent}% complete]`);
+}
+
+async function timeFinaliseStep<T>(
+  timings: FinaliseTimingEntry[],
+  label: string,
+  action: () => Promise<T> | T
+): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    const result = await action();
+    timings.push({
+      label,
+      durationMs: Date.now() - startedAt,
+      status: 'completed',
+    });
+    return result;
+  } catch (error) {
+    timings.push({
+      label,
+      durationMs: Date.now() - startedAt,
+      status: 'failed',
+    });
+    throw error;
+  }
+}
+
+function formatRecentTask(run: RecentFinaliseTaskRun): string {
+  return `${run.command} (${run.source}, completed ${run.completedAt})`;
+}
+
+function getRecentTaskMetadata(run: RecentFinaliseTaskRun): Record<string, unknown> {
+  return {
+    reason: 'recent-successful-run',
+    command: run.command,
+    completedAt: run.completedAt,
+    source: run.source,
+  };
+}
+
+interface BuildProgressMilestone {
+  message: string;
+  percent: number;
+  patterns: RegExp[];
+}
+
+const BUILD_PROGRESS_MILESTONES: BuildProgressMilestone[] = [
+  {
+    message: 'Compiling application bundles...',
+    percent: 34,
+    patterns: [/Creating an optimized production build/u],
+  },
+  {
+    message: 'Application bundles compiled.',
+    percent: 38,
+    patterns: [/Compiled successfully/u],
+  },
+  {
+    message: 'Running lint and TypeScript validation...',
+    percent: 41,
+    patterns: [/Linting and checking validity of types/u],
+  },
+  {
+    message: 'Collecting route and page data...',
+    percent: 44,
+    patterns: [/Collecting page data/u],
+  },
+  {
+    message: 'Generating static route output...',
+    percent: 47,
+    patterns: [/Generating static pages/u],
+  },
+  {
+    message: 'Finalising route manifests and build traces...',
+    percent: 49,
+    patterns: [/Finalizing page optimization/u, /Collecting build traces/u],
+  },
+];
+
+function handleBuildProgressLine(line: string, printedMilestones: Set<number>): void {
+  BUILD_PROGRESS_MILESTONES.forEach((milestone, index) => {
+    if (printedMilestones.has(index)) return;
+    if (!milestone.patterns.some((pattern) => pattern.test(line))) return;
+
+    printedMilestones.add(index);
+    printProgress(milestone.message, milestone.percent);
+  });
+}
+
+function runCleanProductionBuildWithProgress(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    printProgress('Starting clean Next.js production build...', 32);
+    const printedMilestones = new Set<number>();
+    let bufferedOutput = '';
+
+    const child = spawn(getExecutable('npm'), ['run', 'build'], {
+      cwd: REPO_ROOT,
+      env: process.env,
+      shell: shouldUseShell('npm'),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    function processOutput(chunk: string | Buffer, writer: NodeJS.WriteStream): void {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      writer.write(text);
+      bufferedOutput += text;
+
+      const lines = bufferedOutput.split(/\r?\n/u);
+      bufferedOutput = lines.pop() || '';
+      lines.forEach((line) => handleBuildProgressLine(line, printedMilestones));
+    }
+
+    child.stdout?.on('data', (chunk: string | Buffer) => processOutput(chunk, process.stdout));
+    child.stderr?.on('data', (chunk: string | Buffer) => processOutput(chunk, process.stderr));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (bufferedOutput) {
+        handleBuildProgressLine(bufferedOutput, printedMilestones);
+      }
+
+      if (code === 0) {
+        printProgress('Build passed.', 50);
+        resolve();
+        return;
+      }
+
+      reject(new Error(`Command failed (npm run build)${typeof code === 'number' ? ` with exit code ${code}` : ''}`));
+    });
+  });
+}
+
+function getLocalProductionBaseUrl(): string {
+  return `http://127.0.0.1:${DEV_SERVER_PORT}`;
+}
+
+function getLocalTestEnv(): NodeJS.ProcessEnv {
+  const baseUrl = getLocalProductionBaseUrl();
+
+  return {
+    ...process.env,
+    PORT: String(DEV_SERVER_PORT),
+    NEXT_PUBLIC_SITE_URL: baseUrl,
+    TESTSUITE_BASE_URL: baseUrl,
+  };
+}
+
+function runUnloggedCommand(command: string, args: string[]): CommandResult {
+  const result = spawnSync(getExecutable(command), args, {
+    cwd: REPO_ROOT,
+    env: process.env,
+    shell: shouldUseShell(command),
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024 * 50,
+  });
+
+  return {
+    status: result.status,
+    stdout: typeof result.stdout === 'string' ? result.stdout : '',
+    stderr: typeof result.stderr === 'string' ? result.stderr : '',
+  };
 }
 
 function collectMigrationFilesFromScript(filePath: string): string[] {
@@ -229,8 +470,11 @@ function collectMigrationFilesFromScript(filePath: string): string[] {
 }
 
 function isLikelyMigrationScript(relativePath: string): boolean {
+  if (relativePath.startsWith('scripts/migrations/')) {
+    return false;
+  }
+
   return (
-    /^scripts\/migrations\/.+\.ts$/u.test(relativePath) ||
     /^scripts\/.+migration.+\.ts$/u.test(relativePath) ||
     /^scripts\/.+migrations.+\.ts$/u.test(relativePath)
   );
@@ -323,10 +567,7 @@ function listProcesses(): ProcessInfo[] {
       '$items | ConvertTo-Json -Compress',
     ].join('; ');
 
-    const result = runCommand('powershell.exe', ['-NoProfile', '-Command', command], {
-      captureOutput: true,
-      allowFailure: true,
-    });
+    const result = runUnloggedCommand('powershell.exe', ['-NoProfile', '-Command', command]);
 
     if (result.status !== 0 || result.stdout.trim().length === 0) {
       return [];
@@ -346,10 +587,7 @@ function listProcesses(): ProcessInfo[] {
       .filter((item) => item.pid > 0 && item.commandLine.trim().length > 0);
   }
 
-  const result = runCommand('ps', ['-Ao', 'pid=,ppid=,command='], {
-    captureOutput: true,
-    allowFailure: true,
-  });
+  const result = runUnloggedCommand('ps', ['-Ao', 'pid=,ppid=,command=']);
 
   if (result.status !== 0) {
     return [];
@@ -452,10 +690,15 @@ function getManagedProcessOutput(managedProcess: ManagedProcess): string {
   return managedProcess.output.join('').trim();
 }
 
-function startManagedProcess(command: string, args: string[], label: string): ManagedProcess {
+function startManagedProcess(
+  command: string,
+  args: string[],
+  label: string,
+  env: NodeJS.ProcessEnv = process.env
+): ManagedProcess {
   const child = spawn(command, args, {
     cwd: REPO_ROOT,
-    env: process.env,
+    env,
     shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -476,6 +719,10 @@ async function waitForServerReady(managedProcess: ManagedProcess, url: string, t
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
+    if (/\bready in\b/iu.test(getManagedProcessOutput(managedProcess))) {
+      return;
+    }
+
     if (managedProcess.child.exitCode !== null) {
       const details = getManagedProcessOutput(managedProcess);
       throw new Error(
@@ -555,15 +802,12 @@ function commitAllChanges(commitMessage: string): boolean {
     return false;
   }
 
-  assertNoTrackedPrivateFiles();
   runCommand('git', ['add', '-A']);
-  assertNoTrackedPrivateFiles();
   runCommand('git', ['commit', '-m', commitMessage]);
   return true;
 }
 
 function pushCurrentBranch(): string {
-  assertNoTrackedPrivateFiles();
   const branch = getCurrentBranch();
   if (!branch) {
     throw new Error('Cannot push from a detached HEAD state');
@@ -593,127 +837,329 @@ Variants:
 `);
 }
 
+function assertNoBlockingCursorActivity(): void {
+  const activityCheck = checkFinaliseBlockingActivity(REPO_ROOT, [process.pid, process.ppid]);
+  const nowMs = Date.now();
+  const blockingActivities = activityCheck.blockingActivities.filter((activity) => {
+    if (!activity.isFinalise || activity.isAgentReview || !activity.startedAt) return true;
+    const startedAtMs = Date.parse(activity.startedAt);
+    if (Number.isNaN(startedAtMs)) return true;
+    // Cursor writes the current terminal metadata before this script can run.
+    // Ignore only a finalise terminal that has just started, which is this invocation.
+    return Math.abs(nowMs - startedAtMs) > 60_000;
+  });
+  if (blockingActivities.length === 0) return;
+
+  throw new Error([
+    'Blocking Cursor activity detected before finalise:',
+    ...blockingActivities.map((activity) => `- ${formatBlockingActivity(activity)}`),
+    `Terminal directory checked: ${activityCheck.terminalDirectory}`,
+    'Wait for the active Agent Review/finalise run to finish, then rerun finalise.',
+  ].join('\n'));
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
-    printHelp();
-    return;
-  }
+  const run = new AutomationRun({
+    scriptName: 'finalise',
+    mode: getPushModeDescription(options),
+    args: process.argv.slice(2),
+  });
+  automationRun = run;
 
-  const unmergedFiles = getUnmergedFiles();
-  if (unmergedFiles.length > 0) {
-    throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
-  }
-  assertNoTrackedPrivateFiles();
+  try {
+    if (options.help) {
+      printHelp();
+      await run.finish('passed');
+      return;
+    }
 
-  const changedFiles = getChangedFiles();
-  const pendingMigrationFiles = getPendingMigrationFiles(changedFiles);
-  const shouldRunDbValidate = pendingMigrationFiles.some((relativePath) => migrationNeedsDbValidate(relativePath));
-  const devServerProcesses = getRepoDevServerProcesses();
-  const branch = getCurrentBranch();
-  const commitMessage = options.full ? FULL_COMMIT_MESSAGE : DEFAULT_COMMIT_MESSAGE;
+    await run.step('Check for blocking Cursor activity', () => assertNoBlockingCursorActivity());
 
-  if (options.dryRun) {
-    console.log(`Mode: ${getPushModeDescription(options)}`);
-    console.log(`Branch: ${branch || '(detached HEAD)'}`);
-    console.log(`Dev server: ${devServerProcesses.length > 0 ? `would stop ${devServerProcesses.length} process(es)` : 'none running'}`);
-    console.log(
-      `Migrations: ${
-        pendingMigrationFiles.length > 0
-          ? `would run ${pendingMigrationFiles.join(', ')}`
-          : 'none pending'
-      }`
+    const unmergedFiles = getUnmergedFiles();
+    if (unmergedFiles.length > 0) {
+      throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
+    }
+
+    const changedFileStats = getChangedFileStats();
+    const changedFiles = changedFileStats.map((entry) => entry.path);
+    const pendingMigrationFiles = getPendingMigrationFiles(changedFiles);
+    const shouldRunDbValidate = pendingMigrationFiles.some((relativePath) => migrationNeedsDbValidate(relativePath));
+    const devServerProcesses = getRepoDevServerProcesses();
+    const branch = getCurrentBranch();
+    const initialChangeSummary = summarizeFinaliseChanges(changedFileStats);
+    const skippableTasks = getSkippableFinaliseTasks({
+      repoRoot: REPO_ROOT,
+      changedFiles,
+      pendingMigrationFiles,
+      buildArtifactPath: NEXT_BUILD_ARTIFACT_PATH,
+    });
+    const recentMigrationRun = pendingMigrationFiles.length > 0 ? skippableTasks.migrations : undefined;
+    const recentDbValidateRun = shouldRunDbValidate ? skippableTasks['db-validate'] : undefined;
+    const recentBuildRun = skippableTasks.build;
+    const recentTestRun = options.full ? skippableTasks['test-run'] : undefined;
+    const recentTestsuiteRun = options.full ? skippableTasks.testsuite : undefined;
+
+    if (options.dryRun) {
+      console.log(`Mode: ${getPushModeDescription(options)}`);
+      console.log(`Branch: ${branch || '(detached HEAD)'}`);
+      console.log(`Dev server: ${devServerProcesses.length > 0 ? `would stop ${devServerProcesses.length} process(es)` : 'none running'}`);
+      console.log(
+        `Migrations: ${
+          recentMigrationRun
+            ? `would skip; recent run found: ${formatRecentTask(recentMigrationRun)}`
+            : pendingMigrationFiles.length > 0
+            ? `would run ${pendingMigrationFiles.join(', ')}`
+            : 'none pending'
+        }`
+      );
+      console.log(
+        `DB validate: ${
+          recentDbValidateRun
+            ? `would skip; recent run found: ${formatRecentTask(recentDbValidateRun)}`
+            : shouldRunDbValidate
+            ? 'would run'
+            : 'not needed'
+        }`
+      );
+      console.log(
+        `Build: ${
+          recentBuildRun
+            ? `would reuse recent passed build: ${formatRecentTask(recentBuildRun)}`
+            : 'would remove .next and run npm run build'
+        }`
+      );
+      console.log(
+        `Tests: ${
+          options.full
+            ? [
+                `would start a local production server on ${DEV_SERVER_PORT} if needed`,
+                recentTestRun ? `skip npm run test:run (${formatRecentTask(recentTestRun)})` : 'run npm run test:run',
+                recentTestsuiteRun ? `skip npm run testsuite (${formatRecentTask(recentTestsuiteRun)})` : 'run npm run testsuite',
+              ].join(', ')
+            : 'skipped'
+        }`
+      );
+      console.log(
+        `Commit: ${
+          hasUncommittedChanges()
+            ? `would commit ${initialChangeSummary.fileCount} file(s) with "${initialChangeSummary.commitMessage}"`
+            : 'no changes to commit'
+        }`
+      );
+      console.log('Release version: would update locally before push if a bump is due');
+      console.log(`Push: ${options.push ? 'would push current branch' : 'skipped'}`);
+      await run.finish('passed');
+      return;
+    }
+
+    console.log(`Starting finalise workflow (${getPushModeDescription(options)})`);
+    printProgress('Workflow started.', 0);
+    const timingEntries: FinaliseTimingEntry[] = [];
+
+    if (devServerProcesses.length > 0) {
+      console.log(`\n==> Stop dev server (${devServerProcesses.length} process${devServerProcesses.length === 1 ? '' : 'es'})`);
+      printProgress('Stopping repo dev server...', 5);
+      await timeFinaliseStep(timingEntries, 'Stop repo dev server', () =>
+        run.step('Stop repo dev server', () => stopRepoDevServer(), {
+          processCount: devServerProcesses.length,
+        })
+      );
+      printProgress('Repo dev server stopped.', 10);
+    } else {
+      console.log('\n==> Stop dev server');
+      printProgress('No repo dev server detected.', 10);
+    }
+
+    if (pendingMigrationFiles.length > 0) {
+      console.log(`\n==> Run pending local migrations (${pendingMigrationFiles.length})`);
+      if (recentMigrationRun) {
+        await run.step('Skip pending local migrations', () => undefined, {
+          ...getRecentTaskMetadata(recentMigrationRun),
+          migrationFiles: pendingMigrationFiles,
+        });
+        printProgress(`Reused recent migration run: ${formatRecentTask(recentMigrationRun)}.`, 20);
+      } else {
+        printProgress(`Running ${pendingMigrationFiles.length} pending migration${pendingMigrationFiles.length === 1 ? '' : 's'}...`, 12);
+        await timeFinaliseStep(timingEntries, 'Run pending local migrations', () =>
+          run.step('Run pending local migrations', () => runPendingMigrations(pendingMigrationFiles), {
+            migrationFiles: pendingMigrationFiles,
+          })
+        );
+        printProgress('Pending migrations applied.', 20);
+      }
+    } else {
+      console.log('\n==> Run pending local migrations');
+      printProgress('No pending local migration files detected.', 20);
+    }
+
+    if (shouldRunDbValidate) {
+      console.log('\n==> Validate database after schema-risk migration');
+      if (recentDbValidateRun) {
+        await run.step('Skip database validation after schema-risk migration', () => undefined, getRecentTaskMetadata(recentDbValidateRun));
+        printProgress(`Reused recent database validation: ${formatRecentTask(recentDbValidateRun)}.`, 25);
+      } else {
+        printProgress('Running database validation...', 22);
+        await timeFinaliseStep(timingEntries, 'Run database validation', () => runCommand('npm', ['run', 'db:validate']));
+        printProgress('Database validation passed.', 25);
+      }
+    } else {
+      console.log('\n==> Validate database after schema-risk migration');
+      printProgress('No rename/drop migration detected.', 25);
+    }
+
+    console.log('\n==> Run clean production build');
+    if (recentBuildRun) {
+      await run.step('Reuse recent production build', () => undefined, getRecentTaskMetadata(recentBuildRun));
+      printProgress(`Reused recent production build: ${formatRecentTask(recentBuildRun)}.`, 50);
+    } else {
+      console.log('\n==> Remove clean build output');
+      printProgress('Removing previous clean build output...', 28);
+      const removedBuildOutput = await run.step('Remove clean build output', () => removeNextBuildOutput());
+      printProgress(removedBuildOutput ? 'Removed .next build output.' : 'No .next build output to remove.', 30);
+
+      await timeFinaliseStep(timingEntries, 'Run clean production build', () =>
+        run.step('Run clean production build', () => runCleanProductionBuildWithProgress())
+      );
+    }
+
+    if (options.full) {
+      console.log('\n==> Run full automated test suite');
+      const localProductionBaseUrl = getLocalProductionBaseUrl();
+      const localTestEnv = getLocalTestEnv();
+      const shouldRunTestRun = !recentTestRun;
+      const shouldRunTestsuite = !recentTestsuiteRun;
+
+      if (!shouldRunTestRun && !shouldRunTestsuite) {
+        await run.step('Reuse recent full automated test suite', () => undefined, {
+          testRun: recentTestRun ? getRecentTaskMetadata(recentTestRun) : null,
+          testsuite: recentTestsuiteRun ? getRecentTaskMetadata(recentTestsuiteRun) : null,
+        });
+        printProgress('Reused recent full automated test suite.', 84);
+      } else {
+        printProgress(`Starting local production server on ${localProductionBaseUrl}...`, 52);
+        const testServer = startManagedProcess(
+          'npm',
+          ['run', 'start', '--', '--port', String(DEV_SERVER_PORT)],
+          'Local production server',
+          localTestEnv
+        );
+
+        try {
+          printProgress('Waiting for local production server readiness...', 55);
+          await run.step('Wait for local production server', () =>
+            waitForServerReady(testServer, localProductionBaseUrl)
+          );
+          printProgress(`Local production server ready on port ${DEV_SERVER_PORT}.`, 58);
+          if (recentTestRun) {
+            await run.step('Reuse recent Vitest test run', () => undefined, getRecentTaskMetadata(recentTestRun));
+            printProgress(`Reused recent Vitest test run: ${formatRecentTask(recentTestRun)}.`, 72);
+          } else {
+            printProgress('Running Vitest unit, integration, and component tests...', 60);
+            await timeFinaliseStep(timingEntries, 'Run Vitest test run', () =>
+              runCommand('npm', ['run', 'test:run'], { env: localTestEnv })
+            );
+            printProgress('Vitest test run passed.', 72);
+          }
+          if (recentTestsuiteRun) {
+            await run.step('Reuse recent API and Playwright testsuite', () => undefined, getRecentTaskMetadata(recentTestsuiteRun));
+            printProgress(`Reused recent API and Playwright testsuite: ${formatRecentTask(recentTestsuiteRun)}.`, 84);
+          } else {
+            printProgress('Running API and Playwright testsuite...', 75);
+            await timeFinaliseStep(timingEntries, 'Run API and Playwright testsuite', () =>
+              runCommand('npm', ['run', 'testsuite'], { env: localTestEnv })
+            );
+            printProgress('Full automated test suite passed.', 84);
+          }
+        } finally {
+          printProgress('Stopping local production server...', 85);
+          await timeFinaliseStep(timingEntries, 'Stop local production server', () =>
+            run.step('Stop local production server', () => stopManagedProcess(testServer))
+          );
+          printProgress('Local production server stopped.', 86);
+        }
+      }
+    } else {
+      console.log('\n==> Run full automated test suite');
+      printProgress('Skipped for non-full finalise.', 84);
+    }
+
+    console.log('\n==> Summarise workspace changes');
+    printProgress('Summarising workspace changes...', 87);
+    const changeSummary = summarizeFinaliseChanges(changedFileStats);
+    if (changeSummary.fileCount > 0) {
+      console.log(`Changed files: ${changeSummary.fileCount}`);
+      console.log(`Areas: ${changeSummary.areas.join(', ')}`);
+      console.log(`Commit message: ${changeSummary.commitMessage}`);
+    } else {
+      console.log('No workspace changes to summarise.');
+    }
+
+    console.log('\n==> Commit workspace changes');
+    printProgress('Committing workspace changes if needed...', 90);
+    const committed = await timeFinaliseStep(timingEntries, 'Commit workspace changes', () =>
+      commitAllChanges(changeSummary.commitMessage)
     );
-    console.log(`DB validate: ${shouldRunDbValidate ? 'would run' : 'not needed'}`);
-    console.log('Build: would remove .next and run npm run build');
+    printProgress(
+      committed ? `Created commit: ${changeSummary.commitMessage}` : 'No uncommitted changes, so no commit was created.',
+      92
+    );
+
+    console.log('\n==> Bump release version locally');
+    printProgress('Checking release version bump...', 93);
+    const releaseBeforeSha = readReleaseVersionState().lastProcessedSha;
+    const releaseAfterSha = getHeadSha();
+    const releasePrimaryCommitMessage =
+      getReleaseCommitPrimaryMessage(releaseBeforeSha, releaseAfterSha) ??
+      (committed ? changeSummary.commitMessage : null);
+    const releaseVersion = await timeFinaliseStep(timingEntries, 'Bump release version locally', () => {
+      runCommand('npm', ['run', 'version:bump', '--', releaseBeforeSha, releaseAfterSha]);
+      return commitReleaseVersionChanges(releasePrimaryCommitMessage);
+    });
+    printProgress(
+      releaseVersion
+        ? `Created release version commit: ${formatReleaseVersionCommitMessage(releasePrimaryCommitMessage, releaseVersion).split(/\r?\n/u)[0]}`
+        : 'No release version bump required.',
+      95
+    );
+
+    let pushedBranch: string | null = null;
+    if (options.push) {
+      console.log('\n==> Push current branch');
+      printProgress(`Pushing branch ${branch || '(detached HEAD)'}...`, 97);
+      pushedBranch = await timeFinaliseStep(timingEntries, 'Push current branch', () => pushCurrentBranch());
+      printProgress(`Pushed ${pushedBranch}.`, 99);
+    } else {
+      console.log('\n==> Push current branch');
+      printProgress('Skipped for non-push finalise.', 99);
+    }
+
+    console.log('\nFinalise complete.');
+    console.log(`- Branch: ${branch || '(detached HEAD)'}`);
+    console.log(`- Migrations run: ${recentMigrationRun ? 'reused recent run' : pendingMigrationFiles.length}`);
+    console.log(`- Build: ${recentBuildRun ? 'reused recent passed build' : 'passed'}`);
     console.log(
-      `Tests: ${
+      `- Tests: ${
         options.full
-          ? `would run npm run test:run, start a local production server on ${DEV_SERVER_PORT}, then run npm run testsuite`
+          ? recentTestRun && recentTestsuiteRun
+            ? 'reused recent passed runs'
+            : 'passed'
           : 'skipped'
       }`
     );
-    console.log(`Commit: ${hasUncommittedChanges() ? `would commit with "${commitMessage}"` : 'no changes to commit'}`);
-    console.log(`Push: ${options.push ? 'would push current branch' : 'skipped'}`);
-    return;
+    console.log(`- Commit: ${committed ? 'created' : 'skipped'}`);
+    console.log(`- Release version: ${releaseVersion ? `bumped to ${releaseVersion}` : 'unchanged'}`);
+    console.log(`- Push: ${pushedBranch ? `pushed ${pushedBranch}` : 'skipped'}`);
+    console.log('\n==> Timing summary');
+    getFinaliseTimingSummaryLines(timingEntries).forEach((line) => console.log(line));
+    printProgress('Finalise workflow complete.', 100);
+    await run.finish('passed');
+  } catch (error) {
+    await run.finish('failed', error);
+    throw error;
+  } finally {
+    automationRun = null;
   }
-
-  console.log(`Starting finalise workflow (${getPushModeDescription(options)})`);
-
-  if (devServerProcesses.length > 0) {
-    console.log(`\n==> Stop dev server (${devServerProcesses.length} process${devServerProcesses.length === 1 ? '' : 'es'})`);
-    await stopRepoDevServer();
-  } else {
-    console.log('\n==> Stop dev server');
-    console.log('No repo dev server detected.');
-  }
-
-  if (pendingMigrationFiles.length > 0) {
-    console.log(`\n==> Run pending local migrations (${pendingMigrationFiles.length})`);
-    await runPendingMigrations(pendingMigrationFiles);
-  } else {
-    console.log('\n==> Run pending local migrations');
-    console.log('No pending local migration files detected.');
-  }
-
-  if (shouldRunDbValidate) {
-    console.log('\n==> Validate database after schema-risk migration');
-    runCommand('npm', ['run', 'db:validate']);
-  } else {
-    console.log('\n==> Validate database after schema-risk migration');
-    console.log('No rename/drop migration detected.');
-  }
-
-  console.log('\n==> Remove clean build output');
-  const removedBuildOutput = removeNextBuildOutput();
-  console.log(removedBuildOutput ? 'Removed .next build output.' : 'No .next build output to remove.');
-
-  console.log('\n==> Run clean production build');
-  runCommand('npm', ['run', 'build']);
-
-  if (options.full) {
-    console.log('\n==> Run full automated test suite');
-    console.log('Preparing test users...');
-    runCommand('npm', ['run', 'setup:test-users']);
-    runCommand('npm', ['run', 'test:run']);
-    console.log(`Starting local production server on port ${DEV_SERVER_PORT} for testsuite...`);
-    const testServer = startManagedProcess(
-      'npm',
-      ['run', 'start', '--', '--port', String(DEV_SERVER_PORT)],
-      'Local production server'
-    );
-
-    try {
-      await waitForServerReady(testServer, `http://127.0.0.1:${DEV_SERVER_PORT}`);
-      runCommand('npm', ['run', 'testsuite']);
-    } finally {
-      await stopManagedProcess(testServer);
-    }
-  } else {
-    console.log('\n==> Run full automated test suite');
-    console.log('Skipped for non-full finalise.');
-  }
-
-  console.log('\n==> Commit workspace changes');
-  const committed = commitAllChanges(commitMessage);
-  console.log(committed ? `Created commit: ${commitMessage}` : 'No uncommitted changes, so no commit was created.');
-
-  let pushedBranch: string | null = null;
-  if (options.push) {
-    console.log('\n==> Push current branch');
-    pushedBranch = pushCurrentBranch();
-  } else {
-    console.log('\n==> Push current branch');
-    console.log('Skipped for non-push finalise.');
-  }
-
-  console.log('\nFinalise complete.');
-  console.log(`- Branch: ${branch || '(detached HEAD)'}`);
-  console.log(`- Migrations run: ${pendingMigrationFiles.length}`);
-  console.log(`- Build: passed`);
-  console.log(`- Tests: ${options.full ? 'passed' : 'skipped'}`);
-  console.log(`- Commit: ${committed ? 'created' : 'skipped'}`);
-  console.log(`- Push: ${pushedBranch ? `pushed ${pushedBranch}` : 'skipped'}`);
 }
 
 main().catch((error: unknown) => {

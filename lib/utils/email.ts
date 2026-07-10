@@ -6,24 +6,12 @@
 import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
 import { sendResendEmail, type ResendEmailPayload } from '@/lib/server/resend';
-import { inspectDemoEmailRecipients } from '@/lib/utils/demo-email';
 
 function getPrimaryEmailSettings() {
   return getTemplateEmailConfig();
 }
 
-function shouldSimulateEmail(to: string | string[], context: string): boolean {
-  const demoCheck = inspectDemoEmailRecipients(to);
-  if (!demoCheck.shouldSimulate) return false;
-  if (demoCheck.realRecipients.length > 0) return false;
-
-  console.info(
-    `Demo ${context} email simulated for ${demoCheck.demoRecipients.join(', ')}. No email was sent.`
-  );
-  return true;
-}
-
-function sendDemoAwareResendEmail(apiKey: string, payload: ResendEmailPayload): Promise<Response> {
+function sendProductionResendEmail(apiKey: string, payload: ResendEmailPayload): Promise<Response> {
   return sendResendEmail({ apiKey, payload });
 }
 
@@ -44,7 +32,6 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
   error?: string;
 }> {
   const { to, userName, temporaryPassword, isReset = false } = params;
-  if (shouldSimulateEmail(to, 'password')) return { success: true };
   
   try {
     // Check if Resend API key is configured
@@ -261,7 +248,6 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
   error?: string;
 }> {
   const { to, userName, changes } = params;
-  if (shouldSimulateEmail(to, 'profile update')) return { success: true };
   
   try {
     // Check if Resend API key is configured
@@ -402,10 +388,6 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
   error?: string;
 }> {
   const { to, senderName, subject } = params;
-  if (shouldSimulateEmail(to, 'toolbox talk')) {
-    const recipients = Array.isArray(to) ? to : [to];
-    return { success: true, sent: recipients.length, failed: 0 };
-  }
   
   try {
     // Check if Resend API key is configured
@@ -489,7 +471,7 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
       try {
         // Send emails for this batch
         const promises = batch.map(email =>
-          sendDemoAwareResendEmail(apiKey, {
+          sendProductionResendEmail(apiKey, {
             from: emailConfig.primaryFromEmail,
             to: [email],
             subject: `New Toolbox Talk: ${subject}`,
@@ -560,10 +542,6 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
   error?: string;
 }> {
   const { to, senderName, subject, vehicleReg, categoryName, dueInfo } = params;
-  if (shouldSimulateEmail(to, 'maintenance reminder')) {
-    const recipients = Array.isArray(to) ? to : [to];
-    return { success: true, sent: recipients.length, failed: 0 };
-  }
   
   try {
     // Check if Resend API key is configured
@@ -661,7 +639,7 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
       try {
         // Send emails for this batch
         const promises = batch.map(email =>
-          sendDemoAwareResendEmail(apiKey, {
+          sendProductionResendEmail(apiKey, {
             from: emailConfig.primaryFromEmail,
             to: [email],
             subject: `Maintenance Reminder: ${vehicleReg} - ${categoryName}`,
@@ -732,7 +710,6 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
   error?: string;
 }> {
   const { to, employeeName, weekEnding, managerComments } = params;
-  if (shouldSimulateEmail(to, 'timesheet rejection')) return { success: true };
   
   try {
     const emailConfig = getPrimaryEmailSettings();
@@ -850,7 +827,6 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
   error?: string;
 }> {
   const { to, recipientName, employeeName, weekEnding, adjustmentComments, adjustedBy } = params;
-  if (shouldSimulateEmail(to, 'timesheet adjustment')) return { success: true };
   
   try {
     const emailConfig = getPrimaryEmailSettings();
@@ -971,7 +947,6 @@ export async function sendTrainingBookingDeclinedEmail(
   error?: string;
 }> {
   const { to, recipientName, employeeName, trainingDate, declinedBy } = params;
-  if (shouldSimulateEmail(to, 'training booking')) return { success: true };
 
   try {
     const emailConfig = getPrimaryEmailSettings();
@@ -1086,7 +1061,6 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
   error?: string;
 }> {
   const { to, reportId, title, description, errorCode, userName, userEmail, pageUrl, userAgent, additionalContext } = params;
-  if (shouldSimulateEmail(to, 'error report')) return { success: true, sent: to.length, failed: 0 };
   
   try {
     // Check if Resend API key is configured
@@ -1182,7 +1156,7 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
       
       try {
         const promises = batch.map(email =>
-          sendDemoAwareResendEmail(apiKey, {
+          sendProductionResendEmail(apiKey, {
             from: emailConfig.primaryFromEmail,
             to: [email],
             subject,

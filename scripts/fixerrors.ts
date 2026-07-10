@@ -8,38 +8,30 @@
  * 4. Groups errors into patterns (by type + normalized message + component)
  * 5. Writes a structured markdown report to docs_private/error-analysis.md
  * 6. Updates the JSON tracking data in docs_private/error-fix-log.md
- * 7. Prints a concise terminal summary
+ * 7. Clears the production error_logs table after successful analysis
+ * 8. Prints a concise terminal summary
  *
  * Usage: npm run fixerrors
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { relative, resolve } from 'path';
 import * as fs from 'fs';
+import { AutomationRun } from './automation/logger';
 
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
 
 const ERROR_ANALYSIS_PATH = resolve(process.cwd(), 'docs_private', 'error-analysis.md');
 const ERROR_FIX_LOG_PATH = resolve(process.cwd(), 'docs_private', 'error-fix-log.md');
 
 // Admin email to filter out (matches /debug page default)
-const ADMIN_EMAIL = 'template-admin@example.com';
+const ADMIN_EMAIL = 'admin@mpdee.co.uk';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-type ErrorLogEntry = {
+export type ErrorLogEntry = {
   id: string;
   timestamp: string;
   error_message: string;
@@ -69,13 +61,31 @@ type FixLogData = {
   entries: FixLogEntry[];
 };
 
-type SourceFileRef = {
+type FixLogStats = {
+  totalEntries: number;
+  statusCounts: Record<FixLogEntry['status'], number>;
+};
+
+export type SourceFileRef = {
   file: string;
   line?: number;
   column?: number;
 };
 
-type ErrorPattern = {
+const SOURCE_SEARCH_DIRECTORIES = ['app', 'components', 'lib', 'hooks', 'utils', 'services'];
+const SOURCE_FILE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
+const IGNORED_SOURCE_DIRECTORIES = new Set([
+  '.git',
+  '.next',
+  'node_modules',
+  'docs_private',
+  'plans',
+  'coverage',
+  'dist',
+  'build',
+]);
+
+export type ErrorPattern = {
   patternKey: string;
   errorType: string;
   component: string;
@@ -87,6 +97,24 @@ type ErrorPattern = {
   firstSeen: string;
   lastSeen: string;
 };
+
+type ErrorLogClearResult = {
+  clearedCount: number | null;
+};
+
+function getPatternReviewMetadata(patterns: ErrorPattern[]) {
+  return {
+    topPatterns: patterns.slice(0, 10).map((pattern) => ({
+      errorType: pattern.errorType,
+      component: pattern.component,
+      normalizedMessage: pattern.normalizedMessage,
+      occurrences: pattern.occurrences.length,
+      affectedPages: pattern.affectedPages.slice(0, 10),
+      sourceFiles: pattern.sourceFiles.slice(0, 10).map((sourceFile) => sourceFile.file),
+    })),
+    patternsWithoutSourceFiles: patterns.filter((pattern) => pattern.sourceFiles.length === 0).length,
+  };
+}
 
 // ─── Filtering ───────────────────────────────────────────────────────
 
@@ -106,7 +134,7 @@ function filterErrors(errors: ErrorLogEntry[]): ErrorLogEntry[] {
 
 // ─── Stack Trace Parsing ─────────────────────────────────────────────
 
-function parseStackTrace(stack: string | null): SourceFileRef[] {
+export function parseStackTrace(stack: string | null): SourceFileRef[] {
   if (!stack) return [];
 
   const refs: SourceFileRef[] = [];
@@ -155,6 +183,223 @@ function parseStackTrace(stack: string | null): SourceFileRef[] {
   return refs;
 }
 
+function normalizeSourceFilePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').replace(/^\.\/+/, '');
+}
+
+function sourceRefKey(ref: SourceFileRef): string {
+  return `${normalizeSourceFilePath(ref.file)}:${ref.line || ''}`;
+}
+
+function addSourceRef(refs: SourceFileRef[], seen: Set<string>, ref: SourceFileRef): void {
+  const normalizedRef = {
+    ...ref,
+    file: normalizeSourceFilePath(ref.file),
+  };
+  const key = sourceRefKey(normalizedRef);
+  if (!seen.has(key)) {
+    seen.add(key);
+    refs.push(normalizedRef);
+  }
+}
+
+function collectSourceFiles(repoRoot: string): string[] {
+  const files: string[] = [];
+
+  const walk = (absoluteDirectory: string) => {
+    if (!fs.existsSync(absoluteDirectory)) return;
+
+    for (const entry of fs.readdirSync(absoluteDirectory, { withFileTypes: true })) {
+      if (IGNORED_SOURCE_DIRECTORIES.has(entry.name)) continue;
+
+      const absolutePath = resolve(absoluteDirectory, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+        continue;
+      }
+
+      if (!SOURCE_FILE_EXTENSIONS.some((extension) => entry.name.endsWith(extension))) {
+        continue;
+      }
+
+      files.push(normalizeSourceFilePath(relative(repoRoot, absolutePath)));
+    }
+  };
+
+  for (const directory of SOURCE_SEARCH_DIRECTORIES) {
+    walk(resolve(repoRoot, directory));
+  }
+
+  return files;
+}
+
+function findExistingSourceFile(preferredFile: string, repoRoot: string): string {
+  const normalizedPreferred = normalizeSourceFilePath(preferredFile);
+  const extensionless = normalizedPreferred.replace(/\.[^.]+$/, '');
+
+  for (const extension of SOURCE_FILE_EXTENSIONS) {
+    const candidate = `${extensionless}${extension}`;
+    if (fs.existsSync(resolve(repoRoot, candidate))) {
+      return candidate;
+    }
+  }
+
+  return normalizedPreferred;
+}
+
+function routePathFromAppPageFile(file: string): string | null {
+  const normalized = normalizeSourceFilePath(file);
+  const match = normalized.match(/^app\/(.+)\/(?:page|layout)\.(?:tsx|ts|jsx|js)$/);
+  if (!match) return null;
+
+  const routeSegments = match[1]
+    .split('/')
+    .filter((segment) => !segment.startsWith('(') && !segment.startsWith('@'));
+
+  return `/${routeSegments.join('/')}`.replace(/\/+/g, '/') || '/';
+}
+
+function getPagePath(pageUrl: string | null | undefined): string | null {
+  if (!pageUrl) return null;
+  const path = normalizePath(pageUrl);
+  return path.startsWith('/') ? path : null;
+}
+
+function getSharedRouteSegmentScore(file: string, pagePath: string | null): number {
+  if (!pagePath) return 0;
+
+  const fileSegments = new Set(normalizeSourceFilePath(file).split('/'));
+  return pagePath
+    .split('/')
+    .filter(Boolean)
+    .reduce((score, segment) => score + (fileSegments.has(segment) ? 5 : 0), 0);
+}
+
+function sourceFileRouteScore(file: string, pagePath: string | null): number {
+  if (!pagePath) return 0;
+
+  const appRoute = routePathFromAppPageFile(file);
+  if (appRoute === pagePath) return 100;
+
+  const normalized = normalizeSourceFilePath(file);
+  const pagePathSuffix = pagePath.replace(/^\//, '');
+  if (pagePathSuffix && normalized.includes(pagePathSuffix)) return 50;
+
+  return getSharedRouteSegmentScore(file, pagePath);
+}
+
+function extractNextAppChunkSourceRefs(text: string, repoRoot: string): SourceFileRef[] {
+  const refs: SourceFileRef[] = [];
+  const seen = new Set<string>();
+  const nextAppChunkPattern = /\/_next\/static\/chunks\/app\/(.+?)\/(page|layout|route)-[A-Za-z0-9_-]+\.js/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = nextAppChunkPattern.exec(text)) !== null) {
+    const routePath = decodeURIComponent(match[1]);
+    const sourceFile = findExistingSourceFile(`app/${routePath}/${match[2]}.tsx`, repoRoot);
+    addSourceRef(refs, seen, { file: sourceFile });
+  }
+
+  return refs;
+}
+
+function extractConsoleSearchTerms(message: string): string[] {
+  const firstLine = message
+    .replace(/^Console Error:\s*/i, '')
+    .split('\n')[0]
+    .trim();
+  const labelMatch = firstLine.match(/^(.{8,140}?:)\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)\b/);
+  if (!labelMatch) return [];
+
+  return [labelMatch[1]];
+}
+
+function findLineNumberForTerm(content: string, term: string): number | undefined {
+  const lineIndex = content.split(/\r?\n/).findIndex((line) => line.includes(term));
+  return lineIndex >= 0 ? lineIndex + 1 : undefined;
+}
+
+function findSourceRefsByConsoleTerm(message: string, pageUrl: string, repoRoot: string): SourceFileRef[] {
+  const terms = extractConsoleSearchTerms(message);
+  if (terms.length === 0) return [];
+
+  const pagePath = getPagePath(pageUrl);
+  const candidates: Array<SourceFileRef & { score: number }> = [];
+
+  for (const file of collectSourceFiles(repoRoot)) {
+    const absolutePath = resolve(repoRoot, file);
+    const content = fs.readFileSync(absolutePath, 'utf-8');
+
+    for (const term of terms) {
+      if (!content.includes(term)) continue;
+
+      candidates.push({
+        file,
+        line: findLineNumberForTerm(content, term),
+        score: sourceFileRouteScore(file, pagePath),
+      });
+      break;
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
+  const bestScore = candidates[0]?.score ?? 0;
+  const filtered = bestScore > 0 ? candidates.filter((candidate) => candidate.score === bestScore) : candidates;
+
+  return filtered.slice(0, 5).map(({ score: _score, ...ref }) => ref);
+}
+
+function inferSourceRefsFromPageRoute(pageUrl: string, repoRoot: string): SourceFileRef[] {
+  const pagePath = getPagePath(pageUrl);
+  if (!pagePath) return [];
+
+  return collectSourceFiles(repoRoot)
+    .filter((file) => routePathFromAppPageFile(file) === pagePath)
+    .map((file) => ({ file }));
+}
+
+function buildSourceSearchText(error: ErrorLogEntry): string {
+  const parts = [error.error_stack || '', error.error_message || ''];
+  if (error.additional_data) {
+    try {
+      parts.push(JSON.stringify(error.additional_data));
+    } catch {
+      // Ignore non-serializable diagnostic metadata.
+    }
+  }
+  return parts.join('\n');
+}
+
+export function extractSourceFilesForError(error: ErrorLogEntry, repoRoot = process.cwd()): SourceFileRef[] {
+  const refs: SourceFileRef[] = [];
+  const seen = new Set<string>();
+  const searchText = buildSourceSearchText(error);
+
+  for (const ref of parseStackTrace(error.error_stack)) {
+    addSourceRef(refs, seen, ref);
+  }
+
+  if (refs.length === 0) {
+    for (const ref of findSourceRefsByConsoleTerm(error.error_message || '', error.page_url || '', repoRoot)) {
+      addSourceRef(refs, seen, ref);
+    }
+  }
+
+  if (refs.length === 0) {
+    for (const ref of extractNextAppChunkSourceRefs(searchText, repoRoot)) {
+      addSourceRef(refs, seen, ref);
+    }
+  }
+
+  if (refs.length === 0) {
+    for (const ref of inferSourceRefsFromPageRoute(error.page_url || '', repoRoot)) {
+      addSourceRef(refs, seen, ref);
+    }
+  }
+
+  return refs;
+}
+
 // ─── Pattern Grouping ────────────────────────────────────────────────
 
 /** Strip dynamic values (UUIDs, hex IDs, timestamps, numbers) from a message to normalize it */
@@ -188,7 +433,7 @@ function createPatternKey(error: ErrorLogEntry): string {
   return `${type}::${component}::${normalizedMsg}`;
 }
 
-function groupIntoPatterns(errors: ErrorLogEntry[]): ErrorPattern[] {
+export function groupIntoPatterns(errors: ErrorLogEntry[], repoRoot = process.cwd()): ErrorPattern[] {
   const patternMap = new Map<string, ErrorPattern>();
 
   for (const error of errors) {
@@ -228,8 +473,8 @@ function groupIntoPatterns(errors: ErrorLogEntry[]): ErrorPattern[] {
       pattern.affectedUsers.push(userLabel);
     }
 
-    // Parse stack traces and merge source files
-    const refs = parseStackTrace(error.error_stack);
+    // Parse stack traces and infer source files from available runtime context.
+    const refs = extractSourceFilesForError(error, repoRoot);
     for (const ref of refs) {
       const exists = pattern.sourceFiles.some(
         (s) => s.file === ref.file && s.line === ref.line
@@ -315,7 +560,7 @@ function generateReport(patterns: ErrorPattern[], totalFetched: number, totalFil
 
     // Source files
     if (p.sourceFiles.length > 0) {
-      lines.push('**Source files (from stack trace):**');
+      lines.push('**Source files (from stack trace or inference):**');
       for (const ref of p.sourceFiles.slice(0, 10)) {
         const loc = ref.line ? `${ref.file}:${ref.line}${ref.column ? ':' + ref.column : ''}` : ref.file;
         lines.push(`- \`${loc}\``);
@@ -538,7 +783,7 @@ function createLegacySignature(error: ErrorLogEntry): string {
   return `${type}::${component}::${page}::${message}`;
 }
 
-function updateFixLog(errors: ErrorLogEntry[]): void {
+function updateFixLog(errors: ErrorLogEntry[]): FixLogStats {
   const fixLog = loadFixLog();
   const seenSignatures = new Set<string>();
 
@@ -581,93 +826,214 @@ function updateFixLog(errors: ErrorLogEntry[]): void {
   }
 
   saveFixLog(fixLog);
+
+  const statusCounts = fixLog.entries.reduce<FixLogStats['statusCounts']>(
+    (acc, entry) => {
+      acc[entry.status] += 1;
+      return acc;
+    },
+    {
+      untriaged: 0,
+      investigating: 0,
+      fix_applied: 0,
+      resolved: 0,
+      wontfix: 0,
+      stale: 0,
+    }
+  );
+
+  return {
+    totalEntries: fixLog.entries.length,
+    statusCounts,
+  };
+}
+
+// ─── Error Log Cleanup ───────────────────────────────────────────────
+
+async function clearProductionErrorLogs(supabase: SupabaseClient): Promise<ErrorLogClearResult> {
+  const { count, error: countError } = await supabase
+    .from('error_logs')
+    .select('id', { count: 'exact', head: true });
+
+  if (countError) {
+    throw new Error(`Failed to count error logs before clearing: ${countError.message}`);
+  }
+
+  if (count === 0) {
+    return { clearedCount: 0 };
+  }
+
+  const { error: deleteError } = await supabase
+    .from('error_logs')
+    .delete()
+    .gte('timestamp', '1970-01-01');
+
+  if (deleteError) {
+    throw new Error(`Failed to clear production error logs: ${deleteError.message}`);
+  }
+
+  return { clearedCount: count };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────
 
 async function main() {
+  const run = new AutomationRun({
+    scriptName: 'fixerrors',
+    mode: 'analysis',
+    args: process.argv.slice(2),
+    expectedArtifacts: [
+      { path: 'docs_private/error-analysis.md' },
+      { path: 'docs_private/error-fix-log.md', required: false },
+    ],
+  });
+
   console.log('FIXERRORS - Error Analysis & Report Generator');
   console.log('=============================================\n');
 
-  // 1. Fetch errors
-  console.log('Fetching errors from error_logs...');
-  const { data: rawErrors, error: fetchError } = await supabase
-    .from('error_logs')
-    .select('*')
-    .order('timestamp', { ascending: false })
-    .limit(200);
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
-  if (fetchError) {
-    console.error(`FAILED: ${fetchError.message}`);
-    process.exit(1);
+    const clearErrorLogsAfterSuccessfulAnalysis = async (): Promise<ErrorLogClearResult> => {
+      console.log('Clearing production error log...');
+      const clearResult = await run.step('Clear production error log', () => clearProductionErrorLogs(supabase));
+      const clearedLabel = clearResult.clearedCount === null ? 'all' : clearResult.clearedCount;
+      console.log(`  Cleared ${clearedLabel} error log entr${clearResult.clearedCount === 1 ? 'y' : 'ies'}`);
+      return clearResult;
+    };
+
+    // 1. Fetch errors
+    console.log('Fetching errors from error_logs...');
+    const { data: rawErrors, error: fetchError } = await run.step('Fetch production error logs', () =>
+      supabase
+        .from('error_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(200)
+    );
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch production errors: ${fetchError.message}`);
+    }
+
+    if (!rawErrors || rawErrors.length === 0) {
+      console.log('No errors in database. Writing empty report.');
+      const report = generateReport([], 0, 0);
+      await run.step('Write empty error analysis report', () => {
+        fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
+      }, { totalFetched: 0, afterFiltering: 0, patternsFound: 0 });
+      console.log(`\nReport written to: docs_private/error-analysis.md`);
+      await clearErrorLogsAfterSuccessfulAnalysis();
+      await run.finish('passed');
+      return;
+    }
+
+    console.log(`  Fetched ${rawErrors.length} error(s) from database`);
+
+    // 2. Filter
+    const errors = filterErrors(rawErrors);
+    const filteredOut = rawErrors.length - errors.length;
+    console.log(`  Filtered out ${filteredOut} (localhost/admin) -> ${errors.length} remaining`);
+
+    if (errors.length === 0) {
+      console.log('All errors were filtered out. Writing empty report.');
+      const report = generateReport([], rawErrors.length, 0);
+      await run.step('Write filtered-empty error analysis report', () => {
+        fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
+      }, { totalFetched: rawErrors.length, filteredOut, afterFiltering: 0, patternsFound: 0 });
+      console.log(`\nReport written to: docs_private/error-analysis.md`);
+      await clearErrorLogsAfterSuccessfulAnalysis();
+      await run.finish('passed');
+      return;
+    }
+
+    // 3. Group into patterns
+    console.log('Grouping errors into patterns...');
+    const patterns = await run.step('Group errors into patterns', () => groupIntoPatterns(errors), {
+      totalFetched: rawErrors.length,
+      filteredOut,
+      afterFiltering: errors.length,
+      patternsFound: 0,
+    });
+    console.log(`  Found ${patterns.length} distinct pattern(s)`);
+    const patternReviewMetadata = getPatternReviewMetadata(patterns);
+
+    // 4. Generate report
+    console.log('Generating analysis report...');
+    await run.step('Write error analysis report', () => {
+      const report = generateReport(patterns, rawErrors.length, errors.length);
+      fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
+    }, {
+      totalFetched: rawErrors.length,
+      filteredOut,
+      afterFiltering: errors.length,
+      patternsFound: patterns.length,
+      ...patternReviewMetadata,
+    });
+    console.log(`  Written to: docs_private/error-analysis.md`);
+
+    // 5. Update historical fix log (JSON only, no run summaries)
+    console.log('Updating historical fix log...');
+    const fixLogStats = await run.step('Update historical error fix log', () => updateFixLog(errors), {
+      entriesProcessed: errors.length,
+    });
+    run.recordStep({
+      name: 'Summarise historical error fix log',
+      status: 'passed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 0,
+      metadata: fixLogStats,
+    });
+    console.log(`  Updated: docs_private/error-fix-log.md`);
+
+    // 6. Clear the production error log after the analysis artifacts are safely written.
+    const clearResult = await clearErrorLogsAfterSuccessfulAnalysis();
+
+    // 7. Terminal summary
+    console.log('\n=============================================');
+    console.log('SUMMARY');
+    console.log('=============================================');
+    console.log(`  Errors fetched:      ${rawErrors.length}`);
+    console.log(`  After filtering:     ${errors.length}`);
+    console.log(`  Patterns found:      ${patterns.length}`);
+    console.log(`  Error logs cleared:  ${clearResult.clearedCount === null ? 'all' : clearResult.clearedCount}`);
+    console.log('');
+
+    // Top 5 patterns
+    console.log('Top patterns:');
+    patterns.slice(0, 5).forEach((p, i) => {
+      console.log(`  ${i + 1}. [${p.occurrences.length}x] ${p.errorType} in ${p.component}: ${p.normalizedMessage.substring(0, 60)}`);
+    });
+
+    if (patterns.length > 5) {
+      console.log(`  ...and ${patterns.length - 5} more`);
+    }
+
+    console.log('\n=============================================');
+    console.log('Report ready: docs_private/error-analysis.md');
+    console.log('=============================================\n');
+    await run.finish('passed');
+  } catch (error) {
+    await run.finish('failed', error);
+    throw error;
   }
-
-  if (!rawErrors || rawErrors.length === 0) {
-    console.log('No errors in database. Writing empty report.');
-    const report = generateReport([], 0, 0);
-    fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-    console.log(`\nReport written to: docs_private/error-analysis.md`);
-    process.exit(0);
-  }
-
-  console.log(`  Fetched ${rawErrors.length} error(s) from database`);
-
-  // 2. Filter
-  const errors = filterErrors(rawErrors);
-  const filteredOut = rawErrors.length - errors.length;
-  console.log(`  Filtered out ${filteredOut} (localhost/admin) -> ${errors.length} remaining`);
-
-  if (errors.length === 0) {
-    console.log('All errors were filtered out. Writing empty report.');
-    const report = generateReport([], rawErrors.length, 0);
-    fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-    console.log(`\nReport written to: docs_private/error-analysis.md`);
-    process.exit(0);
-  }
-
-  // 3. Group into patterns
-  console.log('Grouping errors into patterns...');
-  const patterns = groupIntoPatterns(errors);
-  console.log(`  Found ${patterns.length} distinct pattern(s)`);
-
-  // 4. Generate report
-  console.log('Generating analysis report...');
-  const report = generateReport(patterns, rawErrors.length, errors.length);
-  fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-  console.log(`  Written to: docs_private/error-analysis.md`);
-
-  // 5. Update historical fix log (JSON only, no run summaries)
-  console.log('Updating historical fix log...');
-  updateFixLog(errors);
-  console.log(`  Updated: docs_private/error-fix-log.md`);
-
-  // 6. Terminal summary
-  console.log('\n=============================================');
-  console.log('SUMMARY');
-  console.log('=============================================');
-  console.log(`  Errors fetched:      ${rawErrors.length}`);
-  console.log(`  After filtering:     ${errors.length}`);
-  console.log(`  Patterns found:      ${patterns.length}`);
-  console.log('');
-
-  // Top 5 patterns
-  console.log('Top patterns:');
-  patterns.slice(0, 5).forEach((p, i) => {
-    console.log(`  ${i + 1}. [${p.occurrences.length}x] ${p.errorType} in ${p.component}: ${p.normalizedMessage.substring(0, 60)}`);
-  });
-
-  if (patterns.length > 5) {
-    console.log(`  ...and ${patterns.length - 5} more`);
-  }
-
-  console.log('\n=============================================');
-  console.log('Report ready: docs_private/error-analysis.md');
-  console.log('=============================================\n');
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error('Fatal error:', err);
-    process.exit(1);
-  });
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Fatal error:', err);
+      process.exit(1);
+    });
+}

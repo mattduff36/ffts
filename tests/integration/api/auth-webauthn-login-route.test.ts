@@ -30,7 +30,7 @@ vi.mock('@/lib/server/webauthn/config', () => ({
   isWebAuthnConfigured: vi.fn(() => true),
   WEBAUTHN_DISABLED_MESSAGE: 'Biometric sign-in is not configured for this deployment',
   getWebAuthnRequestConfig: vi.fn(async () => ({
-    rpName: 'FOREST FARM',
+    rpName: 'Example RP',
     rpID: 'localhost',
     origin: 'http://localhost',
     expectedOrigins: ['http://localhost'],

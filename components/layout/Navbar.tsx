@@ -33,6 +33,7 @@ import { createClient } from '@/lib/supabase/client';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { usePendingAbsenceCount, useRamsAssignmentSummary } from '@/lib/hooks/useNavMetrics';
 import { useClientServiceOutage } from '@/lib/hooks/useClientServiceOutage';
+import { templateConfig } from '@/lib/config/template-config';
 import { toast } from 'sonner';
 import { 
   dashboardNavItem, 
@@ -478,7 +479,7 @@ export function Navbar() {
       return;
     }
 
-    window.alert('Open your browser menu and tap "Install app" (or "Add to Home screen") to install FOREST FARM.');
+    toast.info(`Open your browser menu and tap "Install app" (or "Add to Home screen") to install ${templateConfig.branding.shortAppName}.`);
   };
 
   // Helper function to check if a nav link is active
@@ -587,7 +588,7 @@ export function Navbar() {
               >
                 <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
                 <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                  FOREST FARM
+                  {templateConfig.branding.shortAppName.toUpperCase()}
                 </div>
               </Link>
               <div className="ml-auto flex items-center gap-2">
@@ -606,7 +607,7 @@ export function Navbar() {
             >
               <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                FOREST FARM
+                {templateConfig.branding.shortAppName.toUpperCase()}
               </div>
             </Link>
 
@@ -617,7 +618,7 @@ export function Navbar() {
             >
               <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                FOREST FARM
+                {templateConfig.branding.shortAppName.toUpperCase()}
               </div>
             </Link>
 

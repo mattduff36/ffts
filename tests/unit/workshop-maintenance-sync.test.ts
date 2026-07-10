@@ -33,7 +33,7 @@ function makeCategory(
 describe('workshop maintenance sync', () => {
   it('links a 6 weekly inspection task by title', () => {
     const match = inferMaintenanceLink({
-      title: '6 Weekly Inspection Due - VS71 TMP',
+      title: '6 Weekly Inspection Due - ZZ99 TMP',
     });
 
     expect(match).toEqual({

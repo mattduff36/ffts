@@ -14,6 +14,7 @@ FFTS is the production operations platform for Forest Farm Tree Services. It is 
 ## Local setup
 
 Follow [README-SETUP-FFTS.md](README-SETUP-FFTS.md) and copy the blank values from `.env.forest.example` into `.env.local`.
+The maintained developer and feature documentation index is in [docs/README.md](docs/README.md).
 
 ```bash
 npm install

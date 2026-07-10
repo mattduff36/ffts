@@ -109,7 +109,7 @@ async function bootstrapSuperAdmin(): Promise<void> {
       {
         name: 'superadmin',
         display_name: 'Super Administrator',
-        description: 'MPDEE owner superadmin for Forest Farm Tree Services production support.',
+        description: 'Protected SuperAdmin for Forest Farm Tree Services production support.',
         role_class: 'admin',
         is_super_admin: true,
         is_manager_admin: true,
@@ -145,7 +145,7 @@ async function bootstrapSuperAdmin(): Promise<void> {
     {
       id: userId,
       full_name: 'Matt Duffill',
-      employee_id: 'MPDEE-SUPERADMIN',
+      employee_id: 'FFTS-SUPERADMIN',
       role: 'admin',
       role_id: role.id,
       team_id: 'management',

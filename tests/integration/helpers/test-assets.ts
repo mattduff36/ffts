@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export const TEST_ASSET_PREFIX = 'TE57';
+export const TEST_ASSET_PREFIX = 'ZZ99';
 
 function createMaintenanceWriteClient(fallbackClient: SupabaseClient): SupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

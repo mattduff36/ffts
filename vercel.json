@@ -5,6 +5,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/actions/generate-fleet-inspection-reminders",
+      "schedule": "15 2 * * *"
+    },
+    {
       "path": "/api/quotes/start-alerts-scheduled",
       "schedule": "0 6 * * *"
     }

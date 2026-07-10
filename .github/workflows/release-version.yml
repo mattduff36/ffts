@@ -1,0 +1,41 @@
+name: Release version check
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-release-version:
+    if: ${{ !contains(github.event.head_commit.message, '[skip version]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check release version
+        run: npm run version:bump -- "${{ github.event.before }}" "${{ github.event.after }}"
+
+      - name: Verify release version files are current
+        run: |
+          if [ -z "$(git status --porcelain -- lib/config/release-version.json docs_private/release-log.md)" ]; then
+            echo "Release version files are current."
+            exit 0
+          fi
+
+          echo "Release version files are stale. Run npm run finalise before pushing to main."
+          git diff -- lib/config/release-version.json docs_private/release-log.md
+          exit 1

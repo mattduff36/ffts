@@ -62,7 +62,7 @@ describe('Service Task Creation Integration', () => {
       titlePatterns: [prefixPattern('IT-SERVICE-')],
     });
 
-    // Prefer an existing TE57 test van and never fall back to live assets.
+    // Prefer an existing ZZ99 test van and never fall back to live assets.
     const existingTestVanId = await resolveTestVanId(supabase);
 
     if (existingTestVanId) {
@@ -82,7 +82,7 @@ describe('Service Task Creation Integration', () => {
       const { data: createdVehicle } = await supabase
         .from('vans')
         .insert({
-          reg_number: `TE57STC${Date.now().toString().slice(-4)}`,
+          reg_number: `ZZ99STC${Date.now().toString().slice(-4)}`,
           status: 'active',
           category_id: vanCategory.id,
         })
@@ -93,7 +93,7 @@ describe('Service Task Creation Integration', () => {
         testVehicleId = createdVehicle.id;
         createdTestVehicle = true;
       } else {
-        throw new Error('Failed to create a TE57 test van; refusing to use a live asset');
+        throw new Error('Failed to create a ZZ99 test van; refusing to use a live asset');
       }
     }
 

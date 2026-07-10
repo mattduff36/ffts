@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, type ChangeEvent, type ComponentType } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { templateConfig } from '@/lib/config/template-config';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +55,8 @@ import {
   getErrorReportScreenshots,
   isAllowedErrorReportScreenshot,
 } from '@/lib/utils/error-report-screenshots';
+
+const appDisplayName = templateConfig.branding.shortAppName;
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -818,7 +821,7 @@ export default function HelpPage() {
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
                 <Smartphone className="h-5 w-5 text-brand-yellow" />
-                Install FOREST FARM App
+                Install {appDisplayName} App
               </CardTitle>
               <CardDescription className="text-muted-foreground">
                 Follow the steps for your device and browser. If the install prompt is available, use the button below.
@@ -865,7 +868,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open FOREST FARM in Chrome and sign in.</li>
+                <li>Open {appDisplayName} in Chrome and sign in.</li>
                 <li>Tap the three-dot menu in the top-right corner.</li>
                 <li>Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</li>
                 <li>Confirm by tapping <strong>Install</strong>.</li>
@@ -880,11 +883,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open FOREST FARM in Firefox and sign in.</li>
+                <li>Open {appDisplayName} in Firefox and sign in.</li>
                 <li>Tap the menu button (three dots).</li>
                 <li>Tap <strong>Install</strong> or <strong>Add to Home screen</strong>.</li>
                 <li>Confirm the prompt to add it to your home screen.</li>
-                <li>Launch FOREST FARM from the new home screen icon.</li>
+                <li>Launch {appDisplayName} from the new home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -895,11 +898,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open FOREST FARM in Safari (not inside another browser tab view).</li>
+                <li>Open {appDisplayName} in Safari (not inside another browser tab view).</li>
                 <li>Tap the <strong>Share</strong> button.</li>
                 <li>Scroll and tap <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> in the top-right corner.</li>
-                <li>Open FOREST FARM from your home screen icon.</li>
+                <li>Open {appDisplayName} from your home screen icon.</li>
               </ol>
             </CardContent>
           </Card>
@@ -910,7 +913,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open FOREST FARM in Chrome or Edge.</li>
+                <li>Open {appDisplayName} in Chrome or Edge.</li>
                 <li>Use the browser menu and choose <strong>Open in Safari</strong>.</li>
                 <li>In Safari, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> to finish installation.</li>
@@ -927,7 +930,7 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-                <li>Open FOREST FARM in Chrome or Edge.</li>
+                <li>Open {appDisplayName} in Chrome or Edge.</li>
                 <li>Look for the install icon in the address bar (usually a monitor + down arrow).</li>
                 <li>Click it and confirm <strong>Install</strong>.</li>
                 <li>You can also use browser menu options: <strong>Install app</strong> / <strong>Apps</strong>.</li>
@@ -1339,18 +1342,18 @@ export default function HelpPage() {
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Chrome</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Chrome and visit FOREST FARM once.</li>
+                <li>Open Chrome and visit {appDisplayName} once.</li>
                 <li>Tap the padlock/site icon in the address bar.</li>
                 <li>Open <strong>Site settings</strong>.</li>
                 <li>Tap <strong>Clear & reset</strong>, then confirm.</li>
-                <li>Reload FOREST FARM and sign in again.</li>
+                <li>Reload {appDisplayName} and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Android - Firefox</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open Firefox and go to FOREST FARM.</li>
+                <li>Open Firefox and go to {appDisplayName}.</li>
                 <li>Tap the site settings icon from the address bar/menu.</li>
                 <li>Clear site data/cookies for this site.</li>
                 <li>Close and reopen the tab, then sign in again.</li>
@@ -1362,15 +1365,15 @@ export default function HelpPage() {
               <ol className="list-decimal pl-5 space-y-1">
                 <li>Open iOS <strong>Settings</strong> app.</li>
                 <li>Go to <strong>Safari &gt; Advanced &gt; Website Data</strong>.</li>
-                <li>Search for FOREST FARM domain and swipe/delete it.</li>
-                <li>Reopen Safari, load FOREST FARM, and sign in again.</li>
+                <li>Search for {appDisplayName} domain and swipe/delete it.</li>
+                <li>Reopen Safari, load {appDisplayName}, and sign in again.</li>
               </ol>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-foreground font-semibold">Desktop - Chrome / Edge</h3>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Open FOREST FARM in browser.</li>
+                <li>Open {appDisplayName} in browser.</li>
                 <li>Click the padlock icon next to the URL.</li>
                 <li>Open site settings and clear stored data for this site.</li>
                 <li>Hard refresh the page and sign in again.</li>

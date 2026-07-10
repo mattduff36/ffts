@@ -30,11 +30,11 @@ describeOrSkip('Inform Workshop Endpoint', () => {
   const createdTaskIds: string[] = [];
 
   beforeAll(async () => {
-    // Create test vehicle with TE57 prefix (test vehicles only)
+    // Create test vehicle with ZZ99 prefix (test vehicles only)
     const { data: vehicle } = await supabase
       .from('vans')
       .insert({
-        reg_number: 'TE57INFORM',
+        reg_number: 'ZZ99INFORM',
         status: 'active',
       })
       .select()

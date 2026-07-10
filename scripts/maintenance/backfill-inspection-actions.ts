@@ -45,10 +45,10 @@ async function backfillInspectionActions() {
         COUNT(ii.id) as defect_count
       FROM van_inspections vi
       INNER JOIN inspection_items ii ON vi.id = ii.inspection_id
-      INNER JOIN vehicles v ON vi.van_id = v.id
+      INNER JOIN vans v ON vi.van_id = v.id
       LEFT JOIN profiles p ON vi.user_id = p.id
       WHERE vi.status = 'submitted'
-        AND ii.status = 'attention'
+        AND ii.status IN ('attention', 'defect')
       GROUP BY vi.id, vi.van_id, vi.user_id, vi.inspection_date, v.reg_number, p.full_name
       ORDER BY vi.inspection_date DESC;
     `;
@@ -100,9 +100,9 @@ async function backfillInspectionActions() {
       try {
         // Get attention item (defect) details for the description
         const defectsQuery = `
-          SELECT item_number, item_description, comments, day_of_week
+          SELECT id, item_number, item_description, comments, day_of_week
           FROM inspection_items
-          WHERE inspection_id = $1 AND status = 'attention'
+          WHERE inspection_id = $1 AND status IN ('attention', 'defect')
           ORDER BY item_number, day_of_week;
         `;
 
@@ -115,6 +115,7 @@ async function backfillInspectionActions() {
           item_description: string; 
           days: number[]; 
           comments: string[];
+          item_ids: string[];
         }>();
 
         defects.forEach(d => {
@@ -124,11 +125,15 @@ async function backfillInspectionActions() {
               item_number: d.item_number,
               item_description: d.item_description,
               days: [],
-              comments: []
+              comments: [],
+              item_ids: []
             });
           }
           const group = groupedDefects.get(key)!;
-          group.days.push(d.day_of_week);
+          if (d.day_of_week) {
+            group.days.push(d.day_of_week);
+          }
+          group.item_ids.push(d.id);
           if (d.comments) {
             group.comments.push(d.comments);
           }
@@ -142,38 +147,44 @@ async function backfillInspectionActions() {
           // Build day range for this defect
           let dayRange: string;
           if (group.days.length === 1) {
-            dayRange = dayNames[group.days[0]] || `Day ${group.days[0] + 1}`;
+            dayRange = dayNames[group.days[0] - 1] || `Day ${group.days[0]}`;
           } else if (group.days.length > 1) {
-            const firstDay = dayNames[group.days[0]] || `Day ${group.days[0] + 1}`;
-            const lastDay = dayNames[group.days[group.days.length - 1]] || `Day ${group.days[group.days.length - 1] + 1}`;
+            const firstDay = dayNames[group.days[0] - 1] || `Day ${group.days[0]}`;
+            const lastDay = dayNames[group.days[group.days.length - 1] - 1] || `Day ${group.days[group.days.length - 1]}`;
             dayRange = `${firstDay.substring(0, 3)}-${lastDay.substring(0, 3)}`;
           } else {
             dayRange = 'Unknown';
           }
 
           const comment = group.comments.length > 0 ? `\nComment: ${group.comments[0]}` : '';
-          const description = `Vehicle inspection defect found:\nItem ${group.item_number} - ${group.item_description} (${dayRange})${comment}`;
+          const description = `Van inspection defect found:\nItem ${group.item_number} - ${group.item_description} (${dayRange})${comment}`;
           const title = `${inspection.reg_number} - ${group.item_description} (${dayRange})`;
 
           // Create action for this defect
           const insertQuery = `
             INSERT INTO actions (
+              action_type,
               title,
               description,
               inspection_id,
+              inspection_item_id,
+              van_id,
               status,
               priority,
               created_by,
               created_at
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
             ) RETURNING id;
           `;
           
           const insertResult = await client.query(insertQuery, [
+            'inspection_defect',
             title,
             description,
             inspection.id,
+            group.item_ids[0] || null,
+            inspection.van_id,
             'pending',
             'high',
             inspection.user_id,

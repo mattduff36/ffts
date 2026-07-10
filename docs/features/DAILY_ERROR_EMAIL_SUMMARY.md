@@ -1,7 +1,7 @@
 # Daily Error Email Summary
 
 **Feature:** Automatic daily email summary of application errors  
-**Recipient:** template-admin@example.com (SuperAdmin)  
+**Recipient:** admin@mpdee.co.uk (SuperAdmin)  
 **Status:** ✅ Implemented
 
 ---
@@ -132,8 +132,8 @@ RESEND_API_KEY=your_resend_api_key
 ### Email Configuration
 ```javascript
 {
-  from: 'DigiDocs <notifications@your-app.example.com>',
-  to: ['template-admin@example.com'],
+  from: 'Forest Farm Operations <notifications@your-app.example.com>',
+  to: ['admin@mpdee.co.uk'],
   subject: '🚨 Daily Error Summary - {count} errors on {date}',
   html: '...' // Formatted HTML email
 }
@@ -359,7 +359,7 @@ localStorage.getItem('lastErrorEmailSentDate')
 ✅ **Automatic daily error summaries**  
 ✅ **Triggered by first error of each day**  
 ✅ **Comprehensive email with charts and details**  
-✅ **Sent to template-admin@example.com**  
+✅ **Sent to admin@mpdee.co.uk**  
 ✅ **No external dependencies required**  
 ✅ **Simple localStorage-based tracking**
 

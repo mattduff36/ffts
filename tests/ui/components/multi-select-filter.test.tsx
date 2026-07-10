@@ -21,10 +21,10 @@ describe('MultiSelectFilter', () => {
           },
           {
             value: 'van-location',
-            label: '[FE24 TYH - Jeff Mark]',
+            label: '[ZZ99 TST - Example Driver]',
             description: 'Unassigned',
             groupLabel: 'Vans',
-            searchLabel: 'FE24 TYH Jeff Mark Vans',
+            searchLabel: 'ZZ99 TST Example Driver Vans',
           },
           {
             value: 'site-location',
@@ -63,7 +63,7 @@ describe('MultiSelectFilter', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /vans click to expand/i }));
 
-    expect(screen.getByText('[FE24 TYH - Jeff Mark]')).toBeInTheDocument();
+    expect(screen.getByText('[ZZ99 TST - Example Driver]')).toBeInTheDocument();
     expect(screen.queryByText('[4321-AB - Legacy Site]')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search locations...'), {

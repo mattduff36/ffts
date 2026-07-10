@@ -2786,7 +2786,7 @@ function NewInspectionContent() {
                 value={newVehicleReg}
                 onChange={(e) => setNewVehicleReg(e.target.value.toUpperCase())}
                 onBlur={(e) => setNewVehicleReg(formatRegistration(e.target.value))}
-                placeholder="e.g., BG21 EXH"
+                placeholder="e.g., ZZ99 TST"
                 className="h-12 text-base bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground uppercase"
                 disabled={inspectionsPaused || addingVehicle}
               />

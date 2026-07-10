@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { templateConfig } from '@/lib/config/template-config';
 import { getPrimaryResendEmailConfig } from '@/lib/server/resend-email-config';
 
 interface AdminProfileRow {
@@ -99,7 +100,7 @@ async function sendSensitivePinEmail(params: {
           <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 640px; margin: 0 auto; padding: 24px;">
             <h2>${params.subject}</h2>
             <p>${params.body}</p>
-            <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">This is an automated FOREST FARM security notification.</p>
+            <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">This is an automated ${templateConfig.branding.shortAppName} security notification.</p>
           </body>
         </html>
       `,

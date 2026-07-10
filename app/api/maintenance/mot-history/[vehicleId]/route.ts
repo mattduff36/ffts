@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 export const dynamic = 'force-dynamic';
 
 // Test vehicles that are excluded from DVLA sync
-const TEST_VEHICLES = ['TE57VAN', 'TE57HGV'];
+const TEST_VEHICLES = ['ZZ99VAN', 'ZZ99HGV'];
 
 interface MotTestRecord {
   completedDate?: string;

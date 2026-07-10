@@ -8,12 +8,6 @@ import { Input } from '@/components/ui/input';
 import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { MultiSelectFilter, type MultiSelectFilterOption } from '@/components/ui/multi-select-filter';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   ChevronDown,
   ChevronUp,
   Archive,
@@ -97,34 +91,11 @@ function getRetireReasonBadgeClass(reason: InventoryRetireReason | null): string
   return 'border-slate-500/30 bg-slate-500/10 text-slate-200';
 }
 
-function isNoLocationItem(item: InventoryItem): boolean {
-  return !item.location_id;
-}
-
-function renderLocationWithHint(item: InventoryItem) {
+function renderLocation(item: InventoryItem) {
   const isUnassigned = !item.location_id;
   const isMutedLocation = isUnassigned || isInventoryUnknownLocation(item.location);
   const locationName = item.location?.name || 'No location assigned';
-  if (!isNoLocationItem(item) || !item.source_location_hint) {
-    return isMutedLocation ? <span className="italic text-slate-400">{locationName}</span> : locationName;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className={`cursor-help underline decoration-slate-500 decoration-dotted underline-offset-4 ${isMutedLocation ? 'italic text-slate-400' : ''}`}>
-          {locationName}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs space-y-1">
-        <div className="font-medium text-white">Spreadsheet location</div>
-        <div>{item.source_location_hint}</div>
-        {item.source_location_rows ? (
-          <div className="text-[11px] text-slate-300">COMPLETE LIST row(s): {item.source_location_rows}</div>
-        ) : null}
-      </TooltipContent>
-    </Tooltip>
-  );
+  return isMutedLocation ? <span className="italic text-slate-400">{locationName}</span> : locationName;
 }
 
 function getVanLocationNickname(item: InventoryItem): string | null {
@@ -189,7 +160,7 @@ function renderLocationDetails(item: InventoryItem) {
 
   return (
     <div>
-      <div>{renderLocationWithHint(item)}</div>
+      <div>{renderLocation(item)}</div>
       {linkedVanNickname ? (
         <div className="text-xs text-muted-foreground">{linkedVanNickname}</div>
       ) : null}
@@ -474,7 +445,6 @@ export function InventoryTable({
   const emptyColSpan = (showSerialNumberColumn ? 8 : 7) - (retiredMode ? 1 : 0);
 
   return (
-    <TooltipProvider delayDuration={150}>
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative max-w-sm flex-1">
@@ -793,6 +763,5 @@ export function InventoryTable({
         onShowMore={showMore}
       />
     </div>
-    </TooltipProvider>
   );
 }

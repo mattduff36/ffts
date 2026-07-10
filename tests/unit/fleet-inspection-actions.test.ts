@@ -115,7 +115,7 @@ function createGenerationAdminMock() {
 
         if (table === 'vans') {
           return createQuery({
-            data: [{ id: 'van-1', reg_number: 'YP21 KXU', nickname: 'Kieran Lange' }],
+            data: [{ id: 'van-1', reg_number: 'ZZ99 KXU', nickname: 'Example Driver' }],
             error: null,
           });
         }

@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolve } from 'path';
-import ExcelJS from 'exceljs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeInventoryItemNumber, requireInventoryAccess, requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
 import { isUnknownInventoryLocationName } from '@/app/(dashboard)/inventory/utils';
 import type { InventoryCategory, InventoryStatus } from '@/app/(dashboard)/inventory/types';
-
-const completeListPath = 'data/COMPLETE LIST 2023.xlsx';
 
 interface InventoryItemRequestBody {
   item_number?: string;
@@ -16,11 +12,6 @@ interface InventoryItemRequestBody {
   last_checked_at?: string | null;
   check_interval_days?: number | null;
   status?: InventoryStatus;
-}
-
-interface SourceLocationHint {
-  locations: string[];
-  rows: number[];
 }
 
 interface InventoryLocationRow {
@@ -68,52 +59,6 @@ interface LinkedVanSummary {
 function cleanOptionalDate(value: string | null | undefined): string | null {
   if (!value) return null;
   return value;
-}
-
-function cellText(value: ExcelJS.CellValue | undefined): string {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === 'object') {
-    if ('text' in value && typeof value.text === 'string') return value.text.trim();
-    if ('richText' in value && Array.isArray(value.richText)) {
-      return value.richText.map((part) => part.text).join('').trim();
-    }
-    if ('result' in value) return cellText(value.result as ExcelJS.CellValue);
-    return JSON.stringify(value);
-  }
-
-  return String(value).trim();
-}
-
-function compactLocation(value: string): string {
-  return value.trim() || '(blank)';
-}
-
-async function readCompleteListLocationHints(): Promise<Map<string, SourceLocationHint>> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(resolve(process.cwd(), completeListPath));
-  const worksheet = workbook.getWorksheet('COMPLETE');
-  if (!worksheet) return new Map();
-
-  const hints = new Map<string, SourceLocationHint>();
-  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
-    const row = worksheet.getRow(rowNumber);
-    const itemNumber = cellText(row.getCell(1).value);
-    const name = cellText(row.getCell(2).value);
-    const location = compactLocation(cellText(row.getCell(3).value));
-    const rawDate = cellText(row.getCell(4).value);
-    if (![itemNumber, name, location, rawDate].some(Boolean)) continue;
-
-    const normalizedItemNumber = normalizeInventoryItemNumber(itemNumber);
-    if (!normalizedItemNumber || normalizedItemNumber === 'NONUMBER') continue;
-
-    const existing = hints.get(normalizedItemNumber) || { locations: [], rows: [] };
-    if (!existing.locations.includes(location)) existing.locations.push(location);
-    existing.rows.push(rowNumber);
-    hints.set(normalizedItemNumber, existing);
-  }
-
-  return hints;
 }
 
 function getLinkedVanIds(items: InventoryItemRow[]): string[] {
@@ -272,30 +217,11 @@ export async function GET(request: NextRequest) {
       loadUnknownLocationEnteredAt(admin, items),
     ]);
 
-    let sourceLocationHints = new Map<string, SourceLocationHint>();
-    try {
-      sourceLocationHints = await readCompleteListLocationHints();
-    } catch (hintError) {
-      console.warn('Unable to read inventory spreadsheet location hints:', hintError);
-    }
-
-    const inventory = items.map((item) => {
-      const itemWithLinkedVan = {
+    const inventory = items.map((item) => ({
         ...normalizeMinorPlantDetailRelation(addLinkedVanDisplay(item, vanById)),
         group: groupByItemId.get(item.id) || null,
         unknown_location_entered_at: unknownLocationEnteredAtByItemId.get(item.id) || null,
-      };
-      if (itemWithLinkedVan.location) return itemWithLinkedVan;
-
-      const hint = sourceLocationHints.get(itemWithLinkedVan.item_number_normalized);
-      if (!hint) return itemWithLinkedVan;
-
-      return {
-        ...itemWithLinkedVan,
-        source_location_hint: hint.locations.join(' | '),
-        source_location_rows: hint.rows.join(', '),
-      };
-    });
+      }));
 
     return NextResponse.json({
       inventory,

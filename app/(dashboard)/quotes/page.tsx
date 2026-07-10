@@ -137,9 +137,7 @@ function getCompactManagerLabel(label: string) {
 }
 
 function normalizeLegacyQuoteManagerName(value: string | null | undefined): string {
-  const cleaned = (value || '').replace(/\s+/g, ' ').trim();
-  if (/^geroge\s+healey$/i.test(cleaned)) return 'George Healey';
-  return cleaned;
+  return (value || '').replace(/\s+/g, ' ').trim();
 }
 
 function getLegacyQuoteManagerFilterValue(value: string | null | undefined): string {

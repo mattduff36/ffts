@@ -38,7 +38,7 @@ describe('maintenance placeholder records', () => {
     expect(source).toContain('plant_id: plant.id');
   });
 
-  it('shared TE57 integration helpers repair missing test asset maintenance rows', () => {
+  it('shared ZZ99 integration helpers repair missing test asset maintenance rows', () => {
     const source = readSource('tests/integration/helpers/test-assets.ts');
 
     expect(source).toContain('ensureTestVanMaintenanceRecord');

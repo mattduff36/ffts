@@ -341,13 +341,6 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
--- Insert sample vehicles (you can modify these)
-INSERT INTO vehicles (reg_number, vehicle_type, status) VALUES
-  ('YX65ABC', 'truck', 'active'),
-  ('YX65DEF', 'truck', 'active'),
-  ('YX65GHI', 'artic', 'active')
-ON CONFLICT (reg_number) DO NOTHING;
-
 -- =============================================
 -- STORAGE BUCKET FOR INSPECTION PHOTOS
 -- =============================================

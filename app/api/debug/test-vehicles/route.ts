@@ -109,7 +109,7 @@ async function deleteReminderActionsForFleetItems(
  * GET /api/debug/test-vehicles
  * List fleet items (vans, HGVs, and/or plant) matching a prefix (for test data management)
  * SuperAdmin only
- * Query: prefix=TE57, type=vans|hgvs|plant|all
+ * Query: prefix=ZZ99, type=vans|hgvs|plant|all
  */
 export async function GET(request: NextRequest) {
   try {
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const prefix = searchParams.get('prefix') || 'TE57';
+    const prefix = searchParams.get('prefix') || 'ZZ99';
     const typeParam = searchParams.get('type') || 'all'; // vans | hgvs | plant | all
 
     type FleetItem = { id: string; reg_number: string; nickname: string | null; status: string; fleet_type: 'van' | 'hgv' | 'plant' };
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validPrefix = prefix || 'TE57';
+    const validPrefix = prefix || 'ZZ99';
     const fleetType = fleet_type === 'hgvs' ? 'hgvs' : fleet_type === 'plant' ? 'plant' : 'vans';
     const adminSupabase = getSupabaseAdmin();
 
@@ -589,7 +589,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const validPrefix = prefix || 'TE57';
+    const validPrefix = prefix || 'ZZ99';
     const fleetType = fleet_type === 'hgvs' ? 'hgvs' : fleet_type === 'plant' ? 'plant' : 'vans';
     const adminSupabase = getSupabaseAdmin();
 

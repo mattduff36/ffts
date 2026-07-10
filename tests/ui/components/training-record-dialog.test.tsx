@@ -12,7 +12,7 @@ function makeRecord(): TrainingRecordWithRelations {
     import_batch_id: 'batch-1',
     person_id: 'person-1',
     qualification_id: 'qualification-1',
-    employee_name_raw: 'Frank Barlow',
+    employee_name_raw: 'Example Operator',
     qualification_raw: 'SMSTS',
     qualification_canonical_proposed: 'Site Management Safety Training Scheme (SMSTS)',
     qualification_validation_status: 'standardised_or_spelling_corrected',
@@ -45,8 +45,8 @@ function makeRecord(): TrainingRecordWithRelations {
     updated_at: '2026-06-04T10:00:00.000Z',
     person: {
       id: 'person-1',
-      employee_key: 'FRANK BARLOW',
-      employee_name_raw: 'Frank Barlow',
+      employee_key: 'EXAMPLE OPERATOR',
+      employee_name_raw: 'Example Operator',
       profile_id: 'profile-1',
       profile_match_status: 'matched',
     },
@@ -84,7 +84,7 @@ describe('TrainingRecordDialog', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       comments: 'Updated note',
-      employee_name_raw: 'Frank Barlow',
+      employee_name_raw: 'Example Operator',
     }));
   });
 });

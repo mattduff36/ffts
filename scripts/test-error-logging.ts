@@ -47,7 +47,7 @@ async function testServerErrorLogging(): Promise<TestResult[]> {
         message: 'API did not return error status'
       });
     }
-  } catch (error) {
+  } catch {
     results.push({
       name: 'Server Error - API Throw',
       passed: true,

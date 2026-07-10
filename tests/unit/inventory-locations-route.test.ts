@@ -74,7 +74,7 @@ describe('inventory locations route', () => {
     ));
     const normalLocations = [
       buildLocation('yard-location', 'Yard', 'yard', 'system'),
-      buildLocation('van-location', 'Van - NU75 VGT', 'van', 'fleet'),
+      buildLocation('van-location', 'Van - ZZ99 VGT', 'van', 'fleet'),
     ];
     const activeItemLocations = [
       { location_id: 'yard-location' },

@@ -2,9 +2,9 @@
 
 **Feature Name**: Risk Assessment & Method Statement (RAMS) Management  
 **Created**: October 30, 2025  
-**Status**: 📋 Planning Phase  
+**Status**: Implemented and maintained  
 **Priority**: High  
-**Branch**: `feature/rams-documents`
+**Last Updated**: July 10, 2026
 
 ---
 
@@ -950,13 +950,11 @@ CREATE POLICY "Users can download assigned RAMS" ON storage.objects FOR SELECT
 
 ## 📚 Related Documentation
 
-- `TEMPLATE_APP_PROPOSAL.md` - Original PRD
-- `PRD_IMPLEMENTATION_STATUS.md` - Overall implementation status
-- `OFFLINE_PWA_IMPLEMENTATION.md` - PWA and offline features
-- `types/database.ts` - Database types
+- [`RAMS_IMPLEMENTATION_PROGRESS.md`](RAMS_IMPLEMENTATION_PROGRESS.md) - implementation notes
+- [`../../types/database.ts`](../../types/database.ts) - database types
+- [`../../README-SETUP-FFTS.md`](../../README-SETUP-FFTS.md) - production setup
 
 ---
 
-**Status**: ✅ PRD Complete - Ready for Implementation  
-**Next Step**: Review with client, then proceed to Phase 1 (Database Setup)
+**Status**: Implemented in Forest Farm Operations; future changes must preserve assignment, signature, visitor, export, and audit behavior.
 

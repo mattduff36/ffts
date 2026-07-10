@@ -85,8 +85,6 @@ export interface InventoryItem {
   retired_by: string | null;
   source: string | null;
   source_reference: string | null;
-  source_location_hint?: string | null;
-  source_location_rows?: string | null;
   unknown_location_entered_at?: string | null;
   minor_plant_detail?: InventoryMinorPlantDetail | null;
   group?: InventoryItemGroupSummary | null;

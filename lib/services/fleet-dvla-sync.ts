@@ -46,7 +46,7 @@ export interface FleetSyncSummary {
   results: FleetSyncResultRow[];
 }
 
-export const TEST_REGISTRATIONS = new Set(['TE57VAN', 'TE57HGV']);
+export const TEST_REGISTRATIONS = new Set(['ZZ99VAN', 'ZZ99HGV']);
 
 export function isExpectedFleetDvlaLookupFailure(message: string): boolean {
   const normalized = message.toLowerCase();

@@ -1,6 +1,6 @@
 # Forest Farm Tree Services Production Setup
 
-Use this guide in the `ffts` project after the productionised code has been pushed.
+Use this guide for initial provisioning or recovery of the `ffts` production application.
 
 ## 1. Environment
 
@@ -40,11 +40,9 @@ The script will:
 
 The script intentionally does not:
 
-- Run `demo:seed`.
-- Create demo personas.
-- Create Joe Cane or Forest Farm staff accounts.
-- Set demo passwords.
-- Run demo reset, wipe, snapshot, or bootstrap scripts.
+- Create demo data or personas.
+- Create Forest Farm staff accounts.
+- Run reset, wipe, snapshot, or secondary bootstrap scripts.
 
 After bootstrap succeeds, remove `FOREST_FARM_SUPERADMIN_PASSWORD` from `.env.local`.
 
@@ -62,10 +60,10 @@ Create Forest Farm user accounts manually from the app/admin workflow once the p
 ## 4. Useful Verification Commands
 
 ```bash
-npm run template:validate
 npm run db:validate
+npm run lint
 npm run typecheck
 npm run build
 ```
 
-Use `npm run finalise:push` only after reviewing local changes and confirming the target remote is correct.
+Use `npm run finalise` only after reviewing local changes and confirming the target branch is correct.

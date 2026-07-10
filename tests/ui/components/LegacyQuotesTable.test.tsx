@@ -12,13 +12,13 @@ function buildLegacyQuote(overrides: Partial<LegacyQuote>): LegacyQuote {
   return {
     id: overrides.id || 'legacy-1',
     source_row: overrides.source_row || 2,
-    quote_reference: overrides.quote_reference || '4000-GH',
+    quote_reference: overrides.quote_reference || '4000-EX',
     customer_name: overrides.customer_name || 'Default Customer',
     title: overrides.title || 'Legacy Works',
     quote_date: overrides.quote_date || '2026-01-01',
     quote_date_raw: overrides.quote_date_raw ?? null,
-    quote_manager_name: overrides.quote_manager_name || 'George Healey',
-    quote_manager_initials: overrides.quote_manager_initials || 'GH',
+    quote_manager_name: overrides.quote_manager_name || 'Example Manager',
+    quote_manager_initials: overrides.quote_manager_initials || 'EX',
     quote_value_text: overrides.quote_value_text !== undefined ? overrides.quote_value_text : '£100',
     quote_value_amount: overrides.quote_value_amount !== undefined ? overrides.quote_value_amount : 100,
     comments: overrides.comments || 'Imported quote',
@@ -34,7 +34,7 @@ function buildLegacyPaginationQuotes(firstQuoteOverrides: Partial<LegacyQuote> =
     return buildLegacyQuote({
       id: `legacy-page-${index}`,
       source_row: index + 2,
-      quote_reference: `${(4000 + index).toString()}-GH`,
+      quote_reference: `${(4000 + index).toString()}-EX`,
       quote_date: quoteDate,
       customer_name: `Legacy Customer ${String(index).padStart(3, '0')}`,
       title: `Legacy details ${String(index).padStart(3, '0')}`,
@@ -44,22 +44,21 @@ function buildLegacyPaginationQuotes(firstQuoteOverrides: Partial<LegacyQuote> =
 }
 
 describe('LegacyQuotesTable', () => {
-  it('merges George Healey manager typo variants under the same filter', () => {
+  it('normalizes manager whitespace under the same filter', () => {
     render(
       <LegacyQuotesTable
-        managerFilter={getLegacyQuoteManagerFilterValue('George Healey')}
+        managerFilter={getLegacyQuoteManagerFilterValue('Example Manager')}
         legacyQuotes={[
-          buildLegacyQuote({ id: 'correct', quote_reference: '4001-GH', quote_manager_name: 'George Healey' }),
-          buildLegacyQuote({ id: 'typo', quote_reference: '4002-GH', quote_manager_name: 'Geroge Healey' }),
-          buildLegacyQuote({ id: 'other', quote_reference: '4003-AH', quote_manager_name: 'Andy Hill' }),
+          buildLegacyQuote({ id: 'correct', quote_reference: '4001-EX', quote_manager_name: 'Example Manager' }),
+          buildLegacyQuote({ id: 'spaced', quote_reference: '4002-EX', quote_manager_name: ' Example   Manager ' }),
+          buildLegacyQuote({ id: 'other', quote_reference: '4003-OT', quote_manager_name: 'Other Manager' }),
         ]}
       />
     );
 
-    expect(screen.getAllByText('4001-GH').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('4002-GH').length).toBeGreaterThan(0);
-    expect(screen.queryByText('4003-AH')).not.toBeInTheDocument();
-    expect(screen.queryByText('Geroge Healey')).not.toBeInTheDocument();
+    expect(screen.getAllByText('4001-EX').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('4002-EX').length).toBeGreaterThan(0);
+    expect(screen.queryByText('4003-OT')).not.toBeInTheDocument();
   });
 
   it('reveals legacy quotes with Show More', () => {
@@ -69,12 +68,12 @@ describe('LegacyQuotesTable', () => {
     const tableBody = container.querySelector('tbody');
     expect(tableBody?.querySelectorAll('tr')).toHaveLength(50);
     expect(screen.getByText('Showing 50 of 51 legacy quotes')).toBeInTheDocument();
-    expect(within(tableBody as HTMLElement).queryByText('4000-GH')).not.toBeInTheDocument();
+    expect(within(tableBody as HTMLElement).queryByText('4000-EX')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Show More' }));
 
     expect(tableBody?.querySelectorAll('tr')).toHaveLength(51);
-    expect(within(tableBody as HTMLElement).getByText('4000-GH')).toBeInTheDocument();
+    expect(within(tableBody as HTMLElement).getByText('4000-EX')).toBeInTheDocument();
     expect(screen.getByText('Showing all 51 legacy quotes')).toBeInTheDocument();
   });
 
@@ -82,8 +81,8 @@ describe('LegacyQuotesTable', () => {
     const { container } = render(
       <LegacyQuotesTable
         legacyQuotes={[
-          buildLegacyQuote({ id: 'b', quote_reference: '4002-GH', customer_name: 'Beta Customer', quote_date: '2026-01-02' }),
-          buildLegacyQuote({ id: 'a', quote_reference: '4001-GH', customer_name: 'Alpha Customer', quote_date: '2026-01-01' }),
+          buildLegacyQuote({ id: 'b', quote_reference: '4002-EX', customer_name: 'Beta Customer', quote_date: '2026-01-02' }),
+          buildLegacyQuote({ id: 'a', quote_reference: '4001-EX', customer_name: 'Alpha Customer', quote_date: '2026-01-01' }),
         ]}
       />
     );
@@ -107,9 +106,9 @@ describe('LegacyQuotesTable', () => {
         legacyQuotes={[
           buildLegacyQuote({
             id: 'details-cleanup',
-            quote_reference: '4001-GH',
+            quote_reference: '4001-EX',
             customer_name: 'Alpha Customer',
-            title: '4001-GH - Alpha Customer - Pump overhaul',
+            title: '4001-EX - Alpha Customer - Pump overhaul',
           }),
         ]}
       />
@@ -117,7 +116,7 @@ describe('LegacyQuotesTable', () => {
 
     const firstRowCells = container.querySelectorAll('tbody tr:first-child td');
     expect(firstRowCells[2]).toHaveTextContent('Pump overhaul');
-    expect(firstRowCells[2]).not.toHaveTextContent('4001-GH');
+    expect(firstRowCells[2]).not.toHaveTextContent('4001-EX');
     expect(firstRowCells[2]).not.toHaveTextContent('Alpha Customer');
   });
 
@@ -182,7 +181,7 @@ describe('LegacyQuotesTable', () => {
         legacyQuotes={[
           buildLegacyQuote({
             id: 'blank-total',
-            quote_reference: '4001-GH',
+            quote_reference: '4001-EX',
             quote_value_text: null,
             quote_value_amount: null,
           }),
@@ -206,7 +205,7 @@ describe('LegacyQuotesTable', () => {
     const onLegacyQuoteUpdate = vi.fn().mockResolvedValue(undefined);
     render(
       <LegacyQuotesTable
-        legacyQuotes={[buildLegacyQuote({ id: 'editable', quote_reference: '4001-GH' })]}
+        legacyQuotes={[buildLegacyQuote({ id: 'editable', quote_reference: '4001-EX' })]}
         canEditLegacyQuotes
         onLegacyQuoteUpdate={onLegacyQuoteUpdate}
       />
@@ -220,11 +219,11 @@ describe('LegacyQuotesTable', () => {
 
     await waitFor(() => {
       expect(onLegacyQuoteUpdate).toHaveBeenCalledWith('editable', {
-        quote_reference: '4001-GH',
+        quote_reference: '4001-EX',
         customer_name: 'Updated Customer',
         title: 'Updated details',
         quote_date: '2026-01-01',
-        quote_manager_name: 'George Healey',
+        quote_manager_name: 'Example Manager',
         quote_value_text: '£250.00',
         comments: 'Imported quote',
       });
@@ -235,9 +234,9 @@ describe('LegacyQuotesTable', () => {
     const { container } = render(
       <LegacyQuotesTable
         legacyQuotes={[
-          buildLegacyQuote({ id: 'early', quote_reference: '4001-GH', quote_date: '2026-01-01' }),
-          buildLegacyQuote({ id: 'middle', quote_reference: '4002-GH', quote_date: '2026-01-15' }),
-          buildLegacyQuote({ id: 'late', quote_reference: '4003-GH', quote_date: '2026-01-31' }),
+          buildLegacyQuote({ id: 'early', quote_reference: '4001-EX', quote_date: '2026-01-01' }),
+          buildLegacyQuote({ id: 'middle', quote_reference: '4002-EX', quote_date: '2026-01-15' }),
+          buildLegacyQuote({ id: 'late', quote_reference: '4003-EX', quote_date: '2026-01-31' }),
         ]}
       />
     );
@@ -251,8 +250,8 @@ describe('LegacyQuotesTable', () => {
 
     const tableBody = container.querySelector('tbody');
     expect(tableBody).not.toBeNull();
-    expect(within(tableBody as HTMLElement).queryByText('4001-GH')).not.toBeInTheDocument();
-    expect(within(tableBody as HTMLElement).getByText('4002-GH')).toBeInTheDocument();
-    expect(within(tableBody as HTMLElement).queryByText('4003-GH')).not.toBeInTheDocument();
+    expect(within(tableBody as HTMLElement).queryByText('4001-EX')).not.toBeInTheDocument();
+    expect(within(tableBody as HTMLElement).getByText('4002-EX')).toBeInTheDocument();
+    expect(within(tableBody as HTMLElement).queryByText('4003-EX')).not.toBeInTheDocument();
   });
 });

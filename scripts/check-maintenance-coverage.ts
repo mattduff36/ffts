@@ -31,9 +31,9 @@ async function checkMaintenanceCoverage() {
     await client.connect();
     console.log('✅ Connected to database\n');
 
-    // Check TE57 vehicles
-    console.log('🔍 Checking TE57 vehicles:');
-    const te57Query = await client.query(`
+    // Check ZZ99 vehicles
+    console.log('🔍 Checking ZZ99 vehicles:');
+    const zz99Query = await client.query(`
       SELECT 
         v.id,
         v.reg_number,
@@ -41,10 +41,10 @@ async function checkMaintenanceCoverage() {
         CASE WHEN vm.id IS NOT NULL THEN 'Yes' ELSE 'No' END as has_maintenance_record
       FROM vehicles v
       LEFT JOIN vehicle_maintenance vm ON v.id = vm.van_id
-      WHERE v.reg_number LIKE 'TE57%'
+      WHERE v.reg_number LIKE 'ZZ99%'
       ORDER BY v.reg_number;
     `);
-    console.table(te57Query.rows);
+    console.table(zz99Query.rows);
 
     // Count all vehicles vs vehicles with maintenance
     console.log('\n📊 Coverage Statistics:');

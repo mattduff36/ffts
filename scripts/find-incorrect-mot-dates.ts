@@ -78,7 +78,7 @@ async function findIncorrectMotDates() {
         continue; // Skip vehicles without MOT due date
       }
 
-      // Extract plate number (e.g., "24" from "FE24 TYO")
+      // Extract plate number (e.g., "24" from "AB12 CDE")
       const plateMatch = reg.match(/[A-Z]{2}(\d{2})/i);
       if (!plateMatch) {
         continue; // Skip non-standard plates

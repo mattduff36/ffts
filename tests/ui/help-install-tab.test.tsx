@@ -5,6 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import HelpPage from '@/app/(dashboard)/help/page';
+import { templateConfig } from '@/lib/config/template-config';
 
 const replaceMock = vi.fn();
 const signOutMock = vi.fn(async () => ({ error: null }));
@@ -90,7 +91,9 @@ describe('Help page install tab', () => {
     renderHelpPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Install Forest Farm Operations App')).toBeInTheDocument();
+      expect(
+        screen.getByText(`Install ${templateConfig.branding.shortAppName} App`)
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText('Quick Support Actions')).toBeInTheDocument();

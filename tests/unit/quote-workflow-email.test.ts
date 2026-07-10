@@ -67,7 +67,7 @@ function buildQuoteBundle(overrides: Partial<QuoteBundle['quote']> = {}): QuoteB
       pricing_mode: 'itemized',
       total: 0,
       validity_days: 30,
-      signoff_name: 'Matt Duffill',
+      signoff_name: 'Example Manager',
       signoff_title: 'Contracts Manager',
       version_label: 'Original',
       revision_type: 'original',
@@ -240,7 +240,7 @@ describe('sendQuoteToCustomerEmail', () => {
       recipientEmails: ['alex@example.com', ' alex@example.com '],
       cc: ['charlotte@example.test', 'alex@example.com'],
       senderEmail: 'sender@example.test',
-      senderName: 'Matt Duffill',
+      senderName: 'Example Manager',
     });
 
     expect(result).toEqual({ success: true });
@@ -257,7 +257,7 @@ describe('sendQuoteToCustomerEmail', () => {
     }));
     expect(String(body.html)).toContain('Please can I have a purchase order for the attached quotation.');
     expect(String(body.html)).toContain(VAT_NOTICE);
-    expect(String(body.html)).toContain('Kind Regards<br>Matt Duffill');
+    expect(String(body.html)).toContain('Kind Regards<br>Example Manager');
     expect(body.attachments).toEqual([
       expect.objectContaining({
         filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
@@ -299,7 +299,7 @@ describe('sendQuoteToCustomerEmail', () => {
       bundle: buildQuoteBundle(),
       recipientEmails: ['alex@example.com'],
       senderEmail: 'sender@example.test',
-      senderName: 'Matt Duffill',
+      senderName: 'Example Manager',
     });
 
     expect(result).toEqual({ success: true });
@@ -313,7 +313,7 @@ describe('sendQuoteToCustomerEmail', () => {
       reply_to: 'sender@example.test',
       subject: 'PO needed for Q-001',
     }));
-    expect(String(body.html)).toContain('Hi Alex Customer,<br>Please send a PO to Matt Duffill.');
+    expect(String(body.html)).toContain('Hi Alex Customer,<br>Please send a PO to Example Manager.');
     expect(body.attachments).toEqual([
       expect.objectContaining({
         filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
@@ -332,7 +332,7 @@ describe('quote workflow direct emails', () => {
       subjectLine: 'Concrete repairs',
       cc: ['charlotte@example.test'],
       poNumber: 'PO-123',
-      managerName: 'Matt Duffill',
+      managerName: 'Example Manager',
     });
 
     expect(result).toEqual({ success: true });
@@ -352,7 +352,7 @@ describe('quote workflow direct emails', () => {
     const result = await sendQuoteStartAlertEmail({
       to: 'manager@example.test',
       cc: ['charlotte@example.test'],
-      managerName: 'Matt Duffill',
+      managerName: 'Example Manager',
       quoteReference: 'Q-001',
       customerName: 'Acme Ltd',
       subjectLine: 'Concrete repairs',

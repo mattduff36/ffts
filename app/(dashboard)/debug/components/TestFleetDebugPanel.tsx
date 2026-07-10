@@ -20,7 +20,7 @@ import { PanelLoader } from '@/components/ui/panel-loader';
 import { toast } from 'sonner';
 import { PurgeActions, TestVehicle } from '../types';
 
-const TEST_FLEET_PREFIX = 'TE57';
+const TEST_FLEET_PREFIX = 'ZZ99';
 const TEST_FLEET_TYPE = 'all';
 
 type VehicleIdsByFleetType = {
@@ -347,7 +347,7 @@ export function TestFleetDebugPanel() {
               <Car className="h-5 w-5 text-brand-yellow" />
               Test Fleet Cleanup
             </CardTitle>
-            <CardDescription>Manage and purge test fleet data (vans, HGVs & plant, TE57 prefix)</CardDescription>
+            <CardDescription>Manage and purge test fleet data (vans, HGVs & plant, ZZ99 prefix)</CardDescription>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button

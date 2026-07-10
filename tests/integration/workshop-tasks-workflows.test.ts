@@ -718,7 +718,7 @@ describeLive('Workshop Tasks Module Workflows', () => {
     it('creates and transitions an HGV task through lifecycle states', async () => {
       const hgvId = testHgvId;
       if (!hgvId) {
-        console.log('No TE57 test HGV available, skipping');
+        console.log('No ZZ99 test HGV available, skipping');
         return;
       }
 
@@ -746,7 +746,7 @@ describeLive('Workshop Tasks Module Workflows', () => {
     it('creates and transitions a plant task through lifecycle states', async () => {
       const plantId = testPlantId;
       if (!plantId) {
-        console.log('No TE57 test plant available, skipping');
+        console.log('No ZZ99 test plant available, skipping');
         return;
       }
 

@@ -106,9 +106,9 @@ describe('PATCH /api/quotes/[id]', () => {
       profile_id: 'manager-2',
       initials: 'CD',
       manager_email: 'charlotte@example.test',
-      signoff_name: 'Charlotte Duffill',
+      signoff_name: 'Example Approver',
       signoff_title: 'Accounts Manager',
-      profile: { full_name: 'Charlotte Duffill' },
+      profile: { full_name: 'Example Approver' },
     });
     mockGetInitialsFromName.mockReturnValue('CD');
     mockCopyQuoteCustomerContactRecipients.mockResolvedValue(undefined);
@@ -142,7 +142,7 @@ describe('PATCH /api/quotes/[id]', () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                single: vi.fn().mockResolvedValue({ data: { id: 'manager-2', full_name: 'Charlotte Duffill' }, error: null }),
+                single: vi.fn().mockResolvedValue({ data: { id: 'manager-2', full_name: 'Example Approver' }, error: null }),
                 maybeSingle: vi.fn().mockResolvedValue({ data: { full_name: 'Sender User' }, error: null }),
               })),
             })),
@@ -384,9 +384,9 @@ describe('PATCH /api/quotes/[id]', () => {
         subject_line: 'Fence repairs',
         requester_id: 'manager-1',
         requester_initials: 'MD',
-        manager_name: 'Matt Duffill',
+        manager_name: 'Example Manager',
         manager_email: 'matt@example.test',
-        signoff_name: 'Matt Duffill',
+        signoff_name: 'Example Manager',
         signoff_title: 'Contracts Manager',
         po_number: null,
         sage_posted_at: '2026-06-05T12:00:00.000Z',
@@ -438,7 +438,7 @@ describe('PATCH /api/quotes/[id]', () => {
       version_label: 'Original',
       requester_id: 'manager-2',
       requester_initials: 'CD',
-      manager_name: 'Charlotte Duffill',
+      manager_name: 'Example Approver',
       manager_email: 'charlotte@example.test',
       duplicate_source_quote_id: 'quote-1',
       status: 'draft',

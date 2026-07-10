@@ -1,24 +1,10 @@
 # FFTS Project Setup Instructions
 
-This file is the first file to read in the new Forest Farm Tree Services project.
-
-Suggested prompt for the new project chat:
-
-```text
-Examine and understand README-SETUP-FFTS.md. Use it to set up this codebase for local development, database bootstrap, validation, and future work. Do not run destructive database commands unless I explicitly approve them.
-```
+This is the primary local development and production bootstrap guide for Forest Farm Tree Services.
 
 ## Project Status
 
-This repository is now the production app for Forest Farm Tree Services, based on DigiDocs.
-
-It is not a sales demo branch anymore. The productionised source should be cloned from:
-
-```text
-https://github.com/mattduff36/ffts
-```
-
-Use commit `4ad6360a` or newer.
+This repository is the production app for Forest Farm Tree Services, branded in-product as Forest Farm Operations.
 
 Expected production mode:
 
@@ -106,7 +92,7 @@ This script:
 - Creates or updates only `admin@mpdee.co.uk` as Matt Duffill SuperAdmin.
 - Runs `npm run db:validate` again.
 
-It intentionally does not create Joe Cane, Forest Farm staff accounts, demo personas, sample data, or demo passwords.
+It intentionally does not create Forest Farm staff accounts, demo personas, sample data, or demo passwords.
 
 After successful bootstrap:
 
@@ -127,7 +113,7 @@ npm run db:validate
 For ongoing development after the initial bootstrap:
 
 - Add new SQL migrations under `supabase/migrations/`.
-- Apply only the new migration(s) using the agreed Supabase workflow.
+- Apply only the new migration(s) using the documented `pg.Client` workflow.
 - Always run:
 
 ```bash
@@ -136,17 +122,7 @@ npm run db:validate
 
 Avoid one-off migration scripts unless you have inspected the SQL target and know why the existing baseline/migration flow is not sufficient.
 
-Never run database reset, demo seed, or wipe commands against production.
-
-Do not run:
-
-```bash
-npm run demo:seed
-npm run demo:reset
-npm run demo:wipe-database
-npm run demo:setup-storage
-npm run demo:bootstrap-superadmin
-```
+Database reset, demo seed, and wipe scripts are not part of FFTS and must not be reintroduced.
 
 ## Development Workflow
 
@@ -286,12 +262,3 @@ DEMO_SNAPSHOT_PATH
 - If public branding or URLs look stale, redeploy Vercel after env changes.
 - If you add migrations, run `npm run db:validate` before finalise.
 
-## What To Ask The New Project Chat To Do
-
-After copying this handoff pack into the target project root, ask:
-
-```text
-Examine and understand README-SETUP-FFTS.md and FOREST_FARM_PRODUCTION_SETUP.md. Then verify this repo is ready for local development, install dependencies if needed, inspect package scripts, and tell me what environment values are still missing before running any database bootstrap commands.
-```
-
-Do not ask the new project chat to run `forest:bootstrap-production` until the new Supabase project and `.env.local` are definitely ready.

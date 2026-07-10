@@ -7,7 +7,14 @@
  * Run with: npx tsx scripts/testing/audit-dark-mode-contrast.ts
  */
 
-export const ALL_PAGES = [
+type AuditPage = {
+  path: string;
+  name: string;
+  requiresAuth: boolean;
+  requiresSensitiveAccess?: boolean;
+};
+
+export const ALL_PAGES: AuditPage[] = [
   // Auth Pages
   { path: '/login', name: 'Login', requiresAuth: false },
   { path: '/change-password', name: 'Change Password', requiresAuth: true },
@@ -57,7 +64,7 @@ export const ALL_PAGES = [
   { path: '/errors/manage', name: 'Error Reports', requiresAuth: true },
   
   // Debug/Developer
-  { path: '/debug', name: 'Debug Console', requiresAuth: true },
+  { path: '/debug', name: 'Debug Console', requiresAuth: true, requiresSensitiveAccess: true },
   
   // PDF Viewer
   { path: '/pdf-viewer', name: 'PDF Viewer', requiresAuth: true },
@@ -102,5 +109,6 @@ export const FIXED_COMPONENTS = [
 console.log('Dark Mode Contrast Audit');
 console.log('='.repeat(80));
 console.log(`Total pages to audit: ${ALL_PAGES.length}`);
+console.log(`Sensitive pages requiring PIN unlock: ${ALL_PAGES.filter((page) => page.requiresSensitiveAccess).length}`);
 console.log(`Components fixed: ${FIXED_COMPONENTS.length}`);
 console.log('\nUse browser automation to visit each page and verify contrast.');

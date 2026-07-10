@@ -2,6 +2,7 @@ import pg from 'pg';
 import { renderToStream } from '@react-pdf/renderer';
 import { QuotePDF } from '@/lib/pdf/quote-pdf';
 import { loadTemplateLogoDataUrl } from '@/lib/pdf/template-logo';
+import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
 import { getQuoteResendEmailConfig } from '@/lib/server/resend-email-config';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -672,7 +673,7 @@ export async function sendQuoteToCustomerEmail(
     pricing_note: bundle.quote.pricing_mode === 'attachments_only'
       ? 'Pricing and supporting details are included in the attached documents.'
       : '',
-    signoff_name: bundle.quote.signoff_name || 'Forest Farm Tree Services',
+    signoff_name: bundle.quote.signoff_name || templateConfig.branding.companyName,
     signoff_title: bundle.quote.signoff_title || '',
   });
 
@@ -702,7 +703,11 @@ export async function sendQuotePoRequestEmail(params: {
   }
 
   const customerName = params.bundle.quote.attention_name || params.bundle.quote.customer?.contact_name || 'there';
-  const senderName = params.senderName || params.bundle.quote.manager_name || params.bundle.quote.signoff_name || 'Forest Farm Tree Services';
+  const senderName =
+    params.senderName ||
+    params.bundle.quote.manager_name ||
+    params.bundle.quote.signoff_name ||
+    templateConfig.branding.companyName;
   const template = await renderConfiguredQuoteEmailTemplate(createAdminClient(), 'po_request', {
     quote_reference: params.bundle.quote.quote_reference,
     quote_name: buildQuoteDisplayName(params.bundle.quote),

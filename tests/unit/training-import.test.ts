@@ -8,7 +8,7 @@ import {
 
 describe('training import helpers', () => {
   it('normalizes person names for exact profile matching', () => {
-    expect(normalizeTrainingPersonName('  Frank   Barlow ')).toBe('FRANK BARLOW');
+    expect(normalizeTrainingPersonName('  Alex   Example ')).toBe('ALEX EXAMPLE');
   });
 
   it('parses ISO and UK date formats while preserving raw text', () => {
@@ -25,16 +25,16 @@ describe('training import helpers', () => {
 
   it('matches exact profile names and reports ambiguous matches', () => {
     const index = buildProfileNameIndex([
-      { id: 'profile-1', full_name: 'Frank Barlow' },
-      { id: 'profile-2', full_name: 'Jane Barlow' },
-      { id: 'profile-3', full_name: 'Jane  Barlow' },
+      { id: 'profile-1', full_name: 'Alex Example' },
+      { id: 'profile-2', full_name: 'Jamie Example' },
+      { id: 'profile-3', full_name: 'Jamie  Example' },
     ]);
 
-    expect(matchTrainingPersonToProfile('FRANK BARLOW', index)).toMatchObject({
+    expect(matchTrainingPersonToProfile('ALEX EXAMPLE', index)).toMatchObject({
       profileId: 'profile-1',
       status: 'matched',
     });
-    expect(matchTrainingPersonToProfile('Jane Barlow', index)).toMatchObject({
+    expect(matchTrainingPersonToProfile('Jamie Example', index)).toMatchObject({
       profileId: null,
       status: 'ambiguous',
     });

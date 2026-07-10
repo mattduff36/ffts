@@ -27,11 +27,11 @@ describeOrSkip('Inspection Defect Task Idempotency', () => {
   let testItemId: string;
 
   beforeAll(async () => {
-    // Create test vehicle with TE57 prefix (test vehicles only)
+    // Create test vehicle with ZZ99 prefix (test vehicles only)
     const { data: vehicle } = await supabase
       .from('vans')
       .insert({
-        reg_number: 'TE57IDEM',
+        reg_number: 'ZZ99IDEM',
         status: 'active',
       })
       .select()

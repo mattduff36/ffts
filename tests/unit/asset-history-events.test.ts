@@ -136,7 +136,7 @@ describe('asset history events', () => {
     expect(formatHistoryPersonName('gaz warren')).toBe('Gaz Warren');
     expect(formatHistoryPersonName('ZAK EDLIN')).toBe('Zak Edlin');
     expect(formatHistoryPersonName('Al MacFarlane')).toBe('Al MacFarlane');
-    expect(formatHistoryPersonName('  kieran leape  ')).toBe('Kieran Leape');
+    expect(formatHistoryPersonName('  example operator  ')).toBe('Example Operator');
     expect(formatHistoryPersonName('System')).toBe('System');
   });
 

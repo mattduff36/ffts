@@ -85,9 +85,7 @@ function getLegacyQuoteDetailsTitle(quote: LegacyQuote): string {
 }
 
 export function normalizeLegacyQuoteManagerName(value: string | null | undefined): string {
-  const cleaned = cleanLegacyQuoteManagerName(value);
-  if (/^geroge\s+healey$/i.test(cleaned)) return 'George Healey';
-  return cleaned;
+  return cleanLegacyQuoteManagerName(value);
 }
 
 export function getLegacyQuoteManagerFilterValue(value: string | null | undefined): string {

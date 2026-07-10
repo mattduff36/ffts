@@ -51,22 +51,22 @@ describeOrSkip('Workshop Tasks RLS Policies', () => {
     if (!employee) throw new Error('No test employee found');
     testEmployeeId = employee.id;
 
-    // SAFETY: ONLY use test vehicles starting with TE57
+    // SAFETY: ONLY use deterministic fictional vehicles starting with ZZ99
     const vehicle = await supabase
       .from('vans')
       .select('id')
-      .ilike('reg_number', 'TE57%')
+      .ilike('reg_number', 'ZZ99%')
       .eq('status', 'active')
       .limit(1)
       .single();
     
-    // If no TE57 test vehicle exists, create one
+    // If no fictional test vehicle exists, create one
     if (!vehicle.data) {
       const categoryId = (await supabase.from('van_categories').select('id').limit(1).single()).data?.id;
       const newVehicle = await supabase
         .from('vans')
         .insert({
-          reg_number: 'TE57WSHP',
+          reg_number: 'ZZ99WSHP',
           status: 'active',
           category_id: categoryId,
         })

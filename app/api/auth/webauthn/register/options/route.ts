@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     rpID: config.rpID,
     userID: toWebAuthnBytes(fromBase64Url(webauthnUserId)),
     userName: current.profile.email || current.profile.id,
-    userDisplayName: current.profile.full_name || current.profile.email || 'Forest Farm user',
+    userDisplayName: current.profile.full_name || current.profile.email || `${config.rpName} user`,
     attestationType: 'none',
     excludeCredentials: credentials.map((credential) => ({
       id: credential.credential_id,

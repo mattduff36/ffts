@@ -31,7 +31,7 @@ export const TEAM_LINE_MANAGERS: TeamLineManagerDefinition[] = [
   {
     teamId: 'workshop',
     teamName: 'Workshop',
-    // Andrew Hill in the organogram is the same user as Example User Seven in the system.
+    // The organogram label maps to this system profile.
     primaryManagerName: 'Example User Seven',
   },
   {

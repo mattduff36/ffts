@@ -84,33 +84,33 @@ describe('compareVrnChange', () => {
   it('does not flag a difference when old and new VRNs return the same vehicle details', async () => {
     const comparison = await compareVrnChange(
       'AB12 CDE',
-      'PR11 VTE',
+      'ZZ99 VTE',
       createServices(
         createDvlaFixture('AB12CDE'),
-        createDvlaFixture('PR11VTE'),
+        createDvlaFixture('ZZ99VTE'),
         createMotFixture('AB12CDE'),
-        createMotFixture('PR11VTE')
+        createMotFixture('ZZ99VTE')
       )
     );
 
     expect(comparison.hasDifferences).toBe(false);
     expect(comparison.differences).toEqual([]);
     expect(comparison.oldRegistration).toBe('AB12 CDE');
-    expect(comparison.newRegistration).toBe('PR11 VTE');
+    expect(comparison.newRegistration).toBe('ZZ99 VTE');
   });
 
   it('reports live DVLA and MOT detail differences for mismatched VRNs', async () => {
     const comparison = await compareVrnChange(
       'AB12 CDE',
-      'PR11 VTE',
+      'ZZ99 VTE',
       createServices(
         createDvlaFixture('AB12CDE'),
-        createDvlaFixture('PR11VTE', { colour: 'BLACK', taxDueDate: '2026-11-01' }),
+        createDvlaFixture('ZZ99VTE', { colour: 'BLACK', taxDueDate: '2026-11-01' }),
         createMotFixture('AB12CDE'),
-        createMotFixture('PR11VTE', {
+        createMotFixture('ZZ99VTE', {
           motExpiryDate: '2026-09-01',
           rawData: {
-            registration: 'PR11VTE',
+            registration: 'ZZ99VTE',
             make: 'FORD',
             model: 'TRANSIT CUSTOM',
             firstUsedDate: '2021-03-01',

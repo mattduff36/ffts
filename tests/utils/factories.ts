@@ -80,9 +80,9 @@ export const createMockAdmin = () =>
 
 export const createPriorityManager = () =>
   createMockProfile({
-    id: 'suzanne-id',
+    id: 'priority-manager-id',
     full_name: 'Priority Manager',
-    email: 'priority.manager@example.com',
+    email: 'admin@mpdee.co.uk',
     roles: {
       id: 'manager-role-id',
       name: 'manager',
@@ -105,9 +105,9 @@ export const createManagerApiResponse = (overrides?: Record<string, unknown>) =>
 });
 
 export const createPriorityManagerApiResponse = () => ({
-  id: 'suzanne-id',
+  id: 'priority-manager-id',
   full_name: 'Priority Manager',
-  email: 'priority.manager@example.com',
+  email: 'admin@mpdee.co.uk',
   role: {
     name: 'manager',
     display_name: 'Manager',

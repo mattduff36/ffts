@@ -18,7 +18,7 @@ type Manager = {
 
 const PRIORITY_MANAGER_EMAIL =
   process.env.NEXT_PUBLIC_PRIORITY_MANAGER_EMAIL?.trim().toLowerCase() ||
-  'priority.manager@example.com';
+  'admin@mpdee.co.uk';
 
 function getSupabaseAdmin() {
   return createSupabaseAdmin<Database>(

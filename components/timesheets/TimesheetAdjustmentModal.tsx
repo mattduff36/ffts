@@ -31,7 +31,7 @@ interface Manager {
 
 const PRIORITY_MANAGER_EMAIL =
   process.env.NEXT_PUBLIC_PRIORITY_MANAGER_EMAIL?.trim().toLowerCase() ||
-  'priority.manager@example.com';
+  'admin@mpdee.co.uk';
 
 function isPriorityManager(manager: Manager): boolean {
   return manager.email?.trim().toLowerCase() === PRIORITY_MANAGER_EMAIL;

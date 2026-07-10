@@ -1,6 +1,6 @@
 /**
- * Generate iOS PWA icons from source icon
- * Run with: node scripts/generate-ios-icons.js
+ * Generate Forest Farm raster, PWA, and iOS icons from tracked SVG sources.
+ * Run with: node scripts/maintenance/generate-ios-icons.js
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
 const sharp = require('sharp');
@@ -8,10 +8,15 @@ const fs = require('fs');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '../..');
-const sourceIcon = path.join(projectRoot, 'public/icon-512x512.png');
+const sourceIcon = path.join(projectRoot, 'public/images/forest-farm/favicon.svg');
+const sourceLogo = path.join(projectRoot, 'public/images/forest-farm/logo.svg');
 const outputDir = path.join(projectRoot, 'public');
-const iosIconVersion = '20260529';
-const avsYellow = { r: 241, g: 214, b: 74 };
+const forestBackground = { r: 15, g: 23, b: 42 };
+
+const pwaIconSizes = [
+  { name: 'icon-192x192.png', size: 192 },
+  { name: 'icon-512x512.png', size: 512 },
+];
 
 const iconSizes = [
   { name: 'apple-touch-icon.png', size: 180 },
@@ -21,13 +26,7 @@ const iconSizes = [
   { name: 'apple-touch-icon-120x120.png', size: 120 },
 ];
 
-const cacheBustedAliases = [
-  { source: 'icon-192x192.png', name: `icon-forest-farm-${iosIconVersion}-192x192.png` },
-  { source: 'icon-512x512.png', name: `icon-forest-farm-${iosIconVersion}-512x512.png` },
-  { source: 'apple-touch-icon.png', name: `apple-touch-icon-forest-farm-${iosIconVersion}.png` },
-  { source: 'apple-touch-icon-180x180.png', name: `apple-touch-icon-forest-farm-${iosIconVersion}-180x180.png` },
-  { source: 'apple-touch-icon-152x152.png', name: `apple-touch-icon-forest-farm-${iosIconVersion}-152x152.png` },
-  { source: 'apple-touch-icon-167x167.png', name: `apple-touch-icon-forest-farm-${iosIconVersion}-167x167.png` },
+const precomposedAliases = [
   { source: 'apple-touch-icon.png', name: 'apple-touch-icon-precomposed.png' },
   { source: 'apple-touch-icon-180x180.png', name: 'apple-touch-icon-180x180-precomposed.png' },
   { source: 'apple-touch-icon-152x152.png', name: 'apple-touch-icon-152x152-precomposed.png' },
@@ -43,9 +42,9 @@ async function createFaviconIco() {
       png: await sharp(sourceIcon)
         .resize(size, size, {
           fit: 'contain',
-          background: { ...avsYellow, alpha: 1 },
+          background: { ...forestBackground, alpha: 1 },
         })
-        .flatten({ background: avsYellow })
+        .flatten({ background: forestBackground })
         .png()
         .toBuffer(),
     }))
@@ -78,11 +77,39 @@ async function createFaviconIco() {
 }
 
 async function generateIcons() {
-  console.log('🍎 Generating iOS PWA icons...\n');
+  console.log('🌲 Generating Forest Farm raster assets...\n');
 
-  if (!fs.existsSync(sourceIcon)) {
-    console.error('❌ Source icon not found:', sourceIcon);
-    process.exit(1);
+  for (const sourcePath of [sourceIcon, sourceLogo]) {
+    if (!fs.existsSync(sourcePath)) {
+      console.error('❌ Source asset not found:', sourcePath);
+      process.exit(1);
+    }
+  }
+
+  const logoBuffer = await sharp(sourceLogo)
+    .resize(512, 512, { fit: 'contain' })
+    .png()
+    .toBuffer();
+
+  for (const logoPath of [
+    path.join(projectRoot, 'public/images/forest-farm/logo.png'),
+    path.join(projectRoot, 'public/images/logo.png'),
+  ]) {
+    fs.writeFileSync(logoPath, logoBuffer);
+    console.log(`✅ Generated: ${path.relative(projectRoot, logoPath)}`);
+  }
+
+  for (const icon of pwaIconSizes) {
+    const outputPath = path.join(outputDir, icon.name);
+    await sharp(sourceIcon)
+      .resize(icon.size, icon.size, {
+        fit: 'contain',
+        background: { ...forestBackground, alpha: 1 },
+      })
+      .flatten({ background: forestBackground })
+      .png()
+      .toFile(outputPath);
+    console.log(`✅ Generated: ${icon.name} (${icon.size}x${icon.size})`);
   }
 
   for (const icon of iconSizes) {
@@ -92,9 +119,9 @@ async function generateIcons() {
       await sharp(sourceIcon)
         .resize(icon.size, icon.size, {
           fit: 'contain',
-          background: { ...avsYellow, alpha: 1 },
+          background: { ...forestBackground, alpha: 1 },
         })
-        .flatten({ background: avsYellow })
+        .flatten({ background: forestBackground })
         .png()
         .toFile(outputPath);
       
@@ -105,16 +132,16 @@ async function generateIcons() {
     }
   }
 
-  for (const alias of cacheBustedAliases) {
+  for (const alias of precomposedAliases) {
     const sourcePath = path.join(outputDir, alias.source);
     const outputPath = path.join(outputDir, alias.name);
 
     try {
       await sharp(sourcePath)
-        .flatten({ background: avsYellow })
+        .flatten({ background: forestBackground })
         .png()
         .toFile(outputPath);
-      console.log(`✅ Generated cache-busted alias: ${alias.name}`);
+      console.log(`✅ Generated precomposed alias: ${alias.name}`);
     } catch (error) {
       console.error(`❌ Failed to generate ${alias.name}:`, error.message);
       process.exit(1);

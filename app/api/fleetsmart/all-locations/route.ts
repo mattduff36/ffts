@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { enrichTrackerLocationsWithVanNicknames } from '@/lib/server/fleet-tracker-enrichment';
 
 const BASE = process.env.FLEETSMART_BASE_URL ?? 'https://www.fleetsmartlive.com';
 const CLIENT_ID = process.env.FLEETSMART_CLIENT_ID ?? '';
@@ -237,9 +238,10 @@ export async function GET() {
 
   // If we have cached data, return it immediately
   if (cache.allLocations && Date.now() - cache.allLocationsCachedAt < ALL_LOC_TTL_MS) {
+    const vehicles = await enrichTrackerLocationsWithVanNicknames(cache.allLocations);
     return NextResponse.json({
-      vehicles: cache.allLocations,
-      count: cache.allLocations.length,
+      vehicles,
+      count: vehicles.length,
       cached: true,
     });
   }
@@ -264,9 +266,11 @@ export async function GET() {
     }
   }
 
+  const enrichedVehicles = await enrichTrackerLocationsWithVanNicknames(partial);
+
   return NextResponse.json({
-    vehicles: partial,
-    count: partial.length,
+    vehicles: enrichedVehicles,
+    count: enrichedVehicles.length,
     totalVehicles: vehicles.length,
     loading: cache.bgFetchInProgress,
     cached: false,

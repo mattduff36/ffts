@@ -37,6 +37,9 @@ function buildTask(overrides: Record<string, unknown> = {}) {
   return {
     id: TASK_ID,
     action_type: 'workshop_vehicle_task',
+    title: 'Workshop Task - Test Asset',
+    description: 'Routine workshop task',
+    workshop_comments: 'Routine workshop task',
     created_at: '2026-04-13T09:00:00.000Z',
     created_by: 'user-created',
     logged_at: '2026-04-13T10:00:00.000Z',
@@ -48,6 +51,11 @@ function buildTask(overrides: Record<string, unknown> = {}) {
     actioned_comment: null,
     actioned_signature_data: null,
     actioned_signed_at: null,
+    van_id: null,
+    hgv_id: null,
+    plant_id: null,
+    workshop_task_categories: null,
+    workshop_task_subcategories: null,
     status_history: [
       {
         id: 'event-started',
@@ -80,9 +88,15 @@ function buildComment(overrides: Record<string, unknown> = {}) {
 function createAdminClient({
   task,
   comments = [],
+  maintenanceCategories = [],
+  maintenanceRecord = null,
+  profile = { full_name: 'Manager One' },
 }: {
   task: Record<string, unknown>;
   comments?: Array<Record<string, unknown>>;
+  maintenanceCategories?: Array<Record<string, unknown>>;
+  maintenanceRecord?: Record<string, unknown> | null;
+  profile?: Record<string, unknown> | null;
 }) {
   const taskSingle = vi.fn().mockResolvedValue({ data: task, error: null });
   const taskEq = vi.fn(() => ({ single: taskSingle }));
@@ -98,6 +112,26 @@ function createAdminClient({
   const commentUpdateEqTask = vi.fn().mockResolvedValue({ error: null });
   const commentUpdateEqId = vi.fn(() => ({ eq: commentUpdateEqTask }));
   const commentUpdate = vi.fn(() => ({ eq: commentUpdateEqId }));
+
+  const attachmentUpdateEqStatus = vi.fn().mockResolvedValue({ error: null });
+  const attachmentUpdateEqTask = vi.fn(() => ({ eq: attachmentUpdateEqStatus }));
+  const attachmentUpdate = vi.fn(() => ({ eq: attachmentUpdateEqTask }));
+
+  const categoriesEq = vi.fn().mockResolvedValue({ data: maintenanceCategories, error: null });
+  const categoriesSelect = vi.fn(() => ({ eq: categoriesEq }));
+
+  const maintenanceMaybeSingle = vi.fn().mockResolvedValue({ data: maintenanceRecord, error: null });
+  const maintenanceEqByAsset = vi.fn(() => ({ maybeSingle: maintenanceMaybeSingle }));
+  const maintenanceSelect = vi.fn(() => ({ eq: maintenanceEqByAsset }));
+  const maintenanceUpdateEq = vi.fn().mockResolvedValue({ error: null });
+  const maintenanceUpdate = vi.fn(() => ({ eq: maintenanceUpdateEq }));
+  const maintenanceInsert = vi.fn().mockResolvedValue({ error: null });
+
+  const profileMaybeSingle = vi.fn().mockResolvedValue({ data: profile, error: null });
+  const profileEq = vi.fn(() => ({ maybeSingle: profileMaybeSingle }));
+  const profileSelect = vi.fn(() => ({ eq: profileEq }));
+
+  const maintenanceHistoryInsert = vi.fn().mockResolvedValue({ error: null });
 
   const client = {
     from: vi.fn((table: string) => {
@@ -115,6 +149,38 @@ function createAdminClient({
         };
       }
 
+      if (table === 'workshop_task_attachments') {
+        return {
+          update: attachmentUpdate,
+        };
+      }
+
+      if (table === 'maintenance_categories') {
+        return {
+          select: categoriesSelect,
+        };
+      }
+
+      if (table === 'vehicle_maintenance') {
+        return {
+          select: maintenanceSelect,
+          update: maintenanceUpdate,
+          insert: maintenanceInsert,
+        };
+      }
+
+      if (table === 'profiles') {
+        return {
+          select: profileSelect,
+        };
+      }
+
+      if (table === 'maintenance_history') {
+        return {
+          insert: maintenanceHistoryInsert,
+        };
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     }),
   };
@@ -126,6 +192,13 @@ function createAdminClient({
     commentUpdate,
     commentUpdateEqId,
     commentUpdateEqTask,
+    attachmentUpdate,
+    attachmentUpdateEqTask,
+    attachmentUpdateEqStatus,
+    maintenanceUpdate,
+    maintenanceUpdateEq,
+    maintenanceInsert,
+    maintenanceHistoryInsert,
   };
 }
 
@@ -191,11 +264,19 @@ describe('PATCH /api/workshop-tasks/tasks/[taskId]/timeline/[timelineItemId]/tim
     );
   });
 
-  it('updates completed timestamps and keeps actioned_at aligned', async () => {
+  it('updates completed timestamps, completed attachments, and automatic maintenance due dates', async () => {
     const admin = createAdminClient({
       task: buildTask({
+        title: 'C517773 (NOOTEBOOM)',
+        description: '6 WEEKLY PMI',
+        hgv_id: 'hgv-nooteboom',
+        workshop_task_subcategories: {
+          name: '6 weekly inspection (HGV)',
+        },
+        created_at: '2026-05-10T09:00:00.000Z',
+        logged_at: '2026-05-11T06:00:00.000Z',
         actioned: true,
-        actioned_at: '2026-04-13T12:00:00.000Z',
+        actioned_at: '2026-05-13T14:26:00.000Z',
         actioned_by: 'user-completed',
         actioned_comment: 'Completed work',
         status_history: [
@@ -203,7 +284,7 @@ describe('PATCH /api/workshop-tasks/tasks/[taskId]/timeline/[timelineItemId]/tim
             id: 'event-started',
             type: 'status',
             status: 'logged',
-            created_at: '2026-04-13T10:00:00.000Z',
+            created_at: '2026-05-11T06:00:00.000Z',
             author_id: 'user-started',
             author_name: 'Starter',
             body: 'Started work',
@@ -212,22 +293,39 @@ describe('PATCH /api/workshop-tasks/tasks/[taskId]/timeline/[timelineItemId]/tim
             id: 'event-completed',
             type: 'status',
             status: 'completed',
-            created_at: '2026-04-13T12:00:00.000Z',
+            created_at: '2026-05-13T14:26:00.000Z',
             author_id: 'user-completed',
             author_name: 'Completer',
             body: 'Completed work',
             meta: {
               signature_data: 'data:image/png;base64,signature',
-              signed_at: '2026-04-13T12:00:00.000Z',
+              signed_at: '2026-05-13T14:26:00.000Z',
             },
           },
         ],
       }),
       comments: [],
+      maintenanceCategories: [
+        {
+          id: 'cat-6-week',
+          name: '6 Weekly Inspection Due',
+          type: 'date',
+          period_unit: 'weeks',
+          period_value: 6,
+          applies_to: ['hgv'],
+          is_active: true,
+        },
+      ],
+      maintenanceRecord: {
+        id: 'maintenance-1',
+        current_mileage: 101,
+        current_hours: null,
+        six_weekly_inspection_due_date: '2026-06-24',
+      },
     });
     mockCreateAdminSupabaseClient.mockReturnValue(admin.client);
 
-    const nextTimestamp = '2026-04-13T12:30:00.000Z';
+    const nextTimestamp = '2026-05-11T14:26:00.000Z';
     const response = await callRoute({
       timelineItemId: 'completed',
       itemType: 'status_event',
@@ -253,6 +351,246 @@ describe('PATCH /api/workshop-tasks/tasks/[taskId]/timeline/[timelineItemId]/tim
         ]),
       })
     );
+    expect(admin.attachmentUpdate).toHaveBeenCalledWith({ completed_at: nextTimestamp });
+    expect(admin.attachmentUpdateEqTask).toHaveBeenCalledWith('task_id', TASK_ID);
+    expect(admin.attachmentUpdateEqStatus).toHaveBeenCalledWith('status', 'completed');
+    expect(admin.maintenanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        six_weekly_inspection_due_date: '2026-06-22',
+        last_updated_by: 'manager-1',
+      })
+    );
+    expect(admin.maintenanceUpdateEq).toHaveBeenCalledWith('id', 'maintenance-1');
+    expect(admin.maintenanceHistoryInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        hgv_id: 'hgv-nooteboom',
+        field_name: 'six_weekly_inspection_due_date',
+        old_value: '2026-06-24',
+        new_value: '2026-06-22',
+        maintenance_category_id: 'cat-6-week',
+      }),
+    ]);
+  });
+
+  it('does not create duplicate maintenance history when the recalculated due date is unchanged', async () => {
+    const admin = createAdminClient({
+      task: buildTask({
+        title: 'C517773 (NOOTEBOOM)',
+        description: '6 WEEKLY PMI',
+        hgv_id: 'hgv-nooteboom',
+        workshop_task_subcategories: {
+          name: '6 weekly inspection (HGV)',
+        },
+        actioned: true,
+        actioned_at: '2026-05-13T14:26:00.000Z',
+        actioned_by: 'user-completed',
+        actioned_comment: 'Completed work',
+        status_history: [
+          {
+            id: 'event-started',
+            type: 'status',
+            status: 'logged',
+            created_at: '2026-05-11T06:00:00.000Z',
+            author_id: 'user-started',
+            author_name: 'Starter',
+            body: 'Started work',
+          },
+          {
+            id: 'event-completed',
+            type: 'status',
+            status: 'completed',
+            created_at: '2026-05-13T14:26:00.000Z',
+            author_id: 'user-completed',
+            author_name: 'Completer',
+            body: 'Completed work',
+          },
+        ],
+      }),
+      comments: [],
+      maintenanceCategories: [
+        {
+          id: 'cat-6-week',
+          name: '6 Weekly Inspection Due',
+          type: 'date',
+          period_unit: 'weeks',
+          period_value: 6,
+          applies_to: ['hgv'],
+          is_active: true,
+        },
+      ],
+      maintenanceRecord: {
+        id: 'maintenance-1',
+        current_mileage: 101,
+        current_hours: null,
+        six_weekly_inspection_due_date: '2026-06-22',
+      },
+    });
+    mockCreateAdminSupabaseClient.mockReturnValue(admin.client);
+
+    const response = await callRoute({
+      timelineItemId: 'completed',
+      itemType: 'status_event',
+      timestamp: '2026-05-11T14:26:00.000Z',
+    });
+
+    expect(response.status).toBe(200);
+    expect(admin.maintenanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        six_weekly_inspection_due_date: '2026-06-22',
+      })
+    );
+    expect(admin.maintenanceHistoryInsert).not.toHaveBeenCalled();
+  });
+
+  it('chains maintenance history old and new values across sequential re-adjustments', async () => {
+    const admin = createAdminClient({
+      task: buildTask({
+        title: 'C517773 (NOOTEBOOM)',
+        description: '6 WEEKLY PMI',
+        hgv_id: 'hgv-nooteboom',
+        workshop_task_subcategories: {
+          name: '6 weekly inspection (HGV)',
+        },
+        actioned: true,
+        actioned_at: '2026-05-11T14:26:00.000Z',
+        actioned_by: 'user-completed',
+        actioned_comment: 'Completed work',
+        status_history: [
+          {
+            id: 'event-started',
+            type: 'status',
+            status: 'logged',
+            created_at: '2026-05-11T06:00:00.000Z',
+            author_id: 'user-started',
+            author_name: 'Starter',
+            body: 'Started work',
+          },
+          {
+            id: 'event-completed',
+            type: 'status',
+            status: 'completed',
+            created_at: '2026-05-11T14:26:00.000Z',
+            author_id: 'user-completed',
+            author_name: 'Completer',
+            body: 'Completed work',
+            meta: {
+              timestamp_adjusted: true,
+            },
+          },
+        ],
+      }),
+      comments: [],
+      maintenanceCategories: [
+        {
+          id: 'cat-6-week',
+          name: '6 Weekly Inspection Due',
+          type: 'date',
+          period_unit: 'weeks',
+          period_value: 6,
+          applies_to: ['hgv'],
+          is_active: true,
+        },
+      ],
+      maintenanceRecord: {
+        id: 'maintenance-1',
+        current_mileage: 101,
+        current_hours: null,
+        six_weekly_inspection_due_date: '2026-06-22',
+      },
+    });
+    mockCreateAdminSupabaseClient.mockReturnValue(admin.client);
+
+    const response = await callRoute({
+      timelineItemId: 'completed',
+      itemType: 'status_event',
+      timestamp: '2026-05-12T14:26:00.000Z',
+    });
+
+    expect(response.status).toBe(200);
+    expect(admin.maintenanceHistoryInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        hgv_id: 'hgv-nooteboom',
+        field_name: 'six_weekly_inspection_due_date',
+        old_value: '2026-06-22',
+        new_value: '2026-06-23',
+      }),
+    ]);
+  });
+
+  it('does not recalculate maintenance when adjusting a non-latest completed event', async () => {
+    const admin = createAdminClient({
+      task: buildTask({
+        title: 'C517773 (NOOTEBOOM)',
+        description: '6 WEEKLY PMI',
+        hgv_id: 'hgv-nooteboom',
+        workshop_task_subcategories: {
+          name: '6 weekly inspection (HGV)',
+        },
+        actioned: true,
+        actioned_at: '2026-05-13T14:26:00.000Z',
+        actioned_by: 'user-completed',
+        actioned_comment: 'Latest completed work',
+        status_history: [
+          {
+            id: 'event-started',
+            type: 'status',
+            status: 'logged',
+            created_at: '2026-05-10T06:00:00.000Z',
+            author_id: 'user-started',
+            author_name: 'Starter',
+            body: 'Started work',
+          },
+          {
+            id: 'event-completed-early',
+            type: 'status',
+            status: 'completed',
+            created_at: '2026-05-11T14:26:00.000Z',
+            author_id: 'user-completed',
+            author_name: 'Completer',
+            body: 'First completion',
+          },
+          {
+            id: 'event-completed-latest',
+            type: 'status',
+            status: 'completed',
+            created_at: '2026-05-13T14:26:00.000Z',
+            author_id: 'user-completed',
+            author_name: 'Completer',
+            body: 'Latest completion',
+          },
+        ],
+      }),
+      comments: [],
+      maintenanceCategories: [
+        {
+          id: 'cat-6-week',
+          name: '6 Weekly Inspection Due',
+          type: 'date',
+          period_unit: 'weeks',
+          period_value: 6,
+          applies_to: ['hgv'],
+          is_active: true,
+        },
+      ],
+      maintenanceRecord: {
+        id: 'maintenance-1',
+        current_mileage: 101,
+        current_hours: null,
+        six_weekly_inspection_due_date: '2026-06-24',
+      },
+    });
+    mockCreateAdminSupabaseClient.mockReturnValue(admin.client);
+
+    const response = await callRoute({
+      timelineItemId: 'event-completed-early',
+      itemType: 'status_event',
+      timestamp: '2026-05-12T14:26:00.000Z',
+    });
+
+    expect(response.status).toBe(200);
+    expect(admin.attachmentUpdate).not.toHaveBeenCalled();
+    expect(admin.maintenanceUpdate).not.toHaveBeenCalled();
+    expect(admin.maintenanceHistoryInsert).not.toHaveBeenCalled();
   });
 
   it('updates comment timestamps on workshop_task_comments', async () => {

@@ -92,7 +92,7 @@ describe('MaintenanceTable tablet controls', () => {
       </TabletModeProvider>
     );
 
-    const input = screen.getByPlaceholderText('Search by registration number...');
+    const input = screen.getByPlaceholderText('Search Vans...');
     await waitFor(() => {
       expect(input).toBeInTheDocument();
     });
@@ -112,7 +112,7 @@ describe('MaintenanceTable tablet controls', () => {
       </TabletModeProvider>
     );
 
-    const input = screen.getByPlaceholderText('Search by registration number...');
+    const input = screen.getByPlaceholderText('Search Vans...');
     await waitFor(() => {
       expect(input.className).toContain('min-h-11');
     });

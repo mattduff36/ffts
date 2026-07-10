@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { AbsenceWeeklyPrintPdf } from '@/lib/pdf/absence-weekly-print-pdf';
+import { buildSafeReportFilename, parseReportDateRange, validateRequiredReportDateRange } from '@/lib/server/report-date-range';
 import { getPrintableAbsenceWeeklyReportData } from '@/lib/server/absence-weekly-print-report';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
@@ -12,13 +13,21 @@ function resolveErrorStatus(message: string): number {
 }
 
 export async function GET(request: NextRequest) {
-  const dateFrom = request.nextUrl.searchParams.get('dateFrom') || '';
-  const dateTo = request.nextUrl.searchParams.get('dateTo') || '';
+  const { range, error: dateRangeError } = parseReportDateRange(request.nextUrl.searchParams);
+  const requiredRangeError = validateRequiredReportDateRange(range, 366);
+  if (dateRangeError || requiredRangeError || !range?.dateFrom || !range.dateTo) {
+    return NextResponse.json(
+      { error: dateRangeError || requiredRangeError || 'dateFrom and dateTo are required.' },
+      { status: 400 }
+    );
+  }
+
+  const { dateFrom, dateTo } = range;
 
   try {
     const report = await getPrintableAbsenceWeeklyReportData({ dateFrom, dateTo });
     const pdfBuffer = await renderToBuffer(AbsenceWeeklyPrintPdf({ report }));
-    const fileName = `Absence_Weekly_Print_${dateFrom}_to_${dateTo}.pdf`;
+    const fileName = buildSafeReportFilename('Absence_Weekly_Print', range.filenameDateRange, 'pdf');
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {

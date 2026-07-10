@@ -136,7 +136,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const bookingRange = formatAbsenceRange(absence.date, absence.end_date);
     const subject = `Leave cancellation request from ${employeeName}`;
     const body = [
-      `${employeeName} tried to cancel a leave booking in DigiDocs.`,
+      `${employeeName} tried to cancel a leave booking in Forest Farm Operations.`,
       '',
       `Type: ${reasonName}`,
       `Booking: ${bookingRange}`,
@@ -154,6 +154,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         priority: 'LOW',
         sender_id: current.profile.id,
         created_via: 'absence_contact_line_manager',
+        module_key: 'absence',
       })
       .select('id')
       .single();

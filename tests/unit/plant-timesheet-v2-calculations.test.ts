@@ -15,6 +15,7 @@ function createEntry(overrides: Partial<PlantEntryDraft> = {}): PlantEntryDraft 
     job_number: '',
     job_numbers: [],
     working_in_yard: false,
+    subsistence_payment_required: false,
     time_started: '',
     time_finished: '',
     operator_travel_hours: '',
@@ -76,6 +77,19 @@ describe('PlantTimesheetV2 calculations', () => {
     );
 
     expect(result.daily_total).toBe(9.5);
+  });
+
+  it('does not change plant payable hours when subsistence is marked', () => {
+    const result = recalculateEntry(
+      createEntry({
+        time_started: '08:00',
+        time_finished: '17:00',
+        subsistence_payment_required: true,
+      })
+    );
+
+    expect(result.daily_total).toBe(8.5);
+    expect(result.subsistence_payment_required).toBe(true);
   });
 
   it('forces locked leave totals to paid leave hours', () => {

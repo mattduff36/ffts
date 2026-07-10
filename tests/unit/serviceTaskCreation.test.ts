@@ -96,7 +96,7 @@ describe('Service Task Creation', () => {
 
     expect(tax.title).toBe('Tax Due - AB12 CDE');
     expect(tax.comments).toContain('Vehicle tax requires renewal');
-    expect(loler.title).toBe('LOLOR Inspection Due - PLANT-07');
+    expect(loler.title).toBe('LOLER THOROUGH EXAMINATION Due - PLANT-07');
     expect(loler.comments).toContain('Lifting Operations and Lifting Equipment Regulations');
   });
 

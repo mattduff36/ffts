@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-access';
+import { WORKSHOP_TASK_COMMENT_MIN_LENGTH } from '@/lib/workshop-tasks/validation';
 
 type ActionInsert = Database['public']['Tables']['actions']['Insert'];
 
@@ -28,6 +29,15 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+
+    if (typeof comments !== 'string' || comments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
+      return NextResponse.json(
+        { error: `Comment must be at least ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
+    const trimmedComments = comments.trim();
 
     const supabaseAdmin = createSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,7 +90,7 @@ export async function POST(request: NextRequest) {
       action_type: 'workshop_vehicle_task',
       hgv_id: hgvId,
       title: `HGV ${hgvReg}: Inspector Comments`,
-      description: comments,
+      description: trimmedComments,
       status: 'pending',
       created_by: createdBy,
       inspection_id: inspectionId,

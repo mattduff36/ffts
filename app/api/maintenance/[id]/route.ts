@@ -2,8 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/utils/logger';
 import type {
+  CustomMaintenanceItemUpdate,
   UpdateMaintenanceRequest
 } from '@/types/maintenance';
+
+interface CustomCategoryRow {
+  id: string;
+  name: string;
+  type: 'date' | 'mileage' | 'hours';
+  field_key: string | null;
+}
+
+interface CustomValueRow {
+  id: string;
+  maintenance_category_id: string;
+  due_date: string | null;
+  due_mileage: number | null;
+  last_mileage: number | null;
+  due_hours: number | null;
+  last_hours: number | null;
+  notes: string | null;
+}
+
+function serializeCustomValue(value?: CustomValueRow | CustomMaintenanceItemUpdate | null): string | null {
+  if (!value) return null;
+  const dueValue = value.due_date ?? value.due_mileage ?? value.due_hours ?? null;
+  const lastValue = value.last_mileage ?? value.last_hours ?? null;
+  if (lastValue != null && dueValue != null) return `${lastValue} -> ${dueValue}`;
+  if (dueValue != null) return String(dueValue);
+  if (lastValue != null) return String(lastValue);
+  return value.notes ? value.notes.slice(0, 50) : null;
+}
+
+function isEmptyCustomValue(value: CustomMaintenanceItemUpdate): boolean {
+  return value.due_date == null
+    && value.due_mileage == null
+    && value.last_mileage == null
+    && value.due_hours == null
+    && value.last_hours == null
+    && !value.notes;
+}
 
 /**
  * PUT /api/maintenance/[id]
@@ -259,6 +297,128 @@ export async function PUT(
         });
       }
     }
+
+    const customItems = body.custom_items || [];
+    const customHistoryEntries: Array<{
+      van_id: string | null;
+      plant_id: string | null;
+      hgv_id: string | null;
+      maintenance_category_id: string;
+      field_name: string;
+      old_value: string | null;
+      new_value: string | null;
+      value_type: 'date' | 'mileage' | 'boolean' | 'text';
+      comment: string;
+      updated_by: string;
+      updated_by_name: string;
+    }> = [];
+
+    if (customItems.length > 0) {
+      const assetColumn = currentRecord.van_id ? 'van_id' : currentRecord.hgv_id ? 'hgv_id' : currentRecord.plant_id ? 'plant_id' : null;
+      const assetId = currentRecord.van_id || currentRecord.hgv_id || currentRecord.plant_id;
+
+      if (!assetColumn || !assetId) {
+        return NextResponse.json(
+          { error: 'Maintenance record is not linked to an asset' },
+          { status: 400 }
+        );
+      }
+
+      const categoryIds = [...new Set(customItems.map(item => item.category_id))];
+      const { data: customCategories, error: customCategoriesError } = await (supabase as never as { from: (table: string) => { select: (columns: string) => { in: (column: string, values: string[]) => Promise<{ data: unknown; error: unknown }> } } })
+        .from('maintenance_categories')
+        .select('id, name, type, field_key')
+        .in('id', categoryIds);
+
+      if (customCategoriesError) {
+        logger.error('Failed to fetch custom categories', customCategoriesError);
+        throw customCategoriesError;
+      }
+
+      const categoriesById = new Map(((customCategories || []) as CustomCategoryRow[]).map(category => [category.id, category]));
+
+      const { data: existingCustomValues, error: existingCustomValuesError } = await (supabase as never as { from: (table: string) => { select: (columns: string) => { in: (column: string, values: string[]) => { eq: (column: string, value: string) => Promise<{ data: unknown; error: unknown }> } } } })
+        .from('asset_maintenance_category_values')
+        .select('id, maintenance_category_id, due_date, due_mileage, last_mileage, due_hours, last_hours, notes')
+        .in('maintenance_category_id', categoryIds)
+        .eq(assetColumn, assetId);
+
+      if (existingCustomValuesError) {
+        logger.error('Failed to fetch custom category values', existingCustomValuesError);
+        throw existingCustomValuesError;
+      }
+
+      const existingValuesByCategoryId = new Map(
+        ((existingCustomValues || []) as CustomValueRow[]).map(value => [value.maintenance_category_id, value])
+      );
+
+      for (const item of customItems) {
+        const category = categoriesById.get(item.category_id);
+        if (!category || category.field_key) continue;
+
+        const existingValue = existingValuesByCategoryId.get(item.category_id) || null;
+        const oldValue = serializeCustomValue(existingValue);
+        const newValue = serializeCustomValue(item);
+        if (oldValue === newValue) continue;
+
+        if (isEmptyCustomValue(item)) {
+          if (existingValue) {
+            const { error: deleteValueError } = await (supabase as never as { from: (table: string) => { delete: () => { eq: (column: string, value: string) => Promise<{ error: unknown }> } } })
+              .from('asset_maintenance_category_values')
+              .delete()
+              .eq('id', existingValue.id);
+
+            if (deleteValueError) {
+              logger.error('Failed to clear custom category value', deleteValueError);
+              throw deleteValueError;
+            }
+          }
+        } else {
+          const { error: upsertValueError } = await (supabase as never as { from: (table: string) => { upsert: (row: unknown, options: { onConflict: string }) => Promise<{ error: unknown }> } })
+            .from('asset_maintenance_category_values')
+            .upsert({
+              maintenance_category_id: item.category_id,
+              van_id: currentRecord.van_id,
+              hgv_id: currentRecord.hgv_id,
+              plant_id: currentRecord.plant_id,
+              due_date: item.due_date ?? null,
+              due_mileage: item.due_mileage ?? null,
+              last_mileage: item.last_mileage ?? null,
+              due_hours: item.due_hours ?? null,
+              last_hours: item.last_hours ?? null,
+              notes: item.notes ?? null,
+              last_updated_by: user.id,
+              last_updated_at: new Date().toISOString(),
+            }, { onConflict: 'maintenance_category_id,asset_type,asset_id' });
+
+          if (upsertValueError) {
+            logger.error('Failed to upsert custom category value', upsertValueError);
+            throw upsertValueError;
+          }
+        }
+
+        changedFields.push({
+          field_name: `category:${category.name}`,
+          old_value: oldValue,
+          new_value: newValue,
+          value_type: category.type === 'date' ? 'date' : category.type === 'mileage' ? 'mileage' : 'text',
+        });
+
+        customHistoryEntries.push({
+          van_id: currentRecord.van_id,
+          plant_id: currentRecord.plant_id,
+          hgv_id: currentRecord.hgv_id,
+          maintenance_category_id: item.category_id,
+          field_name: `category:${category.name}`,
+          old_value: oldValue,
+          new_value: newValue,
+          value_type: category.type === 'date' ? 'date' : category.type === 'mileage' ? 'mileage' : 'text',
+          comment: body.comment,
+          updated_by: user.id,
+          updated_by_name: userName,
+        });
+      }
+    }
     
     // If no fields changed, still create history entry but just return current record
     if (changedFields.length === 0) {
@@ -310,18 +470,23 @@ export async function PUT(
     }
     
     // Create history entries for all changed fields
-    const historyEntries = changedFields.map(change => ({
-      van_id: currentRecord.van_id,
-      plant_id: currentRecord.plant_id,
-      hgv_id: currentRecord.hgv_id,
-      field_name: change.field_name,
-      old_value: change.old_value,
-      new_value: change.new_value,
-      value_type: change.value_type,
-      comment: body.comment,
-      updated_by: user.id,
-      updated_by_name: userName
-    }));
+    const historyEntries = [
+      ...changedFields
+        .filter(change => !change.field_name.startsWith('category:'))
+        .map(change => ({
+          van_id: currentRecord.van_id,
+          plant_id: currentRecord.plant_id,
+          hgv_id: currentRecord.hgv_id,
+          field_name: change.field_name,
+          old_value: change.old_value,
+          new_value: change.new_value,
+          value_type: change.value_type,
+          comment: body.comment,
+          updated_by: user.id,
+          updated_by_name: userName
+        })),
+      ...customHistoryEntries,
+    ];
     
     const { data: historyData, error: historyError } = await supabase
       .from('maintenance_history')

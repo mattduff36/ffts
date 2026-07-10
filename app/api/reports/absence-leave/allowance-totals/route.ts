@@ -7,6 +7,7 @@ import { logServerError } from '@/lib/utils/server-error-logger';
 import { generateExcelFile, formatExcelDate } from '@/lib/utils/excel';
 import { getFinancialYear } from '@/lib/utils/date';
 import { fetchCarryoverMapForFinancialYear, getEffectiveAllowance } from '@/lib/utils/absence-carryover';
+import { filterHiddenSystemTestAccounts } from '@/lib/utils/system-test-accounts';
 
 interface ProfileReportRow {
   id: string;
@@ -182,7 +183,7 @@ export async function GET(request: NextRequest) {
         throw profileError;
       }
 
-      const scopedProfiles = ((profileRows || []) as ProfileReportRow[]).filter((profile) =>
+      const scopedProfiles = filterHiddenSystemTestAccounts((profileRows || []) as ProfileReportRow[]).filter((profile) =>
         canActorUseScopedAbsencePermission({
           actorPermissions: actorAbsencePermissions,
           target: {
@@ -345,7 +346,7 @@ export async function GET(request: NextRequest) {
     if (profileError) {
       throw profileError;
     }
-    const allProfiles = (profileRows || []) as ProfileReportRow[];
+    const allProfiles = filterHiddenSystemTestAccounts((profileRows || []) as ProfileReportRow[]);
 
     if (allProfiles.length === 0) {
       return NextResponse.json({ error: 'No employees found for the selected criteria' }, { status: 404 });

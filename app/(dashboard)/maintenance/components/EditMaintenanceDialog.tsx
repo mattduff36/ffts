@@ -1,9 +1,19 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -16,13 +26,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Save, Archive } from 'lucide-react';
-import type { VehicleMaintenanceWithStatus } from '@/types/maintenance';
-import { useUpdateMaintenance, useCreateMaintenance } from '@/lib/hooks/useMaintenance';
+import { AlertTriangle, Loader2, Save, Archive } from 'lucide-react';
+import type { CustomMaintenanceItemUpdate, VehicleMaintenanceWithStatus } from '@/types/maintenance';
+import { useUpdateMaintenance, useCreateMaintenance, useMaintenance } from '@/lib/hooks/useMaintenance';
 import { formatDateForInput } from '@/lib/utils/maintenanceCalculations';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import { formatRegistrationForInput } from './add-asset/utils';
 
 // ============================================================================
 // Zod Validation Schema
@@ -30,6 +41,11 @@ import { toast } from 'sonner';
 
 const editMaintenanceSchema = z.object({
   nickname: z.string().max(100, 'Nickname must be less than 100 characters').optional().nullable(),
+  reg_number: z.string()
+    .min(2, 'VRN must be at least 2 characters')
+    .max(12, 'VRN must be less than 12 characters')
+    .optional()
+    .nullable(),
   current_mileage: z.preprocess(
     (val) => val === '' || val === null || val === undefined ? null : Number(val),
     z.number().int().positive('Current reading must be a positive number').optional().nullable()
@@ -75,6 +91,43 @@ const editMaintenanceSchema = z.object({
 
 type EditMaintenanceFormData = z.infer<typeof editMaintenanceSchema>;
 
+interface CustomItemFormValue extends CustomMaintenanceItemUpdate {
+  category_name: string;
+  category_type: 'date' | 'mileage' | 'hours';
+}
+
+interface EditableMaintenanceRecord extends Omit<VehicleMaintenanceWithStatus, 'id'> {
+  id: string | null;
+}
+
+interface VrnComparisonDifference {
+  key: string;
+  label: string;
+  source: 'DVLA' | 'MOT';
+  oldValue: string | null;
+  newValue: string | null;
+}
+
+interface VrnLookupWarning {
+  registrationNumber: string;
+  source: 'DVLA' | 'MOT';
+  message: string;
+}
+
+interface VrnChangeComparison {
+  oldRegistration: string;
+  newRegistration: string;
+  hasDifferences: boolean;
+  differences: VrnComparisonDifference[];
+  warnings: VrnLookupWarning[];
+}
+
+interface VrnChangeCheckResponse {
+  requiresConfirmation?: boolean;
+  comparison?: VrnChangeComparison | null;
+  error?: string;
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -82,7 +135,7 @@ type EditMaintenanceFormData = z.infer<typeof editMaintenanceSchema>;
 interface EditMaintenanceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  vehicle: VehicleMaintenanceWithStatus | null;
+  vehicle: EditableMaintenanceRecord | null;
   onSuccess?: () => void;
   onRetire?: () => void;
 }
@@ -97,15 +150,69 @@ export function EditMaintenanceDialog({
   const supabase = createClient();
   const updateMutation = useUpdateMaintenance();
   const createMutation = useCreateMaintenance();
+  const { data: maintenanceData } = useMaintenance();
   const [isMileageFocused, setIsMileageFocused] = useState(false);
+  const [customItemValues, setCustomItemValues] = useState<CustomItemFormValue[]>([]);
+  const [customItemsDirty, setCustomItemsDirty] = useState(false);
+  const [isCheckingVrn, setIsCheckingVrn] = useState(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState<EditMaintenanceFormData | null>(null);
+  const [vrnComparison, setVrnComparison] = useState<VrnChangeComparison | null>(null);
+  const [vrnConfirmOpen, setVrnConfirmOpen] = useState(false);
   const dialogContentRef = useRef<HTMLDivElement>(null);
   const assetTypeLabel = vehicle?.vehicle?.asset_type === 'plant' ? 'Plant' : vehicle?.vehicle?.asset_type === 'hgv' ? 'HGV' : 'Van';
   const isHgvAsset = vehicle?.vehicle?.asset_type === 'hgv';
+  const isVanAsset = vehicle?.vehicle?.asset_type === 'van' || !vehicle?.vehicle?.asset_type;
   const distanceUnitLabel = isHgvAsset ? 'KM' : 'Miles';
   const currentDistanceLabel = isHgvAsset ? 'Current KM' : 'Current Mileage';
   
   // Check if this is a new maintenance record (vehicle.id is null for vans without maintenance records)
   const isNewRecord = !vehicle?.id;
+
+  const assetId = vehicle?.hgv_id || vehicle?.van_id || vehicle?.plant_id || vehicle?.vehicle?.id || null;
+  const dynamicMaintenanceRecord = useMemo(() => {
+    if (!assetId) return null;
+
+    return maintenanceData?.vehicles.find(record =>
+      record.hgv_id === assetId
+      || record.van_id === assetId
+      || record.plant_id === assetId
+      || record.vehicle?.id === assetId
+    ) || null;
+  }, [assetId, maintenanceData?.vehicles]);
+  const effectiveMaintenanceItems = useMemo(() => {
+    if ((vehicle?.maintenance_items?.length ?? 0) > 0) return vehicle?.maintenance_items || [];
+    return dynamicMaintenanceRecord?.maintenance_items || [];
+  }, [dynamicMaintenanceRecord?.maintenance_items, vehicle?.maintenance_items]);
+  const defaultSystemFieldKeys = useMemo(() => {
+    if (vehicle?.vehicle?.asset_type === 'hgv') {
+      return new Set([
+        'tax_due_date',
+        'mot_due_date',
+        'first_aid_kit_expiry',
+        'six_weekly_inspection_due_date',
+        'fire_extinguisher_due_date',
+        'taco_calibration_due_date',
+      ]);
+    }
+
+    if (vehicle?.vehicle?.asset_type === 'plant') {
+      return new Set(['next_service_hours']);
+    }
+
+    return new Set([
+      'tax_due_date',
+      'mot_due_date',
+      'first_aid_kit_expiry',
+      'next_service_mileage',
+      'cambelt_due_mileage',
+    ]);
+  }, [vehicle?.vehicle?.asset_type]);
+  const hasSystemItem = (fieldKey: string) => {
+    if (effectiveMaintenanceItems.some(item => item.category_field_key === fieldKey)) return true;
+    if (effectiveMaintenanceItems.length > 0) return false;
+    return defaultSystemFieldKeys.has(fieldKey);
+  };
+  const customItems = customItemValues.filter(item => !item.category_name.startsWith('__'));
 
   // Initialize form
   const {
@@ -113,6 +220,7 @@ export function EditMaintenanceDialog({
     handleSubmit,
     formState: { errors, isSubmitting, isDirty },
     reset,
+    setValue,
     watch,
   } = useForm<EditMaintenanceFormData>({
     resolver: zodResolver(editMaintenanceSchema) as never,
@@ -120,6 +228,7 @@ export function EditMaintenanceDialog({
 
   // Watch comment field for character count
   const commentValue = watch('comment') || '';
+  const regNumberValue = watch('reg_number') || '';
   const commentLength = commentValue.trim().length;
 
   // Reset form when vehicle changes
@@ -127,6 +236,7 @@ export function EditMaintenanceDialog({
     if (vehicle) {
       reset({
         nickname: vehicle.vehicle?.nickname || '',
+        reg_number: formatRegistrationForInput(vehicle.vehicle?.reg_number || ''),
         current_mileage: vehicle.current_mileage || undefined,
         tax_due_date: formatDateForInput(vehicle.tax_due_date),
         mot_due_date: formatDateForInput(vehicle.mot_due_date),
@@ -143,13 +253,29 @@ export function EditMaintenanceDialog({
         tracker_id: vehicle.tracker_id || '',
         comment: '',
       });
+      setCustomItemValues(
+        effectiveMaintenanceItems
+          .filter(item => item.source === 'custom')
+          .map(item => ({
+            category_id: item.category_id,
+            category_name: item.category_name,
+            category_type: item.category_type,
+            due_date: formatDateForInput(item.due_date),
+            due_mileage: item.due_mileage,
+            last_mileage: item.last_mileage,
+            due_hours: item.due_hours,
+            last_hours: item.last_hours,
+            notes: null,
+          }))
+      );
+      setCustomItemsDirty(false);
     }
-  }, [vehicle, reset]);
+  }, [effectiveMaintenanceItems, vehicle, reset]);
 
   // Handle modal close attempts
   const handleOpenChange = (newOpen: boolean) => {
     // If trying to close and form has unsaved changes, prevent close and shake
-    if (!newOpen && isDirty) {
+    if (!newOpen && (isDirty || customItemsDirty)) {
       triggerShakeAnimation(dialogContentRef.current);
       return;
     }
@@ -161,32 +287,101 @@ export function EditMaintenanceDialog({
   // Handle explicit close button click - discard changes
   const handleDiscardChanges = () => {
     reset(); // Reset form to original values
+    setCustomItemsDirty(false);
     onOpenChange(false);
   };
 
+  const updateCustomItemValue = (
+    categoryId: string,
+    field: keyof Omit<CustomItemFormValue, 'category_id' | 'category_name' | 'category_type'>,
+    value: string
+  ) => {
+    setCustomItemValues(prev => prev.map(item => {
+      if (item.category_id !== categoryId) return item;
+
+      const parsedValue = field === 'due_date' || field === 'notes'
+        ? (value || null)
+        : value === ''
+          ? null
+          : Number(value);
+
+      return {
+        ...item,
+        [field]: parsedValue,
+      };
+    }));
+    setCustomItemsDirty(true);
+  };
+
+  const normalizeRegistration = (registrationNumber: string | null | undefined) =>
+    registrationNumber?.replace(/\s+/g, '').trim().toUpperCase() || '';
+
+  const hasVrnChanged = (data: EditMaintenanceFormData) =>
+    isVanAsset
+    && Boolean(vehicle?.vehicle?.id)
+    && normalizeRegistration(data.reg_number) !== normalizeRegistration(vehicle?.vehicle?.reg_number);
+
+  const checkVrnChange = async (data: EditMaintenanceFormData) => {
+    if (!vehicle?.vehicle?.id || !data.reg_number) return false;
+
+    setIsCheckingVrn(true);
+    try {
+      const response = await fetch(`/api/admin/vans/${vehicle.vehicle.id}/vrn-change-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_reg_number: data.reg_number.trim() }),
+      });
+      const result = (await response.json()) as VrnChangeCheckResponse;
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to compare registration details');
+      }
+
+      if (result.requiresConfirmation && result.comparison) {
+        setPendingSubmitData(data);
+        setVrnComparison(result.comparison);
+        setVrnConfirmOpen(true);
+        return true;
+      }
+
+      return false;
+    } finally {
+      setIsCheckingVrn(false);
+    }
+  };
+
   // Submit handler
-  const onSubmit = async (data: EditMaintenanceFormData) => {
+  const saveMaintenanceChanges = async (data: EditMaintenanceFormData) => {
     if (!vehicle) return;
 
-    // If nickname has changed, update the vehicle record first
+    // If asset display details changed, update the asset record first.
     const nicknameChanged = data.nickname?.trim() !== vehicle.vehicle?.nickname;
-    if (nicknameChanged && vehicle.vehicle?.id) {
+    const regNumberChanged = hasVrnChanged(data);
+    if ((nicknameChanged || regNumberChanged) && vehicle.vehicle?.id) {
       try {
         const endpoint = vehicle.vehicle.asset_type === 'hgv' ? 'hgvs' : 'vans';
+        const body: Record<string, string | null> = {
+          nickname: data.nickname?.trim() || null,
+        };
+
+        if (regNumberChanged) {
+          body.reg_number = data.reg_number?.trim() || null;
+        }
+
         const response = await fetch(`/api/admin/${endpoint}/${vehicle.vehicle.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nickname: data.nickname?.trim() || null,
-          }),
+          body: JSON.stringify(body),
         });
         
         if (!response.ok) {
-          throw new Error('Failed to update vehicle nickname');
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result.error || 'Failed to update asset details');
         }
       } catch (error) {
-        console.error('Error updating vehicle nickname:', error);
-        // Continue with maintenance update even if nickname update fails
+        console.error('Error updating asset details:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to update asset details');
+        return;
       }
     }
 
@@ -209,11 +404,20 @@ export function EditMaintenanceDialog({
       last_service_hours: data.last_service_hours || null,
       next_service_hours: data.next_service_hours || null,
       tracker_id: data.tracker_id || null,
+      custom_items: customItems.map(item => ({
+        category_id: item.category_id,
+        due_date: item.category_type === 'date' ? item.due_date || null : null,
+        due_mileage: item.category_type === 'mileage' ? item.due_mileage ?? null : null,
+        last_mileage: item.category_type === 'mileage' ? item.last_mileage ?? null : null,
+        due_hours: item.category_type === 'hours' ? item.due_hours ?? null : null,
+        last_hours: item.category_type === 'hours' ? item.last_hours ?? null : null,
+        notes: item.notes || null,
+      })),
       // notes field intentionally omitted - kept in DB/backend for future use but hidden from UI
       comment: data.comment.trim(), // Mandatory comment for audit trail (not a DB column)
     };
 
-    if (isNewRecord) {
+    if (!vehicle.id) {
       const vanId = vehicle.van_id;
       const hgvId = vehicle.hgv_id;
 
@@ -233,6 +437,38 @@ export function EditMaintenanceDialog({
     }
     
     onSuccess?.();
+    setCustomItemsDirty(false);
+  };
+
+  const onSubmit = async (data: EditMaintenanceFormData) => {
+    if (hasVrnChanged(data)) {
+      try {
+        const confirmationNeeded = await checkVrnChange(data);
+        if (confirmationNeeded) return;
+      } catch (error) {
+        console.error('Error checking VRN change:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to compare registration details');
+        return;
+      }
+    }
+
+    await saveMaintenanceChanges(data);
+  };
+
+  const handleConfirmVrnChange = async () => {
+    if (!pendingSubmitData) return;
+    await saveMaintenanceChanges(pendingSubmitData);
+    setPendingSubmitData(null);
+    setVrnComparison(null);
+    setVrnConfirmOpen(false);
+  };
+
+  const handleVrnConfirmOpenChange = (newOpen: boolean) => {
+    setVrnConfirmOpen(newOpen);
+    if (!newOpen) {
+      setPendingSubmitData(null);
+      setVrnComparison(null);
+    }
   };
 
   if (!vehicle) return null;
@@ -241,7 +477,7 @@ export function EditMaintenanceDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent 
         ref={dialogContentRef}
-        className="border-border text-white w-full max-w-full md:max-w-2xl h-full md:h-auto max-h-screen md:max-h-[90vh] overflow-y-auto p-4 md:p-6"
+        className="border-border text-white w-full max-w-full md:max-w-2xl h-full md:h-auto max-h-dvh md:max-h-[90dvh] overflow-y-auto p-4 md:p-6"
         onInteractOutside={(e) => {
           // Prevent closing when clicking outside if form has changes
           if (isDirty) {
@@ -270,22 +506,51 @@ export function EditMaintenanceDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Asset Nickname */}
-          <div className="space-y-2">
-            <Label htmlFor="nickname" className="text-white">
-              {assetTypeLabel} Nickname <span className="text-slate-400 text-xs">(Optional)</span>
-            </Label>
-            <Input
-              id="nickname"
-              {...register('nickname')}
-              placeholder="e.g., Andy's Van, Red Pickup, Main Truck"
-              className="bg-input border-border text-white"
-            />
-            <p className="text-xs text-muted-foreground">
-              A friendly name to help identify this asset quickly
-            </p>
-            {errors.nickname && (
-              <p className="text-sm text-red-400">{errors.nickname.message}</p>
+          {/* Asset identity */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="nickname" className="text-white">
+                {assetTypeLabel} Nickname <span className="text-slate-400 text-xs">(Optional)</span>
+              </Label>
+              <Input
+                id="nickname"
+                {...register('nickname')}
+                placeholder="e.g., Andy's Van, Red Pickup, Main Truck"
+                className="bg-input border-border text-white"
+              />
+              <p className="text-xs text-slate-400">
+                Helps identify this asset
+              </p>
+              {errors.nickname && (
+                <p className="text-sm text-red-400">{errors.nickname.message}</p>
+              )}
+            </div>
+
+            {isVanAsset && (
+              <div className="space-y-2">
+                <Label htmlFor="reg_number" className="text-white">
+                  VRN <span className="text-slate-400 text-xs">(Registration)</span>
+                </Label>
+                <Input
+                  id="reg_number"
+                  {...register('reg_number')}
+                  value={regNumberValue}
+                  onChange={(event) => {
+                    setValue('reg_number', formatRegistrationForInput(event.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }}
+                  placeholder="e.g., AB12 CDE"
+                  className="bg-input border-border text-white"
+                />
+                <p className="text-xs text-slate-400">
+                  Checks DVLA/MOT before saving
+                </p>
+                {errors.reg_number && (
+                  <p className="text-sm text-red-400">{errors.reg_number.message}</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -314,7 +579,7 @@ export function EditMaintenanceDialog({
                 </p>
               )}
               {!isMileageFocused && vehicle.last_mileage_update && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   Last updated: {new Date(vehicle.last_mileage_update).toLocaleString()}
                 </p>
               )}
@@ -332,7 +597,7 @@ export function EditMaintenanceDialog({
               </h3>
               
               <div className="grid md:grid-cols-3 gap-4">
-                {/* Tax Due Date */}
+                {hasSystemItem('tax_due_date') && (
                 <div className="space-y-2">
                   <Label htmlFor="tax_due_date">Tax Due Date</Label>
                   <Input
@@ -345,8 +610,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.tax_due_date.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* MOT Due Date */}
+                {hasSystemItem('mot_due_date') && (
                 <div className="space-y-2">
                   <Label htmlFor="mot_due_date">MOT Due Date</Label>
                   <Input
@@ -359,8 +626,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.mot_due_date.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* First Aid Expiry */}
+                {hasSystemItem('first_aid_kit_expiry') && (
                 <div className="space-y-2">
                   <Label htmlFor="first_aid_kit_expiry">First Aid Kit Expiry</Label>
                   <Input
@@ -373,9 +642,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.first_aid_kit_expiry.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* HGV: 6 Weekly Inspection Due */}
-                {vehicle.vehicle?.asset_type === 'hgv' && (
+                {hasSystemItem('six_weekly_inspection_due_date') && (
                   <div className="space-y-2">
                     <Label htmlFor="six_weekly_inspection_due_date">6 Weekly Inspection Due</Label>
                     <Input
@@ -391,7 +661,7 @@ export function EditMaintenanceDialog({
                 )}
 
                 {/* HGV: Fire Extinguisher Due */}
-                {vehicle.vehicle?.asset_type === 'hgv' && (
+                {hasSystemItem('fire_extinguisher_due_date') && (
                   <div className="space-y-2">
                     <Label htmlFor="fire_extinguisher_due_date">Fire Extinguisher Due</Label>
                     <Input
@@ -407,7 +677,7 @@ export function EditMaintenanceDialog({
                 )}
 
                 {/* HGV: Taco Calibration Due */}
-                {vehicle.vehicle?.asset_type === 'hgv' && (
+                {hasSystemItem('taco_calibration_due_date') && (
                   <div className="space-y-2">
                     <Label htmlFor="taco_calibration_due_date">Taco Calibration Due</Label>
                     <Input
@@ -421,6 +691,20 @@ export function EditMaintenanceDialog({
                     )}
                   </div>
                 )}
+                {customItems
+                  .filter(item => item.category_type === 'date')
+                  .map(item => (
+                    <div key={item.category_id} className="space-y-2">
+                      <Label htmlFor={`custom-${item.category_id}`}>{item.category_name}</Label>
+                      <Input
+                        id={`custom-${item.category_id}`}
+                        type="date"
+                        value={item.due_date || ''}
+                        onChange={(event) => updateCustomItemValue(item.category_id, 'due_date', event.target.value)}
+                        className="bg-input border-border text-white"
+                      />
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -434,6 +718,7 @@ export function EditMaintenanceDialog({
               
               <div className="grid md:grid-cols-3 gap-4">
                 {/* Service Due */}
+                {hasSystemItem('next_service_mileage') && (
                 <div className="space-y-2">
                   <Label htmlFor="next_service_mileage">Next Service ({distanceUnitLabel})</Label>
                   <Input
@@ -447,8 +732,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.next_service_mileage.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* Last Service */}
+                {hasSystemItem('next_service_mileage') && (
                 <div className="space-y-2">
                   <Label htmlFor="last_service_mileage">Last Service ({distanceUnitLabel})</Label>
                   <Input
@@ -462,8 +749,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.last_service_mileage.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* Cambelt Due */}
+                {hasSystemItem('cambelt_due_mileage') && (
                 <div className="space-y-2">
                   <Label htmlFor="cambelt_due_mileage">Cambelt Due ({distanceUnitLabel})</Label>
                   <Input
@@ -477,6 +766,35 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.cambelt_due_mileage.message}</p>
                   )}
                 </div>
+                )}
+                {customItems
+                  .filter(item => item.category_type === 'mileage')
+                  .map(item => (
+                    <div key={item.category_id} className="grid md:grid-cols-2 gap-4 md:col-span-3">
+                      <div className="space-y-2">
+                        <Label htmlFor={`custom-last-${item.category_id}`}>Last {item.category_name} ({distanceUnitLabel})</Label>
+                        <Input
+                          id={`custom-last-${item.category_id}`}
+                          type="number"
+                          value={item.last_mileage ?? ''}
+                          onChange={(event) => updateCustomItemValue(item.category_id, 'last_mileage', event.target.value)}
+                          placeholder="e.g., 25000"
+                          className="bg-input border-border text-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`custom-due-${item.category_id}`}>Next {item.category_name} ({distanceUnitLabel})</Label>
+                        <Input
+                          id={`custom-due-${item.category_id}`}
+                          type="number"
+                          value={item.due_mileage ?? ''}
+                          onChange={(event) => updateCustomItemValue(item.category_id, 'due_mileage', event.target.value)}
+                          placeholder="e.g., 50000"
+                          className="bg-input border-border text-white"
+                        />
+                      </div>
+                    </div>
+                  ))}
               </div>
 
             </div>
@@ -501,7 +819,7 @@ export function EditMaintenanceDialog({
                     className="bg-input border-border text-white"
                   />
                   {vehicle.last_hours_update && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       Last updated: {new Date(vehicle.last_hours_update).toLocaleString()}
                     </p>
                   )}
@@ -511,6 +829,7 @@ export function EditMaintenanceDialog({
                 </div>
 
                 {/* Next Service Hours */}
+                {hasSystemItem('next_service_hours') && (
                 <div className="space-y-2">
                   <Label htmlFor="next_service_hours">Next Service (Hours)</Label>
                   <Input
@@ -524,8 +843,10 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.next_service_hours.message}</p>
                   )}
                 </div>
+                )}
 
                 {/* Last Service Hours */}
+                {hasSystemItem('next_service_hours') && (
                 <div className="space-y-2">
                   <Label htmlFor="last_service_hours">Last Service (Hours)</Label>
                   <Input
@@ -539,6 +860,33 @@ export function EditMaintenanceDialog({
                     <p className="text-sm text-red-400">{errors.last_service_hours.message}</p>
                   )}
                 </div>
+                )}
+                {customItems
+                  .filter(item => item.category_type === 'hours')
+                  .map(item => (
+                    <div key={item.category_id} className="grid md:grid-cols-2 gap-4 md:col-span-3">
+                      <div className="space-y-2">
+                        <Label htmlFor={`custom-last-hours-${item.category_id}`}>Last {item.category_name} (Hours)</Label>
+                        <Input
+                          id={`custom-last-hours-${item.category_id}`}
+                          type="number"
+                          value={item.last_hours ?? ''}
+                          onChange={(event) => updateCustomItemValue(item.category_id, 'last_hours', event.target.value)}
+                          className="bg-input border-border text-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`custom-due-hours-${item.category_id}`}>Next {item.category_name} (Hours)</Label>
+                        <Input
+                          id={`custom-due-hours-${item.category_id}`}
+                          type="number"
+                          value={item.due_hours ?? ''}
+                          onChange={(event) => updateCustomItemValue(item.category_id, 'due_hours', event.target.value)}
+                          className="bg-input border-border text-white"
+                        />
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -553,8 +901,8 @@ export function EditMaintenanceDialog({
               placeholder="e.g., 359632101982533"
               className="bg-input border-border text-white placeholder:text-muted-foreground"
             />
-            <p className="text-xs text-muted-foreground">
-              GPS tracking device identifier number
+            <p className="text-xs text-slate-400">
+              GPS device identifier
             </p>
             {errors.tracker_id && (
               <p className="text-sm text-red-400">{errors.tracker_id.message}</p>
@@ -574,8 +922,8 @@ export function EditMaintenanceDialog({
               rows={3}
             />
             <div className="flex items-center justify-between text-xs">
-              <p className="text-muted-foreground">
-                Required: Explain what maintenance was performed and why dates are changing
+              <p className="text-slate-400">
+                Required: explain the change
               </p>
               <p className={`font-mono ${commentLength < 10 ? 'text-red-400' : 'text-green-400'}`}>
                 {commentLength} / 500
@@ -645,16 +993,21 @@ export function EditMaintenanceDialog({
                 variant="outline"
                 onClick={handleDiscardChanges}
                 className="border-slate-600 text-white hover:bg-slate-800"
-                disabled={isSubmitting || updateMutation.isPending || createMutation.isPending}
+                disabled={isCheckingVrn || isSubmitting || updateMutation.isPending || createMutation.isPending}
               >
                 {isDirty ? 'Discard Changes' : 'Cancel'}
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || updateMutation.isPending || createMutation.isPending || commentLength < 10}
+                disabled={isCheckingVrn || isSubmitting || updateMutation.isPending || createMutation.isPending || commentLength < 10}
                 className="bg-maintenance hover:bg-maintenance-dark"
               >
-                {(isSubmitting || updateMutation.isPending || createMutation.isPending) ? (
+                {isCheckingVrn ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Checking VRN...
+                  </>
+                ) : (isSubmitting || updateMutation.isPending || createMutation.isPending) ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     {isNewRecord ? 'Creating...' : 'Saving...'}
@@ -670,6 +1023,66 @@ export function EditMaintenanceDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <AlertDialog open={vrnConfirmOpen} onOpenChange={handleVrnConfirmOpenChange}>
+        <AlertDialogContent className="border-border text-white sm:max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              Registration details differ
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Live DVLA/MOT checks for {vrnComparison?.oldRegistration} and {vrnComparison?.newRegistration} did not return exactly the same details. You can still continue if this private plate change is expected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {vrnComparison?.warnings.length ? (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {vrnComparison.warnings.map((warning) => (
+                <p key={`${warning.registrationNumber}-${warning.source}-${warning.message}`}>
+                  {warning.source} check for {warning.registrationNumber}: {warning.message}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          {vrnComparison?.differences.length ? (
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {vrnComparison.differences.map((difference) => (
+                <div
+                  key={difference.key}
+                  className="grid gap-2 rounded-md border border-slate-700 bg-slate-950/50 p-3 text-sm md:grid-cols-[140px_1fr_1fr]"
+                >
+                  <div>
+                    <p className="font-medium text-white">{difference.label}</p>
+                    <p className="text-xs text-slate-400">{difference.source}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Old VRN</p>
+                    <p className="text-slate-200">{difference.oldValue || 'Not returned'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">New VRN</p>
+                    <p className="text-slate-200">{difference.newValue || 'Not returned'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmVrnChange();
+              }}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+            >
+              Continue and Update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

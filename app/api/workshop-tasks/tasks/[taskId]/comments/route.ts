@@ -327,8 +327,12 @@ export async function POST(
     }
 
     // Parse and validate body
-    const body = await request.json();
-    const bodyText = body.body?.trim();
+    const body = await request.json().catch(() => null) as { body?: unknown } | null;
+    if (!body || typeof body.body !== 'string') {
+      return NextResponse.json({ error: 'Comment cannot be empty' }, { status: 400 });
+    }
+
+    const bodyText = body.body.trim();
 
     if (!bodyText || bodyText.length < 1) {
       return NextResponse.json({ error: 'Comment cannot be empty' }, { status: 400 });

@@ -4,9 +4,11 @@ import { format } from 'date-fns';
 import { formatAssetMeterReading, getAssetMeterLabel, type AssetMeterUnit } from '@/lib/workshop-tasks/asset-meter';
 import { templateConfig } from '@/lib/config/template-config';
 
-const BRAND_YELLOW = templateConfig.branding.brandColor;
+const BRAND_YELLOW = '#f2cc0c';
 const BRAND_YELLOW_LIGHT = '#fff6cc';
 const BRAND_TEXT = '#111827';
+const LOLER_THOROUGH_EXAMINATION = 'LOLER THOROUGH EXAMINATION';
+const LEGACY_LOLER_TYPO_PATTERN = new RegExp(`\\b${['LOLO', 'R'].join('')}\\b`, 'gi');
 
 const styles = StyleSheet.create({
   page: {
@@ -298,12 +300,23 @@ interface WorkshopAttachmentPDFProps {
   assetType: 'van' | 'plant' | 'hgv' | null;
   assetMeterReading?: number | null;
   assetMeterUnit?: AssetMeterUnit | null;
+  inspectorName?: string | null;
+  lolerExpiryDate?: string | null;
+  lolerIntervalLabel?: string | null;
   logoSrc?: string | null;
 }
 
 function normalizeValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function normalizeLolerText(value: string): string {
+  return value
+    .replace(LEGACY_LOLER_TYPO_PATTERN, 'LOLER')
+    .replace(/\bLOLER\s*\/\s*Inspection\b/gi, LOLER_THOROUGH_EXAMINATION)
+    .replace(/\bLOLER\s+Inspection\b/gi, LOLER_THOROUGH_EXAMINATION)
+    .replace(/\bLOLER\b(?!\s+THOROUGH\s+EXAMINATION)/gi, LOLER_THOROUGH_EXAMINATION);
 }
 
 export function isSignatureComplete(responseJson: Record<string, unknown> | null | undefined): boolean {
@@ -381,7 +394,7 @@ function displayValue(field: V2PdfFieldData): string {
   if (field.field_type === 'marking_code') return getMarkingCodeLabel(value);
   if (field.field_type === 'yes_no') return getYesNoLabel(value);
   if (field.field_type === 'date') return formatDateSafe(value);
-  return value;
+  return normalizeLolerText(value);
 }
 
 interface BadgeAppearance {
@@ -427,6 +440,9 @@ export function WorkshopAttachmentPDF({
   assetType,
   assetMeterReading = null,
   assetMeterUnit = null,
+  inspectorName = null,
+  lolerExpiryDate = null,
+  lolerIntervalLabel = '12 months',
   logoSrc = null,
 }: WorkshopAttachmentPDFProps) {
   const itemCount = v2Sections.reduce((count, section) => count + section.fields.length, 0);
@@ -434,6 +450,8 @@ export function WorkshopAttachmentPDF({
     count + section.fields.filter((field) => isV2FieldAnswered(field)).length
   ), 0);
   const formattedAssetMeterReading = formatAssetMeterReading(assetMeterReading);
+  const formattedLolerExpiryDate = lolerExpiryDate ? formatDateSafe(lolerExpiryDate) : '-';
+  const inspectorDisplayName = normalizeLolerText(inspectorName || '-');
 
   return (
     <Document>
@@ -442,9 +460,9 @@ export function WorkshopAttachmentPDF({
           <View style={styles.headerRow}>
             <View style={styles.headerTextWrap}>
               <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
-              <Text style={styles.title}>{templateName}</Text>
+              <Text style={styles.title}>{normalizeLolerText(templateName)}</Text>
               {templateDescription && (
-                <Text style={styles.subtitle}>{templateDescription}</Text>
+                <Text style={styles.subtitle}>{normalizeLolerText(templateDescription)}</Text>
               )}
               <Text style={styles.subtitle}>
                 Workshop Task Attachment Report
@@ -461,12 +479,12 @@ export function WorkshopAttachmentPDF({
           <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.infoRow}>
             <Text style={styles.label}>Task Category:</Text>
-            <Text style={styles.value}>{taskCategory}</Text>
+            <Text style={styles.value}>{normalizeLolerText(taskCategory)}</Text>
           </View>
           {taskTitle && (
             <View style={styles.infoRow}>
               <Text style={styles.label}>Task Description:</Text>
-              <Text style={styles.value}>{taskTitle}</Text>
+              <Text style={styles.value}>{normalizeLolerText(taskTitle)}</Text>
             </View>
           )}
           <View style={styles.infoRow}>
@@ -482,6 +500,26 @@ export function WorkshopAttachmentPDF({
               </Text>
               <Text style={styles.value}>{assetName}</Text>
             </View>
+          )}
+          {assetType === 'plant' && (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Examination:</Text>
+                <Text style={styles.value}>{LOLER_THOROUGH_EXAMINATION}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Interval:</Text>
+                <Text style={styles.value}>{lolerIntervalLabel || '12 months'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Inspector Name:</Text>
+                <Text style={styles.value}>{inspectorDisplayName}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Expiry:</Text>
+                <Text style={styles.value}>{formattedLolerExpiryDate}</Text>
+              </View>
+            </>
           )}
           {formattedAssetMeterReading && (
             <View style={styles.infoRow}>
@@ -535,9 +573,9 @@ export function WorkshopAttachmentPDF({
 
             return (
             <View key={section.section_key} style={{ marginBottom: 10 }}>
-              <Text style={styles.checklistSectionTitle}>{section.title}</Text>
+              <Text style={styles.checklistSectionTitle}>{normalizeLolerText(section.title)}</Text>
               {section.description && (
-                <Text style={styles.checklistSectionDescription}>{section.description}</Text>
+                <Text style={styles.checklistSectionDescription}>{normalizeLolerText(section.description)}</Text>
               )}
 
               {standardFields.length > 0 && (
@@ -555,7 +593,7 @@ export function WorkshopAttachmentPDF({
                     return (
                       <View key={`${section.section_key}::${field.field_key}`} style={styles.checklistRow} wrap={false}>
                         <Text style={styles.checklistLabelCell}>
-                          {field.label}
+                          {normalizeLolerText(field.label)}
                           {field.is_required && <Text style={styles.requiredMarker}> *</Text>}
                         </Text>
 
@@ -591,7 +629,7 @@ export function WorkshopAttachmentPDF({
                         wrap={false}
                       >
                         <View style={styles.signatureInfoColumn}>
-                          <Text style={styles.signatureCardTitle}>{field.label}</Text>
+                          <Text style={styles.signatureCardTitle}>{normalizeLolerText(field.label)}</Text>
                           <View style={styles.signatureMetaColumn}>
                             <Text style={styles.signatureMetaLabel}>Signed By</Text>
                             <Text style={styles.signatureMetaValue}>{signatureName || 'No signature captured'}</Text>

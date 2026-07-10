@@ -197,6 +197,7 @@ describe('GET /api/management/suggestions/[id]', () => {
     expect(messageInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         created_via: 'suggestion:suggestion-1',
+        module_key: 'suggestions',
       })
     );
     expect(messageRecipientsInsert).toHaveBeenCalledWith([

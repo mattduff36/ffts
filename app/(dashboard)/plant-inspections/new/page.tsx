@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, dialogContentViewportClassName } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Send, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Info, User, Camera, ArrowLeft } from 'lucide-react';
@@ -43,8 +43,10 @@ import { useInspectionPhotos } from '@/lib/hooks/useInspectionPhotos';
 import { getInspectionPhotoKey } from '@/lib/inspection-photos';
 import { getRecentVehicleIds, recordRecentVehicleId, splitVehiclesByRecent } from '@/lib/utils/recentVehicles';
 import { getReadingDigitGrowthWarning } from '@/lib/utils/readingDigitGrowthWarning';
-import { getInspectionErrorMessage, isDuplicateInspectionError } from '@/lib/utils/inspection-error-handling';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
+import { getInspectionErrorMessage, isDuplicateInspectionError, isMissingDraftError } from '@/lib/utils/inspection-error-handling';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import { completeInspectionReminder } from '@/lib/client/complete-inspection-reminder';
+import { WORKSHOP_TASK_COMMENT_MIN_LENGTH } from '@/lib/workshop-tasks/validation';
 
 // Dynamic imports for heavy components
 const PhotoUpload = dynamic(() => import('@/components/forms/PhotoUpload'), { ssr: false });
@@ -229,9 +231,12 @@ function NewPlantInspectionContent() {
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      console.error('Failed to check for existing plant inspection:', error, {
-        errorContextId: 'plant-inspections-new-check-existing-error',
-      });
+      const status = getErrorStatus(error);
+      if (!isAuthErrorStatus(status) && !isNetworkFetchError(error)) {
+        console.error('Failed to check for existing plant inspection:', error, {
+          errorContextId: 'plant-inspections-new-check-existing-error',
+        });
+      }
       return null;
     }
 
@@ -393,7 +398,9 @@ function NewPlantInspectionContent() {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not merge with existing draft';
-      if (!isAuthErrorStatus(getErrorStatus(err))) {
+      if (isNetworkFetchError(err) || isMissingDraftError(err)) {
+        console.warn('Plant draft merge temporarily unavailable:', err, { errorContextId });
+      } else if (!isAuthErrorStatus(getErrorStatus(err))) {
         console.error('Failed to merge into existing plant draft:', err, { errorContextId });
       }
       if (showToast && !isAuthErrorStatus(getErrorStatus(err))) {
@@ -575,7 +582,16 @@ function NewPlantInspectionContent() {
         return draft.id;
       } catch (err) {
         const errorContextId = 'plant-inspections-new-silent-draft-save-error';
-        console.error('Silent draft save failed:', err, { errorContextId });
+        if (isNetworkFetchError(err)) {
+          console.warn('Silent plant draft save skipped due transient network error', { errorContextId });
+        } else if (isMissingDraftError(err)) {
+          console.warn('Silent plant draft save skipped because the draft no longer exists', {
+            errorContextId,
+            existingInspectionId: existingInspectionId || null,
+          });
+        } else if (!isAuthErrorStatus(getErrorStatus(err))) {
+          console.error('Silent draft save failed:', err, { errorContextId });
+        }
         if (!silent) {
           toast.error('Could not auto-save draft. Please try again.', { id: errorContextId });
         }
@@ -659,9 +675,13 @@ function NewPlantInspectionContent() {
           )
         `)
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (inspectionError) throw inspectionError;
+      if (!inspection) {
+        setError('Draft inspection could not be found or is no longer available');
+        return;
+      }
 
       if (!canManageCrossUserInspections && inspection.user_id !== user?.id) {
         setError('You do not have permission to edit this inspection');
@@ -733,8 +753,17 @@ function NewPlantInspectionContent() {
       loadedDraftIdRef.current = id;
       toast.success('Draft inspection loaded');
     } catch (err) {
-      console.error('Error loading draft inspection:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load draft inspection');
+      const errorContextId = 'plant-inspections-new-load-draft-error';
+      if (isNetworkFetchError(err)) {
+        console.warn('Unable to load plant draft inspection (network):', err, { errorContextId });
+        setError('Could not load draft inspection because the network request failed. Please refresh and try again.');
+        toast.error('Could not load draft inspection. Please refresh and try again.', { id: errorContextId });
+      } else {
+        if (!isAuthErrorStatus(getErrorStatus(err))) {
+          console.error('Error loading draft inspection:', err, { errorContextId });
+        }
+        setError(getInspectionErrorMessage(err, 'Failed to load draft inspection'));
+      }
     } finally {
       if (activeDraftLoadIdRef.current === id) {
         activeDraftLoadIdRef.current = null;
@@ -868,7 +897,10 @@ function NewPlantInspectionContent() {
             setSelectedEmployeeId(user.id);
           }
         } catch (err) {
-          console.error('Error fetching employees:', err);
+          const status = getErrorStatus(err);
+          if (!isAuthErrorStatus(status) && !isNetworkFetchError(err)) {
+            console.error('Error fetching employees:', err);
+          }
         }
       };
 
@@ -1072,7 +1104,7 @@ function NewPlantInspectionContent() {
     const defectsWithoutComments: string[] = [];
     let firstDefectWithoutCommentKey: string | null = null;
     Object.entries(checkboxStates).forEach(([key, status]) => {
-      if (status === 'attention' && !comments[key]) {
+      if (status === 'attention' && !loggedDefects.has(key) && !comments[key]) {
         if (!firstDefectWithoutCommentKey) firstDefectWithoutCommentKey = key;
         const itemNumber = parseInt(key);
         const itemName = currentChecklist[itemNumber - 1] || `Item ${itemNumber}`;
@@ -1094,8 +1126,8 @@ function NewPlantInspectionContent() {
     }
 
     // Validate inform workshop (not applicable for hired plant)
-    if (!isHiredPlant && informWorkshop && inspectorComments.trim().length < 10) {
-      setError('Workshop notification requires at least 10 characters in the comment field');
+    if (!isHiredPlant && informWorkshop && inspectorComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
+      setError(`Workshop notification requires at least ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters in the comment field`);
       toast.error('Comment too short', { id: 'plant-inspections-new-validation-workshop-comment-too-short' });
       setShowConfirmSubmitDialog(false);
       scrollToTarget(document.getElementById('inspector-comments'));
@@ -1391,7 +1423,7 @@ function NewPlantInspectionContent() {
       }
 
       // Handle inform workshop (skip for hired plant)
-      if (!isHiredPlant && informWorkshop && inspectorComments.trim().length >= 10) {
+      if (!isHiredPlant && informWorkshop && inspectorComments.trim().length >= WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
         try {
           setCreatingWorkshopTask(true);
           
@@ -1426,6 +1458,18 @@ function NewPlantInspectionContent() {
         }
       }
 
+      if (!isHiredPlant) {
+        try {
+          await completeInspectionReminder({
+            assetType: 'plant',
+            assetId: selectedPlantId,
+            assignedTo: selectedEmployeeId,
+          });
+        } catch (reminderError) {
+          console.warn('Reminder completion skipped after plant daily check submission:', reminderError);
+        }
+      }
+
       toast.success('Daily check submitted successfully');
       allowNavigationRef.current = true;
       router.push('/plant-inspections');
@@ -1454,12 +1498,21 @@ function NewPlantInspectionContent() {
         return;
       }
 
-      console.error('Error saving inspection:', err, {
-        errorContextId,
-        plantId: selectedPlantId,
-        inspectionDate,
-        existingInspectionId: existingInspectionId || null,
-      });
+      if (isNetworkFetchError(err)) {
+        console.warn('Inspection save failed due transient network error', {
+          errorContextId,
+          plantId: selectedPlantId,
+          inspectionDate,
+          existingInspectionId: existingInspectionId || null,
+        });
+      } else {
+        console.error('Error saving inspection:', err, {
+          errorContextId,
+          plantId: selectedPlantId,
+          inspectionDate,
+          existingInspectionId: existingInspectionId || null,
+        });
+      }
 
       toast.error('Failed to save inspection', {
         id: errorContextId,
@@ -2153,7 +2206,7 @@ function NewPlantInspectionContent() {
           setShowConfirmSubmitDialog(open);
         }}
       >
-        <DialogContent className="border-border text-white max-w-md">
+        <DialogContent className={dialogContentViewportClassName({ size: 'md', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Confirm Submission</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -2184,7 +2237,7 @@ function NewPlantInspectionContent() {
               </p>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -2212,7 +2265,7 @@ function NewPlantInspectionContent() {
         }
         setShowRepeatDefectDialog(open);
       }}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -2272,7 +2325,7 @@ function NewPlantInspectionContent() {
       </Dialog>
 
       <Dialog open={showDigitGrowthWarningDialog} onOpenChange={setShowDigitGrowthWarningDialog}>
-        <DialogContent className="border-border text-white max-w-md">
+        <DialogContent className={dialogContentViewportClassName({ size: 'md', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Confirm Hours Entry</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -2310,7 +2363,7 @@ function NewPlantInspectionContent() {
       
       {/* Signature Dialog */}
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Sign Daily Check</DialogTitle>
             <DialogDescription className="text-muted-foreground">

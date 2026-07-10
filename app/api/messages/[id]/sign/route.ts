@@ -38,6 +38,8 @@ export async function POST(
         messages!inner(
           id,
           type,
+          priority,
+          acceptance_delay_minutes,
           deleted_at
         )
       `)
@@ -72,6 +74,24 @@ export async function POST(
       }, { status: 400 });
     }
 
+    if (recipient.messages.priority === 'URGENT') {
+      const delayMinutes = recipient.messages.acceptance_delay_minutes || 0;
+      const firstShownAt = recipient.first_shown_at ? new Date(recipient.first_shown_at).getTime() : NaN;
+      const elapsedMs = Number.isFinite(firstShownAt) ? Date.now() - firstShownAt : 0;
+      const requiredMs = delayMinutes * 60 * 1000;
+
+      if (requiredMs > 0 && elapsedMs < requiredMs) {
+        const remainingSeconds = Math.ceil((requiredMs - elapsedMs) / 1000);
+        return NextResponse.json(
+          {
+            error: 'This urgent Toolbox Talk cannot be signed yet',
+            remaining_seconds: remainingSeconds,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Update recipient status to SIGNED
     const { data: updatedRecipient, error: updateError } = await supabase
       .from('message_recipients')
@@ -94,7 +114,13 @@ export async function POST(
 
     const response: SignMessageResponse = {
       success: true,
-      recipient: updatedRecipient
+      recipient: {
+        ...updatedRecipient,
+        message_id: updatedRecipient.message_id ?? recipient.message_id ?? '',
+        user_id: updatedRecipient.user_id ?? user.id,
+        created_at: updatedRecipient.created_at ?? '',
+        updated_at: updatedRecipient.updated_at ?? '',
+      }
     };
 
     return NextResponse.json(response);

@@ -1,6 +1,7 @@
 import { formatRegistrationForApi } from '@/lib/utils/registration';
 import type { DVLAApiService } from '@/lib/services/dvla-api';
 import type { MotHistoryService } from '@/lib/services/mot-history-api';
+import type { HgvAnnualTestService } from '@/lib/services/hgv-annual-test-api';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 
@@ -17,6 +18,7 @@ export interface FleetSyncOptions {
   supabase: SupabaseClient<Database>;
   dvlaService: DVLAApiService;
   motService: MotHistoryService | null;
+  hgvAnnualTestService?: HgvAnnualTestService | null;
   targets: FleetSyncTarget[];
   triggerType: 'manual' | 'bulk' | 'automatic' | 'auto_on_create';
   triggeredBy: string | null;
@@ -45,6 +47,18 @@ export interface FleetSyncSummary {
 }
 
 export const TEST_REGISTRATIONS = new Set(['TE57VAN', 'TE57HGV']);
+
+export function isExpectedFleetDvlaLookupFailure(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('dvla api error') &&
+    (
+      normalized.includes('404') ||
+      normalized.includes('not found') ||
+      normalized.includes('vehicle not found')
+    )
+  );
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -78,6 +92,35 @@ function toIsoDate(value: Date): string {
   return value.toISOString().split('T')[0];
 }
 
+function isPastDate(dateValue: string, now = new Date()): boolean {
+  const dueDate = new Date(dateValue);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  return dueDate.getTime() < today.getTime();
+}
+
+interface GenericMotRawData {
+  motTests?: unknown[];
+  motTestDueDate?: string | null;
+}
+
+export function isStaleHgvGenericMotDueDate(
+  assetType: FleetAssetType,
+  motExpiryData: Awaited<ReturnType<MotHistoryService['getMotExpiryData']>> | null,
+  now = new Date()
+): boolean {
+  if (assetType !== 'hgv' || !motExpiryData?.motExpiryDate) return false;
+
+  const rawData = motExpiryData.rawData as GenericMotRawData | null;
+  const testCount = Array.isArray(rawData?.motTests) ? rawData.motTests.length : 0;
+  const isFirstDueDate = rawData?.motTestDueDate === motExpiryData.motExpiryDate;
+
+  return testCount === 0 && isFirstDueDate && isPastDate(motExpiryData.motExpiryDate, now);
+}
+
 /**
  * HGVs, PSVs, buses and trailers require annual tests from year 1.
  * Cars/vans get their first MOT after 3 years.
@@ -95,6 +138,7 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
     supabase,
     dvlaService,
     motService,
+    hgvAnnualTestService = null,
     targets,
     triggerType,
     triggeredBy,
@@ -129,19 +173,28 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
       const dvlaResponseTime = Date.now() - startTime;
       console.log(`${logPrefix}[SYNC] Fetched DVLA for ${target.registrationNumber}`);
 
-      let motExpiryData: Awaited<ReturnType<MotHistoryService['getMotExpiryData']>> | null = null;
+      type MotExpiryData =
+        | Awaited<ReturnType<MotHistoryService['getMotExpiryData']>>
+        | Awaited<ReturnType<HgvAnnualTestService['getMotExpiryData']>>;
+      let motExpiryData: MotExpiryData | null = null;
       let motApiError: string | null = null;
-      if (motService) {
+      let motDataSource: 'MOT' | 'HGV_ANNUAL_TEST' | null = null;
+      const selectedMotService = target.assetType === 'hgv' && hgvAnnualTestService
+        ? hgvAnnualTestService
+        : motService;
+
+      if (selectedMotService) {
+        motDataSource = target.assetType === 'hgv' && hgvAnnualTestService ? 'HGV_ANNUAL_TEST' : 'MOT';
         try {
-          motExpiryData = await motService.getMotExpiryData(regNumberNoSpaces);
+          motExpiryData = await selectedMotService.getMotExpiryData(regNumberNoSpaces);
           console.log(
-            `${logPrefix}[SYNC] MOT API for ${target.registrationNumber} (${target.assetType}): ` +
+            `${logPrefix}[SYNC] ${motDataSource} API for ${target.registrationNumber} (${target.assetType}): ` +
             `status=${motExpiryData.motStatus}, expiry=${motExpiryData.motExpiryDate ?? 'none'}, ` +
             `tests=${(motExpiryData.rawData?.motTests || []).length}`
           );
         } catch (motError: unknown) {
           motApiError = getErrorMessage(motError);
-          console.error(`${logPrefix}[SYNC] MOT fetch failed for ${target.registrationNumber} (${target.assetType}):`, motApiError);
+          console.error(`${logPrefix}[SYNC] ${motDataSource} fetch failed for ${target.registrationNumber} (${target.assetType}):`, motApiError);
         }
       }
 
@@ -186,7 +239,7 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
         if (oldTaxDate !== dvlaData.taxDueDate) fieldsUpdated.push('tax_due_date');
       }
 
-      if (motService) {
+      if (selectedMotService) {
         if (motApiError) {
           updates.mot_api_sync_status = 'error';
           updates.last_mot_api_sync = syncTime;
@@ -194,7 +247,7 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
 
           // Fallback: estimate test due date from first registration.
           // HGVs need annual tests from year 1; cars/vans get first MOT after 3 years.
-          if (motApiError.includes('No MOT history found') && dvlaData.monthOfFirstRegistration) {
+          if (target.assetType !== 'hgv' && motApiError.includes('No MOT history found') && dvlaData.monthOfFirstRegistration) {
             try {
               const [year, month] = dvlaData.monthOfFirstRegistration.split('.');
               if (year && month) {
@@ -216,6 +269,11 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
           }
         } else if (motExpiryData?.motExpiryDate || motExpiryData?.rawData) {
           const motRawData = motExpiryData.rawData as unknown as Record<string, unknown> | null;
+          const isRejectedStaleHgvDate = motDataSource === 'MOT' && isStaleHgvGenericMotDueDate(
+            target.assetType,
+            motExpiryData as Awaited<ReturnType<MotHistoryService['getMotExpiryData']>>
+          );
+
           if (motRawData) {
             updates.mot_make = (motRawData.make as string) || null;
             updates.mot_model = (motRawData.model as string) || null;
@@ -232,13 +290,22 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
             }
           }
 
-          if (motExpiryData.motExpiryDate) {
+          if (isRejectedStaleHgvDate) {
+            updates.mot_api_sync_error = 'Generic MOT History API returned a stale HGV first annual-test due date; configure the HGV annual-test API source.';
+            if (oldMotDate === motExpiryData.motExpiryDate) {
+              updates.mot_due_date = null;
+              updates.mot_expiry_date = null;
+              fieldsUpdated.push('mot_due_date (cleared stale HGV generic MOT date)');
+            }
+          } else if (motExpiryData.motExpiryDate) {
             updates.mot_due_date = motExpiryData.motExpiryDate;
             updates.mot_expiry_date = motExpiryData.motExpiryDate;
-            if (oldMotDate !== motExpiryData.motExpiryDate) fieldsUpdated.push('mot_due_date');
+            if (oldMotDate !== motExpiryData.motExpiryDate) {
+              fieldsUpdated.push(motDataSource === 'HGV_ANNUAL_TEST' ? 'mot_due_date (HGV annual test)' : 'mot_due_date');
+            }
           } else if (motRawData?.firstUsedDate) {
             const firstUsedRaw = motRawData.firstUsedDate as string | undefined;
-            if (firstUsedRaw) {
+            if (target.assetType !== 'hgv' && firstUsedRaw) {
               const intervalYears = firstTestIntervalYears(target.assetType);
               const firstUsedDate = new Date(firstUsedRaw);
               const nextDue = new Date(firstUsedDate);
@@ -252,7 +319,7 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
 
           updates.mot_api_sync_status = 'success';
           updates.last_mot_api_sync = syncTime;
-          updates.mot_api_sync_error = null;
+          if (!updates.mot_api_sync_error) updates.mot_api_sync_error = null;
           updates.mot_raw_data = motRawData || null;
         } else {
           updates.mot_api_sync_status = 'success';
@@ -275,7 +342,12 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
       );
       if (upsertError) throw upsertError;
 
-      const persistedMotDate = updates.mot_due_date ?? null;
+      const hasMotDueDateUpdate = Object.prototype.hasOwnProperty.call(updates, 'mot_due_date');
+      const persistedMotDate = hasMotDueDateUpdate ? (updates.mot_due_date as string | null) : oldMotDate;
+      const apiProvider = [
+        process.env.DVLA_API_PROVIDER,
+        motDataSource,
+      ].filter(Boolean).join('+');
       const dslTable = supabase.from('dvla_sync_log') as unknown as {
         insert: (values: DvlaSyncLogInsert) => Promise<{ error: { message: string } | null }>;
       };
@@ -288,7 +360,7 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
         tax_due_date_new: dvlaData.taxDueDate,
         mot_due_date_old: oldMotDate,
         mot_due_date_new: persistedMotDate,
-        api_provider: `${process.env.DVLA_API_PROVIDER}${motService ? '+MOT' : ''}`,
+        api_provider: apiProvider || undefined,
         api_response_time_ms: dvlaResponseTime,
         raw_response: {
           dvla: dvlaData.rawData,
@@ -320,17 +392,22 @@ export async function runFleetDvlaSync(options: FleetSyncOptions): Promise<Fleet
         });
       }
 
-      if (persistedMotDate && oldMotDate !== persistedMotDate) {
+      if (hasMotDueDateUpdate && oldMotDate !== persistedMotDate) {
         const wasCalculated = fieldsUpdated.some((f) => f.includes('calculated'));
+        const wasClearedStaleHgvDate = fieldsUpdated.some((f) => f.includes('cleared stale HGV'));
         historyEntries.push({
           [fkField]: target.assetId,
           field_name: 'mot_due_date',
           old_value: oldMotDate,
           new_value: persistedMotDate,
           value_type: 'date',
-          comment: wasCalculated
-            ? `MOT due date calculated from first registration via DVLA API sync for ${target.registrationNumber}`
-            : `MOT due date updated automatically via DVLA/MOT API sync for ${target.registrationNumber}`,
+          comment: wasClearedStaleHgvDate
+            ? `Stale HGV MOT due date cleared after generic MOT API returned an out-of-date first annual-test date for ${target.registrationNumber}`
+            : wasCalculated
+              ? `MOT due date calculated from first registration via DVLA API sync for ${target.registrationNumber}`
+              : motDataSource === 'HGV_ANNUAL_TEST'
+                ? `MOT due date updated automatically via HGV annual-test API sync for ${target.registrationNumber}`
+                : `MOT due date updated automatically via DVLA/MOT API sync for ${target.registrationNumber}`,
           updated_by: triggeredBy,
           updated_by_name: updaterName,
         });

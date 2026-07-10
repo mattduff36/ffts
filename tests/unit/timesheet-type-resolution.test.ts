@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  normalizeTimesheetTypeOverride,
   normalizeTimesheetType,
   resolveTimesheetTypeWithOverride,
 } from '@/app/(dashboard)/timesheets/hooks/useTimesheetType';
@@ -12,6 +13,12 @@ describe('timesheet type resolution with overrides', () => {
     expect(normalizeTimesheetType(null)).toBeNull();
   });
 
+  it('normalizes user choice as an override mode, not a concrete timesheet type', () => {
+    expect(normalizeTimesheetType('user_choice')).toBeNull();
+    expect(normalizeTimesheetTypeOverride('user_choice')).toBe('user_choice');
+    expect(normalizeTimesheetTypeOverride('plant')).toBe('plant');
+  });
+
   it('prefers user override over team and role defaults', () => {
     expect(
       resolveTimesheetTypeWithOverride({
@@ -19,7 +26,17 @@ describe('timesheet type resolution with overrides', () => {
         teamType: 'civils',
         roleType: 'civils',
       })
-    ).toBe('plant');
+    ).toEqual({ timesheetType: 'plant', mode: 'fixed' });
+  });
+
+  it('returns choice mode when user choice override is configured', () => {
+    expect(
+      resolveTimesheetTypeWithOverride({
+        overrideType: 'user_choice',
+        teamType: 'plant',
+        roleType: 'civils',
+      })
+    ).toEqual({ timesheetType: null, mode: 'choice' });
   });
 
   it('falls back to team default when override is absent', () => {
@@ -29,7 +46,7 @@ describe('timesheet type resolution with overrides', () => {
         teamType: 'plant',
         roleType: 'civils',
       })
-    ).toBe('plant');
+    ).toEqual({ timesheetType: 'plant', mode: 'fixed' });
   });
 
   it('falls back to role when team has no type', () => {
@@ -39,7 +56,7 @@ describe('timesheet type resolution with overrides', () => {
         teamType: null,
         roleType: 'plant',
       })
-    ).toBe('plant');
+    ).toEqual({ timesheetType: 'plant', mode: 'fixed' });
   });
 
   it('uses civils default when no source provides a type', () => {
@@ -49,6 +66,6 @@ describe('timesheet type resolution with overrides', () => {
         teamType: null,
         roleType: null,
       })
-    ).toBe('civils');
+    ).toEqual({ timesheetType: 'civils', mode: 'fixed' });
   });
 });

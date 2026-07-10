@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 import { getProfileWithRole } from '@/lib/utils/permissions';
 import { HgvInspectionPDF } from '@/lib/pdf/hgv-inspection-pdf';
 import { enrichDefectsWithWorkshopCompletion } from '@/lib/utils/hgvDefectWorkshopDetails';
+import {
+  getInspectionEnteredComment,
+  type InspectionCommentTask,
+} from '@/lib/utils/inspection-item-comments';
 
 interface HgvInspectionWithRelations {
   id: string;
@@ -74,16 +78,37 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
+    const itemIds = (items || []).map((item) => item.id);
+    let linkedDefectTasks: InspectionCommentTask[] = [];
+    if (itemIds.length > 0) {
+      const { data: linkedDefectTaskRows, error: linkedDefectTasksError } = await supabase
+        .from('actions')
+        .select('inspection_item_id, created_at, logged_comment, workshop_comments, status')
+        .eq('action_type', 'inspection_defect')
+        .in('inspection_item_id', itemIds);
+
+      if (linkedDefectTasksError) {
+        return NextResponse.json({ error: 'Failed to fetch linked defect tasks' }, { status: 500 });
+      }
+
+      linkedDefectTasks = (linkedDefectTaskRows || []) as InspectionCommentTask[];
+    }
+
+    const displayItems = (items || []).map((item) => ({
+      ...item,
+      comments: getInspectionEnteredComment(item, linkedDefectTasks),
+    }));
+
     const inspectionWithRelations = inspection as unknown as HgvInspectionWithRelations;
     const defectsWithWorkshop = await enrichDefectsWithWorkshopCompletion(
       supabase,
       inspectionWithRelations.hgv_id,
-      (items || [])
+      displayItems
         .filter((item) => item.status === 'attention')
         .map((item) => ({
           id: item.id,
           item_number: item.item_number,
-          item_description: item.item_description,
+          item_description: item.item_description || `Item ${item.item_number}`,
           comments: item.comments,
         }))
     );
@@ -105,9 +130,9 @@ export async function GET(
       operator: {
         full_name: inspectionWithRelations.profile?.full_name || 'Unknown',
       },
-      items: (items || []).map(item => ({
+      items: displayItems.map(item => ({
         item_number: item.item_number,
-        item_description: item.item_description,
+        item_description: item.item_description || `Item ${item.item_number}`,
         day_of_week: item.day_of_week,
         status: item.status as 'ok' | 'attention' | 'na',
         comments: item.comments,

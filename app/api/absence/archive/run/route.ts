@@ -2,24 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { getProfileWithRole } from '@/lib/utils/permissions';
 import { runAbsenceFinancialYearArchive } from '@/lib/services/absence-archive';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminAbsenceAccess } from '@/lib/server/absence-work-shift-auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await requireAdminAbsenceAccess();
+    if (auth.response) {
+      return auth.response;
     }
 
-    const profile = await getProfileWithRole(user.id);
-    const canAccessAbsence = await canEffectiveRoleAccessModule('absence');
-    if (!profile || !canAccessAbsence) {
+    const supabase = await createServerClient();
+    const profile = await getProfileWithRole(auth.user.id);
+    if (!profile) {
       return NextResponse.json(
-        { error: 'Forbidden: Absence access required' },
+        { error: 'Forbidden: Profile required' },
         { status: 403 }
       );
     }
@@ -47,7 +43,7 @@ export async function POST(request: NextRequest) {
       allEligible: runAllEligible,
       force: body.force === true,
       notes: body.notes,
-      actorId: user.id,
+      actorId: profile.id,
     });
 
     return NextResponse.json({

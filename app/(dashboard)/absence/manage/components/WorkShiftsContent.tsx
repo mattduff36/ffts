@@ -698,7 +698,7 @@ export function WorkShiftsContent({
           }
         }}
       >
-        <DialogContent className="max-w-3xl border-border">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-border">
           <DialogHeader>
             <DialogTitle className="text-white">
               {dialogState.mode === 'create' ? 'Create Work Shift Template' : 'Edit Work Shift Template'}

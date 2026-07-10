@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { getDidNotWorkReasonInfo } from '@/lib/utils/timesheetDidNotWork';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { buildSafeReportFilename, parseReportDateRange, validateRequiredReportDateRange } from '@/lib/server/report-date-range';
 import { filterTimesheetRowsForReportScope } from '@/lib/server/reports-timesheet-scope';
 import { loadEmployeeWorkShiftPatternMap } from '@/lib/server/work-shifts';
 import {
@@ -15,6 +16,7 @@ import { getTimesheetWeekIsoBounds, resolveTimesheetOffDayStates } from '@/lib/u
 import { buildLeaveAwareTotals, buildLeaveDaysBreakdown } from '@/lib/utils/timesheet-leave-totals';
 import { normalizeTimesheetEntriesForDisplay } from '@/lib/utils/plant-timesheet-v2-normalization';
 import { collectUniqueJobNumbers } from '@/lib/utils/timesheet-job-codes';
+import { isSubsistencePaymentRequired } from '@/lib/utils/timesheet-subsistence';
 import type { TimesheetEntry } from '@/types/timesheet';
 
 type AbsenceReasonRow = {
@@ -34,6 +36,7 @@ type TimesheetEntryRow = {
   time_finished?: string | null;
   daily_total?: number | null;
   working_in_yard?: boolean | null;
+  subsistence_payment_required?: boolean | null;
   did_not_work?: boolean | null;
   remarks?: string | null;
   job_number?: string | null;
@@ -80,8 +83,12 @@ export async function GET(request: NextRequest) {
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
-    const dateFrom = searchParams.get('dateFrom');
-    const dateTo = searchParams.get('dateTo');
+    const { range, error: dateRangeError } = parseReportDateRange(searchParams);
+    const requiredRangeError = validateRequiredReportDateRange(range, 366);
+    if (dateRangeError || requiredRangeError || !range) {
+      return NextResponse.json({ error: dateRangeError || requiredRangeError || 'Invalid date range.' }, { status: 400 });
+    }
+    const { dateFrom, dateTo } = range;
 
     // Build query for approved timesheets only
     let query = supabase
@@ -106,6 +113,7 @@ export async function GET(request: NextRequest) {
           time_finished,
           daily_total,
           working_in_yard,
+          subsistence_payment_required,
           did_not_work,
           remarks,
           job_number,
@@ -267,6 +275,8 @@ export async function GET(request: NextRequest) {
       let basicHours = 0; // Mon-Fri regular hours
       let overtime15Hours = 0; // Sat-Sun hours at 1.5x
       let overtime2Hours = 0; // Night shifts + Bank holidays at 2x
+      let subsistenceDays = 0;
+      const subsistenceDayNames: string[] = [];
 
       entries.forEach((entry) => {
         const dnwReason = getDidNotWorkReasonInfo(entry.did_not_work, entry.remarks);
@@ -291,6 +301,10 @@ export async function GET(request: NextRequest) {
         const dayOfWeek = entry.day_of_week; // Integer: 1=Mon, 2=Tue, ..., 6=Sat, 7=Sun
         const isNightShift = entry.night_shift || false;
         const isBankHoliday = entry.bank_holiday || false;
+        if (isSubsistencePaymentRequired(entry)) {
+          subsistenceDays += 1;
+          subsistenceDayNames.push(dayNameMap[dayOfWeek] || String(dayOfWeek));
+        }
 
         // Priority: Night shift or Bank Holiday takes precedence (2x rate)
         if (isNightShift || isBankHoliday) {
@@ -329,6 +343,8 @@ export async function GET(request: NextRequest) {
         'Paid Absence (Days)': leaveDaysBreakdown.paidLeaveDays > 0 ? leaveDaysBreakdown.paidLeaveDays.toFixed(1) : '-',
         'Unpaid Absence (Days)': leaveDaysBreakdown.unpaidLeaveDays > 0 ? leaveDaysBreakdown.unpaidLeaveDays.toFixed(1) : '-',
         'Weekly Total (Hours + Days)': leaveAwareTotals.weekly.display,
+        'Subsistence Days': subsistenceDays > 0 ? String(subsistenceDays) : '-',
+        'Subsistence Dates': subsistenceDayNames.join(', ') || '-',
         'Paid Absence Hours': formatExcelHours(paidAbsenceHours),
         'Unpaid Absence Hours': formatExcelHours(unpaidAbsenceHours),
         'Total Hours': formatExcelHours(totalHours),
@@ -346,6 +362,7 @@ export async function GET(request: NextRequest) {
     const totalUnpaidDays = excelData.reduce((sum, row) => sum + (parseFloat(row['Unpaid Absence (Days)']) || 0), 0);
     const totalPaidAbsence = excelData.reduce((sum, row) => sum + (parseFloat(row['Paid Absence Hours']) || 0), 0);
     const totalUnpaidAbsence = excelData.reduce((sum, row) => sum + (parseFloat(row['Unpaid Absence Hours']) || 0), 0);
+    const totalSubsistenceDays = excelData.reduce((sum, row) => sum + (parseFloat(row['Subsistence Days']) || 0), 0);
     const totalHours = excelData.reduce((sum, row) => sum + (parseFloat(row['Total Hours']) || 0), 0);
 
     excelData.push({
@@ -361,6 +378,8 @@ export async function GET(request: NextRequest) {
       'Paid Absence (Days)': '',
       'Unpaid Absence (Days)': '',
       'Weekly Total (Hours + Days)': '',
+      'Subsistence Days': '',
+      'Subsistence Dates': '',
       'Paid Absence Hours': '',
       'Unpaid Absence Hours': '',
       'Total Hours': '',
@@ -379,6 +398,8 @@ export async function GET(request: NextRequest) {
       'Paid Absence (Days)': totalPaidDays.toFixed(1),
       'Unpaid Absence (Days)': totalUnpaidDays.toFixed(1),
       'Weekly Total (Hours + Days)': `${totalWorkedHours.toFixed(2)} hours + ${totalLeaveDays.toFixed(1)} days`,
+      'Subsistence Days': totalSubsistenceDays > 0 ? totalSubsistenceDays.toFixed(0) : '-',
+      'Subsistence Dates': '',
       'Paid Absence Hours': totalPaidAbsence.toFixed(2),
       'Unpaid Absence Hours': totalUnpaidAbsence.toFixed(2),
       'Total Hours': totalHours.toFixed(2),
@@ -415,6 +436,8 @@ export async function GET(request: NextRequest) {
           { header: 'Paid Absence (Days)', key: 'Paid Absence (Days)', width: 18 },
           { header: 'Unpaid Absence (Days)', key: 'Unpaid Absence (Days)', width: 20 },
           { header: 'Weekly Total (Hours + Days)', key: 'Weekly Total (Hours + Days)', width: 26 },
+          { header: 'Subsistence Days', key: 'Subsistence Days', width: 18 },
+          { header: 'Subsistence Dates', key: 'Subsistence Dates', width: 30 },
           { header: 'Paid Absence Hours', key: 'Paid Absence Hours', width: 18 },
           { header: 'Unpaid Absence Hours', key: 'Unpaid Absence Hours', width: 20 },
           { header: 'Total Hours', key: 'Total Hours', width: 12 },
@@ -440,10 +463,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Generate filename
-    const dateRange = dateFrom && dateTo
-      ? `${dateFrom}_to_${dateTo}`
-      : new Date().toISOString().split('T')[0];
-    const filename = `Payroll_Report_${dateRange}.xlsx`;
+    const filename = buildSafeReportFilename('Payroll_Report', range.filenameDateRange, 'xlsx');
 
     // Return Excel file
     return new NextResponse(new Uint8Array(buffer), {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { MaintenanceOverview } from './MaintenanceOverview';
 import { getDateBasedStatus, calculateAlertCounts } from '@/lib/utils/maintenanceCalculations';
 import type { MaintenanceItemStatus, VehicleMaintenanceWithStatus } from '@/types/maintenance';
@@ -120,11 +120,7 @@ export function PlantOverview({ onVehicleClick }: PlantOverviewProps) {
   }, [fetchPlantAssets]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
+    return <PanelLoader message="Loading plant maintenance..." accent="maintenance" className="py-12" />;
   }
 
   const summary = {

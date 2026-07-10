@@ -55,3 +55,31 @@ export const appendStatusHistory = (
   const events = Array.isArray(nextEvents) ? nextEvents : [nextEvents];
   return [...base, ...events];
 };
+
+export const updateLatestInProgressStatusHistoryTimestamp = (
+  existing: unknown,
+  createdAt: string
+): StatusHistoryEvent[] => {
+  const base = Array.isArray(existing) ? (existing as StatusHistoryEvent[]) : [];
+  let latestIndex = -1;
+  let latestTime = Number.NEGATIVE_INFINITY;
+
+  base.forEach((event, index) => {
+    if (event.status !== 'logged' && event.status !== 'resumed') return;
+    const eventTime = Date.parse(event.created_at);
+    if (Number.isNaN(eventTime) || eventTime < latestTime) return;
+    latestTime = eventTime;
+    latestIndex = index;
+  });
+
+  if (latestIndex === -1) return base;
+
+  return base.map((event, index) =>
+    index === latestIndex
+      ? {
+          ...event,
+          created_at: createdAt,
+        }
+      : event
+  );
+};

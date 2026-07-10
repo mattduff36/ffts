@@ -20,15 +20,18 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const runLiveDatabaseTests = process.env.RUN_LIVE_DB_TESTS === 'true';
 
-if (!supabaseUrl || !supabaseKey) {
+if (runLiveDatabaseTests && (!supabaseUrl || !supabaseKey)) {
   console.error('Missing Supabase credentials in .env.local');
   console.error('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
   console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? 'Set' : 'Missing');
   throw new Error('Missing required environment variables for integration tests');
 }
 
-describe('Workshop Tasks Module Workflows', () => {
+const describeLive = runLiveDatabaseTests ? describe : describe.skip;
+
+describeLive('Workshop Tasks Module Workflows', () => {
   let supabase: SupabaseClient;
   let testUserId: string;
   let testVehicleId: string;
@@ -47,7 +50,7 @@ describe('Workshop Tasks Module Workflows', () => {
   }
 
   beforeAll(async () => {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl!, supabaseKey!);
     
     // Authenticate as test user
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -449,7 +452,7 @@ describe('Workshop Tasks Module Workflows', () => {
           testCategoryId = data.category.id;
           createdCategoryIds.add(data.category.id);
         }
-      } catch (error) {
+      } catch {
         console.log('API test skipped - server may not be reachable from test environment');
         return;
       }

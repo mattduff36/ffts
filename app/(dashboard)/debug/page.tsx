@@ -8,33 +8,98 @@ import { useBrowserSupabaseClient } from '@/lib/hooks/useBrowserSupabaseClient';
 import { AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bug, Car, Clock, Database, History, RefreshCw, Send, ShieldAlert, Users } from 'lucide-react';
+import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
+import { BarChart3, Bug, Car, FlaskConical, History, KeyRound, RefreshCw, Send, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { canAccessDebugConsole } from '@/lib/utils/debug-access';
-import { DebugInfo } from './types';
 
-const AuditLogDebugPanel = dynamic(() => import('./components/AuditLogDebugPanel').then((mod) => ({ default: mod.AuditLogDebugPanel })));
-const DVLASyncDebugPanel = dynamic(() => import('./components/DVLASyncDebugPanel').then((mod) => ({ default: mod.DVLASyncDebugPanel })));
-const ErrorLogsDebugPanel = dynamic(() => import('./components/ErrorLogsDebugPanel').then((mod) => ({ default: mod.ErrorLogsDebugPanel })));
-const NotificationSettingsDebugPanel = dynamic(() => import('./components/NotificationSettingsDebugPanel').then((mod) => ({ default: mod.NotificationSettingsDebugPanel })));
-const TestFleetDebugPanel = dynamic(() => import('./components/TestFleetDebugPanel').then((mod) => ({ default: mod.TestFleetDebugPanel })));
-const UIModalStylesDebugPanel = dynamic(() => import('./components/UIModalStylesDebugPanel').then((mod) => ({ default: mod.UIModalStylesDebugPanel })));
+const debugTabLoading = () => <PanelLoader message="Loading debug tab..." accent="debug" className="min-h-[320px]" />;
 
-type DebugTab = 'error-log' | 'audit-log' | 'dvla-sync' | 'test-fleet' | 'notification-settings' | 'modal-styles';
+const AuditLogDebugPanel = dynamic(
+  () => import('./components/AuditLogDebugPanel').then((mod) => ({ default: mod.AuditLogDebugPanel })),
+  { loading: debugTabLoading },
+);
+const DVLASyncDebugPanel = dynamic(
+  () => import('./components/DVLASyncDebugPanel').then((mod) => ({ default: mod.DVLASyncDebugPanel })),
+  { loading: debugTabLoading },
+);
+const ErrorLogsDebugPanel = dynamic(
+  () => import('./components/ErrorLogsDebugPanel').then((mod) => ({ default: mod.ErrorLogsDebugPanel })),
+  { loading: debugTabLoading },
+);
+const EmulationTestsDebugPanel = dynamic(
+  () => import('./components/EmulationTestsDebugPanel').then((mod) => ({ default: mod.EmulationTestsDebugPanel })),
+  { loading: debugTabLoading },
+);
+const NotificationSettingsDebugPanel = dynamic(
+  () => import('./components/NotificationSettingsDebugPanel').then((mod) => ({ default: mod.NotificationSettingsDebugPanel })),
+  { loading: debugTabLoading },
+);
+const LegacyJobCodesDebugPanel = dynamic(
+  () => import('./components/LegacyJobCodesDebugPanel').then((mod) => ({ default: mod.LegacyJobCodesDebugPanel })),
+  { loading: debugTabLoading },
+);
+const TestFleetDebugPanel = dynamic(
+  () => import('./components/TestFleetDebugPanel').then((mod) => ({ default: mod.TestFleetDebugPanel })),
+  { loading: debugTabLoading },
+);
+const UserAnalyticsDebugPanel = dynamic(
+  () => import('./components/UserAnalyticsDebugPanel').then((mod) => ({ default: mod.UserAnalyticsDebugPanel })),
+  { loading: debugTabLoading },
+);
+
+type DebugTab =
+  | 'error-log'
+  | 'audit-log'
+  | 'usage-analytics'
+  | 'dvla-sync'
+  | 'test-fleet'
+  | 'job-code-corrections'
+  | 'notification-settings'
+  | 'emulation-tests';
+
+interface DebugTabConfig {
+  value: DebugTab;
+  label: string;
+  icon: LucideIcon;
+}
 
 const DEBUG_TAB_ALIASES: Record<string, DebugTab> = {
   errors: 'error-log',
   'error-log': 'error-log',
   audit: 'audit-log',
   'audit-log': 'audit-log',
+  analytics: 'usage-analytics',
+  usage: 'usage-analytics',
+  'usage-analytics': 'usage-analytics',
   dvla: 'dvla-sync',
   'dvla-sync': 'dvla-sync',
   'test-fleet': 'test-fleet',
+  legacy: 'job-code-corrections',
+  'legacy-codes': 'job-code-corrections',
+  'legacy-job-codes': 'job-code-corrections',
+  'job-codes': 'job-code-corrections',
+  'job-code-corrections': 'job-code-corrections',
   notifications: 'notification-settings',
   'notification-settings': 'notification-settings',
-  'modal-styles': 'modal-styles',
+  emulation: 'emulation-tests',
+  'emulation-tests': 'emulation-tests',
 };
+
+const DEBUG_TABS: DebugTabConfig[] = [
+  { value: 'error-log', label: 'Error Log', icon: Bug },
+  { value: 'audit-log', label: 'Audit Log', icon: History },
+  { value: 'usage-analytics', label: 'Usage Analytics', icon: BarChart3 },
+  { value: 'dvla-sync', label: 'DVLA Sync', icon: RefreshCw },
+  { value: 'test-fleet', label: 'Test Fleet', icon: Car },
+  { value: 'job-code-corrections', label: 'Job Codes', icon: KeyRound },
+  { value: 'notification-settings', label: 'Notification Settings', icon: Send },
+  { value: 'emulation-tests', label: 'Emulation Tests', icon: FlaskConical },
+];
+
+const tabTriggerClassName = 'min-h-10 gap-2 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground lg:px-3';
 
 export default function DebugPage() {
   const { profile, loading: authLoading, isActualSuperAdmin, isViewingAs } = useAuth();
@@ -46,6 +111,9 @@ export default function DebugPage() {
     email: profile?.email,
     isActualSuperAdmin,
     isViewingAs,
+  });
+  const sensitiveAccess = useSensitiveModuleAccess('debug', {
+    enabled: Boolean(profile && canAccessDebugTools),
   });
 
   useEffect(() => {
@@ -64,13 +132,6 @@ export default function DebugPage() {
       return;
     }
   }, [authLoading, canAccessDebugTools, profile, router]);
-
-  const debugInfo: DebugInfo = {
-    environment: process.env.NODE_ENV || 'development',
-    buildTime: new Date().toISOString(),
-    nodeVersion: typeof process !== 'undefined' ? process.version : 'N/A',
-    nextVersion: '15.5.6',
-  };
 
   useEffect(() => {
     const requestedTab = searchParams.get('tab');
@@ -93,98 +154,59 @@ export default function DebugPage() {
   }
 
   if (!profile || !canAccessDebugTools) {
-    return null;
+    return (
+      <AppPageShell>
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Access denied</CardTitle>
+            <CardDescription>
+              Super admin permission is required to access debug tools.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </AppPageShell>
+    );
+  }
+
+  if (sensitiveAccess.loading) {
+    return <PageLoader message="Checking sensitive debug access..." />;
+  }
+
+  if (!sensitiveAccess.canAccess) {
+    return (
+      <AppPageShell width="wide">
+        <SensitiveModuleGate moduleLabel="Debug Console" access={sensitiveAccess} />
+      </AppPageShell>
+    );
   }
 
   return (
     <AppPageShell width="wide">
-      <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-lg p-6 text-white">
+      <SensitiveModuleSessionManager moduleLabel="Debug Console" access={sensitiveAccess} />
+      <div className="rounded-lg bg-gradient-to-r from-red-600 to-orange-500 p-6 text-white shadow-sm">
         <div className="flex items-center gap-3">
-          <Bug className="h-6 md:h-8 w-6 md:w-8" />
+          <Bug className="h-6 w-6 md:h-8 md:w-8" />
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">SuperAdmin Debug Console</h1>
-            <p className="text-sm md:text-base text-red-100">Developer tools and system information</p>
+            <h1 className="mb-1 text-2xl font-bold md:mb-2 md:text-3xl">SuperAdmin Debug Console</h1>
+            <p className="text-sm text-red-50 md:text-base">Developer tools and operational diagnostics</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 md:gap-4">
-        <Card>
-          <CardHeader className="pb-2 md:pb-3 px-3 md:px-6 pt-3 md:pt-6">
-            <CardDescription className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
-              <Database className="h-3 md:h-4 w-3 md:w-4 text-blue-500" />
-              <span className="hidden md:inline">Environment</span>
-              <span className="md:hidden">Env</span>
-            </CardDescription>
-            <CardTitle className="text-base md:text-2xl font-bold text-foreground truncate">{debugInfo.environment}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 md:pb-3 px-3 md:px-6 pt-3 md:pt-6">
-            <CardDescription className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
-              <Users className="h-3 md:h-4 w-3 md:w-4 text-green-500" />
-              <span className="hidden md:inline">Logged In</span>
-              <span className="md:hidden">User</span>
-            </CardDescription>
-            <CardTitle className="text-xs md:text-lg font-bold text-foreground truncate">{profile.full_name}</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 md:pb-3 px-3 md:px-6 pt-3 md:pt-6">
-            <CardDescription className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
-              <ShieldAlert className="h-3 md:h-4 w-3 md:w-4 text-red-500" />
-              <span className="hidden md:inline">Access</span>
-              <span className="md:hidden">Role</span>
-            </CardDescription>
-            <CardTitle className="text-xs md:text-base font-bold text-red-600 dark:text-red-400">Debug Access</CardTitle>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 md:pb-3 px-3 md:px-6 pt-3 md:pt-6">
-            <CardDescription className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
-              <Clock className="h-3 md:h-4 w-3 md:w-4 text-purple-500" />
-              <span className="hidden md:inline">Next.js</span>
-              <span className="md:hidden">Ver</span>
-            </CardDescription>
-            <CardTitle className="text-base md:text-2xl font-bold text-foreground">{debugInfo.nextVersion}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
       <Tabs value={activeTab} onValueChange={(value) => handleTabChange(value as DebugTab)} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-1 md:gap-0 h-auto md:h-10 p-1">
-          <TabsTrigger value="error-log" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <Bug className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Error Log</span>
-            <span className="md:hidden data-[state=active]:inline hidden">Errors</span>
-          </TabsTrigger>
-          <TabsTrigger value="audit-log" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <History className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Audit Log</span>
-            <span className="md:hidden data-[state=active]:inline hidden">Audit</span>
-          </TabsTrigger>
-          <TabsTrigger value="dvla-sync" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <RefreshCw className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">DVLA Sync</span>
-            <span className="md:hidden data-[state=active]:inline hidden">DVLA</span>
-          </TabsTrigger>
-          <TabsTrigger value="test-fleet" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <Car className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Test Fleet</span>
-            <span className="md:hidden data-[state=active]:inline hidden">Fleet</span>
-          </TabsTrigger>
-          <TabsTrigger value="notification-settings" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <Send className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Notification Settings</span>
-            <span className="md:hidden data-[state=active]:inline hidden">Notifs</span>
-          </TabsTrigger>
-          <TabsTrigger value="modal-styles" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 data-[state=active]:gap-2">
-            <span className="hidden md:inline">Modal Styles</span>
-            <span className="md:hidden data-[state=active]:inline hidden">Modals</span>
-          </TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-4 gap-1 bg-slate-900/50 p-1 sm:grid-cols-8 lg:flex lg:w-auto lg:flex-wrap lg:justify-start lg:gap-0 lg:p-1.5">
+          {DEBUG_TABS.map(({ value, label, icon: Icon }) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className={tabTriggerClassName}
+              aria-label={label}
+              title={label}
+            >
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden lg:inline">{label}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="error-log">
@@ -195,6 +217,10 @@ export default function DebugPage() {
           <AuditLogDebugPanel supabase={supabase} />
         </TabsContent>
 
+        <TabsContent value="usage-analytics">
+          <UserAnalyticsDebugPanel />
+        </TabsContent>
+
         <TabsContent value="dvla-sync">
           <DVLASyncDebugPanel />
         </TabsContent>
@@ -203,13 +229,18 @@ export default function DebugPage() {
           <TestFleetDebugPanel />
         </TabsContent>
 
+        <TabsContent value="job-code-corrections">
+          <LegacyJobCodesDebugPanel />
+        </TabsContent>
+
         <TabsContent value="notification-settings">
           <NotificationSettingsDebugPanel />
         </TabsContent>
 
-        <TabsContent value="modal-styles">
-          <UIModalStylesDebugPanel />
+        <TabsContent value="emulation-tests">
+          <EmulationTestsDebugPanel />
         </TabsContent>
+
       </Tabs>
     </AppPageShell>
   );

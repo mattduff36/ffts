@@ -9,21 +9,64 @@ export interface TimesheetJobCodeSource {
   timesheet_entry_job_codes?: TimesheetEntryJobCodeLike[] | null;
 }
 
-export const JOB_NUMBER_REGEX = /^\d{4}-[A-Z]{2}$/;
+export const JOB_NUMBER_REGEX = /^\d{4,5}-[A-Z]{2}$/;
+export const QUOTE_JOB_NUMBER_REGEX = /^\d{5}-[A-Z]{2}$/;
+export const JOB_NUMBER_MAX_LENGTH = 32;
+export const STANDARD_JOB_NUMBER_MAX_LENGTH = 8;
 
-export function normalizeJobNumberInput(value: string): string {
-  let cleaned = value.replace(/[^0-9A-Za-z-]/g, '').toUpperCase();
-  cleaned = cleaned.replace(/-/g, '');
+function compactJobCode(value: string): string {
+  return value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+}
 
-  if (cleaned.length > 4) {
-    cleaned = `${cleaned.substring(0, 4)}-${cleaned.substring(4, 6)}`;
+function normalizeStandardJobNumberInput(value: string): string {
+  const cleaned = value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  const digits = cleaned.match(/^\d{0,5}/)?.[0] || '';
+  const suffix = cleaned.slice(digits.length).replace(/[^A-Z]/g, '').slice(0, 2);
+
+  if (!suffix) return digits;
+
+  return `${digits}-${suffix}`.substring(0, STANDARD_JOB_NUMBER_MAX_LENGTH);
+}
+
+export function normalizeCatalogJobCode(value: string): string {
+  const cleaned = compactJobCode(value).slice(0, JOB_NUMBER_MAX_LENGTH);
+  if (!cleaned) return '';
+
+  if (/^\d/.test(cleaned) && !/^\d{6}/.test(cleaned)) {
+    return normalizeStandardJobNumberInput(cleaned);
   }
 
-  return cleaned.substring(0, 7);
+  return cleaned;
+}
+
+export function normalizeJobNumberInput(value: string): string {
+  return normalizeCatalogJobCode(value);
 }
 
 export function isValidJobNumber(value: string | null | undefined): boolean {
+  const compact = (value || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  if (/^\d{6}/.test(compact)) return false;
+
   return JOB_NUMBER_REGEX.test(normalizeJobNumberInput(value || ''));
+}
+
+export function isCataloguedJobNumber(
+  value: string | null | undefined,
+  cataloguedJobNumbers: ReadonlySet<string>
+): boolean {
+  const normalizedValue = normalizeCatalogJobCode(value || '');
+  return Boolean(normalizedValue) && cataloguedJobNumbers.has(normalizedValue);
+}
+
+export function areCataloguedJobNumbers(
+  values: Array<string | null | undefined> | null | undefined,
+  cataloguedJobNumbers: ReadonlySet<string>
+): boolean {
+  const jobNumbers = getNormalizedJobNumbers(values);
+  if (jobNumbers.length === 0) return false;
+  if (hasDuplicateJobNumbers(values)) return false;
+
+  return jobNumbers.every((jobNumber) => isCataloguedJobNumber(jobNumber, cataloguedJobNumbers));
 }
 
 export function getNormalizedJobNumbers(values: Array<string | null | undefined> | null | undefined): string[] {
@@ -33,7 +76,7 @@ export function getNormalizedJobNumbers(values: Array<string | null | undefined>
   const normalized: string[] = [];
 
   for (const value of values) {
-    const next = normalizeJobNumberInput(value || '');
+    const next = normalizeCatalogJobCode(value || '');
     if (!next) continue;
     if (seen.has(next)) continue;
     seen.add(next);
@@ -73,7 +116,7 @@ export function hasDuplicateJobNumbers(values: Array<string | null | undefined> 
   const seen = new Set<string>();
 
   for (const value of values) {
-    const next = normalizeJobNumberInput(value || '');
+    const next = normalizeCatalogJobCode(value || '');
     if (!next) continue;
     if (seen.has(next)) return true;
     seen.add(next);

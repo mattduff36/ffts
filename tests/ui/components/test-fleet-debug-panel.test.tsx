@@ -77,27 +77,31 @@ describe('TestFleetDebugPanel', () => {
   it('requires a timed second click before quick purging TE57 assets', async () => {
     render(<TestFleetDebugPanel />);
 
+    await waitFor(() => {
+      expect(screen.getByText('TE57 ABC')).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByRole('button', { name: /quick purge te57 assets/i }));
 
     expect(screen.getByRole('button', { name: /confirm purge of te57 assets/i })).toBeInTheDocument();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: /confirm purge of te57 assets/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
     expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/debug/test-vehicles?prefix=TE57&type=all');
     expect(global.fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       '/api/debug/test-vehicles',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       }),
     );
-    expect(global.fetch).toHaveBeenNthCalledWith(3, '/api/debug/test-vehicles?prefix=TE57&type=all');
+    expect(global.fetch).toHaveBeenNthCalledWith(4, '/api/debug/test-vehicles?prefix=TE57&type=all');
     expect(toastSuccessMock).toHaveBeenCalledWith('Purged records for 1 fleet item(s)');
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
@@ -106,6 +110,9 @@ describe('TestFleetDebugPanel', () => {
     vi.useFakeTimers();
     try {
       render(<TestFleetDebugPanel />);
+      await act(async () => {
+        await Promise.resolve();
+      });
 
       fireEvent.click(screen.getByRole('button', { name: /quick purge te57 assets/i }));
       expect(screen.getByRole('button', { name: /confirm purge of te57 assets/i })).toBeInTheDocument();
@@ -120,39 +127,68 @@ describe('TestFleetDebugPanel', () => {
     }
   });
 
-  it('uses the current prefix in the quick purge label and resets confirmation when the prefix changes', async () => {
+  it('uses fixed TE57 loading controls without exposing a prefix field or extra load button', async () => {
     render(<TestFleetDebugPanel />);
 
-    fireEvent.change(screen.getByLabelText(/fleet registration prefix/i), {
-      target: { value: 'ab12' },
+    await waitFor(() => {
+      expect(screen.getByText('TE57 ABC')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /quick purge ab12 assets/i }));
-    expect(screen.getByRole('button', { name: /confirm purge of ab12 assets/i })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/fleet registration prefix/i), {
-      target: { value: 'cd34' },
-    });
-
-    expect(screen.getByRole('button', { name: /quick purge cd34 assets/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /confirm purge of ab12 assets/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/fleet registration prefix/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^load fleet$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick purge te57 assets/i })).toBeInTheDocument();
+    expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/debug/test-vehicles?prefix=TE57&type=all');
   });
 
   it('shows bordered destructive purge buttons', async () => {
     render(<TestFleetDebugPanel />);
 
+    await waitFor(() => {
+      expect(screen.getByText('TE57 ABC')).toBeInTheDocument();
+    });
+
     expect(screen.getByRole('button', { name: /quick purge te57 assets/i }).className).toContain('border-red-500/60');
 
-    fireEvent.click(screen.getByRole('button', { name: /^load fleet$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^select all$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /purge selected records/i }).className).toContain('border-red-500/60');
+    });
+  });
+
+  it('allows direct checkbox clicks as well as row clicks', async () => {
+    render(<TestFleetDebugPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('TE57 ABC')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByText('Select Fleet (1 of 1 selected)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('TE57 ABC'));
+    expect(checkbox.checked).toBe(false);
+    expect(screen.getByText('Select Fleet (0 of 1 selected)')).toBeInTheDocument();
+  });
+
+  it('keeps hard delete disabled until selected records have been purged', async () => {
+    render(<TestFleetDebugPanel />);
 
     await waitFor(() => {
       expect(screen.getByText('TE57 ABC')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: /^select all$/i }));
+    expect(screen.getByRole('button', { name: /hard delete fleet/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /quick purge te57 assets/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm purge of te57 assets/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /purge selected records/i }).className).toContain('border-red-500/60');
+      expect(screen.getByRole('button', { name: /hard delete fleet/i })).not.toBeDisabled();
     });
   });
 });

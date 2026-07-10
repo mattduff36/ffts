@@ -6,7 +6,7 @@
  * HGV inspection delete route.
  */
 import { describe, it, expect } from 'vitest';
-import { formatMilesUntil, formatMileage } from '@/lib/utils/maintenanceCalculations';
+import { formatMilesUntil } from '@/lib/utils/maintenanceCalculations';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -71,7 +71,10 @@ describe('KM labels present in HGV-specific files', () => {
   });
 
   it('HGV fleet history page uses "Current KM" and "Service Due KM"', () => {
-    const src = readSource('app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx');
+    const src = [
+      readSource('app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx'),
+      readSource('lib/fleet/asset-history-field-labels.ts'),
+    ].join('\n');
     expect(src).toContain('Current KM');
     expect(src).toContain('Service Due KM');
     expect(src).toContain('Last Service KM');
@@ -113,6 +116,14 @@ describe('Conditional KM labels in shared components', () => {
     const src = readSource('app/(dashboard)/maintenance/components/MaintenanceOverview.tsx');
     expect(src).toContain("distanceUnit");
     expect(src).toMatch(/formatMilesUntil\([^)]*distanceUnit/);
+  });
+
+  it('MaintenanceOverview shows the HGV fleet maintenance category strip from category items', () => {
+    const src = readSource('app/(dashboard)/maintenance/components/MaintenanceOverview.tsx');
+    expect(src).toContain('getHgvMaintenanceSummaryItems');
+    expect(src).toContain('vehicle.maintenance_items');
+    expect(src).toContain('item.category_name');
+    expect(src).toContain('item.display_value');
   });
 
   it('MaintenanceHistoryDialog handles HGV KM labels', () => {

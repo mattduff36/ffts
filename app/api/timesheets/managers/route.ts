@@ -4,6 +4,7 @@ import type { Database } from '@/types/database';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { isHiddenSystemTestAccountEmail, isHiddenSystemTestAccountProfile } from '@/lib/utils/system-test-accounts';
 
 type Manager = {
   id: string;
@@ -67,6 +68,8 @@ export async function GET() {
       .select(`
         id,
         full_name,
+        employee_id,
+        is_placeholder,
         roles!inner(
           name,
           display_name,
@@ -88,7 +91,7 @@ export async function GET() {
     // Fetch each user by ID to avoid pagination limits of listUsers()
     const emailMap = new Map<string, string | null>();
     
-    for (const profile of ((profilesData ?? []) as Array<{ id: string; full_name: string; roles: { name: string; display_name: string; is_manager_admin: boolean } | null }>)) {
+    for (const profile of ((profilesData ?? []) as Array<{ id: string; full_name: string; employee_id: string | null; is_placeholder: boolean | null; roles: { name: string; display_name: string; is_manager_admin: boolean } | null }>)) {
       try {
         const { data: { user }, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
         if (!userError && user?.email) {
@@ -104,10 +107,10 @@ export async function GET() {
     }
 
     // Merge profiles with emails
-    const data = ((profilesData ?? []) as Array<{ id: string; full_name: string; roles: { name: string; display_name: string; is_manager_admin: boolean } | null }>).map((profile) => ({
+    const data = ((profilesData ?? []) as Array<{ id: string; full_name: string; employee_id: string | null; is_placeholder: boolean | null; roles: { name: string; display_name: string; is_manager_admin: boolean } | null }>).map((profile) => ({
       ...profile,
       email: emailMap.get(profile.id) || null,
-    }));
+    })).filter((profile) => !isHiddenSystemTestAccountEmail(profile.email) && !isHiddenSystemTestAccountProfile(profile));
 
     const rawManagers = (data ?? []) as Array<{
       id: string;

@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, dialogContentViewportClassName } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,7 +29,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { PageLoader } from '@/components/ui/page-loader';
 import { AlertCircle, AlertTriangle, ArrowLeft, Camera, CheckCircle2, Info, Send, Timer, User, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { TRUCK_CHECKLIST_ITEMS } from '@/lib/checklists/vehicle-checklists';
+import {
+  HGV_ARTIC_ONLY_END_ITEM,
+  HGV_ARTIC_ONLY_START_ITEM,
+  TRUCK_CHECKLIST_ITEMS,
+} from '@/lib/checklists/vehicle-checklists';
 import { formatDate, formatDateISO, getDayOfWeek } from '@/lib/utils/date';
 import { getRecentVehicleIds, recordRecentVehicleId, splitVehiclesByRecent } from '@/lib/utils/recentVehicles';
 import { getInspectionVisibilityFlags } from '@/lib/utils/inspection-access';
@@ -43,7 +47,9 @@ import { InspectionPhotoTiles } from '@/components/inspections/InspectionPhotoTi
 import { useInspectionPhotos } from '@/lib/hooks/useInspectionPhotos';
 import { getInspectionPhotoKey } from '@/lib/inspection-photos';
 import { getReadingDigitGrowthWarning } from '@/lib/utils/readingDigitGrowthWarning';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import { completeInspectionReminder } from '@/lib/client/complete-inspection-reminder';
+import { WORKSHOP_TASK_COMMENT_MIN_LENGTH } from '@/lib/workshop-tasks/validation';
 
 const PhotoUpload = dynamic(() => import('@/components/forms/PhotoUpload'), { ssr: false });
 const SignaturePad = dynamic(() => import('@/components/forms/SignaturePad'), { ssr: false });
@@ -63,13 +69,35 @@ type ExistingInspectionConflict = { id: string; status: 'draft' | 'submitted' };
 
 const MIN_HGV_INSPECTION_SECONDS = 10 * 60;
 const STICKY_NAV_OFFSET_PX = 96;
-const ARTIC_ONLY_START_ITEM = 22;
-const ARTIC_ONLY_END_ITEM = 25;
 const getInspectionTimerStorageKey = (inspectionId: string): string => `hgv-inspection-timer-start:${inspectionId}`;
 type RecentCompletedDefect = { completedAt: string };
 
 function isArticOnlyItem(itemNumber: number): boolean {
-  return itemNumber >= ARTIC_ONLY_START_ITEM && itemNumber <= ARTIC_ONLY_END_ITEM;
+  return itemNumber >= HGV_ARTIC_ONLY_START_ITEM && itemNumber <= HGV_ARTIC_ONLY_END_ITEM;
+}
+
+function normalizeChecklistLabel(label?: string | null): string {
+  return (label || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function resolveCurrentHgvChecklistItemNumber(itemDescription?: string | null, fallbackItemNumber?: number): number {
+  const normalizedDescription = normalizeChecklistLabel(itemDescription);
+  const currentIndex = TRUCK_CHECKLIST_ITEMS.findIndex(
+    (checklistItem) => normalizeChecklistLabel(checklistItem) === normalizedDescription
+  );
+
+  return currentIndex >= 0 ? currentIndex + 1 : fallbackItemNumber || 0;
+}
+
+function resolveCurrentHgvDefectSignature(signature: string): string {
+  const match = signature.match(/^\s*(\d+)\s*-\s*(.+?)\s*$/);
+  if (!match) return signature;
+
+  const itemDescription = match[2];
+  return buildInspectionDefectSignature({
+    item_number: resolveCurrentHgvChecklistItemNumber(itemDescription, Number(match[1])),
+    item_description: itemDescription,
+  });
 }
 
 function NewHgvInspectionContent() {
@@ -214,9 +242,16 @@ function NewHgvInspectionContent() {
       .maybeSingle();
 
     if (error) {
-      console.error('Failed to check for existing inspection:', error, {
-        errorContextId: 'hgv-inspections-new-check-existing-error',
-      });
+      const status = getErrorStatus(error);
+      if (!isAuthErrorStatus(status) && !isNetworkFetchError(error)) {
+        console.error('Failed to check for existing inspection:', error, {
+          errorContextId: 'hgv-inspections-new-check-existing-error',
+        });
+      } else if (isNetworkFetchError(error)) {
+        console.warn('Unable to check existing HGV inspection (network):', error, {
+          errorContextId: 'hgv-inspections-new-check-existing-error',
+        });
+      }
       return null;
     }
 
@@ -327,7 +362,11 @@ function NewHgvInspectionContent() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not merge with existing draft';
       if (!isAuthErrorStatus(getErrorStatus(err))) {
-        console.error('Failed to merge into existing HGV draft:', err, { errorContextId });
+        if (isNetworkFetchError(err)) {
+          console.warn('HGV draft merge temporarily unavailable:', err, { errorContextId });
+        } else {
+          console.error('Failed to merge into existing HGV draft:', err, { errorContextId });
+        }
       }
       if (showToast && !isAuthErrorStatus(getErrorStatus(err))) {
         toast.error(message, { id: errorContextId });
@@ -514,7 +553,11 @@ function NewHgvInspectionContent() {
         return draft.id;
       } catch (err) {
         const errorContextId = 'hgv-inspections-new-silent-draft-save-error';
-        console.error('Silent draft save failed:', err, { errorContextId });
+        if (isNetworkFetchError(err)) {
+          console.warn('Silent HGV draft save skipped due transient network error', { errorContextId });
+        } else if (!isAuthErrorStatus(getErrorStatus(err))) {
+          console.error('Silent draft save failed:', err, { errorContextId });
+        }
         if (!silent) {
           toast.error('Could not auto-save draft. Please try again.', { id: errorContextId });
         }
@@ -573,21 +616,22 @@ function NewHgvInspectionContent() {
       setExistingInspectionId(id);
       setSubmittedConflictInspectionId(null);
       setShowSubmittedConflictDialog(false);
-      setHgvId(draft.hgv_id);
-      setInspectionDate(draft.inspection_date);
+      setHgvId(draft.hgv_id || '');
+      setInspectionDate(draft.inspection_date || '');
       setCurrentMileage(draft.current_mileage != null ? String(draft.current_mileage) : '');
-      setSelectedEmployeeId(draft.user_id);
+      setSelectedEmployeeId(draft.user_id || '');
       setInspectorComments(draft.inspector_comments || '');
 
       const { data: items } = await supabase
         .from('inspection_items')
-        .select('item_number, status, comments')
+        .select('item_number, item_description, status, comments')
         .eq('inspection_id', id);
 
       const restoredStates: Record<string, InspectionStatus> = {};
       const restoredComments: Record<string, string> = {};
-      for (const item of (items || []) as Array<{ item_number: number; status: InspectionStatus; comments: string | null }>) {
-        const key = `${item.item_number}`;
+      for (const item of (items || []) as Array<{ item_number: number; item_description: string | null; status: InspectionStatus; comments: string | null }>) {
+        const itemNumber = resolveCurrentHgvChecklistItemNumber(item.item_description, item.item_number);
+        const key = `${itemNumber}`;
         restoredStates[key] = item.status;
         if (item.comments) restoredComments[key] = item.comments;
       }
@@ -616,8 +660,17 @@ function NewHgvInspectionContent() {
       loadedDraftIdRef.current = id;
     } catch (err) {
       const errorContextId = 'hgv-inspections-new-load-draft-error';
-      console.error('Error loading HGV draft:', err, { errorContextId });
-      toast.error('Failed to load draft inspection', { id: errorContextId });
+      if (isNetworkFetchError(err)) {
+        console.warn('Unable to load HGV draft inspection (network):', err, { errorContextId });
+        setError('Could not load draft inspection because the network request failed. Please refresh and try again.');
+        toast.error('Could not load draft inspection. Please refresh and try again.', { id: errorContextId });
+      } else {
+        if (!isAuthErrorStatus(getErrorStatus(err))) {
+          console.error('Error loading HGV draft:', err, { errorContextId });
+        }
+        setError(err instanceof Error ? err.message : 'Failed to load draft inspection');
+        toast.error('Failed to load draft inspection', { id: errorContextId });
+      }
     } finally {
       if (activeDraftLoadIdRef.current === id) {
         activeDraftLoadIdRef.current = null;
@@ -830,22 +883,17 @@ function NewHgvInspectionContent() {
       const initialStates: Record<string, InspectionStatus> = {};
       const initialComments: Record<string, string> = {};
 
-      for (const item of lockedItems as Array<{ item_number: number; status?: string; comment: string; actionId: string }>) {
-        const key = `${item.item_number}`;
-        const statusLabel =
-          item.status === 'pending' ? 'pending' :
-          item.status === 'on_hold' ? 'on hold' :
-          item.status === 'logged' ? 'logged' :
-          'in progress';
-        const lockComment = item.comment || `Defect ${statusLabel} with workshop`;
-        map.set(key, { comment: lockComment, actionId: item.actionId });
+      for (const item of lockedItems as Array<{ item_number: number; item_description?: string | null; status?: string; comment: string; actionId: string }>) {
+        const itemNumber = resolveCurrentHgvChecklistItemNumber(item.item_description, item.item_number);
+        const key = `${itemNumber}`;
+        map.set(key, { comment: item.comment, actionId: item.actionId });
         initialStates[key] = 'attention';
-        initialComments[key] = lockComment;
+        initialComments[key] = item.comment || '';
       }
 
       const recentCompletedMap = new Map<string, RecentCompletedDefect>();
       recentCompletedItems.forEach((item) => {
-        recentCompletedMap.set(item.signature, { completedAt: item.completedAt });
+        recentCompletedMap.set(resolveCurrentHgvDefectSignature(item.signature), { completedAt: item.completedAt });
       });
 
       setRecentlyCompletedDefects(recentCompletedMap);
@@ -964,13 +1012,17 @@ function NewHgvInspectionContent() {
     }
 
     const defectsWithoutComments = Object.entries(checkboxStates)
-      .filter(([itemKey, status]) => status === 'attention' && !comments[itemKey]?.trim());
+      .filter(([itemKey, status]) =>
+        status === 'attention' &&
+        !loggedDefects.has(itemKey) &&
+        !comments[itemKey]?.trim()
+      );
     if (defectsWithoutComments.length > 0) {
       return 'Please add comments for all failed items';
     }
 
-    if (informWorkshop && inspectorComments.trim().length < 10) {
-      return 'Workshop notification requires at least 10 characters in notes';
+    if (informWorkshop && inspectorComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
+      return `Workshop notification requires at least ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters in notes`;
     }
 
     if (!canSubmitNow) {
@@ -1021,14 +1073,18 @@ function NewHgvInspectionContent() {
     }
 
     const firstMissingComment = Object.entries(checkboxStates)
-      .find(([itemKey, status]) => status === 'attention' && !comments[itemKey]?.trim());
+      .find(([itemKey, status]) =>
+        status === 'attention' &&
+        !loggedDefects.has(itemKey) &&
+        !comments[itemKey]?.trim()
+      );
     if (firstMissingComment) {
       const [itemKey] = firstMissingComment;
       scroll(document.querySelector(`[data-comment-input="${itemKey}"]`));
       return;
     }
 
-    if (informWorkshop && inspectorComments.trim().length < 10) {
+    if (informWorkshop && inspectorComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
       scroll(document.getElementById('inspectorComments'));
     }
   };
@@ -1191,7 +1247,7 @@ function NewHgvInspectionContent() {
         });
       }
 
-      if (status === 'submitted' && informWorkshop && inspectorComments.trim().length >= 10) {
+      if (status === 'submitted' && informWorkshop && inspectorComments.trim().length >= WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
         await fetch('/api/hgv-inspections/inform-workshop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1205,6 +1261,16 @@ function NewHgvInspectionContent() {
       }
 
       if (status === 'submitted') {
+        try {
+          await completeInspectionReminder({
+            assetType: 'hgv',
+            assetId: hgvId,
+            assignedTo: selectedEmployeeId,
+          });
+        } catch (reminderError) {
+          console.warn('Reminder completion skipped after HGV daily check submission:', reminderError);
+        }
+
         toast.success('HGV inspection submitted successfully');
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem(getInspectionTimerStorageKey(inspectionId));
@@ -1560,9 +1626,9 @@ function NewHgvInspectionContent() {
       {checklistStarted && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-foreground">25-Point HGV Safety Check</CardTitle>
+            <CardTitle className="text-foreground">{TRUCK_CHECKLIST_ITEMS.length}-Point HGV Safety Check</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Mark each item as Pass or Fail (items 22-25 also allow N/A)
+              Mark each item as Pass or Fail (items {HGV_ARTIC_ONLY_START_ITEM}-{HGV_ARTIC_ONLY_END_ITEM} also allow N/A)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4 md:p-6">
@@ -1585,7 +1651,7 @@ function NewHgvInspectionContent() {
                     const statusOptions = getStatusOptions(itemNumber);
                     return (
                       <Fragment key={itemNumber}>
-                        {itemNumber === ARTIC_ONLY_START_ITEM && (
+                        {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
                           <tr className="bg-blue-500/10 border-y border-blue-400/40">
                             <td colSpan={4} className="p-2 text-center text-xs font-semibold tracking-wide text-blue-200 uppercase">
                               Artics only
@@ -1620,8 +1686,8 @@ function NewHgvInspectionContent() {
                               value={comments[key] || ''}
                               onChange={(e) => handleCommentChange(itemNumber, e.target.value)}
                               placeholder={currentStatus === 'attention' ? 'Required for failed items' : 'Optional notes'}
-                              className={`bg-slate-900/50 border-slate-600 text-white ${currentStatus === 'attention' && !comments[key] ? 'border-red-500' : ''}`}
                               readOnly={isLocked}
+                              className={`bg-slate-900/50 border-slate-600 text-white ${currentStatus === 'attention' && !comments[key] && !isLocked ? 'border-red-500' : ''} ${isLocked ? 'cursor-not-allowed opacity-70' : ''}`}
                             />
                             {currentStatus === 'attention' && !isLocked && (() => {
                               const dayOfWeek = inspectionDate ? getDayOfWeek(new Date(inspectionDate + 'T00:00:00')) : 1;
@@ -1668,7 +1734,7 @@ function NewHgvInspectionContent() {
                 const statusOptions = getStatusOptions(itemNumber);
                 return (
                   <Fragment key={itemNumber}>
-                    {itemNumber === ARTIC_ONLY_START_ITEM && (
+                    {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
                       <div className="rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-blue-200">
                         Artics only
                       </div>
@@ -1703,18 +1769,18 @@ function NewHgvInspectionContent() {
                       {(currentStatus === 'attention' || comments[key]) && (
                         <div className="space-y-2">
                           <Label className="text-foreground text-sm">
-                            {currentStatus === 'attention' ? (isLocked ? 'Manager Comment' : 'Comments (Required)') : 'Notes'}
+                            {currentStatus === 'attention' ? 'Comments (Required)' : 'Notes'}
                           </Label>
                           <Textarea
                             id={`hgv-comment-${itemNumber}`}
                             data-comment-input={key}
                             value={comments[key] || ''}
                             onChange={(e) => handleCommentChange(itemNumber, e.target.value)}
-                            placeholder={isLocked ? '' : 'Add details...'}
+                            placeholder="Add details..."
+                            readOnly={isLocked}
                             className={`min-h-[80px] bg-slate-900/50 border-slate-600 text-white placeholder:text-muted-foreground ${
                               currentStatus === 'attention' && !comments[key] && !isLocked ? 'border-red-500' : ''
                             } ${isLocked ? 'cursor-not-allowed opacity-70' : ''}`}
-                            readOnly={isLocked}
                           />
                         </div>
                       )}
@@ -1867,7 +1933,7 @@ function NewHgvInspectionContent() {
         }
         setShowRepeatDefectDialog(open);
       }}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -1927,7 +1993,7 @@ function NewHgvInspectionContent() {
       </Dialog>
 
       <Dialog open={showDigitGrowthWarningDialog} onOpenChange={setShowDigitGrowthWarningDialog}>
-        <DialogContent className="border-border text-white max-w-md">
+        <DialogContent className={dialogContentViewportClassName({ size: 'md', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Confirm KM Entry</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -1966,7 +2032,7 @@ function NewHgvInspectionContent() {
       </Dialog>
 
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="border-border text-white max-w-lg">
+        <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl">Sign Daily Check</DialogTitle>
             <DialogDescription className="text-muted-foreground">

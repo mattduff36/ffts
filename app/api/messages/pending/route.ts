@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import type { GetPendingMessagesResponse } from '@/types/messages';
+import type { NotificationModuleKey } from '@/types/notifications';
 
 interface SenderShape {
   full_name?: string | null;
@@ -12,9 +13,11 @@ interface PendingMessageShape {
   id?: string;
   type?: 'TOOLBOX_TALK' | 'REMINDER' | 'NOTIFICATION';
   created_via?: string | null;
+  module_key?: NotificationModuleKey | null;
   subject?: string | null;
   body?: string | null;
-  priority?: 'HIGH' | 'LOW';
+  priority?: 'HIGH' | 'LOW' | 'URGENT';
+  acceptance_delay_minutes?: number | null;
   sender_id?: string | null;
   created_at?: string | null;
   deleted_at?: string | null;
@@ -24,8 +27,12 @@ interface PendingMessageShape {
 
 interface RecipientShape {
   id?: string;
+  first_shown_at?: string | null;
   messages?: PendingMessageShape | PendingMessageShape[] | null;
 }
+
+const TOOLBOX_TALKS_MODULE_KEY: NotificationModuleKey = 'toolbox_talks';
+const TOOLBOX_TALKS_CREATED_VIA_PREFIX = 'toolbox-talks';
 
 function pickMessage(messages: RecipientShape['messages']): PendingMessageShape | null {
   if (!messages) return null;
@@ -35,6 +42,23 @@ function pickMessage(messages: RecipientShape['messages']): PendingMessageShape 
 function pickSender(sender: PendingMessageShape['sender']): SenderShape | null {
   if (!sender) return null;
   return Array.isArray(sender) ? sender[0] ?? null : sender;
+}
+
+function shouldShowNonBlockingModal(message: PendingMessageShape): boolean {
+  if (message.module_key) {
+    return message.module_key === TOOLBOX_TALKS_MODULE_KEY
+      && (message.type === 'REMINDER' || message.type === 'NOTIFICATION');
+  }
+
+  if (message.type === 'REMINDER') {
+    return (message.created_via ?? '').startsWith(TOOLBOX_TALKS_CREATED_VIA_PREFIX);
+  }
+
+  if (message.type === 'NOTIFICATION') {
+    return (message.created_via ?? '').startsWith(TOOLBOX_TALKS_CREATED_VIA_PREFIX);
+  }
+
+  return false;
 }
 
 /**
@@ -59,13 +83,16 @@ export async function GET() {
         id,
         message_id,
         status,
+        first_shown_at,
         messages!inner(
           id,
           type,
           created_via,
+          module_key,
           subject,
           body,
           priority,
+          acceptance_delay_minutes,
           sender_id,
           created_at,
           deleted_at,
@@ -79,6 +106,7 @@ export async function GET() {
       .eq('user_id', userId)
       .eq('status', 'PENDING')
       .eq('messages.type', 'TOOLBOX_TALK')
+      .eq('messages.module_key', TOOLBOX_TALKS_MODULE_KEY)
       .is('messages.deleted_at', null)
       .order('messages(created_at)', { ascending: true }); // Oldest first
 
@@ -87,7 +115,7 @@ export async function GET() {
       throw toolboxError;
     }
 
-    // Fetch pending Reminders (PENDING status, not soft-deleted)
+    // Fetch pending non-blocking messages (PENDING status, not soft-deleted)
     const { data: reminders, error: remindersError } = await supabase
       .from('message_recipients')
       .select(`
@@ -98,6 +126,7 @@ export async function GET() {
           id,
           type,
           created_via,
+          module_key,
           subject,
           body,
           priority,
@@ -112,7 +141,8 @@ export async function GET() {
       `)
       .eq('user_id', userId)
       .eq('status', 'PENDING')
-      .eq('messages.type', 'REMINDER')
+      .in('messages.type', ['REMINDER', 'NOTIFICATION'])
+      .eq('messages.module_key', TOOLBOX_TALKS_MODULE_KEY)
       .is('messages.deleted_at', null)
       .order('messages(created_at)', { ascending: false }); // Newest first
 
@@ -139,13 +169,16 @@ export async function GET() {
           updated_at: message.created_at,
           deleted_at: message.deleted_at ?? null,
           created_via: message.created_via ?? 'api',
+          module_key: message.module_key ?? TOOLBOX_TALKS_MODULE_KEY,
           pdf_file_path: message.pdf_file_path ?? null,
+          acceptance_delay_minutes: message.acceptance_delay_minutes ?? 0,
           sender: {
             id: message.sender_id ?? '',
             full_name: pickSender(message.sender)?.full_name ?? 'Deleted User',
             role: 'unknown',
           },
           recipient_id: item.id ?? '',
+          first_shown_at: item.first_shown_at ?? null,
           sender_name: pickSender(message.sender)?.full_name ?? 'Deleted User',
         };
       })
@@ -156,6 +189,7 @@ export async function GET() {
         const item = rawItem as RecipientShape;
         const message = pickMessage(item.messages);
         if (!message?.id || !message.type || !message.priority || !message.created_at) return null;
+        if (!shouldShowNonBlockingModal(message)) return null;
 
         return {
           id: message.id,
@@ -168,7 +202,9 @@ export async function GET() {
           updated_at: message.created_at,
           deleted_at: message.deleted_at ?? null,
           created_via: message.created_via ?? 'api',
+          module_key: message.module_key ?? TOOLBOX_TALKS_MODULE_KEY,
           pdf_file_path: message.pdf_file_path ?? null,
+          acceptance_delay_minutes: message.acceptance_delay_minutes ?? 0,
           sender: {
             id: message.sender_id ?? '',
             full_name: pickSender(message.sender)?.full_name ?? 'Deleted User',

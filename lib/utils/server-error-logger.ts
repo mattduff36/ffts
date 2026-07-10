@@ -5,6 +5,7 @@
 
 import { insertErrorLogs } from '@/lib/server/error-logs';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
+import { trackServerUsageEvent } from '@/lib/server/user-analytics';
 import type { Json } from '@/types/database';
 
 export interface ServerErrorLog {
@@ -106,7 +107,7 @@ export async function logServerError({
     let finalUserEmail = userEmail;
     
     if (!finalUserId || !finalUserEmail) {
-      const current = await getCurrentAuthenticatedProfile({ allowLocked: true, includeEmail: true });
+      const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
       finalUserId = finalUserId || current?.profile.id || null;
       finalUserEmail = finalUserEmail || current?.profile.email || null;
     }
@@ -150,6 +151,17 @@ export async function logServerError({
         ...errorLog,
         timestamp: new Date().toISOString(),
       }]);
+    await trackServerUsageEvent({
+      eventName: 'error_observed',
+      userId: finalUserId,
+      request,
+      metadata: {
+        componentName,
+        errorType: errorObj.name || 'Error',
+        originalMessage: errorObj.message,
+        requestContext,
+      },
+    });
   } catch (err) {
     // Silent fail - don't want error logging to break the app
     console.warn('[Server Error Logger] Failed to log error:', err);

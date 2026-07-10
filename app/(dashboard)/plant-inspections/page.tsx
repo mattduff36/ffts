@@ -13,25 +13,19 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageLoader } from '@/components/ui/page-loader';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Clipboard, Clock, User, Download, Trash2, Filter, Wrench, Loader2, LayoutGrid, Table2, Settings2 } from 'lucide-react';
+import { Plus, Clipboard, Clock, User, Download, Trash2, Filter, Wrench, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
 import { toast } from 'sonner';
 import { PlantInspection } from '@/types/inspection';
 import { Employee, InspectionStatusFilter } from '@/types/common';
 import { useQueryState } from 'nuqs';
 import { canEditDraftInspection, getInspectionVisibilityFlags } from '@/lib/utils/inspection-access';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import { ColumnVisibilityMenu, DataViewToggle } from '@/components/ui/data-view-controls';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -217,7 +211,10 @@ function PlantInspectionsContent() {
             }))
           );
         } catch (err) {
-          console.error('Error fetching employees:', err);
+          const status = getErrorStatus(err);
+          if (!isAuthErrorStatus(status) && !isNetworkFetchError(err)) {
+            console.error('Error fetching employees:', err);
+          }
         }
       };
 
@@ -411,20 +408,13 @@ function PlantInspectionsContent() {
       );
     } catch (error) {
       const errorContextId = 'plant-inspections-fetch-list-error';
-      const message = (() => {
-        if (error instanceof Error) return error.message;
-        if (typeof error === 'string') return error;
-        try {
-          return JSON.stringify(error);
-        } catch {
-          return String(error);
-        }
-      })();
-      const isNetworkFailure =
-        message.includes('Failed to fetch') || message.includes('NetworkError') || message.toLowerCase().includes('network');
+      const isNetworkFailure = isNetworkFetchError(error);
+      const isAuthFailure = isAuthErrorStatus(getErrorStatus(error));
 
       if (isNetworkFailure) {
-        console.error('Unable to load plant inspections (network):', error, { errorContextId, network: true });
+        console.warn('Unable to load plant inspections (network):', error, { errorContextId, network: true });
+      } else if (isAuthFailure) {
+        console.warn('Unable to load plant inspections (auth):', error, { errorContextId, auth: true });
       } else {
         console.error('Error fetching plant inspections:', error, { errorContextId });
       }
@@ -634,14 +624,14 @@ function PlantInspectionsContent() {
       {/* Header */}
       <div className={`bg-slate-900 rounded-lg border border-border ${tabletModeEnabled ? 'p-5 md:p-6' : 'p-6'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-white mb-2">Plant Daily Checks</h1>
             <p className="text-muted-foreground">
               Daily plant machinery safety checks
             </p>
           </div>
-          <Link href="/plant-inspections/new">
-            <Button className={`bg-plant-inspection hover:bg-plant-inspection-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
+          <Link href="/plant-inspections/new" className="w-full md:w-auto">
+            <Button className={`w-full bg-plant-inspection hover:bg-plant-inspection-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg md:w-auto ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}>
               <Plus className="h-4 w-4 mr-2" />
               New Daily Check
             </Button>
@@ -651,8 +641,8 @@ function PlantInspectionsContent() {
         {/* Manager: Employee Filter */}
         {canViewCrossUserInspections && employees.length > 0 && (
           <div className="pt-4 border-t border-border">
-            <div className={`flex items-center gap-3 ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
-              <Label htmlFor="employee-filter" className="text-white text-sm flex items-center gap-2 whitespace-nowrap">
+            <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${tabletModeEnabled ? 'max-w-none flex-wrap' : 'max-w-md'}`}>
+              <Label htmlFor="employee-filter" className="text-white text-sm flex items-center gap-2">
                 <User className="h-4 w-4" />
                 View daily checks for:
               </Label>
@@ -682,9 +672,9 @@ function PlantInspectionsContent() {
           <CardContent className="pt-6">
             <div className={`grid grid-cols-1 gap-6 ${tabletModeEnabled ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
               {/* Status Filter */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Filter className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-slate-400 mr-2">Filter by status:</span>
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by status:</span>
                 <div className="flex gap-2 flex-wrap">
                   {(['all', 'draft', 'submitted'] as InspectionStatusFilter[]).map((filter) => (
                     <Button
@@ -703,9 +693,9 @@ function PlantInspectionsContent() {
               </div>
 
               {/* Plant Filter */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Wrench className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-slate-400 mr-2 whitespace-nowrap">Filter by plant:</span>
+                <span className="text-sm text-slate-400 sm:mr-2">Filter by plant:</span>
                 <Select value={normalizedPlantFilter} onValueChange={setPlantFilter}>
                 <SelectTrigger className={`${tabletModeEnabled ? 'min-h-11 text-base' : 'h-9'} border-border text-white bg-slate-900/50`}>
                     <SelectValue placeholder="All plant" />
@@ -729,12 +719,7 @@ function PlantInspectionsContent() {
       )}
 
       {showInitialLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-plant-inspection mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">Loading daily checks...</p>
-          </div>
-        </div>
+        <PanelLoader message="Loading daily checks..." accent="plant-inspection" className="py-20" />
       ) : inspections.length === 0 ? (
         <Card className="border-border">
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -761,70 +746,24 @@ function PlantInspectionsContent() {
           )}
           {canViewCrossUserInspections && (
             <div className="hidden md:flex items-center justify-end gap-2">
-              {viewMode === 'table' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="border-slate-600">
-                      <Settings2 className="h-4 w-4 mr-2" />
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-slate-900 border border-border">
-                    <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.employeeId}
-                      onCheckedChange={() => toggleColumn('employeeId')}
-                    >
-                      Employee ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.category}
-                      onCheckedChange={() => toggleColumn('category')}
-                    >
-                      Category
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.status}
-                      onCheckedChange={() => toggleColumn('status')}
-                    >
-                      Status
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.submittedAt}
-                      onCheckedChange={() => toggleColumn('submittedAt')}
-                    >
-                      Submitted
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('table');
-                    localStorage.setItem('plant-inspections-view-mode', 'table');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'table' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <Table2 className="h-4 w-4 mr-1.5" />
-                  Table
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setViewMode('cards');
-                    localStorage.setItem('plant-inspections-view-mode', 'cards');
-                  }}
-                  className={`h-8 px-3 ${viewMode === 'cards' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                >
-                  <LayoutGrid className="h-4 w-4 mr-1.5" />
-                  Cards
-                </Button>
-              </div>
+              {viewMode === 'table' ? (
+                <ColumnVisibilityMenu
+                  options={[
+                    { id: 'employeeId', label: 'Employee ID', checked: columnVisibility.employeeId },
+                    { id: 'category', label: 'Category', checked: columnVisibility.category },
+                    { id: 'status', label: 'Status', checked: columnVisibility.status },
+                    { id: 'submittedAt', label: 'Submitted', checked: columnVisibility.submittedAt },
+                  ]}
+                  onToggle={toggleColumn}
+                />
+              ) : null}
+              <DataViewToggle
+                value={viewMode}
+                onValueChange={(nextViewMode) => {
+                  setViewMode(nextViewMode);
+                  localStorage.setItem('plant-inspections-view-mode', nextViewMode);
+                }}
+              />
             </div>
           )}
 

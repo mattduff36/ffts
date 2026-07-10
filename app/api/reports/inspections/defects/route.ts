@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getVehicleCategoryName } from '@/lib/utils/deprecation-logger';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { buildSafeReportFilename, parseReportDateRange, validateRequiredReportDateRange } from '@/lib/server/report-date-range';
 import { getReportScopeContext, getScopedProfileIdsForModule } from '@/lib/server/report-scope';
 import { 
   generateExcelFile, 
@@ -132,8 +133,12 @@ export async function GET(request: NextRequest) {
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
-    const dateFrom = searchParams.get('dateFrom');
-    const dateTo = searchParams.get('dateTo');
+    const { range, error: dateRangeError } = parseReportDateRange(searchParams);
+    const requiredRangeError = validateRequiredReportDateRange(range, 366);
+    if (dateRangeError || requiredRangeError || !range) {
+      return NextResponse.json({ error: dateRangeError || requiredRangeError || 'Invalid date range.' }, { status: 400 });
+    }
+    const { dateFrom, dateTo } = range;
 
     const vanScope = scopedModuleIds.get('inspections') || null;
     const plantScope = scopedModuleIds.get('plant-inspections') || null;
@@ -356,10 +361,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Generate filename
-    const dateRange = dateFrom && dateTo 
-      ? `${dateFrom}_to_${dateTo}`
-      : new Date().toISOString().split('T')[0];
-    const filename = `Daily_Checks_Defects_${dateRange}.xlsx`;
+    const filename = buildSafeReportFilename('Daily_Checks_Defects', range.filenameDateRange, 'xlsx');
 
     // Return Excel file
     return new NextResponse(new Uint8Array(buffer), {

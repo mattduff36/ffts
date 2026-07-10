@@ -198,6 +198,28 @@ export function PlantInspectionPDF({
   const machineText = plant.isHired
     ? `${plant.plant_id}${plant.nickname ? ` (${plant.nickname})` : ''}`
     : `${plant.plant_id}${plant.nickname ? ` (${plant.nickname})` : ''}${plant.serial_number ? ` (SN: ${plant.serial_number})` : ''}`;
+  const checklistItems = (() => {
+    const itemByNumber = new Map<number, string>();
+
+    items.forEach((item) => {
+      if (itemByNumber.has(item.item_number)) return;
+      itemByNumber.set(
+        item.item_number,
+        item.item_description || PLANT_INSPECTION_ITEMS[item.item_number - 1] || `Item ${item.item_number}`
+      );
+    });
+
+    if (itemByNumber.size === 0) {
+      return PLANT_INSPECTION_ITEMS.map((description, index) => ({
+        number: index + 1,
+        description,
+      }));
+    }
+
+    return [...itemByNumber.entries()]
+      .sort(([leftNumber], [rightNumber]) => leftNumber - rightNumber)
+      .map(([number, description]) => ({ number, description }));
+  })();
 
   return (
     <Document>
@@ -227,7 +249,7 @@ export function PlantInspectionPDF({
               <Text style={styles.topValue}>{inspection.current_mileage != null ? `${inspection.current_mileage}` : '-'}</Text>
             </View>
             <View style={[styles.topCellLast, { width: '38%' }]}>
-              <Text style={styles.topLabel}>OPERATOR&apos;S NAME</Text>
+              <Text style={styles.topLabel}>INSPECTOR NAME</Text>
               <Text style={styles.topValue}>{operator.full_name}</Text>
             </View>
           </View>
@@ -251,10 +273,10 @@ export function PlantInspectionPDF({
               <Text style={styles.headerText}>COMMENTS</Text>
             </View>
           </View>
-          {PLANT_INSPECTION_ITEMS.map((itemLabel, index) => {
-            const itemNumber = index + 1;
+          {checklistItems.map((checklistItem, index) => {
+            const itemNumber = checklistItem.number;
             const item = getSingleItem(itemNumber);
-            const isLast = index === PLANT_INSPECTION_ITEMS.length - 1;
+            const isLast = index === checklistItems.length - 1;
             const rowStyle = isLast ? styles.rowLast : styles.row;
             const passMark = item?.status === 'ok' ? 'PASS' : '';
             const failMark = item?.status === 'attention' ? 'FAIL' : '';
@@ -268,7 +290,7 @@ export function PlantInspectionPDF({
                   <Text style={styles.numText}>{String(itemNumber).padStart(2, '0')}</Text>
                 </View>
                 <View style={styles.itemCell}>
-                  <Text style={styles.itemText}>{itemLabel}</Text>
+                  <Text style={styles.itemText}>{checklistItem.description}</Text>
                 </View>
                 <View style={styles.passCell}>
                   <Text style={styles.markText}>{passMark}</Text>

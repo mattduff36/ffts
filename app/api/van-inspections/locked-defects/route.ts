@@ -3,6 +3,15 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-access';
 import { LOCKED_INSPECTION_DEFECT_STATUSES } from '@/lib/utils/inspectionDefectTaskStatuses';
 
+function extractOriginalInspectionComment(description: string | null | undefined): string {
+  if (!description) {
+    return '';
+  }
+
+  const commentMatch = description.match(/(?:^|\n)Comment:\s*(.+?)(?:\n|$)/);
+  return commentMatch?.[1]?.trim() || '';
+}
+
 /**
  * GET /api/van-inspections/locked-defects?vehicleId=xxx
  * 
@@ -78,11 +87,11 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     // Fetch inspection items if we have any item IDs
-    let items: Array<{ id: string; item_number: number; item_description: string }> = [];
+    let items: Array<{ id: string; item_number: number; item_description: string; comments: string | null }> = [];
     if (itemIds.length > 0) {
       const { data: fetchedItems } = await supabaseAdmin
         .from('inspection_items')
-        .select('id, item_number, item_description')
+        .select('id, item_number, item_description, comments')
         .in('id', itemIds);
       
       if (fetchedItems) {
@@ -104,21 +113,12 @@ export async function GET(request: NextRequest) {
       if (task.inspection_item_id) {
         const item = items.find(i => i.id === task.inspection_item_id);
         if (item) {
-          // Get comment (prefer logged_comment, then workshop_comments, then parse from description)
-          let comment = task.logged_comment || task.workshop_comments || '';
-          if (!comment && task.description) {
-            const commentMatch = task.description.match(/Comment: (.+)/);
-            if (commentMatch) {
-              comment = commentMatch[1];
-            }
-          }
-
           lockedItem = {
             item_number: item.item_number,
             item_description: item.item_description,
             status: task.status,
             actionId: task.id,
-            comment: comment || 'Defect in progress'
+            comment: item.comments?.trim() || extractOriginalInspectionComment(task.description)
           };
         }
       }
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
             item_description: itemDesc,
             status: task.status,
             actionId: task.id,
-            comment: task.logged_comment || task.workshop_comments || 'Defect in progress'
+            comment: extractOriginalInspectionComment(task.description)
           };
         }
       }

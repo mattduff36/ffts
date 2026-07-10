@@ -47,14 +47,14 @@ describeOrSkip('Inspection Defect Task Idempotency', () => {
       throw new Error('No test user available');
     }
 
-    // Create test inspection
+    // Create test daily inspection
     const { data: inspection } = await supabase
       .from('van_inspections')
       .insert({
         van_id: testVehicleId,
         user_id: testUserId,
         inspection_date: '2026-01-13',
-        inspection_end_date: '2026-01-19',
+        inspection_end_date: '2026-01-13',
         current_mileage: 999994, // Obviously invalid test value for easy corruption detection
         status: 'draft',
       })

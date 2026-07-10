@@ -17,7 +17,7 @@ import { getRecentVehicleIds, recordRecentVehicleId, splitVehiclesByRecent } fro
 import { useAttachmentTemplates } from '@/lib/hooks/useAttachmentTemplates';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
-import type { Database } from '@/types/database';
+import { WORKSHOP_TASK_COMMENT_MIN_LENGTH } from '@/lib/workshop-tasks/validation';
 
 type Vehicle = {
   id: string;
@@ -49,8 +49,6 @@ type Subcategory = {
   };
 };
 
-type ActionInsert = Database['public']['Tables']['actions']['Insert'];
-
 interface CreateWorkshopTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +56,14 @@ interface CreateWorkshopTaskDialogProps {
   initialCategoryId?: string;
   alertType?: AlertType;
   onSuccess?: () => void;
+}
+
+interface CreateWorkshopTaskResponse {
+  error?: string;
+  task?: {
+    id: string;
+  };
+  meter_reading_updated?: boolean;
 }
 
 function normalizeTemplateAppliesTo(rawValues?: string | string[] | null): string[] {
@@ -359,13 +365,20 @@ export function CreateWorkshopTaskDialog({
       return;
     }
 
-    if (workshopComments.length < 10) {
-      toast.error('Comments must be at least 10 characters');
+    if (workshopComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH) {
+      toast.error(`Comments must be at least ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters`);
       return;
     }
 
     const readingValue = parseInt(newMeterReading);
     const selectedVehicleForValidation = vehicles.find(v => v.id === selectedVehicleId);
+    const selectedCategoryIsValid = filteredCategories.some(category => category.id === selectedCategoryId);
+    const selectedSubcategoryIsValid = !categoryHasSubcategories || filteredSubcategories.some(subcategory => subcategory.id === selectedSubcategoryId);
+    if (!selectedCategoryIsValid || !selectedSubcategoryIsValid) {
+      toast.error('Please select a valid workshop category for this asset');
+      return;
+    }
+
     const isHgvSelection = selectedVehicleForValidation?.asset_type === 'hgv';
     const readingDescriptor = meterReadingType === 'hours' ? 'hours' : isHgvSelection ? 'KM' : 'mileage';
     const readingLabel = meterReadingType === 'hours' ? 'Hours' : isHgvSelection ? 'KM' : 'Mileage';
@@ -386,7 +399,13 @@ export function CreateWorkshopTaskDialog({
 
       // Generate title based on alert type if provided, otherwise use generic title
       const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);
-      const isPlant = selectedVehicle?.asset_type === 'plant';
+      if (!selectedVehicle || !['van', 'plant', 'hgv'].includes(selectedVehicle.asset_type)) {
+        toast.error('Please select a valid asset');
+        return;
+      }
+
+      const isPlant = selectedVehicle.asset_type === 'plant';
+      const isHgv = selectedVehicle.asset_type === 'hgv';
       const assetIdLabel = isPlant
         ? (selectedVehicle?.plant_id ?? 'Unknown Plant')
         : (selectedVehicle?.reg_number ?? 'Unknown Asset');
@@ -394,41 +413,32 @@ export function CreateWorkshopTaskDialog({
         ? getTaskContent(alertType, assetIdLabel, '').title
         : `Workshop Task - ${assetIdLabel}`;
 
-      // Create the workshop task with correct asset reference
-      const taskData: ActionInsert = {
-        action_type: 'workshop_vehicle_task',
-        workshop_comments: workshopComments,
-        title: taskTitle,
-        description: workshopComments.substring(0, 200),
-        status: 'pending',
-        priority: 'medium',
-        created_by: user.id,
-      };
+      const createTaskResponse = await fetch('/api/workshop-tasks/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_id: selectedVehicleId,
+          asset_type: selectedVehicle.asset_type,
+          workshop_category_id: selectedCategoryId,
+          workshop_subcategory_id: categoryHasSubcategories ? selectedSubcategoryId : null,
+          workshop_comments: workshopComments.trim(),
+          meter_reading: readingValue,
+          title: taskTitle,
+        }),
+      });
 
-      // Set category/subcategory based on whether subcategories exist for this category
-      if (categoryHasSubcategories && selectedSubcategoryId) {
-        taskData.workshop_subcategory_id = selectedSubcategoryId;
-      } else {
-        taskData.workshop_category_id = selectedCategoryId;
-        taskData.workshop_subcategory_id = null;
+      const createTaskPayload = await createTaskResponse.json().catch(() => ({})) as CreateWorkshopTaskResponse;
+
+      if (!createTaskResponse.ok) {
+        const errorMessage = createTaskPayload.error || 'Failed to create task';
+        if (createTaskResponse.status === 401 || createTaskResponse.status === 403) {
+          toast.error(errorMessage);
+          return;
+        }
+        throw new Error(errorMessage);
       }
 
-      // Set one asset id field only.
-      if (isPlant) {
-        taskData.plant_id = selectedVehicleId;
-      } else if (selectedVehicle?.asset_type === 'hgv') {
-        taskData.hgv_id = selectedVehicleId;
-      } else {
-        taskData.van_id = selectedVehicleId;
-      }
-
-      const { data: newTask, error } = await supabase
-        .from('actions')
-        .insert(taskData)
-        .select('id')
-        .single();
-
-      if (error) throw error;
+      const newTask = createTaskPayload.task;
 
       // Create attachments for selected templates
       if (newTask && selectedTemplateIds.length > 0) {
@@ -453,59 +463,11 @@ export function CreateWorkshopTaskDialog({
         }
       }
 
-      // Update meter reading in vehicle_maintenance table
-      const updateData: Record<string, unknown> = {
-        last_updated_at: new Date().toISOString(),
-        last_updated_by: user.id,
-      };
-
-      if (isPlant) {
-        updateData.plant_id = selectedVehicleId;
-        updateData.current_hours = readingValue;
-        updateData.last_hours_update = new Date().toISOString();
-      } else if (selectedVehicle?.asset_type === 'hgv') {
-        updateData.hgv_id = selectedVehicleId;
-        updateData.current_mileage = readingValue;
-        updateData.last_mileage_update = new Date().toISOString();
+      if (createTaskPayload.meter_reading_updated === false) {
+        toast.error(`Task created but failed to update ${meterReadingType === 'hours' ? 'hours' : (isHgv ? 'KM' : 'mileage')}`);
       } else {
-        updateData.van_id = selectedVehicleId;
-        updateData.current_mileage = readingValue;
-        updateData.last_mileage_update = new Date().toISOString();
+        toast.success('Workshop task created successfully');
       }
-
-      // Use select-then-insert/update instead of upsert (no guaranteed UNIQUE constraint
-      // on van_id/plant_id, which makes ON CONFLICT fail in Postgres).
-      let meterReadingUpdated = false;
-      try {
-        const idColumn = isPlant ? 'plant_id' : (selectedVehicle?.asset_type === 'hgv' ? 'hgv_id' : 'van_id');
-        const { data: existingMaintenance, error: existingMaintenanceError } = await supabase
-          .from('vehicle_maintenance')
-          .select('id')
-          .eq(idColumn, selectedVehicleId)
-          .order('last_updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (existingMaintenanceError) throw existingMaintenanceError;
-
-        const { error: meterReadingError } = existingMaintenance
-          ? await supabase
-              .from('vehicle_maintenance')
-              .update(updateData)
-              .eq('id', existingMaintenance.id)
-          : await supabase
-              .from('vehicle_maintenance')
-              .insert(updateData);
-
-        if (meterReadingError) throw meterReadingError;
-
-        meterReadingUpdated = true;
-      } catch (meterReadingUpdateError) {
-        console.error('Error updating meter reading:', meterReadingUpdateError);
-        toast.error(`Task created but failed to update ${meterReadingType === 'hours' ? 'hours' : (selectedVehicle?.asset_type === 'hgv' ? 'KM' : 'mileage')}`);
-      }
-
-      if (meterReadingUpdated) toast.success('Workshop task created successfully');
 
       resetForm();
       onOpenChange(false);
@@ -731,12 +693,12 @@ export function CreateWorkshopTaskDialog({
               id="comments"
               value={workshopComments}
               onChange={(e) => setWorkshopComments(e.target.value)}
-              placeholder="Describe the work needed (minimum 10 characters)"
+              placeholder={`Describe the work needed (minimum ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters)`}
               className={`min-h-[100px] ${tabletModeEnabled ? 'text-base' : ''}`}
               maxLength={300}
             />
             <p className="text-xs text-muted-foreground">
-              {workshopComments.length}/300 characters (minimum 10)
+              {workshopComments.length}/300 characters (minimum {WORKSHOP_TASK_COMMENT_MIN_LENGTH})
             </p>
           </div>
 
@@ -797,7 +759,7 @@ export function CreateWorkshopTaskDialog({
           </Button>
           <Button
             onClick={handleAddTask}
-            disabled={submitting || !selectedVehicleId || !selectedCategoryId || (categoryHasSubcategories && !selectedSubcategoryId) || workshopComments.length < 10 || !newMeterReading.trim()}
+            disabled={submitting || !selectedVehicleId || !selectedCategoryId || (categoryHasSubcategories && !selectedSubcategoryId) || workshopComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH || !newMeterReading.trim()}
               className={`bg-workshop hover:bg-workshop-dark text-white ${tabletModeEnabled ? 'min-h-11 text-base px-4' : ''}`}
           >
             {submitting ? 'Creating...' : 'Create Task'}

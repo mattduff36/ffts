@@ -37,7 +37,6 @@ export function getErrorStatus(error: unknown): number | null {
     if (message.includes('unauthorized')) return 401;
     if (message.includes('not authenticated')) return 401;
     if (message.includes('jwt expired')) return 401;
-    if (message.includes('session is locked')) return 423;
     return null;
   }
 
@@ -45,18 +44,24 @@ export function getErrorStatus(error: unknown): number | null {
     return error.status;
   }
 
+  if ('statusCode' in error && typeof error.statusCode === 'number') {
+    return error.statusCode;
+  }
+
+  if ('code' in error && typeof error.code === 'number') {
+    return error.code;
+  }
+
   const message = getErrorMessageText(error).toLowerCase();
   if (message.includes('empty jwt is sent in authorization header')) return 401;
   if (message.includes('unauthorized')) return 401;
   if (message.includes('not authenticated')) return 401;
   if (message.includes('jwt expired')) return 401;
-  if (message.includes('session is locked')) return 423;
-
   return null;
 }
 
 export function isAuthErrorStatus(status: number | null | undefined): boolean {
-  return status === 401 || status === 423;
+  return status === 401;
 }
 
 export function isNetworkFetchError(error: unknown): boolean {

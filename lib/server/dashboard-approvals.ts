@@ -148,8 +148,8 @@ export async function getDashboardApprovalsMetrics(params: {
   });
 
   return {
-    summaryTimesheets: countRowsWithStatus(scopedTimesheets, 'submitted'),
-    summaryAbsences: countRowsWithStatus(scopedAbsences, 'pending'),
+    summaryTimesheets: countRowsWithStatus(scopedTimesheets, tileStatuses.timesheetStatus),
+    summaryAbsences: countRowsWithStatus(scopedAbsences, tileStatuses.absenceStatus),
     tileTotal:
       countRowsWithStatus(scopedTimesheets, tileStatuses.timesheetStatus) +
       countRowsWithStatus(scopedAbsences, tileStatuses.absenceStatus),

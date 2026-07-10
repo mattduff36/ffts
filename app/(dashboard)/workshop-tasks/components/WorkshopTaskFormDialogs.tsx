@@ -8,6 +8,8 @@ import { FileText } from 'lucide-react';
 import { splitVehiclesByRecent } from '@/lib/utils/recentVehicles';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
+import { useWorkshopDraftPersistence } from '@/lib/hooks/useWorkshopDraftPersistence';
+import { WORKSHOP_TASK_COMMENT_MIN_LENGTH } from '@/lib/workshop-tasks/validation';
 import {
   TabletAwareButton,
   TabletAwareSelectContent,
@@ -33,6 +35,7 @@ function normalizeTemplateAppliesTo(rawValues?: string[] | null): string[] {
 }
 
 interface WorkshopTaskFormDialogsProps {
+  userId?: string | null;
   showAddModal: boolean;
   onShowAddModalChange: (open: boolean) => void;
   assetTab: AssetTab;
@@ -89,6 +92,7 @@ interface WorkshopTaskFormDialogsProps {
 }
 
 export function WorkshopTaskFormDialogs({
+  userId,
   showAddModal,
   onShowAddModalChange,
   assetTab,
@@ -187,6 +191,63 @@ export function WorkshopTaskFormDialogs({
   const editMeterLabel = editingTask?.plant_id ? 'Current Hours' : editUsesKm ? 'Current KM' : 'Current Mileage';
   const editMeterPlaceholder = editingTask?.plant_id ? 'hours' : editUsesKm ? 'KM' : 'mileage';
   const editMeterUnit = editingTask?.plant_id ? 'hours' : editUsesKm ? 'km' : 'miles';
+  const { clearDraft: clearAddDraft } = useWorkshopDraftPersistence({
+    enabled: showAddModal,
+    draftId: `workshop-task-add:${userId || 'anonymous'}:${assetTab}`,
+    kind: 'workshop-task-add',
+    ownerId: userId,
+    value: {
+      selectedVehicleId,
+      selectedCategoryId,
+      selectedSubcategoryId,
+      newMeterReading,
+      workshopComments,
+      selectedAttachmentTemplateIds,
+    },
+    isDirty: isAddFormDirty,
+    onRestore: (draft) => {
+      onSelectedVehicleIdChange(draft.selectedVehicleId || '');
+      if (draft.selectedVehicleId) onFetchCurrentMeterReading(draft.selectedVehicleId);
+      onSelectedCategoryIdChange(draft.selectedCategoryId || '');
+      onSelectedSubcategoryIdChange(draft.selectedSubcategoryId || '');
+      onNewMeterReadingChange(draft.newMeterReading || '');
+      onWorkshopCommentsChange(draft.workshopComments || '');
+      onSelectedAttachmentTemplateIdsChange(draft.selectedAttachmentTemplateIds || []);
+    },
+  });
+  const { clearDraft: clearEditDraft } = useWorkshopDraftPersistence({
+    enabled: showEditModal && Boolean(editingTask),
+    draftId: `workshop-task-edit:${userId || 'anonymous'}:${editingTask?.id || 'none'}`,
+    kind: 'workshop-task-edit',
+    ownerId: userId,
+    value: {
+      editVehicleId,
+      editCategoryId,
+      editSubcategoryId,
+      editMileage,
+      editComments,
+    },
+    isDirty: isEditFormDirty,
+    onRestore: (draft) => {
+      onEditVehicleIdChange(draft.editVehicleId || '');
+      onEditCategoryIdChange(draft.editCategoryId || '');
+      onEditSubcategoryIdChange(draft.editSubcategoryId || '');
+      onEditMileageChange(draft.editMileage || '');
+      onEditCommentsChange(draft.editComments || '');
+    },
+  });
+
+  useEffect(() => {
+    if (!showAddModal && !isAddFormDirty) {
+      void clearAddDraft();
+    }
+  }, [clearAddDraft, isAddFormDirty, showAddModal]);
+
+  useEffect(() => {
+    if (!showEditModal && !isEditFormDirty) {
+      void clearEditDraft();
+    }
+  }, [clearEditDraft, isEditFormDirty, showEditModal]);
 
   function handleAddDialogOpenChange(open: boolean) {
     if (!open && isAddFormDirty) {
@@ -346,12 +407,12 @@ export function WorkshopTaskFormDialogs({
                 id="comments"
                 value={workshopComments}
                 onChange={(e) => onWorkshopCommentsChange(e.target.value)}
-                placeholder="Describe the work needed (minimum 10 characters)"
+                placeholder={`Describe the work needed (minimum ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters)`}
                 className="bg-white dark:bg-slate-800 border-border text-foreground min-h-[100px]"
                 maxLength={300}
               />
               <p className="text-xs text-muted-foreground">
-                {workshopComments.length}/300 characters (minimum 10)
+                {workshopComments.length}/300 characters (minimum {WORKSHOP_TASK_COMMENT_MIN_LENGTH})
               </p>
             </div>
 
@@ -412,6 +473,7 @@ export function WorkshopTaskFormDialogs({
             <TabletAwareButton
               variant="outline"
               onClick={() => {
+                void clearAddDraft();
                 onShowAddModalChange(false);
                 onResetAddForm();
               }}
@@ -421,7 +483,7 @@ export function WorkshopTaskFormDialogs({
             </TabletAwareButton>
             <TabletAwareButton
               onClick={onCreateTask}
-              disabled={submitting || !selectedVehicleId || !selectedCategoryId || (categoryHasSubcategories && !selectedSubcategoryId) || workshopComments.length < 10 || !newMeterReading.trim()}
+              disabled={submitting || !selectedVehicleId || !selectedCategoryId || (categoryHasSubcategories && !selectedSubcategoryId) || workshopComments.trim().length < WORKSHOP_TASK_COMMENT_MIN_LENGTH || !newMeterReading.trim()}
               className="bg-workshop hover:bg-workshop-dark text-white"
             >
               {submitting ? 'Creating...' : 'Create Task'}
@@ -586,12 +648,12 @@ export function WorkshopTaskFormDialogs({
                 id="edit-comments"
                 value={editComments}
                 onChange={(e) => onEditCommentsChange(e.target.value)}
-                placeholder="Describe the work needed (minimum 10 characters)"
+                placeholder={`Describe the work needed (minimum ${WORKSHOP_TASK_COMMENT_MIN_LENGTH} characters)`}
                 className="bg-white dark:bg-slate-800 border-border text-foreground min-h-[100px]"
                 maxLength={300}
               />
               <p className="text-xs text-muted-foreground">
-                {editComments.length}/300 characters (minimum 10)
+                {editComments.length}/300 characters (minimum {WORKSHOP_TASK_COMMENT_MIN_LENGTH})
               </p>
             </div>
           </div>
@@ -599,7 +661,10 @@ export function WorkshopTaskFormDialogs({
           <DialogFooter className={tabletModeEnabled ? 'gap-3 pt-2' : 'gap-3'}>
             <TabletAwareButton
               variant="outline"
-              onClick={onResetEditForm}
+              onClick={() => {
+                void clearEditDraft();
+                onResetEditForm();
+              }}
               className="border-border text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               {isEditFormDirty ? 'Discard Changes' : 'Cancel'}

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OnceDialog } from '@/components/ui/once-ui';
+import { validateAndNormalizePlantSerialNumber } from '@/lib/utils/plant-serial-number';
 import { isApplicableToType, type VehicleCategoryOption } from './utils';
 
 interface AddPlantDialogProps {
@@ -26,6 +27,7 @@ export function AddPlantDialog({ open, onOpenChange, onSuccess }: AddPlantDialog
   const [formData, setFormData] = useState({
     plant_id: '',
     nickname: '',
+    serial_number: '',
     category_id: '',
     status: 'active',
   });
@@ -56,6 +58,7 @@ export function AddPlantDialog({ open, onOpenChange, onSuccess }: AddPlantDialog
     setFormData({
       plant_id: '',
       nickname: '',
+      serial_number: '',
       category_id: '',
       status: 'active',
     });
@@ -74,6 +77,12 @@ export function AddPlantDialog({ open, onOpenChange, onSuccess }: AddPlantDialog
       return;
     }
 
+    const serialNumberResult = validateAndNormalizePlantSerialNumber(formData.serial_number);
+    if (!serialNumberResult.valid) {
+      setError(serialNumberResult.error || 'Serial Number is invalid');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const response = await fetch('/api/admin/plant', {
@@ -82,6 +91,7 @@ export function AddPlantDialog({ open, onOpenChange, onSuccess }: AddPlantDialog
         body: JSON.stringify({
           plant_id: formData.plant_id.trim(),
           nickname: formData.nickname.trim() || null,
+          serial_number: serialNumberResult.value,
           category_id: formData.category_id,
           status: formData.status,
         }),
@@ -129,6 +139,23 @@ export function AddPlantDialog({ open, onOpenChange, onSuccess }: AddPlantDialog
             placeholder="Optional"
             className="bg-slate-900 text-white"
           />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="plant-serial-number">Serial Number</Label>
+          <Input
+            id="plant-serial-number"
+            value={formData.serial_number}
+            onChange={(event) => setFormData((prev) => ({ ...prev, serial_number: event.target.value }))}
+            onBlur={() => {
+              const result = validateAndNormalizePlantSerialNumber(formData.serial_number);
+              if (result.valid) {
+                setFormData((prev) => ({ ...prev, serial_number: result.value || '' }));
+              }
+            }}
+            placeholder="Optional"
+            className="bg-slate-900 text-white"
+          />
+          <p className="text-xs text-muted-foreground">Optional manufacturer serial number. Letters and numbers only.</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="plant-category">Category *</Label>

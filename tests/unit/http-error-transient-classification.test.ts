@@ -14,4 +14,8 @@ describe('http error transient classification', () => {
 
     expect(isNetworkFetchError(error)).toBe(true);
   });
+
+  it('reads common statusCode fields from error-like objects', () => {
+    expect(getErrorStatus({ message: 'Unauthorized', statusCode: 401 })).toBe(401);
+  });
 });

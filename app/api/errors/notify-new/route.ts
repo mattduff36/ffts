@@ -168,6 +168,8 @@ ${errorLog.error_stack ? `**Stack Trace:**\n\`\`\`\n${errorLog.error_stack.subst
             subject: `🚨 New Error Detected: ${errorLog.error_message.substring(0, 50)}${errorLog.error_message.length > 50 ? '...' : ''}`,
             body: errorSummary,
             sender_id: user.id,
+            created_via: 'error_notify_new',
+            module_key: 'errors',
           })
           .select()
           .single();

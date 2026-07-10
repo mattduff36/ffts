@@ -195,22 +195,24 @@ describe('Child Tables Reference Integrity', () => {
 });
 
 describe('Row Count Parity', () => {
-  it('van_inspections has rows', async () => {
-    const { count, error } = await supabase
+  it('van_inspections row check is queryable', async () => {
+    const { data, error } = await supabase
       .from('van_inspections')
-      .select('*', { count: 'exact', head: true });
+      .select('id')
+      .limit(1);
     expect(error).toBeNull();
-    expect(count).toBeGreaterThanOrEqual(0);
-    console.log(`van_inspections count: ${count}`);
+    expect(Array.isArray(data)).toBe(true);
+    console.log(`van_inspections row probe: ${data?.length || 0}`);
   });
 
-  it('plant_inspections has rows', async () => {
-    const { count, error } = await supabase
+  it('plant_inspections row check is queryable', async () => {
+    const { data, error } = await supabase
       .from('plant_inspections')
-      .select('*', { count: 'exact', head: true });
+      .select('id')
+      .limit(1);
     expect(error).toBeNull();
-    expect(count).toBeGreaterThanOrEqual(0);
-    console.log(`plant_inspections count: ${count}`);
+    expect(Array.isArray(data)).toBe(true);
+    console.log(`plant_inspections row probe: ${data?.length || 0}`);
   });
 
   it('van inspections have no plant_id set', async () => {

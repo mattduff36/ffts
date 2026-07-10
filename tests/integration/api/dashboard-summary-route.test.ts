@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createSupabaseQueryMock } from '@/tests/utils/supabase-query-mock';
 
 vi.mock('@/lib/server/app-auth/session', () => ({
   getCurrentAuthenticatedProfile: vi.fn(),
@@ -7,11 +8,21 @@ vi.mock('@/lib/server/app-auth/session', () => ({
 
 import { GET } from '@/app/api/dashboard/summary/route';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
+import { DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL } from '@/lib/utils/error-log-filters';
 
 vi.mock('@/lib/supabase/server');
 vi.mock('@/lib/supabase/admin');
 vi.mock('@/lib/utils/view-as');
 vi.mock('@/lib/server/team-permissions');
+vi.mock('@/lib/server/reminders/ensure-fleet-inspection-actions-fresh', () => ({
+  DASHBOARD_FLEET_INSPECTION_REFRESH_INTERVAL_MS: 15 * 60 * 1000,
+  ensureFleetInspectionReminderActionsFresh: vi.fn().mockResolvedValue({
+    refreshed: false,
+    reason: 'fresh',
+    lastGeneratedAt: '2026-05-27T08:00:00.000Z',
+    summary: null,
+  }),
+}));
 vi.mock('@/lib/server/absence-secondary-permissions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/absence-secondary-permissions')>();
 
@@ -23,12 +34,7 @@ vi.mock('@/lib/server/absence-secondary-permissions', async (importOriginal) => 
 
 function createCountQuery(count: number) {
   const resolved = { count, error: null };
-  const query = {
-    eq: vi.fn().mockResolvedValue({ count, error: null }),
-    in: vi.fn().mockReturnThis(),
-    then: (resolve: (value: typeof resolved) => unknown) => Promise.resolve(resolved).then(resolve),
-  };
-  return query;
+  return createSupabaseQueryMock(resolved, ['eq', 'in', 'not', 'or']);
 }
 
 function createScopedRowsQuery<T extends Record<string, unknown>>(rows: T[]) {
@@ -38,6 +44,10 @@ function createScopedRowsQuery<T extends Record<string, unknown>>(rows: T[]) {
       error: null,
     })),
   };
+}
+
+function createReminderActionsSummaryQuery(rows: Array<Record<string, unknown>>) {
+  return createSupabaseQueryMock({ data: rows, error: null }, ['eq']);
 }
 
 describe('GET /api/dashboard/summary', () => {
@@ -160,6 +170,35 @@ describe('GET /api/dashboard/summary', () => {
           };
         }
         if (table === 'actions') return { select: () => createCountQuery(3) };
+        if (table === 'reminder_actions') {
+          return {
+            select: () =>
+              createReminderActionsSummaryQuery([
+                {
+                  id: 'unassigned-action',
+                  ignored_forever: false,
+                  ignored_until: null,
+                  reminders: [],
+                },
+                {
+                  id: 'assigned-action',
+                  ignored_forever: false,
+                  ignored_until: null,
+                  reminders: [
+                    { status: 'pending' },
+                    { status: 'pending' },
+                    { status: 'pending' },
+                  ],
+                },
+                {
+                  id: 'ignored-action',
+                  ignored_forever: true,
+                  ignored_until: null,
+                  reminders: [],
+                },
+              ]),
+          };
+        }
         if (table === 'suggestions') {
           return {
             select: () => Promise.resolve({
@@ -192,11 +231,9 @@ describe('GET /api/dashboard/summary', () => {
         if (table === 'error_logs') return { select: () => createCountQuery(0) };
         if (table === 'maintenance_categories') {
           return {
-            select: () => ({
-              eq: vi.fn().mockResolvedValue({
+            select: () => Promise.resolve({
                 data: [],
                 error: null,
-              }),
             }),
           };
         }
@@ -234,7 +271,7 @@ describe('GET /api/dashboard/summary', () => {
     expect(response.status).toBe(200);
     expect(payload.metrics).toEqual({
       approvals: {
-        timesheets: 2,
+        timesheets: 1,
         absences: 1,
       },
       badges: {
@@ -242,6 +279,8 @@ describe('GET /api/dashboard/summary', () => {
         workshop_pending: 3,
         maintenance_due_soon: 0,
         maintenance_overdue: 0,
+        reminders_pending: 0,
+        actions_unassigned: 1,
         suggestions_new: 6,
         error_reports_new: 1,
         quotes_pending_internal_approval: 6,
@@ -250,7 +289,7 @@ describe('GET /api/dashboard/summary', () => {
     });
   });
 
-  it('uses Accounts-specific approval badge totals while preserving scoped approval visibility', async () => {
+  it('uses Accounts-specific approval statuses for both summary and badge totals', async () => {
     const { createClient } = await import('@/lib/supabase/server');
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
@@ -363,13 +402,15 @@ describe('GET /api/dashboard/summary', () => {
     expect(payload.metrics).toEqual({
       approvals: {
         timesheets: 2,
-        absences: 1,
+        absences: 2,
       },
       badges: {
         approvals: 4,
         workshop_pending: 0,
         maintenance_due_soon: 0,
         maintenance_overdue: 0,
+        reminders_pending: 0,
+        actions_unassigned: 0,
         suggestions_new: 0,
         error_reports_new: 0,
         quotes_pending_internal_approval: 0,
@@ -387,8 +428,8 @@ describe('GET /api/dashboard/summary', () => {
 
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       profile: {
-        id: 'charlotte-id',
-        email: 'debug.user@example.com',
+        id: 'support-id',
+        email: 'admin@mpdee.co.uk',
       },
       validation: {
         cookieValue: null,
@@ -404,7 +445,7 @@ describe('GET /api/dashboard/summary', () => {
       is_super_admin: false,
       is_viewing_as: false,
       is_actual_super_admin: false,
-      user_id: 'charlotte-id',
+      user_id: 'support-id',
       team_id: 'team-accounts',
       team_name: 'Accounts',
     });
@@ -431,7 +472,7 @@ describe('GET /api/dashboard/summary', () => {
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
-      user_id: 'charlotte-id',
+      user_id: 'support-id',
       team_id: 'team-accounts',
       team_name: 'Accounts',
       role_name: 'admin',
@@ -447,6 +488,9 @@ describe('GET /api/dashboard/summary', () => {
       has_exception_row: false,
     } as never);
 
+    const errorLogsCountQuery = createCountQuery(7);
+    const selectErrorLogs = vi.fn(() => errorLogsCountQuery);
+
     const supabase = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
@@ -456,7 +500,7 @@ describe('GET /api/dashboard/summary', () => {
       },
       from: (table: string) => {
         if (table === 'error_logs') {
-          return { select: () => createCountQuery(7) };
+          return { select: selectErrorLogs };
         }
         if (table === 'suggestions') {
           return {
@@ -489,6 +533,11 @@ describe('GET /api/dashboard/summary', () => {
 
     expect(response.status).toBe(200);
     expect(payload.metrics.badges.error_logs).toBe(7);
+    expect(selectErrorLogs).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+    expect(errorLogsCountQuery.or).toHaveBeenCalledWith('page_url.is.null,page_url.not.ilike.%localhost%');
+    expect(errorLogsCountQuery.or).toHaveBeenCalledWith(
+      `user_email.is.null,user_email.neq.${DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL}`
+    );
   });
 
   it('returns workshop and maintenance tile badge counts without actions permission', async () => {
@@ -553,11 +602,9 @@ describe('GET /api/dashboard/summary', () => {
         if (table === 'actions') return { select: () => createCountQuery(4) };
         if (table === 'maintenance_categories') {
           return {
-            select: () => ({
-              eq: vi.fn().mockResolvedValue({
+            select: () => Promise.resolve({
                 data: [],
                 error: null,
-              }),
             }),
           };
         }
@@ -762,6 +809,8 @@ describe('GET /api/dashboard/summary', () => {
         workshop_pending: 0,
         maintenance_due_soon: 0,
         maintenance_overdue: 0,
+        reminders_pending: 0,
+        actions_unassigned: 0,
         suggestions_new: 0,
         error_reports_new: 0,
         quotes_pending_internal_approval: 0,

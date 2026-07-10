@@ -266,7 +266,7 @@ describeOrSkip('Fleet Module Workflows', () => {
         if (data.category) {
           testCategoryId = data.category.id;
         }
-      } catch (error) {
+      } catch {
         console.log('API test skipped - server may not be reachable from test environment');
         return;
       }

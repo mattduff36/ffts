@@ -20,11 +20,12 @@ import {
   canUseScopedAbsencePermission,
   useAbsenceSecondaryPermissions,
 } from '@/lib/hooks/useAbsenceSecondaryPermissions';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { clearClientServiceOutage } from '@/lib/app-auth/client-service-health';
 import { fetchAbsenceMessage } from '@/lib/client/absence-message';
 import { fetchCurrentWorkShift, fetchWorkShiftMatrix } from '@/lib/client/work-shifts';
 import { canOpenAbsenceManageArea } from '@/types/absence-permissions';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -61,7 +62,11 @@ import {
 import { formatDate, formatDateISO, calculateDurationDays, getFinancialYearMonths, getCurrentFinancialYear, getFinancialYear } from '@/lib/utils/date';
 import { getWorkingDisplayDatesForAbsence } from '@/lib/utils/absence-calendar-display';
 import { ANNUAL_LEAVE_MIN_REMAINING_DAYS } from '@/lib/utils/annual-leave';
-import { createStatusError, getErrorStatus, isServerErrorStatus } from '@/lib/utils/http-error';
+import {
+  canEmployeeSelfBookAbsenceRange,
+  getEmployeeAbsenceSelfServiceDeadlineForRange,
+} from '@/lib/utils/absence-self-service-deadline';
+import { createStatusError, getErrorStatus, isAuthErrorStatus, isServerErrorStatus } from '@/lib/utils/http-error';
 import {
   clearPageServiceError,
   getFirstPageServiceError,
@@ -105,6 +110,31 @@ function isAnnualLeaveReason(name: string): boolean {
 
 function isUnpaidLeaveReason(name: string): boolean {
   return name.trim().toLowerCase() === 'unpaid leave';
+}
+
+function buildRequestLeaveDirtySnapshot({
+  selectedReasonId,
+  startDate,
+  endDate,
+  isHalfDay,
+  halfDaySession,
+  notes,
+}: {
+  selectedReasonId: string;
+  startDate: string;
+  endDate: string;
+  isHalfDay: boolean;
+  halfDaySession: 'AM' | 'PM';
+  notes: string;
+}) {
+  return JSON.stringify({
+    selectedReasonId,
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDaySession,
+    notes,
+  });
 }
 
 function getOldestOpenFinancialYearStartYear(
@@ -185,8 +215,16 @@ function isExpectedAbsenceSubmissionError(message: string): boolean {
     normalized.includes('half-day conflicts') ||
     normalized.includes('half-day is already booked') ||
     normalized.includes('financial year is closed for employee bookings') ||
-    normalized.includes('could not be submitted with your current permissions')
+    normalized.includes('could not be submitted with your current permissions') ||
+    normalized.includes('not authenticated') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('session is locked') ||
+    normalized.includes('jwt expired')
   );
+}
+
+function isExpectedAccessStatus(status: number | null): boolean {
+  return isAuthErrorStatus(status) || status === 403;
 }
 
 export default function AbsencePage() {
@@ -463,6 +501,62 @@ export default function AbsencePage() {
   const [selectedReasonId, setSelectedReasonId] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [requestDialogBaselineSnapshot, setRequestDialogBaselineSnapshot] = useState('');
+  const currentRequestDialogSnapshot = buildRequestLeaveDirtySnapshot({
+    selectedReasonId,
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDaySession,
+    notes,
+  });
+  const isRequestDialogDirty = showRequestDialog
+    && Boolean(requestDialogBaselineSnapshot)
+    && currentRequestDialogSnapshot !== requestDialogBaselineSnapshot;
+  const {
+    contentRef: requestDialogContentRef,
+    handleOpenChange: handleRequestDialogOpenChange,
+    handleInteractOutside: handleRequestDialogInteractOutside,
+    handleEscapeKeyDown: handleRequestDialogEscapeKeyDown,
+    discard: discardRequestDialog,
+  } = useDirtyDialogGuard({
+    isDirty: isRequestDialogDirty,
+    disabled: submitting,
+    onOpenChange: setShowRequestDialog,
+  });
+
+  function openRequestDialog(nextStartDate = '') {
+    setStartDate(nextStartDate);
+    setEndDate('');
+    setIsHalfDay(false);
+    setHalfDaySession('AM');
+    setNotes('');
+    setRequestDialogBaselineSnapshot(buildRequestLeaveDirtySnapshot({
+      selectedReasonId,
+      startDate: nextStartDate,
+      endDate: '',
+      isHalfDay: false,
+      halfDaySession: 'AM',
+      notes: '',
+    }));
+    setShowRequestDialog(true);
+  }
+
+  function resetRequestForm() {
+    setStartDate('');
+    setEndDate('');
+    setIsHalfDay(false);
+    setHalfDaySession('AM');
+    setNotes('');
+    setRequestDialogBaselineSnapshot(buildRequestLeaveDirtySnapshot({
+      selectedReasonId,
+      startDate: '',
+      endDate: '',
+      isHalfDay: false,
+      halfDaySession: 'AM',
+      notes: '',
+    }));
+  }
 
   const handleUnavailableError = useCallback((
     source: PageServiceRequestKey,
@@ -599,6 +693,13 @@ export default function AbsencePage() {
           return;
         }
 
+        const status = getErrorStatus(error);
+        if (isExpectedAccessStatus(status)) {
+          setCurrentWorkShiftPattern(null);
+          console.warn('Skipping current work shift load due to access state:', error);
+          return;
+        }
+
         console.error('Error loading current work shift:', error);
       }
     }
@@ -728,6 +829,14 @@ export default function AbsencePage() {
       });
       return;
     }
+
+    if (!isAdminTier && !isManager && !canEmployeeSelfBookAbsenceRange(startDate, endDate || null)) {
+      const deadline = getEmployeeAbsenceSelfServiceDeadlineForRange(startDate, endDate || null);
+      toast.error(`Absences can only be booked until the Monday after that week (${formatDate(deadline)}). Please contact your manager.`, {
+        id: 'absence-submit-validation-self-service-deadline',
+      });
+      return;
+    }
     
     if (requestedDays <= 0) {
       toast.error('Selected dates do not include a working day', {
@@ -760,12 +869,7 @@ export default function AbsencePage() {
       
       toast.success(`${selectedReason.name} request submitted`);
       
-      // Reset form
-      setStartDate('');
-      setEndDate('');
-      setIsHalfDay(false);
-      setHalfDaySession('AM');
-      setNotes('');
+      resetRequestForm();
       setShowRequestDialog(false);
       setShowDayModal(false);
     } catch (error) {
@@ -806,11 +910,15 @@ export default function AbsencePage() {
         });
         return;
       }
-      setStartDate(formatDateISO(selectedDate));
-      setEndDate('');
-      setIsHalfDay(false);
+      if (!isAdminTier && !isManager && !canEmployeeSelfBookAbsenceRange(formatDateISO(selectedDate))) {
+        const deadline = getEmployeeAbsenceSelfServiceDeadlineForRange(formatDateISO(selectedDate));
+        toast.error(`Absences can only be booked until the Monday after that week (${formatDate(deadline)}). Please contact your manager.`, {
+          id: 'absence-day-request-validation-self-service-deadline',
+        });
+        return;
+      }
       setShowDayModal(false);
-      setShowRequestDialog(true);
+      openRequestDialog(formatDateISO(selectedDate));
     }
   }
   
@@ -1068,40 +1176,38 @@ export default function AbsencePage() {
   
   return (
     <AppPageShell>
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Absence & Leave
-            </h1>
-            <p className="text-muted-foreground">
-              {canOpenManageLink
-                ? 'Manage annual leave and view absence records'
-                : 'Request annual leave and view your absence records'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <AppPageHeader
+        title="Absence & Leave"
+        description={canOpenManageLink
+          ? 'Manage annual leave and view absence records'
+          : 'Request annual leave and view your absence records'
+        }
+        contentClassName="sm:flex-row sm:items-start sm:justify-between"
+        headingClassName="space-y-0"
+        titleClassName="mb-2"
+        descriptionClassName="text-base"
+        actionsClassName="flex-col sm:w-auto sm:flex-row sm:items-center"
+        actions={(
+          <>
             {canOpenManageLink && (
-              <Link href="/absence/manage">
-                <Button variant="outline" className="border-border text-muted-foreground">
+              <Link href="/absence/manage" className="w-full sm:w-auto">
+                <Button variant="outline" className="w-full justify-center border-border text-muted-foreground sm:w-auto">
                   <Settings className="h-4 w-4 mr-2" />
                   Manage Absence
                 </Button>
               </Link>
             )}
             <Button
-              className="bg-absence hover:bg-absence-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg"
-              onClick={() => setShowRequestDialog(true)}
+              className="w-full justify-center bg-absence hover:bg-absence-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg sm:w-auto"
+              onClick={() => openRequestDialog()}
               disabled={isSelectedFinancialYearClosed || !canRequestLeave}
             >
               <Plus className="h-4 w-4 mr-2" />
               Request Leave
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
       
       {/* Summary Card */}
       <Card className="bg-gradient-to-br from-[hsl(var(--absence-primary))] to-[hsl(var(--absence-dark))] border-0 text-white">
@@ -1141,174 +1247,181 @@ export default function AbsencePage() {
         </CardContent>
       </Card>
       
-      <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
-        <DialogContent className="border-border max-w-3xl">
-          <DialogHeader>
+      <Dialog open={showRequestDialog} onOpenChange={handleRequestDialogOpenChange}>
+        <DialogContent
+          ref={requestDialogContentRef}
+          className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden border-border p-0 sm:max-h-[90vh] sm:w-full sm:gap-6 sm:p-6"
+          onInteractOutside={handleRequestDialogInteractOutside}
+          onEscapeKeyDown={handleRequestDialogEscapeKeyDown}
+        >
+          <DialogHeader className="px-4 pt-4 text-left sm:px-0 sm:pt-0">
             <DialogTitle className="text-foreground">Request Leave</DialogTitle>
             <DialogDescription className="text-slate-400/90">
               Submit leave dates for approval in the current booking window.
             </DialogDescription>
           </DialogHeader>
-          <AllowanceDetailsPanel summary={summary} loading={loadingSummary} />
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="rounded-lg border border-[hsl(var(--absence-primary)/0.25)] bg-[hsl(var(--absence-primary)/0.06)] p-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="reason" className="text-foreground font-medium">Absence reason</Label>
-                  <p className="text-xs text-slate-400/90">Choose the leave type for this request.</p>
-                  <Select value={selectedReasonId} onValueChange={setSelectedReasonId}>
-                    <SelectTrigger id="reason" className="bg-slate-950 border-border text-foreground">
-                      <SelectValue placeholder="Select reason" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableRequestReasons.map((reason) => (
-                        <SelectItem key={reason.id} value={reason.id}>
-                          {reason.name} ({reason.is_paid ? 'Paid' : 'Unpaid'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-0 sm:py-0">
+              <AllowanceDetailsPanel summary={summary} loading={loadingSummary} />
+              <div className="rounded-lg border border-[hsl(var(--absence-primary)/0.25)] bg-[hsl(var(--absence-primary)/0.06)] p-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reason" className="text-foreground font-medium">Absence reason</Label>
+                    <p className="text-xs text-slate-400/90">Choose the leave type for this request.</p>
+                    <Select value={selectedReasonId} onValueChange={setSelectedReasonId}>
+                      <SelectTrigger id="reason" className="bg-slate-950 border-border text-foreground">
+                        <SelectValue placeholder="Select reason" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableRequestReasons.map((reason) => (
+                          <SelectItem key={reason.id} value={reason.id}>
+                            {reason.name} ({reason.is_paid ? 'Paid' : 'Unpaid'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-foreground font-medium">Duration options</Label>
+                    <p className="text-xs text-slate-400/90">Tick for a half-day request.</p>
+                    <div className="flex items-center gap-2 rounded-md border border-border bg-slate-950 px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={isHalfDay}
+                        onChange={(e) => {
+                          setIsHalfDay(e.target.checked);
+                          if (e.target.checked) {
+                            setEndDate('');
+                          }
+                        }}
+                        className="rounded border-border"
+                      />
+                      <span className="text-sm text-slate-400/90">Half Day</span>
+                    </div>
+                    {isHalfDay && (
+                      <div className="flex gap-3 pt-1">
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="session"
+                            value="AM"
+                            checked={halfDaySession === 'AM'}
+                            onChange={() => setHalfDaySession('AM')}
+                            className="text-purple-500"
+                          />
+                          <span className="text-sm text-slate-400/90">AM</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="session"
+                            value="PM"
+                            checked={halfDaySession === 'PM'}
+                            onChange={() => setHalfDaySession('PM')}
+                            className="text-purple-500"
+                          />
+                          <span className="text-sm text-slate-400/90">PM</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-foreground font-medium">Duration options</Label>
-                  <p className="text-xs text-slate-400/90">Tick for a half-day request.</p>
-                  <div className="flex items-center gap-2 rounded-md border border-border bg-slate-950 px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={isHalfDay}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="startDate" className="text-foreground font-medium">First day off</Label>
+                    <p className="text-xs text-slate-400/90">
+                      Select the first day you will be away from work.
+                    </p>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={startDate}
                       onChange={(e) => {
-                        setIsHalfDay(e.target.checked);
-                        if (e.target.checked) {
+                        setStartDate(e.target.value);
+                        if (endDate && endDate < e.target.value) {
                           setEndDate('');
                         }
                       }}
-                      className="rounded border-border"
+                      min={formatDateISO(new Date())}
+                      max={bookingMaxDate}
+                      required
+                      className="bg-slate-950 border-border text-foreground"
                     />
-                    <span className="text-sm text-slate-400/90">Half Day</span>
+                    <p className="text-xs text-slate-400/90 mt-1">
+                      Booking window currently ends on {formatDate(bookingMaxDate)}.
+                    </p>
                   </div>
-                  {isHalfDay && (
-                    <div className="flex gap-3 pt-1">
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="session"
-                          value="AM"
-                          checked={halfDaySession === 'AM'}
-                          onChange={() => setHalfDaySession('AM')}
-                          className="text-purple-500"
-                        />
-                        <span className="text-sm text-slate-400/90">AM</span>
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="session"
-                          value="PM"
-                          checked={halfDaySession === 'PM'}
-                          onChange={() => setHalfDaySession('PM')}
-                          className="text-purple-500"
-                        />
-                        <span className="text-sm text-slate-400/90">PM</span>
-                      </label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="endDate" className="text-foreground font-medium">Last day off</Label>
+                    <p className="text-xs text-slate-400/90">
+                      Leave blank for a single day. Disabled for half-day requests.
+                    </p>
+                    <Input
+                      id="endDate"
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      min={startDate || formatDateISO(new Date())}
+                      max={bookingMaxDate}
+                      disabled={!startDate || isHalfDay}
+                      className="bg-slate-950 border-border text-foreground"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="notes" className="text-foreground font-medium">Notes (optional)</Label>
+                  <p className="text-xs text-slate-400/90">Add any context your manager should see.</p>
+                  <Input
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add any additional information..."
+                    className="bg-slate-950 border-border text-foreground"
+                  />
+                </div>
+              </div>
+
+              {startDate && (
+                <div className="bg-slate-800/30 p-4 rounded-lg space-y-2">
+                  <h4 className="font-semibold text-foreground">Request Summary</h4>
+                  <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <span className="text-muted-foreground">Requested Days:</span>
+                      <span className="ml-2 text-foreground font-medium">{requestedDays}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Approved Taken:</span>
+                      <span className="ml-2 text-foreground font-medium">{displayApprovedTaken}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Pending:</span>
+                      <span className="ml-2 text-foreground font-medium">{displayPendingTotal}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Projected Remaining:</span>
+                      <span className={`ml-2 font-medium ${projectedRemaining < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        {projectedRemaining}
+                      </span>
+                    </div>
+                  </div>
+                  {deductsAllowance && projectedRemaining < ANNUAL_LEAVE_MIN_REMAINING_DAYS && (
+                    <div className="flex items-start gap-2 bg-red-500/20 p-3 rounded border border-red-500/30">
+                      <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-300">
+                        This request exceeds the allowed 2-day annual leave buffer. Please adjust the dates or contact your manager.
+                      </p>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="startDate" className="text-foreground font-medium">First day off</Label>
-                  <p className="text-xs text-slate-400/90">
-                    Select the first day you will be away from work.
-                  </p>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => {
-                      setStartDate(e.target.value);
-                      if (endDate && endDate < e.target.value) {
-                        setEndDate('');
-                      }
-                    }}
-                    min={formatDateISO(new Date())}
-                    max={bookingMaxDate}
-                    required
-                    className="bg-slate-950 border-border text-foreground"
-                  />
-                  <p className="text-xs text-slate-400/90 mt-1">
-                    Booking window currently ends on {formatDate(bookingMaxDate)}.
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="endDate" className="text-foreground font-medium">Last day off</Label>
-                  <p className="text-xs text-slate-400/90">
-                    Leave blank for a single day. Disabled for half-day requests.
-                  </p>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate || formatDateISO(new Date())}
-                    max={bookingMaxDate}
-                    disabled={!startDate || isHalfDay}
-                    className="bg-slate-950 border-border text-foreground"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="notes" className="text-foreground font-medium">Notes (optional)</Label>
-                <p className="text-xs text-slate-400/90">Add any context your manager should see.</p>
-                <Input
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any additional information..."
-                  className="bg-slate-950 border-border text-foreground"
-                />
-              </div>
+              )}
             </div>
 
-            {startDate && (
-              <div className="bg-slate-800/30 p-4 rounded-lg space-y-2">
-                <h4 className="font-semibold text-foreground">Request Summary</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Requested Days:</span>
-                    <span className="ml-2 text-foreground font-medium">{requestedDays}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Approved Taken:</span>
-                    <span className="ml-2 text-foreground font-medium">{displayApprovedTaken}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Pending:</span>
-                    <span className="ml-2 text-foreground font-medium">{displayPendingTotal}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Projected Remaining:</span>
-                    <span className={`ml-2 font-medium ${projectedRemaining < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                      {projectedRemaining}
-                    </span>
-                  </div>
-                </div>
-                {deductsAllowance && projectedRemaining < ANNUAL_LEAVE_MIN_REMAINING_DAYS && (
-                  <div className="flex items-start gap-2 bg-red-500/20 p-3 rounded border border-red-500/30">
-                    <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-300">
-                      This request exceeds the allowed 2-day annual leave buffer. Please adjust the dates or contact your manager.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowRequestDialog(false)} className="border-border text-muted-foreground">
-                Cancel
+            <DialogFooter className="border-t border-border bg-card px-4 py-3 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+              <Button type="button" variant="outline" onClick={discardRequestDialog} className="border-border text-muted-foreground">
+                {isRequestDialogDirty ? 'Discard Changes' : 'Cancel'}
               </Button>
               <Button
                 type="button"
@@ -1629,7 +1742,7 @@ export default function AbsencePage() {
       
       {/* Day Click Modal */}
       <Dialog open={showDayModal} onOpenChange={setShowDayModal}>
-        <DialogContent className="border-border max-w-6xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">
               {selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}
@@ -1752,7 +1865,7 @@ export default function AbsencePage() {
           }
         }}
       >
-        <DialogContent className="border-border max-w-3xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">Contact line manager</DialogTitle>
             <DialogDescription className="text-slate-400/90">

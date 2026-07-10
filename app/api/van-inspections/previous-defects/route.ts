@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const { data: lastInspection, error: inspectionError } = await supabaseAdmin
       .from('van_inspections')
-      .select('id')
+      .select('id, inspection_date')
       .eq('van_id', vehicleId)
       .eq('status', 'submitted')
       .order('inspection_date', { ascending: false })
@@ -54,10 +54,13 @@ export async function GET(request: NextRequest) {
           .eq('inspection_id', lastInspection.id),
         supabaseAdmin
           .from('actions')
-          .select('description')
+          .select('description, actioned_at, updated_at')
+          .eq('van_id', vehicleId)
           .eq('action_type', 'inspection_defect')
-          .eq('inspection_id', lastInspection.id)
-          .eq('status', 'completed'),
+          .eq('status', 'completed')
+          .or(`actioned_at.gte.${lastInspection.inspection_date},updated_at.gte.${lastInspection.inspection_date}`)
+          .order('actioned_at', { ascending: false, nullsFirst: false })
+          .limit(100),
       ]);
 
     if (itemsError) {
@@ -72,7 +75,8 @@ export async function GET(request: NextRequest) {
 
     const previousDefects = buildUnresolvedPreviousDefects(
       items || [],
-      (completedActions || []).map((action) => action.description)
+      completedActions || [],
+      { inspectionStartDate: lastInspection.inspection_date }
     );
 
     return NextResponse.json({

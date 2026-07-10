@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -30,24 +31,30 @@ import {
   Wrench,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
+import { cn } from '@/lib/utils/cn';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
-import type { Action, AssetTab, Vehicle } from '../types';
+import type { Action, AssetTab, Vehicle, WorkshopTaskStatusFilter, WorkshopTaskTileFilter } from '../types';
 import type { InspectionPhoto } from '@/types/inspection';
 
 interface WorkshopTasksOverviewTabProps {
   assetTab: AssetTab;
   onAssetTabChange: (tab: string) => void;
-  statusFilter: string;
-  onStatusFilterChange: (status: string) => void;
+  statusFilter: WorkshopTaskTileFilter;
+  onStatusFilterChange: (status: WorkshopTaskTileFilter) => void;
   vehicleFilter: string;
   onVehicleFilterChange: (vehicleId: string) => void;
   vehicles: Vehicle[];
   loading: boolean;
   tabFilteredTasks: Action[];
+  taskCount: number;
+  pendingTaskCount: number;
   pendingTasks: Action[];
   highPriorityPendingCount: number;
+  inProgressTaskCount: number;
   inProgressTasks: Action[];
+  onHoldTaskCount: number;
   onHoldTasks: Action[];
+  completedTaskCount: number;
   completedTasks: Action[];
   showPending: boolean;
   onShowPendingChange: (show: boolean) => void;
@@ -147,10 +154,15 @@ export function WorkshopTasksOverviewTab({
   vehicles,
   loading,
   tabFilteredTasks,
+  taskCount,
+  pendingTaskCount,
   pendingTasks,
   highPriorityPendingCount,
+  inProgressTaskCount,
   inProgressTasks,
+  onHoldTaskCount,
   onHoldTasks,
+  completedTaskCount,
   completedTasks,
   showPending,
   onShowPendingChange,
@@ -188,6 +200,8 @@ export function WorkshopTasksOverviewTab({
     ? 'flex flex-wrap items-center gap-1.5 w-full lg:w-auto'
     : 'flex flex-wrap items-center gap-1.5 w-full md:w-auto';
   const getTaskPhotos = (taskId: string) => taskInspectionPhotos[taskId] ?? [];
+  const statusSelectValue: WorkshopTaskStatusFilter = statusFilter === 'high_priority' ? 'pending' : statusFilter;
+  const visibleTaskCount = pendingTasks.length + inProgressTasks.length + onHoldTasks.length + completedTasks.length;
   const [completedLoadState, setCompletedLoadState] = useState({ key: '', count: 20 });
   const [completedSearch, setCompletedSearch] = useState('');
   const [completedDateFrom, setCompletedDateFrom] = useState('');
@@ -215,6 +229,34 @@ export function WorkshopTasksOverviewTab({
       </Badge>
     );
   };
+
+  const getSourceBadgeClass = (task: Action) => {
+    if (task.action_type !== 'inspection_defect') {
+      return 'bg-transparent text-workshop border-workshop';
+    }
+
+    if (task.hgv_id) {
+      return 'bg-transparent text-hgv-inspection border-hgv-inspection';
+    }
+
+    if (task.plant_id) {
+      return 'bg-transparent text-plant-inspection border-plant-inspection';
+    }
+
+    return 'bg-transparent text-inspection border-inspection';
+  };
+
+  const renderSourceBadge = (task: Action, label = getSourceLabel(task)) => (
+    <Badge variant="outline" className={`text-xs font-semibold shadow-sm ${getSourceBadgeClass(task)}`}>
+      {label}
+    </Badge>
+  );
+
+  const renderInspectionDescription = (task: Action) => (
+    task.action_type === 'inspection_defect' && task.description ? (
+      <p className="mb-2 whitespace-pre-line text-sm text-muted-foreground">{task.description}</p>
+    ) : null
+  );
 
   const completedRows = useMemo<CompletedTaskRow[]>(
     () =>
@@ -359,6 +401,43 @@ export function WorkshopTasksOverviewTab({
     setCompletedSortDirection('desc');
   };
 
+  const renderStatusTile = ({
+    filter,
+    label,
+    count,
+    countClassName,
+    activeClassName,
+    ariaLabel,
+  }: {
+    filter: WorkshopTaskTileFilter;
+    label: string;
+    count: number;
+    countClassName: string;
+    activeClassName: string;
+    ariaLabel: string;
+  }) => {
+    const isActive = statusFilter === filter;
+
+    return (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-pressed={isActive}
+        onClick={() => onStatusFilterChange(filter)}
+        className={cn(
+          'rounded-lg border bg-slate-900 text-card-foreground shadow-sm text-left transition-all duration-200',
+          'cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          isActive ? activeClassName : 'border-border hover:border-workshop/50 hover:bg-slate-800/80'
+        )}
+      >
+        <CardHeader className="pb-3">
+          <CardDescription className="text-muted-foreground">{label}</CardDescription>
+          <CardTitle className={`text-3xl ${countClassName}`}>{count}</CardTitle>
+        </CardHeader>
+      </button>
+    );
+  };
+
   return (
     <TabsContent value="overview" className="space-y-6 mt-0">
       <div className={`flex ${tabletModeEnabled ? 'justify-start' : 'justify-end'}`}>
@@ -389,7 +468,7 @@ export function WorkshopTasksOverviewTab({
           <div className={`grid grid-cols-1 md:grid-cols-2 ${tabletModeEnabled ? 'gap-5' : 'gap-4'}`}>
             <div className="space-y-2">
               <Label>Status Filter</Label>
-              <Select value={statusFilter} onValueChange={onStatusFilterChange}>
+              <Select value={statusSelectValue} onValueChange={(value) => onStatusFilterChange(value as WorkshopTaskStatusFilter)}>
                 <SelectTrigger className={`bg-white dark:bg-slate-900 border-border dark:text-slate-100 text-slate-900 ${tabletModeEnabled ? 'min-h-11 text-base' : ''}`}>
                   <SelectValue />
                 </SelectTrigger>
@@ -430,54 +509,67 @@ export function WorkshopTasksOverviewTab({
         className={`grid gap-4 ${
           tabletModeEnabled
             ? hasHighPriorityPending
-              ? 'grid-cols-2 xl:grid-cols-5'
-              : 'grid-cols-2 xl:grid-cols-4'
+              ? 'grid-cols-2 xl:grid-cols-6'
+              : 'grid-cols-2 xl:grid-cols-5'
             : hasHighPriorityPending
-              ? 'grid-cols-5'
-              : 'grid-cols-4'
+              ? 'grid-cols-6'
+              : 'grid-cols-5'
         }`}
       >
+        {renderStatusTile({
+          filter: 'all',
+          label: 'All Tasks',
+          count: taskCount,
+          countClassName: 'text-workshop',
+          activeClassName: 'border-workshop bg-[hsl(var(--workshop-primary)/0.28)] hover:bg-[hsl(var(--workshop-primary)/0.34)] ring-1 ring-[hsl(var(--workshop-primary)/0.45)]',
+          ariaLabel: 'Show all workshop tasks',
+        })}
         {hasHighPriorityPending && (
-          <Card className="border-red-500/30 bg-red-500/5">
-            <CardHeader className="pb-3">
-              <CardDescription className="text-muted-foreground">High Priority</CardDescription>
-              <CardTitle className="text-3xl text-red-500">{highPriorityPendingCount}</CardTitle>
-            </CardHeader>
-          </Card>
+          renderStatusTile({
+            filter: 'high_priority',
+            label: 'High Priority',
+            count: highPriorityPendingCount,
+            countClassName: 'text-red-500',
+            activeClassName: 'border-red-500/70 bg-red-500/15 ring-1 ring-red-500/40',
+            ariaLabel: 'Show high priority workshop tasks',
+          })
         )}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-muted-foreground">Pending</CardDescription>
-            <CardTitle className="text-3xl text-amber-600 dark:text-amber-400">{pendingTasks.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-muted-foreground">In Progress</CardDescription>
-            <CardTitle className="text-3xl text-blue-600 dark:text-blue-400">{inProgressTasks.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-muted-foreground">On Hold</CardDescription>
-            <CardTitle className="text-3xl text-purple-600 dark:text-purple-400">{onHoldTasks.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-muted-foreground">Completed</CardDescription>
-            <CardTitle className="text-3xl text-green-600 dark:text-green-400">{completedTasks.length}</CardTitle>
-          </CardHeader>
-        </Card>
+        {renderStatusTile({
+          filter: 'pending',
+          label: 'Pending',
+          count: pendingTaskCount,
+          countClassName: 'text-amber-600 dark:text-amber-400',
+          activeClassName: 'border-amber-500/70 bg-amber-500/15 ring-1 ring-amber-500/40',
+          ariaLabel: 'Show pending workshop tasks',
+        })}
+        {renderStatusTile({
+          filter: 'logged',
+          label: 'In Progress',
+          count: inProgressTaskCount,
+          countClassName: 'text-blue-600 dark:text-blue-400',
+          activeClassName: 'border-blue-500/70 bg-blue-500/15 ring-1 ring-blue-500/40',
+          ariaLabel: 'Show in progress workshop tasks',
+        })}
+        {renderStatusTile({
+          filter: 'on_hold',
+          label: 'On Hold',
+          count: onHoldTaskCount,
+          countClassName: 'text-purple-600 dark:text-purple-400',
+          activeClassName: 'border-purple-500/70 bg-purple-500/15 ring-1 ring-purple-500/40',
+          ariaLabel: 'Show on hold workshop tasks',
+        })}
+        {renderStatusTile({
+          filter: 'completed',
+          label: 'Completed',
+          count: completedTaskCount,
+          countClassName: 'text-green-600 dark:text-green-400',
+          activeClassName: 'border-green-500/70 bg-green-500/15 ring-1 ring-green-500/40',
+          ariaLabel: 'Show completed workshop tasks',
+        })}
       </div>
 
       {showInitialLoading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <p>Loading tasks...</p>
-          </div>
-        </div>
+        <PanelLoader message="Loading tasks..." accent="workshop" className="min-h-[400px]" />
       ) : tabFilteredTasks.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -493,6 +585,13 @@ export function WorkshopTasksOverviewTab({
               <Plus className="h-4 w-4 mr-2" />
               Create Task
             </Button>
+          </CardContent>
+        </Card>
+      ) : visibleTaskCount === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Wrench className="h-16 w-16 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No tasks match this status filter</h3>
           </CardContent>
         </Card>
       ) : (
@@ -534,13 +633,11 @@ export function WorkshopTasksOverviewTab({
                           <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
                             <div className="flex-1 w-full">
                               <div className="flex items-center gap-2 mb-2">
-                                {getStatusIcon(task.status, task)}
+                                {getStatusIcon(task.status ?? 'pending', task)}
                                 <h3 className="font-semibold text-lg text-foreground">
                                   {getVehicleReg(task)}
                                 </h3>
-                                <Badge variant="outline" className="text-xs">
-                                  {getSourceLabel(task)}
-                                </Badge>
+                                {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
                                   <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
@@ -561,9 +658,7 @@ export function WorkshopTasksOverviewTab({
                                   </Badge>
                                 )}
                               </div>
-                              {task.action_type === 'inspection_defect' && task.description && (
-                                <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                              )}
+                              {renderInspectionDescription(task)}
                               {task.workshop_comments && (
                                 <p className="text-sm text-muted-foreground mb-2">
                                   <strong>Notes:</strong> {task.workshop_comments}
@@ -595,6 +690,18 @@ export function WorkshopTasksOverviewTab({
                               >
                                 <Clock className="h-3.5 w-3.5 mr-1.5" />
                                 In Progress
+                              </Button>
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMarkOnHold(task);
+                                }}
+                                disabled={isUpdating}
+                                size="sm"
+                                className={`${taskActionButtonClass} bg-purple-600/80 hover:bg-purple-600 text-white border-0`}
+                              >
+                                <Pause className="h-3.5 w-3.5 mr-1.5" />
+                                On Hold
                               </Button>
                               <Button
                                 onClick={(e) => {
@@ -681,9 +788,9 @@ export function WorkshopTasksOverviewTab({
                           <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
                             <div className="flex-1 w-full">
                               <div className="flex items-center gap-2 mb-2">
-                                {getStatusIcon(task.status)}
+                                {getStatusIcon(task.status ?? 'pending')}
                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
-                                <Badge variant="outline" className="text-xs">{getSourceLabel(task)}</Badge>
+                                {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
                                   <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
@@ -704,9 +811,7 @@ export function WorkshopTasksOverviewTab({
                                   </Badge>
                                 )}
                               </div>
-                              {task.action_type === 'inspection_defect' && task.description && (
-                                <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                              )}
+                              {renderInspectionDescription(task)}
                               {task.logged_comment && (
                                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
                                   <p className="text-sm text-blue-300">
@@ -802,9 +907,9 @@ export function WorkshopTasksOverviewTab({
                           <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
                             <div className="flex-1 w-full">
                               <div className="flex items-center gap-2 mb-2">
-                                {getStatusIcon(task.status)}
+                                {getStatusIcon(task.status ?? 'pending')}
                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
-                                <Badge variant="outline" className="text-xs">{getSourceLabel(task)}</Badge>
+                                {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
                                   <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
@@ -825,9 +930,7 @@ export function WorkshopTasksOverviewTab({
                                   </Badge>
                                 )}
                               </div>
-                              {task.action_type === 'inspection_defect' && task.description && (
-                                <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                              )}
+                              {renderInspectionDescription(task)}
                               {task.logged_comment && (
                                 <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 mb-2">
                                   <p className="text-sm text-purple-200 font-medium">Progress Note: {task.logged_comment}</p>
@@ -1083,9 +1186,7 @@ export function WorkshopTasksOverviewTab({
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge variant="outline" className="text-xs">
-                                  {row.source}
-                                </Badge>
+                                {renderSourceBadge(row.task, row.source)}
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">
                                 {row.subcategory ? (
@@ -1107,7 +1208,7 @@ export function WorkshopTasksOverviewTab({
                                 <div className="space-y-1">
                                   <p className="text-sm font-medium text-foreground">{row.task.title}</p>
                                   {row.summary && (
-                                    <p className="line-clamp-2 text-sm text-muted-foreground">{row.summary}</p>
+                                    <p className="line-clamp-2 whitespace-pre-line text-sm text-muted-foreground">{row.summary}</p>
                                   )}
                                 </div>
                               </TableCell>
@@ -1168,9 +1269,7 @@ export function WorkshopTasksOverviewTab({
                                     <div className="flex items-center gap-2 mb-2">
                                       <CheckCircle2 className="h-5 w-5 text-green-400" />
                                       <h3 className="font-semibold text-lg text-foreground">{assetLabel}</h3>
-                                      <Badge variant="outline" className="text-xs">
-                                        {sourceLabel}
-                                      </Badge>
+                                      {renderSourceBadge(task, sourceLabel)}
                                       {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
                                         <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
                                           <Paperclip className="h-3 w-3 mr-1" />
@@ -1196,9 +1295,7 @@ export function WorkshopTasksOverviewTab({
                                         </Badge>
                                       )}
                                     </div>
-                                    {task.action_type === 'inspection_defect' && task.description && (
-                                      <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                                    )}
+                                    {renderInspectionDescription(task)}
                                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                                       {task.actioned_at && (
                                         <span className="text-green-400">

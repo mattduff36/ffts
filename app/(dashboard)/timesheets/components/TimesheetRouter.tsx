@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { useTimesheetType } from '../hooks/useTimesheetType';
-import { TimesheetRegistry, isTimesheetTypeImplemented, getTimesheetTypeLabel } from '../types/registry';
+import { TimesheetRegistry, isTimesheetTypeImplemented, getTimesheetTypeLabel, type TimesheetType } from '../types/registry';
 import { PlantTimesheetV2 } from '../types/plant/PlantTimesheetV2Aligned';
 import { PlantTimesheet } from '../types/plant/PlantTimesheet';
 import { resolveTimesheetRenderVariant } from './timesheet-routing';
@@ -26,6 +27,7 @@ interface TimesheetRouterProps {
   onSelectedEmployeeChange?: (employeeId: string) => void;
   existingTimesheetType?: string | null;
   existingTemplateVersion?: number | null;
+  selectedTimesheetType?: TimesheetType | null;
 }
 
 export function TimesheetRouter({
@@ -35,30 +37,28 @@ export function TimesheetRouter({
   onSelectedEmployeeChange,
   existingTimesheetType = null,
   existingTemplateVersion = null,
+  selectedTimesheetType = null,
 }: TimesheetRouterProps) {
-  const { timesheetType, loading, error } = useTimesheetType(userId);
+  const { timesheetType, mode, loading, error } = useTimesheetType(userId);
+  const resolvedType = !existingId && selectedTimesheetType ? selectedTimesheetType : timesheetType;
 
   // Loading state
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-timesheet mx-auto"></div>
-          <p className="text-muted-foreground">Loading timesheet...</p>
-        </div>
-      </div>
-    );
+    return <PanelLoader message="Loading timesheet..." accent="timesheet" className="min-h-[400px]" />;
   }
 
-  // Error state (should rarely happen - falls back to default)
+  // Error state (should rarely happen - hook falls back to default)
   if (error) {
-    console.error('Timesheet routing error:', error);
-    // Still show default timesheet despite error
+    console.warn('Timesheet routing warning:', error);
+  }
+
+  if (!existingId && mode === 'choice' && !selectedTimesheetType) {
+    return <PanelLoader message="Waiting for timesheet type selection..." accent="timesheet" className="min-h-[240px]" />;
   }
 
   // New plant timesheets must always use v2.
   // Existing records are handled by template-version routing below.
-  if (!existingId && timesheetType === 'plant') {
+  if (!existingId && resolvedType === 'plant') {
     return (
       <PlantTimesheetV2
         weekEnding={weekEnding}
@@ -73,7 +73,7 @@ export function TimesheetRouter({
     existingId,
     existingTimesheetType,
     existingTemplateVersion,
-    resolvedType: timesheetType,
+    resolvedType,
   });
 
   if (routing.variant === 'plant-v2') {

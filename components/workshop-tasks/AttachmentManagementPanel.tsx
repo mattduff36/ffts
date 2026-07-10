@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
@@ -140,7 +141,7 @@ export function AttachmentManagementPanel({ taxonomyMode }: AttachmentManagement
     setEditingTemplate(template);
     setTemplateName(template.name);
     setTemplateDescription(template.description || '');
-    setTemplateActive(template.is_active);
+    setTemplateActive(template.is_active ?? true);
     setTemplateAppliesToVehicle(appliesTo.includes('van'));
     setTemplateAppliesToHgv(appliesTo.includes('hgv'));
     setTemplateAppliesToPlant(appliesTo.includes('plant'));
@@ -257,9 +258,7 @@ export function AttachmentManagementPanel({ taxonomyMode }: AttachmentManagement
         {isExpanded && (
           <CardContent className="pt-6">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-pulse text-muted-foreground">Loading attachment templates...</div>
-              </div>
+              <PanelLoader message="Loading attachment templates..." accent="workshop" className="py-12" />
             ) : filteredTemplates.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <FileText className="h-16 w-16 text-muted-foreground mb-4" />

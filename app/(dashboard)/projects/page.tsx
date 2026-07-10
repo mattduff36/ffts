@@ -15,6 +15,7 @@ import { formatFileSize } from '@/lib/utils/file-validation';
 import { RecordVisitorSignatureModal } from '@/components/rams/RecordVisitorSignatureModal';
 import { RAMSErrorBoundary } from '@/components/rams/RAMSErrorBoundary';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { isNetworkFetchError } from '@/lib/utils/http-error';
 
 interface RAMSDocument {
   id: string;
@@ -74,7 +75,11 @@ export default function RAMSPage() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (!errorMessage.includes('HTTP 401') && !errorMessage.includes('HTTP 403')) {
+      if (
+        !errorMessage.includes('HTTP 401') &&
+        !errorMessage.includes('HTTP 403') &&
+        !isNetworkFetchError(error)
+      ) {
         console.error('Error fetching RAMS documents:', {
           message: errorMessage,
           timestamp: new Date().toISOString(),
@@ -134,8 +139,8 @@ export default function RAMSPage() {
     <AppPageShell>
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-foreground mb-2">Projects</h1>
             <p className="text-muted-foreground">
               {isManager || isAdmin 
@@ -145,11 +150,11 @@ export default function RAMSPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
             {/* Manage Projects link for managers/admins */}
             {(isManager || isAdmin) && (
-              <Link href="/projects/manage">
-                <Button className="bg-rams hover:bg-rams-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg">
+              <Link href="/projects/manage" className="w-full sm:w-auto">
+                <Button className="w-full bg-rams hover:bg-rams-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg sm:w-auto">
                   <Settings className="h-4 w-4 mr-2" />
                   Manage Projects
                 </Button>
@@ -158,7 +163,7 @@ export default function RAMSPage() {
 
             {/* Pending count badge for employees */}
             {!isManager && !isAdmin && pendingCount > 0 && (
-              <Badge variant="destructive" className="text-lg px-4 py-2">
+              <Badge variant="destructive" className="w-fit text-lg px-4 py-2">
                 {pendingCount} pending
               </Badge>
             )}

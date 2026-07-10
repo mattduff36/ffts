@@ -38,3 +38,8 @@ export function isDuplicateInspectionError(error: unknown): boolean {
     message.includes('unique constraint')
   );
 }
+
+export function isMissingDraftError(error: unknown): boolean {
+  const message = extractInspectionErrorMessage(error).trim().toLowerCase();
+  return message === 'draft not found';
+}

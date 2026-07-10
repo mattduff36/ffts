@@ -72,7 +72,8 @@ export async function GET(request: NextRequest) {
 
     // Count tasks by status
     const statusBreakdown = tasks?.reduce((acc, task) => {
-      acc[task.status] = (acc[task.status] || 0) + 1;
+      const status = task.status || 'pending';
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>) || {};
 
@@ -80,12 +81,12 @@ export async function GET(request: NextRequest) {
     const items: SubcategoryTaskItem[] = (tasks || []).map(task => ({
       id: task.id,
       title: task.title,
-      status: task.status,
+      status: task.status || 'pending',
       vehicle: {
         reg_number: (task.vehicles as { reg_number?: string | null; nickname?: string | null } | null)?.reg_number || 'Unknown',
         nickname: (task.vehicles as { reg_number?: string | null; nickname?: string | null } | null)?.nickname || null,
       },
-      created_at: task.created_at,
+      created_at: task.created_at || '',
       url: `/workshop-tasks?task=${task.id}`,
     }));
 

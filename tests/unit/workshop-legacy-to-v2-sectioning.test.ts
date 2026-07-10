@@ -29,7 +29,7 @@ describe('inferLegacySectionsForTemplate', () => {
   });
 
   it('collapses repeated comment prompts into one section comment field', () => {
-    const sections = inferLegacySectionsForTemplate('LOLOR', [
+    const sections = inferLegacySectionsForTemplate('LOLER THOROUGH EXAMINATION', [
       { question_text: 'pins and bushes', question_type: 'checkbox', is_required: false, sort_order: 1 },
       { question_text: 'comments', question_type: 'text', is_required: false, sort_order: 2 },
       { question_text: 'lifting chart stickers', question_type: 'checkbox', is_required: false, sort_order: 3 },

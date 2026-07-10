@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getProfileWithRole } from '@/lib/utils/permissions';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type { GetNotificationsResponse, NotificationItem } from '@/types/messages';
+import type { NotificationModuleKey } from '@/types/notifications';
+import { isUnreadNotification } from '@/lib/utils/notification-helpers';
 
 interface SenderShape {
   full_name?: string | null;
@@ -12,8 +14,11 @@ interface MessageShape {
   type?: NotificationItem['type'];
   priority?: NotificationItem['priority'];
   created_via?: string | null;
+  module_key?: NotificationModuleKey | null;
   subject?: string | null;
   body?: string | null;
+  pdf_file_path?: string | null;
+  acceptance_delay_minutes?: number | null;
   sender_id?: string | null;
   created_at?: string | null;
   sender?: SenderShape | SenderShape[] | null;
@@ -25,6 +30,7 @@ interface RecipientShape {
   status?: NotificationItem['status'];
   signed_at?: string | null;
   first_shown_at?: string | null;
+  signature_data?: string | null;
   messages?: MessageShape | MessageShape[] | null;
 }
 
@@ -103,13 +109,17 @@ export async function GET(request: NextRequest) {
         status,
         signed_at,
         first_shown_at,
+        signature_data,
         created_at,
         messages!inner(
           id,
           type,
           created_via,
+          module_key,
           subject,
           body,
+          pdf_file_path,
+          acceptance_delay_minutes,
           priority,
           sender_id,
           created_at,
@@ -145,20 +155,23 @@ export async function GET(request: NextRequest) {
           type: message.type,
           priority: message.priority,
           created_via: message.created_via ?? null,
+          module_key: message.module_key ?? 'general_notifications',
           subject: message.subject ?? '',
           body: message.body ?? '',
+          pdf_file_path: message.pdf_file_path ?? null,
+          acceptance_delay_minutes: message.acceptance_delay_minutes ?? 0,
           sender_name: sender?.full_name ?? 'Deleted User',
           sender_id: message.sender_id ?? null,
           status: item.status ?? 'PENDING',
           created_at: message.created_at,
           signed_at: item.signed_at ?? null,
           first_shown_at: item.first_shown_at ?? null,
+          signature_data: item.signature_data ?? null,
         };
       })
       .filter((item): item is NotificationItem => item !== null);
 
-    // Count unread (PENDING status)
-    const unread_count = notifications.filter(n => n.status === 'PENDING').length;
+    const unread_count = notifications.filter(isUnreadNotification).length;
 
     const response: GetNotificationsResponse = {
       success: true,

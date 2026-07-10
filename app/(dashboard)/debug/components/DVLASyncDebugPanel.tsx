@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RefreshCw, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Loader2, CheckCircle2, XCircle, AlertTriangle, Car, Gauge, RadioTower, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Alert,
@@ -20,6 +22,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+type DvlaSummaryTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral';
+
+interface DvlaSummaryMetric {
+  title: string;
+  value: string;
+  detail: string;
+  tone: DvlaSummaryTone;
+  icon: ReactNode;
+}
+
+function formatNumber(value: number): string {
+  return value.toLocaleString('en-GB');
+}
+
+function getDvlaMetricClasses(tone: DvlaSummaryTone): string {
+  switch (tone) {
+    case 'success':
+      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+    case 'warning':
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+    case 'danger':
+      return 'border-red-500/30 bg-red-500/10 text-red-100';
+    case 'info':
+      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+    default:
+      return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+  }
+}
+
+function DvlaSummaryMetricCard({ metric }: { metric: DvlaSummaryMetric }) {
+  return (
+    <div className={`rounded-xl border p-4 ${getDvlaMetricClasses(metric.tone)}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{metric.title}</p>
+          <p className="mt-2 text-xl font-bold">{metric.value}</p>
+        </div>
+        <span className="opacity-85">{metric.icon}</span>
+      </div>
+      <p className="mt-2 text-sm leading-5 opacity-85">{metric.detail}</p>
+    </div>
+  );
+}
 
 export function DVLASyncDebugPanel() {
   const [regNumber, setRegNumber] = useState('');
@@ -46,6 +92,39 @@ export function DVLASyncDebugPanel() {
   } | null>(null);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [vehicleCount, setVehicleCount] = useState(0);
+  const successfulSyncs = syncResult?.successful ?? (syncResult?.success ? 1 : 0);
+  const failedSyncs = syncResult?.failed ?? (syncResult && !syncResult.success ? 1 : 0);
+  const updatedRecords = syncResult?.results?.filter((row) => row.updatedFields?.length || row.fields_updated?.length).length ?? 0;
+  const syncSummaryMetrics: DvlaSummaryMetric[] = [
+    {
+      title: 'Mode',
+      value: bulkSyncing ? 'Bulk running' : syncing ? 'Single running' : 'Ready',
+      detail: 'Use single sync for spot checks, or bulk sync to refresh every active road asset with a plate.',
+      tone: syncing || bulkSyncing ? 'warning' : 'info',
+      icon: <RadioTower className="h-5 w-5" />,
+    },
+    {
+      title: 'Known assets',
+      value: vehicleCount > 0 ? formatNumber(vehicleCount) : 'Not counted',
+      detail: vehicleCount > 0 ? 'Road-eligible assets were counted during the latest bulk-sync confirmation.' : 'Open bulk sync to count active road assets before spending API quota.',
+      tone: vehicleCount > 0 ? 'success' : 'neutral',
+      icon: <Car className="h-5 w-5" />,
+    },
+    {
+      title: 'Latest result',
+      value: syncResult ? `${formatNumber(successfulSyncs)} ok / ${formatNumber(failedSyncs)} failed` : 'No run yet',
+      detail: syncResult ? (syncResult.message || 'The latest DVLA sync response is shown below.') : 'Run a single or bulk sync to see live result details.',
+      tone: !syncResult ? 'neutral' : failedSyncs > 0 ? 'danger' : 'success',
+      icon: <Gauge className="h-5 w-5" />,
+    },
+    {
+      title: 'Updated records',
+      value: syncResult ? formatNumber(updatedRecords) : 'Pending',
+      detail: syncResult ? 'Records with changed tax or MOT fields in the latest response.' : 'No records have been compared in this view yet.',
+      tone: updatedRecords > 0 ? 'success' : 'neutral',
+      icon: <ShieldCheck className="h-5 w-5" />,
+    },
+  ];
 
   const handleSingleSync = async () => {
     if (!regNumber.trim()) {
@@ -172,19 +251,44 @@ export function DVLASyncDebugPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Configuration Info */}
-      <Alert className="bg-amber-500/10 border-amber-500/50 text-amber-400">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="text-amber-300">Developer Tool</AlertTitle>
-        <AlertDescription className="text-amber-200/80">
-          These controls sync van tax & MOT due dates from GOV.UK APIs (VES & MOT History). Each sync uses your production API quota.
-        </AlertDescription>
-      </Alert>
+      <Card className="overflow-hidden border-brand-yellow/20 bg-slate-950/60">
+        <div className="pointer-events-none h-1 bg-gradient-to-r from-orange-500 to-red-600" />
+        <CardHeader>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <RefreshCw className="h-5 w-5 text-brand-yellow" />
+                DVLA Sync Control
+              </CardTitle>
+              <CardDescription>
+                Refresh tax and MOT dates from GOV.UK APIs for individual or active road fleet assets.
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="w-fit border-amber-500/30 bg-amber-500/10 text-amber-300">
+              Production API quota
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-amber-200">Developer Tool</AlertTitle>
+            <AlertDescription className="text-amber-100/80">
+              These controls sync tax and MOT due dates from GOV.UK APIs (VES and MOT History). Each sync uses production API quota.
+            </AlertDescription>
+          </Alert>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {syncSummaryMetrics.map((metric) => (
+              <DvlaSummaryMetricCard key={metric.title} metric={metric} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Single Van Sync */}
-      <Card className="border-border">
+      <Card className="border-slate-700/70 bg-slate-950/45">
         <CardHeader>
-          <CardTitle className="text-white">Sync Single Van</CardTitle>
+          <CardTitle className="text-white">Sync Single Asset</CardTitle>
           <CardDescription className="text-muted-foreground">
             Sync tax & MOT due dates for a specific fleet asset by registration number
           </CardDescription>
@@ -201,10 +305,10 @@ export function DVLASyncDebugPanel() {
                 disabled={syncing}
                 className="flex-1 bg-input border-border text-white placeholder:text-muted-foreground"
               />
-              <Button 
+              <Button
                 onClick={handleSingleSync}
                 disabled={syncing || !regNumber.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-orange-600 text-white hover:bg-orange-700"
               >
                 {syncing ? (
                   <>
@@ -224,7 +328,7 @@ export function DVLASyncDebugPanel() {
       </Card>
 
       {/* Bulk Sync All Road-Eligible Assets */}
-      <Card className="border-border">
+      <Card className="border-slate-700/70 bg-slate-950/45">
         <CardHeader>
           <CardTitle className="text-white">Bulk Sync All Road Assets</CardTitle>
           <CardDescription className="text-muted-foreground">
@@ -236,7 +340,7 @@ export function DVLASyncDebugPanel() {
             onClick={handleBulkSyncClick}
             disabled={bulkSyncing}
             variant="outline"
-            className="w-full border-slate-600 text-white hover:bg-slate-800"
+            className="w-full border-orange-500/30 bg-orange-500/10 text-orange-200 hover:bg-orange-500/20"
           >
             {bulkSyncing ? (
               <>
@@ -255,7 +359,8 @@ export function DVLASyncDebugPanel() {
 
       {/* Sync Results */}
       {syncResult && (
-        <Card className="border-border">
+        <Card className="overflow-hidden border-slate-700/70 bg-slate-950/45">
+          <div className={`pointer-events-none h-1 ${syncResult.success ? 'bg-emerald-500' : 'bg-red-600'}`} />
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               {syncResult.success ? (
@@ -301,7 +406,7 @@ export function DVLASyncDebugPanel() {
                             {row.registrationNumber || 'Unknown'}
                           </span>
                           {row.assetType && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 uppercase">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/10 text-orange-300 uppercase">
                               {row.assetType}
                             </span>
                           )}
@@ -334,7 +439,7 @@ export function DVLASyncDebugPanel() {
 
       {/* Bulk Sync Confirmation Dialog */}
       <Dialog open={showBulkConfirm} onOpenChange={setShowBulkConfirm}>
-        <DialogContent className="border-border text-white">
+          <DialogContent className="border-slate-700 text-white">
           <DialogHeader>
             <DialogTitle className="text-xl text-white">Confirm Bulk Sync</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -357,7 +462,7 @@ export function DVLASyncDebugPanel() {
             </Button>
             <Button 
               onClick={handleBulkSync}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-orange-600 hover:bg-orange-700 text-white"
             >
               Yes, Sync All
             </Button>

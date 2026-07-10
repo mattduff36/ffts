@@ -1180,7 +1180,7 @@ export function AbsenceCalendarAdmin() {
       </Card>
 
       <Dialog open={showDayModal} onOpenChange={setShowDayModal}>
-        <DialogContent className="border-border max-w-6xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">
               {selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}
@@ -1385,7 +1385,7 @@ export function AbsenceCalendarAdmin() {
       />
 
       <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
-        <DialogContent className="border-border max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">Delete Absence</DialogTitle>
             <DialogDescription className="text-slate-400/90">

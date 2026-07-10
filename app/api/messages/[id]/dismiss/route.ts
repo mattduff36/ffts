@@ -77,7 +77,13 @@ export async function POST(
 
     const response: SignMessageResponse = {
       success: true,
-      recipient: updatedRecipient
+      recipient: {
+        ...updatedRecipient,
+        message_id: updatedRecipient.message_id ?? recipient.message_id ?? '',
+        user_id: updatedRecipient.user_id ?? user.id,
+        created_at: updatedRecipient.created_at ?? '',
+        updated_at: updatedRecipient.updated_at ?? '',
+      }
     };
 
     return NextResponse.json(response);

@@ -7,19 +7,16 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { AppPageShell } from '@/components/layout/AppPageShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Wrench, Truck, Settings, HardHat, Plus } from 'lucide-react';
+import { Wrench, Truck, Settings, HardHat, Plus } from 'lucide-react';
 import { logger } from '@/lib/utils/logger';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { PanelLoader } from '@/components/ui/panel-loader';
 
 // Dynamic import for PlantTable
 const PlantTable = dynamic(
   () => import('@/app/(dashboard)/maintenance/components/PlantTable').then(mod => ({ default: mod.PlantTable })),
   { 
-    loading: () => (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    ),
+    loading: () => <PanelLoader message="Loading plant table..." accent="fleet" className="p-12" />,
     ssr: false
   }
 );
@@ -36,18 +33,17 @@ import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import type { Category, HgvAsset, HgvCategory, PlantAsset, Vehicle } from './types';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
 import { getErrorMessage } from '@/lib/utils/absence-error-handling';
 
 function isExpectedFleetLoadError(error: unknown): boolean {
   const status = getErrorStatus(error);
-  const message = getErrorMessage(error, '');
+  const message = getErrorMessage(error, '').toLowerCase();
   return (
     isAuthErrorStatus(status) ||
-    message.includes('Unauthorized') ||
-    message.includes('Not authenticated') ||
-    message.includes('Failed to fetch') ||
-    message.includes('NetworkError')
+    isNetworkFetchError(error) ||
+    message.includes('unauthorized') ||
+    message.includes('not authenticated')
   );
 }
 
@@ -149,7 +145,11 @@ function FleetContent() {
         setVehicles(data.vehicles || []);
       }
     } catch (error) {
-      logger.error('Failed to fetch vehicles', error, 'FleetPage');
+      if (isExpectedFleetLoadError(error)) {
+        setVehicles([]);
+      } else {
+        logger.error('Failed to fetch vehicles', error, 'FleetPage');
+      }
     } finally {
       setVehiclesLoading(false);
     }
@@ -166,7 +166,10 @@ function FleetContent() {
         .eq('status', 'active');
       
       if (error) throw error;
-      setPlantAssets(data || []);
+      setPlantAssets((data || []).map((asset) => ({
+        ...asset,
+        status: asset.status || 'active',
+      })));
     } catch (error) {
       if (isExpectedFleetLoadError(error)) {
         setPlantAssets([]);
@@ -188,7 +191,11 @@ function FleetContent() {
         setHgvCategories(data.categories || []);
       }
     } catch (error) {
-      logger.error('Failed to fetch HGV categories', error, 'FleetPage');
+      if (isExpectedFleetLoadError(error)) {
+        setHgvCategories([]);
+      } else {
+        logger.error('Failed to fetch HGV categories', error, 'FleetPage');
+      }
     } finally {
       setHgvCategoriesLoading(false);
     }
@@ -206,7 +213,10 @@ function FleetContent() {
         .order('reg_number', { ascending: true });
 
       if (error) throw error;
-      setHgvAssets(data || []);
+      setHgvAssets((data || []).map((asset) => ({
+        ...asset,
+        status: asset.status || 'active',
+      })));
     } catch (error) {
       if (isExpectedFleetLoadError(error)) {
         setHgvAssets([]);
@@ -228,7 +238,11 @@ function FleetContent() {
         setCategories(data.categories || []);
       }
     } catch (error) {
-      logger.error('Failed to fetch categories', error, 'FleetPage');
+      if (isExpectedFleetLoadError(error)) {
+        setCategories([]);
+      } else {
+        logger.error('Failed to fetch categories', error, 'FleetPage');
+      }
     } finally {
       setCategoriesLoading(false);
     }
@@ -398,15 +412,15 @@ function FleetContent() {
     <AppPageShell>
       {/* Header */}
       <div className={`bg-white dark:bg-slate-900 rounded-lg border border-border ${tabletModeEnabled ? 'p-5 md:p-6' : 'p-6'}`}>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-foreground mb-2">Fleet Management</h1>
             <p className="text-muted-foreground">
               Manage vans, HGVs, plant machinery, and fleet operations
             </p>
           </div>
           <Button
-            className={`bg-fleet hover:bg-fleet-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}
+            className={`w-full bg-fleet hover:bg-fleet-dark text-white transition-all duration-200 active:scale-95 shadow-md hover:shadow-lg sm:w-auto ${tabletModeEnabled ? 'min-h-11 text-base px-4 [&_svg]:size-5' : ''}`}
             onClick={() => setHeaderAddAssetOpen(true)}
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -453,9 +467,7 @@ function FleetContent() {
           {assetTab === 'plant' && (
             <div className="space-y-6">
           {maintenanceLoading || (plantAssetsLoading && plantAssets.length === 0) ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-            </div>
+            <PanelLoader message="Loading plant assets..." accent="fleet" className="min-h-[400px]" />
           ) : maintenanceError ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -480,9 +492,7 @@ function FleetContent() {
           {assetTab === 'vans' && (
             <div className="space-y-6">
               {maintenanceLoading || (vehiclesLoading && vehicles.length === 0) ? (
-                <div className="flex items-center justify-center min-h-[400px]">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
+                <PanelLoader message="Loading vans..." accent="fleet" className="min-h-[400px]" />
               ) : maintenanceError ? (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
@@ -508,9 +518,7 @@ function FleetContent() {
           {assetTab === 'hgvs' && (
             <div className="space-y-6">
               {maintenanceLoading || (hgvAssetsLoading && hgvAssets.length === 0) ? (
-                <div className="flex items-center justify-center min-h-[400px]">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
+                <PanelLoader message="Loading HGVs..." accent="fleet" className="min-h-[400px]" />
               ) : maintenanceError ? (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ActiveNowUsersPanel } from '@/components/layout/ActiveNowUsersPanel';
 import {
   Activity,
@@ -48,7 +48,7 @@ interface SidebarNavProps {
   onToggle: () => void;
 }
 
-const HOVER_EXPAND_DELAY_MS = 1000;
+const HOVER_EXPAND_DELAY_MS = 500;
 
 export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   const pathname = usePathname();
@@ -62,12 +62,10 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   const [allTeams, setAllTeams] = useState<TeamOption[]>([]);
   const [viewAsMenuOpen, setViewAsMenuOpen] = useState(false);
   const [hoverExpanded, setHoverExpanded] = useState(false);
-  const [viewAsMenuPosition, setViewAsMenuPosition] = useState({ left: 12, top: 12, maxHeight: 320 });
   const [activeUsersPanelOpen, setActiveUsersPanelOpen] = useState(false);
   const [activeUsersPanelPosition, setActiveUsersPanelPosition] = useState({ left: 12, top: 12, maxHeight: 320 });
   const sidebarRef = useRef<HTMLDivElement | null>(null);
   const viewAsTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const viewAsMenuRef = useRef<HTMLDivElement | null>(null);
   const activeUsersTriggerRef = useRef<HTMLButtonElement | null>(null);
   const activeUsersPanelRef = useRef<HTMLDivElement | null>(null);
   const hoverExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,7 +85,6 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
 
     return Boolean(
       sidebarRef.current?.contains(target) ||
-      viewAsMenuRef.current?.contains(target) ||
       activeUsersPanelRef.current?.contains(target)
     );
   }, []);
@@ -106,23 +103,20 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
     if (isInsideSidebarHoverZone(relatedTarget) || open) return;
 
     setHoverExpanded(false);
-    setViewAsMenuOpen(false);
     setActiveUsersPanelOpen(false);
   }, [clearHoverExpandTimer, isInsideSidebarHoverZone, open]);
 
-  const handleViewAsMenuMouseLeave = useCallback((relatedTarget: EventTarget | null) => {
+  const handleFloatingPanelMouseLeave = useCallback((relatedTarget: EventTarget | null) => {
     if (isInsideSidebarHoverZone(relatedTarget) || open) return;
 
     clearHoverExpandTimer();
     setHoverExpanded(false);
-    setViewAsMenuOpen(false);
     setActiveUsersPanelOpen(false);
   }, [isInsideSidebarHoverZone, open, clearHoverExpandTimer]);
 
   const handleNavLinkClick = useCallback(() => {
     clearHoverExpandTimer();
     setHoverExpanded(false);
-    setViewAsMenuOpen(false);
     setActiveUsersPanelOpen(false);
   }, [clearHoverExpandTimer]);
 
@@ -134,7 +128,6 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
 
     clearHoverExpandTimer();
     setHoverExpanded(false);
-    setViewAsMenuOpen(false);
     setActiveUsersPanelOpen(false);
   }, [open, onToggle, clearHoverExpandTimer]);
 
@@ -209,31 +202,6 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   }, [pathname, clearHoverExpandTimer]);
 
   useEffect(() => {
-    if (!viewAsMenuOpen) return;
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      if (viewAsTriggerRef.current?.contains(target) || viewAsMenuRef.current?.contains(target)) {
-        return;
-      }
-      setViewAsMenuOpen(false);
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setViewAsMenuOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [viewAsMenuOpen]);
-
-  useEffect(() => {
     if (!activeUsersPanelOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
@@ -257,36 +225,6 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [activeUsersPanelOpen]);
-
-  const updateViewAsMenuPosition = useCallback(() => {
-    const triggerRect = viewAsTriggerRef.current?.getBoundingClientRect();
-    if (!triggerRect) return;
-
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const menuWidth = 256; // matches w-64
-    const margin = 12;
-    const preferredLeft = Math.round(triggerRect.right + (isExpanded ? 16 : 12));
-    const maxLeft = Math.max(margin, viewportWidth - menuWidth - margin);
-    const clampedLeft = Math.min(Math.max(margin, preferredLeft), maxLeft);
-    const spaceBelow = viewportHeight - triggerRect.bottom - margin;
-    const spaceAbove = triggerRect.top - margin;
-    const openUpwards = spaceBelow < 220 && spaceAbove > spaceBelow;
-    const fallbackAvailable = viewportHeight - margin * 2;
-    const targetAvailable = openUpwards ? spaceAbove : spaceBelow;
-    const maxHeight = Math.max(160, Math.min(fallbackAvailable, Math.floor(targetAvailable - 8)));
-    const preferredTop = openUpwards
-      ? Math.round(triggerRect.top - maxHeight - 8)
-      : Math.round(triggerRect.bottom + 8);
-    const maxTop = Math.max(margin, viewportHeight - maxHeight - margin);
-    const clampedTop = Math.min(Math.max(margin, preferredTop), maxTop);
-
-    setViewAsMenuPosition({
-      left: clampedLeft,
-      top: clampedTop,
-      maxHeight,
-    });
-  }, [isExpanded]);
 
   const updateActiveUsersPanelPosition = useCallback(() => {
     const triggerRect = activeUsersTriggerRef.current?.getBoundingClientRect();
@@ -317,23 +255,6 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
       maxHeight,
     });
   }, [isExpanded]);
-
-  useEffect(() => {
-    if (!viewAsMenuOpen) return;
-
-    updateViewAsMenuPosition();
-
-    function syncPosition() {
-      updateViewAsMenuPosition();
-    }
-
-    window.addEventListener('resize', syncPosition);
-    window.addEventListener('scroll', syncPosition, true);
-    return () => {
-      window.removeEventListener('resize', syncPosition);
-      window.removeEventListener('scroll', syncPosition, true);
-    };
-  }, [viewAsMenuOpen, isExpanded, updateViewAsMenuPosition]);
 
   useEffect(() => {
     if (!activeUsersPanelOpen) return;
@@ -387,6 +308,11 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
       ? [draftRole?.display_name, draftTeam?.name].filter(Boolean).join(' / ')
       : 'Actual Role & Team';
 
+  const openViewAsDialog = () => {
+    setActiveUsersPanelOpen(false);
+    setViewAsMenuOpen(true);
+  };
+
   const applyViewAsSelection = () => {
     setViewAsSelection({
       roleId: draftRoleId,
@@ -394,17 +320,22 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
     });
     setViewAsRoleIdState(draftRoleId);
     setViewAsTeamIdState(draftTeamId);
+    setViewAsMenuOpen(false);
     setTimeout(() => window.location.reload(), 100);
   };
 
-  const viewAsPopoverContent = (
+  const resetViewAsSelection = () => {
+    clearViewAsSelection();
+    setViewAsRoleIdState('');
+    setViewAsTeamIdState('');
+    setDraftRoleId('');
+    setDraftTeamId('');
+    setViewAsMenuOpen(false);
+    setTimeout(() => window.location.reload(), 100);
+  };
+
+  const viewAsDialogBody = (
     <div className="space-y-3">
-      <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>
-        View As
-      </div>
-      <div className="px-2 text-xs" style={{ color: '#94a3b8' }}>
-        Select both a role and team to mirror that combination.
-      </div>
       <button
         type="button"
         onClick={() => {
@@ -524,14 +455,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
             type="button"
             variant="ghost"
             className="flex-1 text-slate-300 hover:bg-slate-800 hover:text-white"
-            onClick={() => {
-              clearViewAsSelection();
-              setViewAsRoleIdState('');
-              setViewAsTeamIdState('');
-              setDraftRoleId('');
-              setDraftTeamId('');
-              setTimeout(() => window.location.reload(), 100);
-            }}
+            onClick={resetViewAsSelection}
           >
             Reset
           </Button>
@@ -540,46 +464,50 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
     </div>
   );
 
+  const viewAsDialog = (
+    <Dialog
+      open={viewAsMenuOpen}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setActiveUsersPanelOpen(false);
+        setViewAsMenuOpen(nextOpen);
+      }}
+    >
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[85vh] overflow-hidden border border-slate-700 bg-slate-900 text-slate-100">
+        <DialogHeader>
+          <DialogTitle className="text-slate-100">View As</DialogTitle>
+          <DialogDescription className="text-slate-300">
+            Select both a role and team to mirror that combination. Current selection: {selectionSummary}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[65vh] overflow-y-auto pr-1">
+          {viewAsDialogBody}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   // Sidebar has no links — show floating View As button for superadmins, nothing otherwise
   if (!showSidebar) {
     if (!isSuperAdmin) return null;
 
     return (
-      <div className="hidden md:block fixed bottom-4 left-4 z-[70]">
-        <Button
-          ref={viewAsTriggerRef}
-          variant="ghost"
-          size="icon"
-          className={`h-10 w-10 ${
-            isViewingAsOverride ? 'bg-amber-600/30' : 'hover:bg-slate-800'
-          }`}
-          title={selectedRole || selectedTeam ? `Viewing as ${selectionSummary}` : 'View As'}
-          onClick={() => {
-            const nextOpen = !viewAsMenuOpen;
-            if (nextOpen) {
-              requestAnimationFrame(() => updateViewAsMenuPosition());
-            }
-            setActiveUsersPanelOpen(false);
-            setViewAsMenuOpen(nextOpen);
-          }}
-        >
-          <Eye className={`w-5 h-5 ${isViewingAsOverride ? 'text-amber-300' : 'text-slate-400 hover:text-white'}`} />
-        </Button>
-        {viewAsMenuOpen && (
-          <div
-            ref={viewAsMenuRef}
-            className="fixed z-[80] w-64 max-w-[calc(100vw-1.5rem)] p-2 bg-slate-900 border border-slate-700 shadow-2xl overflow-y-auto rounded-md"
-            style={{
-              left: `${viewAsMenuPosition.left}px`,
-              top: `${viewAsMenuPosition.top}px`,
-              maxHeight: `${viewAsMenuPosition.maxHeight}px`,
-              color: '#e2e8f0',
-            }}
+      <>
+        <div className="hidden md:block fixed bottom-4 left-4 z-[70]">
+          <Button
+            ref={viewAsTriggerRef}
+            variant="ghost"
+            size="icon"
+            className={`h-10 w-10 ${
+              isViewingAsOverride ? 'bg-amber-600/30' : 'hover:bg-slate-800'
+            }`}
+            title={selectedRole || selectedTeam ? `Viewing as ${selectionSummary}` : 'View As'}
+            onClick={openViewAsDialog}
           >
-            {viewAsPopoverContent}
-          </div>
-        )}
-      </div>
+            <Eye className={`w-5 h-5 ${isViewingAsOverride ? 'text-amber-300' : 'text-slate-400 hover:text-white'}`} />
+          </Button>
+        </div>
+        {viewAsDialog}
+      </>
     );
   }
 
@@ -621,7 +549,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
         </div>
 
         {/* Navigation */}
-        <div className={`overflow-y-auto overflow-x-hidden py-4 ${isSuperAdmin ? 'h-[calc(100vh-10rem)]' : 'h-[calc(100vh-8.25rem)]'}`}>
+        <div className={`scrollbar-hidden overflow-y-auto overflow-x-hidden py-4 ${isSuperAdmin ? 'h-[calc(100dvh-10rem)]' : 'h-[calc(100dvh-8.25rem)]'}`}>
           {/* Manager Links */}
           {(isManager || isAdmin) && sidebarManagerLinks.length > 0 && (
           <div className="px-3 mb-6">
@@ -769,70 +697,38 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
         {/* View As Selector - SuperAdmin Only (Bottom) */}
         {isSuperAdmin && (
           <div className="border-t border-slate-700 p-3 mt-auto">
-            <Popover>
-              <PopoverTrigger asChild>
-                {isExpanded ? (
-                  <button
-                    ref={viewAsTriggerRef}
-                    type="button"
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isViewingAsOverride
-                        ? 'bg-amber-600/30 text-amber-200 hover:bg-amber-600/40 hover:text-amber-100'
-                        : 'text-muted-foreground hover:bg-slate-800 hover:text-white'
-                    }`}
-                    onClick={() => {
-                      const nextOpen = !viewAsMenuOpen;
-                      if (nextOpen) {
-                        requestAnimationFrame(() => updateViewAsMenuPosition());
-                      }
-                      setActiveUsersPanelOpen(false);
-                      setViewAsMenuOpen(nextOpen);
-                    }}
-                  >
-                    <Eye className="w-4 h-4 flex-shrink-0" />
-                    <span className="min-w-0 flex-1 text-left truncate">
-                      {selectionSummary}
-                    </span>
-                  </button>
-                ) : (
-                  <Button
-                    ref={viewAsTriggerRef}
-                    variant="ghost"
-                    size="sm"
-                    className={`w-full h-9 p-0 ${isViewingAsOverride ? 'bg-amber-600/30' : 'hover:bg-slate-800'}`}
-                    title="View As"
-                    onClick={() => {
-                      const nextOpen = !viewAsMenuOpen;
-                      if (nextOpen) {
-                        requestAnimationFrame(() => updateViewAsMenuPosition());
-                      }
-                      setActiveUsersPanelOpen(false);
-                      setViewAsMenuOpen(nextOpen);
-                    }}
-                  >
-                    <Eye className={`w-5 h-5 ${isViewingAsOverride ? 'text-amber-300' : 'text-slate-400 hover:text-white'}`} />
-                  </Button>
-                )}
-              </PopoverTrigger>
-            </Popover>
-            {viewAsMenuOpen && (
-              <div
-                ref={viewAsMenuRef}
-                className="fixed z-[80] w-64 max-w-[calc(100vw-1.5rem)] p-2 bg-slate-900 border border-slate-700 shadow-2xl overflow-y-auto rounded-md"
-                style={{
-                  left: `${viewAsMenuPosition.left}px`,
-                  top: `${viewAsMenuPosition.top}px`,
-                  maxHeight: `${viewAsMenuPosition.maxHeight}px`,
-                  color: '#e2e8f0',
-                }}
-                onMouseLeave={(event) => handleViewAsMenuMouseLeave(event.relatedTarget)}
+            {isExpanded ? (
+              <button
+                ref={viewAsTriggerRef}
+                type="button"
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isViewingAsOverride
+                    ? 'bg-amber-600/30 text-amber-200 hover:bg-amber-600/40 hover:text-amber-100'
+                    : 'text-muted-foreground hover:bg-slate-800 hover:text-white'
+                }`}
+                onClick={openViewAsDialog}
               >
-                {viewAsPopoverContent}
-              </div>
+                <Eye className="w-4 h-4 flex-shrink-0" />
+                <span className="min-w-0 flex-1 text-left truncate">
+                  {selectionSummary}
+                </span>
+              </button>
+            ) : (
+              <Button
+                ref={viewAsTriggerRef}
+                variant="ghost"
+                size="sm"
+                className={`w-full h-9 p-0 ${isViewingAsOverride ? 'bg-amber-600/30' : 'hover:bg-slate-800'}`}
+                title="View As"
+                onClick={openViewAsDialog}
+              >
+                <Eye className={`w-5 h-5 ${isViewingAsOverride ? 'text-amber-300' : 'text-slate-400 hover:text-white'}`} />
+              </Button>
             )}
           </div>
         )}
       </div>
+      {isSuperAdmin && viewAsDialog}
       {activeUsersPanelOpen && (
         <div
           ref={activeUsersPanelRef}
@@ -842,7 +738,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
             top: `${activeUsersPanelPosition.top}px`,
             maxHeight: `${activeUsersPanelPosition.maxHeight}px`,
           }}
-          onMouseLeave={(event) => handleViewAsMenuMouseLeave(event.relatedTarget)}
+          onMouseLeave={(event) => handleFloatingPanelMouseLeave(event.relatedTarget)}
         >
           <ActiveNowUsersPanel open={activeUsersPanelOpen} />
         </div>

@@ -4,6 +4,7 @@ import {
   listErrorLogs,
   requireErrorLogAdminAccess,
 } from '@/lib/server/error-logs';
+import { createDebugAccessErrorBody } from '@/lib/server/debug-console-access';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 function getRequestedLimit(request: NextRequest): number {
@@ -19,7 +20,7 @@ function getRequestedLimit(request: NextRequest): number {
 export async function GET(request: NextRequest) {
   const access = await requireErrorLogAdminAccess();
   if (!access.ok) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
   }
 
   try {
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const access = await requireErrorLogAdminAccess();
   if (!access.ok) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
   }
 
   try {

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { logger } from '@/lib/utils/logger';
-import type { MaintenanceCategory, UpdateMaintenanceRequest } from '@/types/maintenance';
+import type {
+  CustomMaintenanceItemUpdate,
+  MaintenanceCategory,
+  UpdateMaintenanceRequest,
+} from '@/types/maintenance';
 import { buildAutomaticMaintenancePlan } from '@/lib/utils/workshopMaintenanceSync';
 
 type AssetType = 'van' | 'hgv' | 'plant';
@@ -10,6 +15,7 @@ type ChangedFieldValueType = 'date' | 'mileage' | 'boolean' | 'text';
 
 type ExtendedUpdateMaintenanceRequest = UpdateMaintenanceRequest & {
   assetType?: AssetType;
+  task_id?: string;
   completed_at?: string;
   task_title?: string | null;
   task_description?: string | null;
@@ -17,6 +23,38 @@ type ExtendedUpdateMaintenanceRequest = UpdateMaintenanceRequest & {
   task_subcategory_name?: string | null;
   loler_due_date?: string | null;
 };
+
+interface CustomCategoryValueRow {
+  id: string;
+  maintenance_category_id: string;
+  due_date: string | null;
+  due_mileage: number | null;
+  last_mileage: number | null;
+  due_hours: number | null;
+  last_hours: number | null;
+  notes: string | null;
+}
+
+interface TaskMaintenanceContextRow {
+  id: string;
+  title: string | null;
+  description: string | null;
+  workshop_comments: string | null;
+  actioned_at: string | null;
+  status: string | null;
+  van_id: string | null;
+  hgv_id: string | null;
+  plant_id: string | null;
+  workshop_task_categories: { name: string | null } | Array<{ name: string | null }> | null;
+  workshop_task_subcategories: { name: string | null } | Array<{ name: string | null }> | null;
+}
+
+function getRelatedName(
+  related: { name: string | null } | Array<{ name: string | null }> | null
+): string | null {
+  if (Array.isArray(related)) return related[0]?.name ?? null;
+  return related?.name ?? null;
+}
 
 function fkColumnForAssetType(assetType: AssetType): FkColumn {
   if (assetType === 'hgv') return 'hgv_id';
@@ -38,6 +76,25 @@ const FIELD_TO_CATEGORY_NAME: Record<string, string> = {
   last_service_hours: 'Service Due (Hours)',
   loler_due_date: 'LOLER Due',
 };
+
+function serializeCustomValue(value?: CustomCategoryValueRow | CustomMaintenanceItemUpdate | null): string | null {
+  if (!value) return null;
+  const dueValue = value.due_date ?? value.due_mileage ?? value.due_hours ?? null;
+  const lastValue = value.last_mileage ?? value.last_hours ?? null;
+  if (lastValue != null && dueValue != null) return `${lastValue} -> ${dueValue}`;
+  if (dueValue != null) return String(dueValue);
+  if (lastValue != null) return String(lastValue);
+  return value.notes ? value.notes.slice(0, 50) : null;
+}
+
+function isEmptyCustomValue(value: CustomMaintenanceItemUpdate): boolean {
+  return value.due_date == null
+    && value.due_mileage == null
+    && value.last_mileage == null
+    && value.due_hours == null
+    && value.last_hours == null
+    && !value.notes;
+}
 
 function buildCategoryIdByField(categories: MaintenanceCategory[]): Map<string, string> {
   const categoryIdByName = new Map(
@@ -196,28 +253,93 @@ export async function POST(
 
     const maintenanceCategories = (categories || []) as MaintenanceCategory[];
     const categoryIdByField = buildCategoryIdByField(maintenanceCategories);
+    const assetType = fkColumn === 'hgv_id' ? 'hgv' : fkColumn === 'plant_id' ? 'plant' : 'van';
+    let verifiedTaskContext: TaskMaintenanceContextRow | null = null;
+
+    if (body.task_id) {
+      const admin = createAdminClient();
+      const { data: taskContext, error: taskContextError } = await admin
+        .from('actions')
+        .select(`
+          id,
+          title,
+          description,
+          workshop_comments,
+          actioned_at,
+          status,
+          van_id,
+          hgv_id,
+          plant_id,
+          workshop_task_categories (
+            name
+          ),
+          workshop_task_subcategories (
+            name
+          )
+        `)
+        .eq('id', body.task_id)
+        .maybeSingle();
+
+      if (taskContextError) {
+        logger.error('Failed to verify workshop task for maintenance update', taskContextError);
+        throw taskContextError;
+      }
+
+      verifiedTaskContext = taskContext as TaskMaintenanceContextRow | null;
+
+      if (
+        !verifiedTaskContext ||
+        verifiedTaskContext.status !== 'completed' ||
+        verifiedTaskContext[fkColumn] !== vehicleId
+      ) {
+        return NextResponse.json(
+          { error: 'Workshop task could not be verified for this maintenance update' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const automaticContext = verifiedTaskContext
+      ? {
+          title: verifiedTaskContext.title,
+          description: verifiedTaskContext.description,
+          workshopCategoryName: getRelatedName(verifiedTaskContext.workshop_task_categories),
+          workshopSubcategoryName: getRelatedName(verifiedTaskContext.workshop_task_subcategories),
+        }
+      : {
+          title: body.task_title,
+          description: body.task_description,
+          workshopCategoryName: body.task_category_name,
+          workshopSubcategoryName: body.task_subcategory_name,
+        };
+    const automaticCompletedAt =
+      verifiedTaskContext?.actioned_at || body.completed_at || new Date().toISOString();
 
     const autoPlan = buildAutomaticMaintenancePlan({
-      context: {
-        title: body.task_title,
-        description: body.task_description,
-        workshopCategoryName: body.task_category_name,
-        workshopSubcategoryName: body.task_subcategory_name,
-      },
+      context: automaticContext,
       categories: maintenanceCategories,
       state: {
-        currentMileage: existingRecord?.current_mileage ?? null,
-        currentHours: existingRecord?.current_hours ?? null,
+        currentMileage: body.current_mileage ?? existingRecord?.current_mileage ?? null,
+        currentHours: body.current_hours ?? existingRecord?.current_hours ?? null,
       },
-      completedAt: body.completed_at || new Date().toISOString(),
+      completedAt: automaticCompletedAt,
+      assetType,
     });
 
     const requestedUpdates: Partial<UpdateMaintenanceRequest> = {
-      ...(autoPlan?.maintenanceUpdates || {}),
+      ...autoPlan?.maintenanceUpdates,
     };
 
+    const requestedCustomItemsByCategoryId = new Map<string, CustomMaintenanceItemUpdate>();
+    for (const item of autoPlan?.customItems || []) {
+      requestedCustomItemsByCategoryId.set(item.category_id, item);
+    }
+    for (const item of body.custom_items || []) {
+      requestedCustomItemsByCategoryId.set(item.category_id, item);
+    }
+
     const requestedPlantUpdates: { loler_due_date?: string | null } = {
-      ...(autoPlan?.plantUpdates || {}),
+      ...autoPlan?.plantUpdates,
     };
 
     const maintenanceFields: Array<keyof UpdateMaintenanceRequest> = [
@@ -482,16 +604,128 @@ export async function POST(
       }
     }
 
+    const requestedCustomItems = Array.from(requestedCustomItemsByCategoryId.values());
+    if (requestedCustomItems.length > 0) {
+      const categoryIds = requestedCustomItems.map((item) => item.category_id);
+      const customCategories = maintenanceCategories.filter((category) =>
+        categoryIds.includes(category.id)
+      );
+      const customCategoriesById = new Map(customCategories.map((category) => [category.id, category]));
+
+      const { data: existingCustomValues, error: existingCustomValuesError } = await (supabase as never as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            in: (column: string, values: string[]) => {
+              eq: (column: string, value: string) => Promise<{ data: unknown; error: unknown }>;
+            };
+          };
+        };
+      })
+        .from('asset_maintenance_category_values')
+        .select('id, maintenance_category_id, due_date, due_mileage, last_mileage, due_hours, last_hours, notes')
+        .in('maintenance_category_id', categoryIds)
+        .eq(fkColumn, vehicleId);
+
+      if (existingCustomValuesError) {
+        logger.error('Failed to fetch custom maintenance category values', existingCustomValuesError);
+        throw existingCustomValuesError;
+      }
+
+      const existingValuesByCategoryId = new Map(
+        ((existingCustomValues || []) as CustomCategoryValueRow[]).map((value) => [
+          value.maintenance_category_id,
+          value,
+        ])
+      );
+
+      for (const item of requestedCustomItems) {
+        const category = customCategoriesById.get(item.category_id);
+        if (!category || category.field_key) continue;
+
+        const existingValue = existingValuesByCategoryId.get(item.category_id) || null;
+        const oldValue = serializeCustomValue(existingValue);
+        const newValue = serializeCustomValue(item);
+        if (oldValue === newValue) continue;
+
+        if (isEmptyCustomValue(item)) {
+          if (existingValue) {
+            const { error: deleteValueError } = await (supabase as never as {
+              from: (table: string) => {
+                delete: () => {
+                  eq: (column: string, value: string) => Promise<{ error: unknown }>;
+                };
+              };
+            })
+              .from('asset_maintenance_category_values')
+              .delete()
+              .eq('id', existingValue.id);
+
+            if (deleteValueError) {
+              logger.error('Failed to clear custom maintenance category value', deleteValueError);
+              throw deleteValueError;
+            }
+          }
+        } else {
+          const { error: upsertValueError } = await (supabase as never as {
+            from: (table: string) => {
+              upsert: (row: unknown, options: { onConflict: string }) => Promise<{ error: unknown }>;
+            };
+          })
+            .from('asset_maintenance_category_values')
+            .upsert({
+              maintenance_category_id: item.category_id,
+              van_id: fkColumn === 'van_id' ? vehicleId : null,
+              hgv_id: fkColumn === 'hgv_id' ? vehicleId : null,
+              plant_id: fkColumn === 'plant_id' ? vehicleId : null,
+              due_date: item.due_date ?? null,
+              due_mileage: item.due_mileage ?? null,
+              last_mileage: item.last_mileage ?? null,
+              due_hours: item.due_hours ?? null,
+              last_hours: item.last_hours ?? null,
+              notes: item.notes ?? null,
+              last_updated_by: user.id,
+              last_updated_at: new Date().toISOString(),
+            }, { onConflict: 'maintenance_category_id,asset_type,asset_id' });
+
+          if (upsertValueError) {
+            logger.error('Failed to upsert custom maintenance category value', upsertValueError);
+            throw upsertValueError;
+          }
+        }
+
+        changedFields.push({
+          field_name: `category:${category.name}`,
+          old_value: oldValue,
+          new_value: newValue,
+          value_type: category.type === 'date' ? 'date' : category.type === 'mileage' ? 'mileage' : 'text',
+          maintenance_category_id: category.id,
+        });
+      }
+    }
+
     if (requestedPlantUpdates.loler_due_date !== undefined && plantRecord) {
       if (plantRecord.loler_due_date !== requestedPlantUpdates.loler_due_date) {
-        const { error: plantUpdateError } = await supabase
+        const shouldUseVerifiedAutomaticPlantUpdate =
+          Boolean(verifiedTaskContext) &&
+          body.loler_due_date === undefined &&
+          autoPlan?.plantUpdates.loler_due_date !== undefined;
+        const plantUpdateClient = shouldUseVerifiedAutomaticPlantUpdate
+          ? createAdminClient()
+          : supabase;
+        const { data: updatedPlant, error: plantUpdateError } = await plantUpdateClient
           .from('plant')
           .update({ loler_due_date: requestedPlantUpdates.loler_due_date })
-          .eq('id', vehicleId);
+          .eq('id', vehicleId)
+          .select('id')
+          .maybeSingle();
 
         if (plantUpdateError) {
           logger.error('Failed to update plant LOLER due date', plantUpdateError);
           throw plantUpdateError;
+        }
+
+        if (!updatedPlant) {
+          throw new Error('Plant LOLER due date update was not applied');
         }
 
         assignChangedField(

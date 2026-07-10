@@ -245,6 +245,8 @@ export async function PATCH(
             subject,
             body: bodyParts.join('\n'),
             sender_id: user.id,
+            created_via: 'error_report_response',
+            module_key: 'errors',
           })
           .select()
           .single();
@@ -272,7 +274,12 @@ export async function PATCH(
 
     const response: UpdateErrorReportResponse = {
       success: true,
-      report: updatedReport,
+      report: {
+        ...updatedReport,
+        status: updatedReport.status ?? 'new',
+        created_at: updatedReport.created_at ?? '',
+        updated_at: updatedReport.updated_at ?? '',
+      },
     };
 
     return NextResponse.json(response);

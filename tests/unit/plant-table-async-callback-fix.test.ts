@@ -312,7 +312,7 @@ describe('Plant Table Async Callback Timing Fix', () => {
         try {
           await fetchPlantData();
           onVehicleAdded(); // Should not fire if fetch fails
-        } catch (error) {
+        } catch {
           errorHandled = true;
           // Don't fire callback on error
         }

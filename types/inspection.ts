@@ -92,4 +92,6 @@ export {
   type VehicleCategory,
   TRUCK_CHECKLIST_ITEMS,
   VAN_CHECKLIST_ITEMS,
+  HGV_ARTIC_ONLY_START_ITEM,
+  HGV_ARTIC_ONLY_END_ITEM,
 } from '@/lib/checklists/vehicle-checklists';

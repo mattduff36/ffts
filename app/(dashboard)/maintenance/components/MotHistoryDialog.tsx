@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { formatMileage } from '@/lib/utils/maintenanceCalculations';
 import { 
   FileText, 
@@ -19,8 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Gauge,
-  MapPin,
-  Loader2
+  MapPin
 } from 'lucide-react';
 
 interface MotHistoryDialogProps {
@@ -122,7 +122,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border text-white w-full max-w-full md:max-w-[80vw] h-full md:h-auto max-h-screen md:max-h-[90vh] overflow-y-auto p-4 md:p-6">
+      <DialogContent className="border-border text-white w-full max-w-full md:max-w-[80vw] h-full md:h-auto max-h-dvh md:max-h-[90dvh] overflow-y-auto p-4 md:p-6">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4 pr-6 md:pr-8">
             <div className="flex-1 min-w-0">
@@ -138,10 +138,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
         </DialogHeader>
 
         {loading ? (
-          <div className="text-center py-12">
-            <Loader2 className="h-12 w-12 mx-auto mb-3 animate-spin text-blue-400" />
-            <p className="text-muted-foreground">Loading MOT history from GOV.UK...</p>
-          </div>
+          <PanelLoader message="Loading MOT history from GOV.UK..." accent="maintenance" className="py-12" />
         ) : error ? (
           <div className="text-center py-12 text-muted-foreground">
             {vehicleNotFound ? (

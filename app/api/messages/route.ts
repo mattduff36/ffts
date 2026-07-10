@@ -7,6 +7,15 @@ import { logServerError } from '@/lib/utils/server-error-logger';
 import type { CreateMessageInput, CreateMessageResponse, MessagePriority, MessageType } from '@/types/messages';
 import { normalizeRoleInternalName } from '@/lib/utils/role-name';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { filterHiddenSystemTestAccountProfiles } from '@/lib/server/system-test-accounts';
+
+type StoredMessagePriority = Exclude<MessagePriority, 'MEDIUM'>;
+
+function getToolboxTalksCreatedVia(type: MessageType): string {
+  if (type === 'NOTIFICATION') return 'toolbox-talks_notification';
+  if (type === 'REMINDER') return 'toolbox-talks_reminder';
+  return 'web';
+}
 
 /**
  * POST /api/messages
@@ -55,6 +64,8 @@ export async function POST(request: NextRequest) {
     let recipient_type: string;
     let recipient_user_ids: string[] | undefined;
     let recipient_roles: string[] | undefined;
+    let requestedPriority: MessagePriority | undefined;
+    let requestedAcceptanceDelayMinutes = 0;
     let pdfFile: File | null = null;
 
     if (contentType.includes('multipart/form-data')) {
@@ -70,6 +81,11 @@ export async function POST(request: NextRequest) {
       
       const recipientRolesStr = formData.get('recipient_roles') as string | null;
       recipient_roles = recipientRolesStr ? JSON.parse(recipientRolesStr) : undefined;
+      requestedPriority = (formData.get('priority') as MessagePriority | null) || undefined;
+      requestedAcceptanceDelayMinutes = Number.parseInt(
+        (formData.get('acceptance_delay_minutes') as string | null) || '0',
+        10
+      ) || 0;
       
       pdfFile = formData.get('pdf_file') as File | null;
     } else {
@@ -81,6 +97,10 @@ export async function POST(request: NextRequest) {
       recipient_type = body.recipient_type;
       recipient_user_ids = body.recipient_user_ids;
       recipient_roles = body.recipient_roles;
+      requestedPriority = body.priority;
+      requestedAcceptanceDelayMinutes = Number.isFinite(body.acceptance_delay_minutes)
+        ? Math.floor(body.acceptance_delay_minutes as number)
+        : 0;
     }
 
     // Validate required fields
@@ -88,8 +108,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (!['TOOLBOX_TALK', 'REMINDER'].includes(type)) {
+    if (!['TOOLBOX_TALK', 'REMINDER', 'NOTIFICATION'].includes(type)) {
       return NextResponse.json({ error: 'Invalid message type' }, { status: 400 });
+    }
+
+    if (requestedPriority && !['LOW', 'HIGH', 'URGENT'].includes(requestedPriority)) {
+      return NextResponse.json({ error: 'Invalid message priority' }, { status: 400 });
+    }
+
+    if (requestedAcceptanceDelayMinutes < 0 || requestedAcceptanceDelayMinutes > 1440) {
+      return NextResponse.json({ error: 'Acceptance delay must be between 0 and 1440 minutes' }, { status: 400 });
     }
 
     // Resolve recipients based on selection type
@@ -130,29 +158,38 @@ export async function POST(request: NextRequest) {
       } else {
         const { data: roleUsers, error: roleUsersError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, full_name, employee_id, is_placeholder')
           .in('role_id', roleIds);
         if (roleUsersError) throw roleUsersError;
-        recipientUserIds = roleUsers?.map((u) => u.id) || [];
+        const visibleRoleUsers = await filterHiddenSystemTestAccountProfiles(admin, roleUsers || []);
+        recipientUserIds = visibleRoleUsers.map((u) => u.id);
       }
 
     } else if (recipient_type === 'all_staff') {
       // Fetch all active users
       const { data: allUsers, error: allError } = await supabase
         .from('profiles')
-        .select('id');
+        .select('id, full_name, employee_id, is_placeholder');
 
       if (allError) throw allError;
-      
-      recipientUserIds = allUsers?.map(u => u.id) || [];
+
+      const visibleAllUsers = await filterHiddenSystemTestAccountProfiles(admin, allUsers || []);
+      recipientUserIds = visibleAllUsers.map(u => u.id);
     }
 
     if (recipientUserIds.length === 0) {
       return NextResponse.json({ error: 'No valid recipients found' }, { status: 400 });
     }
 
-    // Set priority based on type
-    const priority: MessagePriority = type === 'TOOLBOX_TALK' ? 'HIGH' : 'LOW';
+    // Set priority based on type. Notifications remain low priority and dismissible.
+    const priority: StoredMessagePriority = type === 'TOOLBOX_TALK'
+      ? (requestedPriority as StoredMessagePriority | undefined) || 'HIGH'
+      : 'LOW';
+    const acceptanceDelayMinutes = priority === 'URGENT' ? requestedAcceptanceDelayMinutes : 0;
+
+    if (priority === 'URGENT' && acceptanceDelayMinutes < 1) {
+      return NextResponse.json({ error: 'Urgent Toolbox Talks require an acceptance delay' }, { status: 400 });
+    }
 
     // Handle PDF upload if present
     let pdfFilePath: string | null = null;
@@ -192,8 +229,9 @@ export async function POST(request: NextRequest) {
       pdfFilePath = uploadData.path;
     }
 
-    // Create message
-    const { data: message, error: messageError } = await supabase
+    // Create message with the admin client after explicit module authorization.
+    // The authenticated client can be narrower than the app's effective-role access model.
+    const { data: message, error: messageError } = await admin
       .from('messages')
       .insert({
         type: type as MessageType,
@@ -201,8 +239,10 @@ export async function POST(request: NextRequest) {
         body: messageBody,
         priority,
         sender_id: user.id,
-        created_via: 'web',
-        pdf_file_path: pdfFilePath
+        created_via: getToolboxTalksCreatedVia(type as MessageType),
+        module_key: 'toolbox_talks',
+        pdf_file_path: pdfFilePath,
+        acceptance_delay_minutes: acceptanceDelayMinutes
       })
       .select()
       .single();
@@ -225,7 +265,7 @@ export async function POST(request: NextRequest) {
       status: 'PENDING' as const
     }));
 
-    const { error: recipientsError } = await supabase
+    const { error: recipientsError } = await admin
       .from('message_recipients')
       .insert(recipientRecords);
 
@@ -233,7 +273,7 @@ export async function POST(request: NextRequest) {
       console.error('Error creating recipients:', recipientsError);
       
       // Clean up message and PDF if recipients creation failed
-      await supabase.from('messages').delete().eq('id', message.id);
+      await admin.from('messages').delete().eq('id', message.id);
       if (pdfFilePath) {
         await admin.storage.from('toolbox-talk-pdfs').remove([pdfFilePath]);
       }
@@ -275,7 +315,17 @@ export async function POST(request: NextRequest) {
 
     const response: CreateMessageResponse = {
       success: true,
-      message,
+      message: {
+        ...message,
+        sender_id: message.sender_id ?? null,
+        created_at: message.created_at ?? new Date().toISOString(),
+        updated_at: message.updated_at ?? message.created_at ?? new Date().toISOString(),
+        deleted_at: message.deleted_at ?? null,
+        created_via: message.created_via ?? 'api',
+        module_key: message.module_key ?? 'toolbox_talks',
+        pdf_file_path: message.pdf_file_path ?? null,
+        acceptance_delay_minutes: message.acceptance_delay_minutes ?? 0,
+      },
       recipients_created: recipientUserIds.length
     };
 

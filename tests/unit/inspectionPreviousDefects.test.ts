@@ -63,4 +63,58 @@ describe('buildUnresolvedPreviousDefects', () => {
       days: [2],
     });
   });
+
+  it('drops previous defects completed after the failed inspection day', () => {
+    const defects = buildUnresolvedPreviousDefects(
+      [
+        {
+          item_number: 12,
+          item_description: 'Steering',
+          status: 'attention',
+          day_of_week: 2,
+        },
+      ],
+      [
+        {
+          description: 'Van inspection defect found:\nItem 12 - Steering (Wednesday)',
+          actioned_at: '2026-05-18T07:49:33.121Z',
+        },
+      ],
+      { inspectionStartDate: '2026-05-04' }
+    );
+
+    expect(defects.has('12-Steering')).toBe(false);
+  });
+
+  it('keeps previous defects completed before a later failed inspection day', () => {
+    const defects = buildUnresolvedPreviousDefects(
+      [
+        {
+          item_number: 12,
+          item_description: 'Steering',
+          status: 'attention',
+          day_of_week: 1,
+        },
+        {
+          item_number: 12,
+          item_description: 'Steering',
+          status: 'attention',
+          day_of_week: 3,
+        },
+      ],
+      [
+        {
+          description: 'Van inspection defect found:\nItem 12 - Steering (Monday)',
+          actioned_at: '2026-05-05T12:00:00.000Z',
+        },
+      ],
+      { inspectionStartDate: '2026-05-04' }
+    );
+
+    expect(defects.get('12-Steering')).toEqual({
+      item_number: 12,
+      item_description: 'Steering',
+      days: [3],
+    });
+  });
 });

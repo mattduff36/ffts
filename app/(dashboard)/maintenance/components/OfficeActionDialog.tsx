@@ -218,7 +218,7 @@ export function OfficeActionDialog({
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white dark:bg-slate-900 border-border text-foreground max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-white dark:bg-slate-900 border-border text-foreground max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-foreground text-xl flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />

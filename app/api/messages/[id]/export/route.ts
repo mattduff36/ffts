@@ -115,7 +115,7 @@ export async function GET(
         id: message.id,
         subject: message.subject,
         body: message.body,
-        created_at: message.created_at,
+        created_at: message.created_at ?? '',
         sender_name: messageSender?.full_name ?? 'Unknown',
         pdf_file_path: message.pdf_file_path,
       },

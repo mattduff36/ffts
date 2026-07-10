@@ -121,7 +121,7 @@ const TEMPLATE_PRESETS: LegacyTemplateSectionPreset[] = [
     ],
   },
   {
-    template_name_hints: ['lolor', 'loler'],
+    template_name_hints: ['loler'],
     section_rules: [
       {
         section_key: 'lifting_components',

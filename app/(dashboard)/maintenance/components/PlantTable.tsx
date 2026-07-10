@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,13 +30,19 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { AddAssetFlowDialog } from './add-asset/AddAssetFlowDialog';
-import { formatMaintenanceDate, getStatusColorClass } from '@/lib/utils/maintenanceCalculations';
+import { getStatusColorClass } from '@/lib/utils/maintenanceCalculations';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import { toast } from 'sonner';
 import { Undo2, XCircle } from 'lucide-react';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { cn } from '@/lib/utils/cn';
+import { useMaintenance } from '@/lib/hooks/useMaintenance';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
+import type { MaintenanceItem } from '@/types/maintenance';
 
 type PlantAsset = {
   id: string;
@@ -55,6 +63,7 @@ type PlantMaintenanceWithStatus = {
   plant: PlantAsset;
   current_hours: number | null;
   next_service_hours: number | null;
+  maintenance_items?: MaintenanceItem[];
 };
 
 interface PlantTableProps {
@@ -63,7 +72,7 @@ interface PlantTableProps {
   onVehicleAdded?: () => void;
 }
 
-type SortField = 'plant_id' | 'nickname' | 'serial_number' | 'category' | 'current_hours' | 'next_service_hours' | 'loler_due';
+type SortField = 'plant_id' | 'nickname' | 'serial_number' | 'category' | 'current_hours' | `category:${string}`;
 type SortDirection = 'asc' | 'desc';
 
 interface ColumnVisibility {
@@ -71,8 +80,7 @@ interface ColumnVisibility {
   serial_number: boolean;
   category: boolean;
   current_hours: boolean;
-  service_due: boolean;
-  loler_due: boolean;
+  [categoryColumnId: string]: boolean;
 }
 
 export function PlantTable({ 
@@ -82,6 +90,7 @@ export function PlantTable({
 }: PlantTableProps) {
   const router = useRouter();
   const { tabletModeEnabled } = useTabletMode();
+  const { data: maintenanceData, isLoading: maintenanceLoading, refetch: refetchMaintenance } = useMaintenance();
   // ✅ Create supabase client using useMemo to avoid recreating on every render
   const supabase = useMemo(() => createClient(), []);
   const [sortField, setSortField] = useState<SortField>('plant_id');
@@ -95,6 +104,9 @@ export function PlantTable({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [retiredSearchQuery, setRetiredSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+  const [selectedPlantIds, setSelectedPlantIds] = useState<Set<string>>(new Set());
+  const [movingToMinorPlant, setMovingToMinorPlant] = useState(false);
   
   // Column visibility defaults - category hidden by default
   const defaultVisibility: ColumnVisibility = {
@@ -102,8 +114,6 @@ export function PlantTable({
     serial_number: true,
     category: false,
     current_hours: true,
-    service_due: true,
-    loler_due: true,
   };
 
   // Initialise with defaults; useEffect below will hydrate from localStorage
@@ -116,7 +126,7 @@ export function PlantTable({
       if (saved) {
         const parsed = JSON.parse(saved) as Partial<ColumnVisibility>;
         // Merge with defaults so any newly-added columns get their default value
-        setColumnVisibility(prev => ({ ...prev, ...parsed }));
+        setColumnVisibility(prev => ({ ...prev, ...parsed } as ColumnVisibility));
       }
     } catch (e) {
       console.error('Failed to parse saved column visibility:', e);
@@ -139,43 +149,6 @@ export function PlantTable({
     try {
       setLoading(true);
       
-      // Fetch active plant assets with maintenance data
-      const { data: plantData, error: plantError} = await supabase
-        .from('plant')
-        .select(`
-          *,
-          van_categories (
-            id,
-            name
-          )
-        `)
-        .eq('status', 'active')
-        .order('plant_id');
-
-      if (plantError) throw plantError;
-
-      // Fetch maintenance records for plant
-      const { data: maintenanceData, error: maintenanceError } = await supabase
-        .from('vehicle_maintenance')
-        .select('*')
-        .not('plant_id', 'is', null);
-
-      if (maintenanceError) throw maintenanceError;
-
-      // Combine plant data with maintenance data
-      const combined: PlantMaintenanceWithStatus[] = (plantData || []).map((plant: PlantAsset) => {
-        const maintenance = maintenanceData?.find((m: { plant_id: string | null }) => m.plant_id === plant.id);
-        
-        return {
-          plant_id: plant.plant_id, // Human-readable identifier (P001, P002, etc.)
-          plant: plant as PlantAsset,
-          current_hours: maintenance?.current_hours || plant.current_hours || null,
-          next_service_hours: maintenance?.next_service_hours || null,
-        };
-      });
-
-      setActivePlantAssets(combined);
-
       // Fetch retired plant assets
       const { data: retiredData, error: retiredError } = await supabase
         .from('plant')
@@ -190,16 +163,30 @@ export function PlantTable({
         .order('updated_at', { ascending: false });
 
       if (retiredError) {
-        console.error('Error fetching retired plant assets:', retiredError);
-        toast.error('Unable to load retired plant', {
-          description: 'Retired plant data may be incomplete. Please refresh.',
-        });
+        const status = getErrorStatus(retiredError);
+        if (isNetworkFetchError(retiredError)) {
+          console.warn('Retired plant temporarily unavailable:', retiredError);
+        } else if (!isAuthErrorStatus(status)) {
+          console.error('Error fetching retired plant assets:', retiredError);
+        }
+        if (!isAuthErrorStatus(status)) {
+          toast.error('Unable to load retired plant', {
+            description: 'Retired plant data may be incomplete. Please refresh.',
+          });
+        }
       } else {
-        setRetiredPlantAssets(retiredData || []);
+        setRetiredPlantAssets((retiredData || []).map((asset) => ({
+          ...asset,
+          status: asset.status || 'retired',
+        })));
         setRetiredPlantCount(retiredData?.length || 0);
       }
     } catch (error) {
-      console.error('Error fetching plant assets:', error);
+      if (isNetworkFetchError(error)) {
+        console.warn('Plant assets temporarily unavailable:', error);
+      } else if (!isAuthErrorStatus(getErrorStatus(error))) {
+        console.error('Error fetching plant assets:', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -210,21 +197,92 @@ export function PlantTable({
     fetchPlantData();
   }, [fetchPlantData]);
 
-  // Filter based on search
-  const filteredPlant = activePlantAssets.filter(asset => {
-    if (!searchQuery) return true;
-    
-    const searchLower = searchQuery.toLowerCase();
-    const plantId = asset.plant?.plant_id?.toLowerCase() || '';
-    const regNumber = asset.plant?.reg_number?.toLowerCase() || '';
-    const nickname = asset.plant?.nickname?.toLowerCase() || '';
-    const serialNumber = asset.plant?.serial_number?.toLowerCase() || '';
-    
-    return plantId.includes(searchLower) || 
-           regNumber.includes(searchLower) ||
-           nickname.includes(searchLower) ||
-           serialNumber.includes(searchLower);
-  });
+  useEffect(() => {
+    const plantAssets = (maintenanceData?.vehicles || [])
+      .filter(vehicle => vehicle.vehicle?.asset_type === 'plant')
+      .map((vehicle): PlantMaintenanceWithStatus => ({
+        plant_id: vehicle.vehicle?.plant_id || 'Unknown',
+        plant: {
+          id: vehicle.plant_id || vehicle.vehicle?.id || vehicle.id,
+          plant_id: vehicle.vehicle?.plant_id || 'Unknown',
+          reg_number: vehicle.vehicle?.reg_number || null,
+          nickname: vehicle.vehicle?.nickname || null,
+          serial_number: vehicle.vehicle?.serial_number || null,
+          loler_due_date: vehicle.loler_due_date || null,
+          current_hours: vehicle.current_hours || null,
+          status: vehicle.vehicle?.status || 'active',
+          retired_at: null,
+          retire_reason: null,
+          van_categories: null,
+        },
+        current_hours: vehicle.current_hours || null,
+        next_service_hours: vehicle.next_service_hours || null,
+        maintenance_items: vehicle.maintenance_items || [],
+      }));
+
+    setActivePlantAssets(plantAssets);
+  }, [maintenanceData]);
+
+  const isLoading = loading || maintenanceLoading;
+
+  const maintenanceColumns = useMemo(() => {
+    const columnsByCategoryId = new Map<string, MaintenanceItem>();
+
+    activePlantAssets.forEach(asset => {
+      (asset.maintenance_items || []).forEach(item => {
+        if (!columnsByCategoryId.has(item.category_id)) {
+          columnsByCategoryId.set(item.category_id, item);
+        }
+      });
+    });
+
+    return Array.from(columnsByCategoryId.values())
+      .sort((a, b) => a.sort_order - b.sort_order || a.category_name.localeCompare(b.category_name));
+  }, [activePlantAssets]);
+
+  useEffect(() => {
+    setColumnVisibility(prev => {
+      const next: ColumnVisibility = {
+        nickname: prev.nickname ?? true,
+        serial_number: prev.serial_number ?? true,
+        category: prev.category ?? false,
+        current_hours: prev.current_hours ?? true,
+      };
+
+      maintenanceColumns.forEach(column => {
+        next[`category:${column.category_id}`] = prev[`category:${column.category_id}`] ?? true;
+      });
+
+      localStorage.setItem('plant-table-column-visibility', JSON.stringify(next));
+      return next;
+    });
+  }, [maintenanceColumns]);
+
+  // Filter based on search before pagination so matches can come from any page.
+  const filteredPlant = useMemo(() => {
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) return activePlantAssets;
+
+    return activePlantAssets.filter(asset => {
+      const searchableValues = [
+        asset.plant?.plant_id,
+        asset.plant?.reg_number,
+        asset.plant?.nickname,
+        asset.plant?.serial_number,
+        asset.plant?.van_categories?.name,
+        asset.current_hours?.toString(),
+        ...(asset.maintenance_items || []).flatMap((item) => [
+          item.category_name,
+          item.display_value,
+          item.due_date,
+          item.due_mileage?.toString(),
+          item.due_hours?.toString(),
+        ]),
+      ];
+
+      return searchableValues.some((value) => value?.toLowerCase().includes(query));
+    });
+  }, [activePlantAssets, debouncedSearchQuery]);
 
   // Sort
   const sortedPlant = [...filteredPlant].sort((a, b) => {
@@ -246,19 +304,41 @@ export function PlantTable({
       case 'current_hours':
         return multiplier * ((a.current_hours || 0) - (b.current_hours || 0));
       
-      case 'next_service_hours':
-        return multiplier * ((a.next_service_hours || 0) - (b.next_service_hours || 0));
-      
-      case 'loler_due':
-        if (!a.plant?.loler_due_date && !b.plant?.loler_due_date) return 0;
-        if (!a.plant?.loler_due_date) return 1;
-        if (!b.plant?.loler_due_date) return -1;
-        return multiplier * (new Date(a.plant.loler_due_date).getTime() - new Date(b.plant.loler_due_date).getTime());
-      
       default:
+        if (sortField.startsWith('category:')) {
+          const categoryId = sortField.replace('category:', '');
+          const getSortValue = (item?: MaintenanceItem) => {
+            if (!item) return Number.POSITIVE_INFINITY;
+            if (item.category_type === 'date') return item.due_date ? new Date(item.due_date).getTime() : Number.POSITIVE_INFINITY;
+            if (item.category_type === 'hours') return item.due_hours ?? Number.POSITIVE_INFINITY;
+            return item.due_mileage ?? Number.POSITIVE_INFINITY;
+          };
+
+          return multiplier * (
+            getSortValue(a.maintenance_items?.find(item => item.category_id === categoryId))
+            - getSortValue(b.maintenance_items?.find(item => item.category_id === categoryId))
+          );
+        }
+
         return 0;
     }
   });
+  const paginationKey = [
+    debouncedSearchQuery.trim(),
+    sortField,
+    sortDirection,
+    sortedPlant.length,
+  ].join(':');
+  const {
+    visibleItems: visiblePlant,
+    showMore,
+  } = useLoadMorePagination(sortedPlant, { resetKey: paginationKey });
+
+  const visiblePlantIds = useMemo(
+    () => visiblePlant.map((asset) => asset.plant.id),
+    [visiblePlant]
+  );
+  const allVisiblePlantSelected = visiblePlantIds.length > 0 && visiblePlantIds.every((plantId) => selectedPlantIds.has(plantId));
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -271,6 +351,64 @@ export function PlantTable({
 
   const handleViewHistory = (plantId: string) => {
     router.push(`/fleet/plant/${plantId}/history?fromTab=plant`);
+  };
+
+  const togglePlantSelected = (plantId: string, checked: boolean) => {
+    setSelectedPlantIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(plantId);
+      else next.delete(plantId);
+      return next;
+    });
+  };
+
+  const toggleVisiblePlantSelected = (checked: boolean) => {
+    setSelectedPlantIds((current) => {
+      const next = new Set(current);
+      visiblePlantIds.forEach((plantId) => {
+        if (checked) next.add(plantId);
+        else next.delete(plantId);
+      });
+      return next;
+    });
+  };
+
+  const handleMoveSelectedToMinorPlant = async () => {
+    const plantIds = Array.from(selectedPlantIds);
+    if (plantIds.length === 0) return;
+    if (!confirm(`Move ${plantIds.length} selected Plant asset${plantIds.length === 1 ? '' : 's'} to Minor Plant inventory?`)) return;
+
+    setMovingToMinorPlant(true);
+    try {
+      const response = await fetch('/api/inventory/minor-plant/move-from-plant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plant_ids: plantIds }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to move Plant assets to Minor Plant');
+      }
+
+      toast.success('Plant assets moved to Minor Plant', {
+        description: `${payload.moved_count || 0} moved${payload.skipped_count ? `, ${payload.skipped_count} skipped` : ''}.`,
+      });
+      if (payload.skipped_count) {
+        toast.warning('Some Plant assets were skipped', {
+          description: 'They may already be moved, inactive, or have an inventory ID conflict.',
+        });
+      }
+      setSelectedPlantIds(new Set());
+      await Promise.all([fetchPlantData(), refetchMaintenance()]);
+      onVehicleAdded?.();
+    } catch (error: unknown) {
+      console.error('Error moving Plant assets to Minor Plant:', error);
+      toast.error('Failed to move Plant assets', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setMovingToMinorPlant(false);
+    }
   };
 
   const handleRestorePlant = (plant: PlantAsset) => {
@@ -391,12 +529,25 @@ export function PlantTable({
             <div className="relative flex-1">
               <Search className={cn('absolute left-3 text-muted-foreground', tabletModeEnabled ? 'top-3.5 h-5 w-5' : 'top-3 h-4 w-4')} />
               <Input
-                placeholder="Search by registration number..."
+                placeholder="Search Plant..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className={cn('bg-slate-900/50 border-slate-600 text-white', tabletModeEnabled ? 'pl-12 min-h-11 text-base' : 'pl-11')}
               />
             </div>
+            {selectedPlantIds.size > 0 ? (
+              <Button
+                variant="outline"
+                onClick={handleMoveSelectedToMinorPlant}
+                disabled={movingToMinorPlant}
+                className={cn('border-amber-500/50 text-amber-200 hover:bg-amber-900/20', tabletModeEnabled && 'min-h-11 text-base px-4')}
+              >
+                {movingToMinorPlant ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Move to Minor Plant ({selectedPlantIds.size})
+              </Button>
+            ) : null}
             
             {/* Column Visibility Dropdown - Hidden on Mobile */}
             <DropdownMenu>
@@ -433,18 +584,15 @@ export function PlantTable({
                 >
                   Hours
                 </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.service_due}
-                  onCheckedChange={() => toggleColumn('service_due')}
-                >
-                  Service Due
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.loler_due}
-                  onCheckedChange={() => toggleColumn('loler_due')}
-                >
-                  LOLOR / Inspection Due
-                </DropdownMenuCheckboxItem>
+                {maintenanceColumns.map(column => (
+                  <DropdownMenuCheckboxItem
+                    key={column.category_id}
+                    checked={columnVisibility[`category:${column.category_id}`] ?? true}
+                    onCheckedChange={() => toggleColumn(`category:${column.category_id}`)}
+                  >
+                    {column.category_name}
+                  </DropdownMenuCheckboxItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -452,13 +600,23 @@ export function PlantTable({
           {/* Desktop Table View */}
           {sortedPlant.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? 'No plant machinery found matching your search.' : 'No plant machinery with maintenance records yet.'}
+              {debouncedSearchQuery ? 'No plant machinery found matching your search.' : 'No plant machinery with maintenance records yet.'}
             </div>
           ) : (
             <div className={cn('border border-slate-700 rounded-lg', tabletModeEnabled ? 'hidden' : 'hidden md:block')}>
                 <Table className="min-w-full">
                   <TableHeader>
                     <TableRow className="border-border">
+                      <TableHead
+                        className="sticky z-30 w-10 bg-slate-900 text-muted-foreground border-b-2 border-border"
+                        style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
+                      >
+                        <Checkbox
+                          checked={allVisiblePlantSelected}
+                          onCheckedChange={(checked) => toggleVisiblePlantSelected(checked === true)}
+                          aria-label="Select visible plant assets"
+                        />
+                      </TableHead>
                       <TableHead 
                         className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
                         style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
@@ -483,7 +641,7 @@ export function PlantTable({
                       )}
                       {columnVisibility.serial_number && (
                         <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
+                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border whitespace-nowrap"
                           style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
                           onClick={() => handleSort('serial_number')}
                         >
@@ -495,7 +653,7 @@ export function PlantTable({
                       )}
                       {columnVisibility.category && (
                         <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
+                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border whitespace-nowrap"
                           style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
                           onClick={() => handleSort('category')}
                         >
@@ -507,7 +665,7 @@ export function PlantTable({
                       )}
                       {columnVisibility.current_hours && (
                         <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
+                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border whitespace-nowrap"
                           style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
                           onClick={() => handleSort('current_hours')}
                         >
@@ -517,48 +675,65 @@ export function PlantTable({
                           </div>
                         </TableHead>
                       )}
-                      {columnVisibility.service_due && (
-                        <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('next_service_hours')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Service Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
-                      {columnVisibility.loler_due && (
-                        <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('loler_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            LOLOR / Inspection Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
+                      {maintenanceColumns
+                        .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                        .map(column => (
+                          <TableHead
+                            key={column.category_id}
+                            className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border whitespace-nowrap"
+                            style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
+                            onClick={() => handleSort(`category:${column.category_id}`)}
+                          >
+                            <div className="flex items-center gap-2">
+                              {column.category_name === 'Service Due (Hours)' ? 'Service Due' : column.category_name}
+                              <ArrowUpDown className="h-3 w-3" />
+                            </div>
+                          </TableHead>
+                        ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedPlant.map((asset) => (
+                    {visiblePlant.map((asset) => (
                       <TableRow 
                         key={asset.plant_id}
                         onClick={() => handleViewHistory(asset.plant?.id || '')}
                         className="border-slate-700 hover:bg-slate-800/50 cursor-pointer"
                       >
+                        <TableCell className="align-top">
+                          <Checkbox
+                            checked={selectedPlantIds.has(asset.plant.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            onCheckedChange={(checked) => togglePlantSelected(asset.plant.id, checked === true)}
+                            aria-label={`Select ${asset.plant?.plant_id || 'Plant asset'}`}
+                          />
+                        </TableCell>
                         {/* Plant ID */}
-                        <TableCell className="font-medium text-white">
-                          {asset.plant?.plant_id || 'Unknown'}
+                        <TableCell className="align-top font-medium text-white">
+                          <div className="space-y-1">
+                            <span className="block">{asset.plant?.plant_id || 'Unknown'}</span>
+                            {asset.plant?.reg_number ? (
+                              <span className="block text-xs font-normal text-muted-foreground">
+                                {asset.plant.reg_number}
+                              </span>
+                            ) : null}
+                          </div>
                         </TableCell>
                         
                         {/* Nickname */}
                         {columnVisibility.nickname && (
-                          <TableCell className="text-muted-foreground">
-                            {asset.plant?.nickname || (
+                          <TableCell className="align-top text-muted-foreground">
+                            {asset.plant?.nickname ? (
+                              <span
+                                className="block max-w-[18rem] overflow-hidden break-words text-sm leading-5 text-muted-foreground"
+                                style={{
+                                  display: '-webkit-box',
+                                  WebkitBoxOrient: 'vertical',
+                                  WebkitLineClamp: 2,
+                                }}
+                              >
+                                {asset.plant.nickname}
+                              </span>
+                            ) : (
                               <span className="text-slate-400 italic">No nickname</span>
                             )}
                           </TableCell>
@@ -566,7 +741,7 @@ export function PlantTable({
                         
                         {/* Serial Number */}
                         {columnVisibility.serial_number && (
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="align-top whitespace-nowrap text-muted-foreground">
                             {asset.plant?.serial_number || (
                               <span className="text-slate-400 italic">Not set</span>
                             )}
@@ -575,45 +750,35 @@ export function PlantTable({
                         
                         {/* Category */}
                         {columnVisibility.category && (
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="align-top whitespace-nowrap text-muted-foreground">
                             {asset.plant?.van_categories?.name || 'All plant'}
                           </TableCell>
                         )}
                         
                         {/* Hours */}
                         {columnVisibility.current_hours && (
-                          <TableCell>
+                          <TableCell className="align-top whitespace-nowrap">
                             {asset.current_hours != null ? (
                               <span className="text-muted-foreground">{asset.current_hours.toLocaleString()}h</span>
                             ) : (
-                              <Badge className={`font-medium ${getStatusColorClass('not_set')}`}>Not Set</Badge>
+                              <Badge className={`whitespace-nowrap font-medium ${getStatusColorClass('not_set')}`}>Not Set</Badge>
                             )}
                           </TableCell>
                         )}
                         
-                        {/* Service Due */}
-                        {columnVisibility.service_due && (
-                          <TableCell>
-                            {asset.next_service_hours ? (
-                              <Badge className={`font-medium ${getStatusColorClass('ok')}`}>
-                                {asset.next_service_hours.toLocaleString()}h
-                              </Badge>
-                            ) : (
-                              <Badge className={`font-medium ${getStatusColorClass('not_set')}`}>
-                                Not set
-                              </Badge>
-                            )}
-                          </TableCell>
-                        )}
-                        
-                        {/* LOLER Due */}
-                        {columnVisibility.loler_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(asset.plant?.loler_due_date ? 'ok' : 'not_set')}`}>
-                              {formatMaintenanceDate(asset.plant?.loler_due_date || null)}
-                            </Badge>
-                          </TableCell>
-                        )}
+                        {maintenanceColumns
+                          .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                          .map(column => {
+                            const item = asset.maintenance_items?.find(maintenanceItem => maintenanceItem.category_id === column.category_id);
+
+                            return (
+                              <TableCell key={column.category_id} className="align-top whitespace-nowrap">
+                                <Badge className={`whitespace-nowrap font-medium ${getStatusColorClass(item?.status.status || 'not_set')}`}>
+                                  {item?.display_value || 'Not Set'}
+                                </Badge>
+                              </TableCell>
+                            );
+                          })}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -624,7 +789,7 @@ export function PlantTable({
           {/* Mobile Card View */}
           {sortedPlant.length > 0 && (
             <div className={cn('space-y-3', tabletModeEnabled ? 'block' : 'md:hidden')}>
-              {sortedPlant.map((asset) => {
+              {visiblePlant.map((asset) => {
                 const isExpanded = expandedCardId === asset.plant_id;
                 
                 return (
@@ -658,6 +823,13 @@ export function PlantTable({
                       >
                         {/* Header */}
                         <div className="flex items-center justify-between mb-2">
+                          <Checkbox
+                            checked={selectedPlantIds.has(asset.plant.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            onCheckedChange={(checked) => togglePlantSelected(asset.plant.id, checked === true)}
+                            aria-label={`Select ${asset.plant?.plant_id || 'Plant asset'}`}
+                            className="mr-3"
+                          />
                           <div className="flex-1">
                             <h3 className="font-semibold text-white text-lg">{asset.plant?.plant_id}</h3>
                             {asset.plant?.nickname && (
@@ -688,10 +860,14 @@ export function PlantTable({
                                 {asset.current_hours ? <>{asset.current_hours.toLocaleString()}h</> : 'Not set'}
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span>LOLOR / Inspection Due:</span>
-                              <span className="text-white">{formatMaintenanceDate(asset.plant?.loler_due_date || null)}</span>
-                            </div>
+                            {asset.maintenance_items?.find(item => item.category_field_key === 'loler_due_date') && (
+                              <div className="flex justify-between">
+                                <span>LOLER THOROUGH EXAMINATION Due:</span>
+                                <span className="text-white">
+                                  {asset.maintenance_items.find(item => item.category_field_key === 'loler_due_date')?.display_value}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -727,24 +903,20 @@ export function PlantTable({
                                 )}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">Service Due:</span>
-                              {asset.next_service_hours ? (
-                                <Badge className={`font-medium ${getStatusColorClass('ok')}`}>
-                                  {asset.next_service_hours.toLocaleString()}h
-                                </Badge>
-                              ) : (
-                                <Badge className={`font-medium ${getStatusColorClass('not_set')}`}>
-                                  Not set
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">LOLOR / Inspection Due:</span>
-                              <Badge className={`font-medium ${getStatusColorClass(asset.plant?.loler_due_date ? 'ok' : 'not_set')}`}>
-                                {formatMaintenanceDate(asset.plant?.loler_due_date || null)}
-                              </Badge>
-                            </div>
+                            {maintenanceColumns
+                              .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                              .map(column => {
+                                const item = asset.maintenance_items?.find(maintenanceItem => maintenanceItem.category_id === column.category_id);
+
+                                return (
+                                  <div key={column.category_id} className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">{column.category_name}:</span>
+                                    <Badge className={`font-medium ${getStatusColorClass(item?.status.status || 'not_set')}`}>
+                                      {item?.display_value || 'Not Set'}
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
                           </div>
 
                           {/* Actions - Single History Button */}
@@ -769,6 +941,12 @@ export function PlantTable({
               })}
             </div>
           )}
+          <LoadMorePagination
+            visibleCount={visiblePlant.length}
+            totalCount={sortedPlant.length}
+            itemLabel="plant assets"
+            onShowMore={showMore}
+          />
             </TabsContent>
             
             {/* Retired Plant Tab */}
@@ -777,18 +955,15 @@ export function PlantTable({
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search retired plant by registration..."
+                  placeholder="Search Plant..."
                   value={retiredSearchQuery}
                   onChange={(e) => setRetiredSearchQuery(e.target.value)}
                   className="pl-11 bg-slate-900/50 border-slate-600 text-white"
                 />
               </div>
 
-              {loading ? (
-                <div className="text-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-3" />
-                  <p className="text-muted-foreground">Loading retired plant...</p>
-                </div>
+              {isLoading ? (
+                <PanelLoader message="Loading retired plant..." accent="maintenance" className="py-12" />
               ) : !filteredRetiredPlant || filteredRetiredPlant.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FolderClock className="h-12 w-12 mx-auto mb-3 text-slate-600" />

@@ -80,13 +80,6 @@ function getStatusIcon(inspection: VanInspectionRow) {
   return <Clipboard className={`h-4 w-4 ${iconColorClass}`} />;
 }
 
-function formatInspectionRange(startDate: string, endDate: string | null) {
-  if (endDate && endDate !== startDate) {
-    return `${formatDate(startDate)} - ${formatDate(endDate)}`;
-  }
-  return formatDate(startDate);
-}
-
 export function VanInspectionsListTable({
   inspections,
   columnVisibility,
@@ -223,7 +216,7 @@ export function VanInspectionsListTable({
                 </TableCell>
               )}
               <TableCell className="text-muted-foreground">
-                {formatInspectionRange(inspection.inspection_date, inspection.inspection_end_date)}
+                {formatDate(inspection.inspection_date)}
               </TableCell>
               {columnVisibility.status && (
                 <TableCell>

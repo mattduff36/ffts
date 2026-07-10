@@ -46,6 +46,10 @@ export function formatPeriodValue(value: number, unit: MaintenancePeriodUnit): s
   return `${value.toLocaleString()} ${pluralize(unit, value)}`;
 }
 
+export function formatDistancePeriodValue(value: number, unitLabel: string = 'miles'): string {
+  return `${value.toLocaleString()} ${unitLabel.toLowerCase()}`;
+}
+
 export function formatCategoryPeriod(category: Pick<MaintenanceCategory, 'type' | 'period_value' | 'period_unit'>): string {
   return formatPeriodValue(
     category.period_value,

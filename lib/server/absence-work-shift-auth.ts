@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
-import { canEffectiveRoleAccessModule, isEffectiveRoleAdminOrSuper, isEffectiveRoleManagerOrHigher } from '@/lib/utils/rbac';
+import { canEffectiveRoleAccessModule, canEffectiveRoleUseModuleLevel } from '@/lib/utils/rbac';
 
 export async function requireAbsenceUser() {
   const supabase = await createServerClient();
@@ -36,7 +36,7 @@ export async function requireAdminAbsenceAccess() {
     return auth;
   }
 
-  const isAdmin = await isEffectiveRoleAdminOrSuper();
+  const isAdmin = await canEffectiveRoleUseModuleLevel('absence', 5);
   if (!isAdmin) {
     return {
       user: null,
@@ -57,11 +57,11 @@ export async function requireManagerWorkShiftReadAccess() {
     return auth;
   }
 
-  const isManagerOrHigher = await isEffectiveRoleManagerOrHigher();
-  if (!isManagerOrHigher) {
+  const canReadTeamWorkShifts = await canEffectiveRoleUseModuleLevel('absence', 3);
+  if (!canReadTeamWorkShifts) {
     return {
       user: null,
-      response: NextResponse.json({ error: 'Forbidden: Manager access required' }, { status: 403 }),
+      response: NextResponse.json({ error: 'Forbidden: Supervisor access required' }, { status: 403 }),
     };
   }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getInspectionErrorMessage,
   isDuplicateInspectionError,
+  isMissingDraftError,
 } from '@/lib/utils/inspection-error-handling';
 
 describe('inspection-error-handling', () => {
@@ -36,5 +37,13 @@ describe('inspection-error-handling', () => {
 
   it('does not classify unrelated errors as duplicate conflicts', () => {
     expect(isDuplicateInspectionError(new Error('new row violates row-level security policy'))).toBe(false);
+  });
+
+  it('detects stale draft update misses', () => {
+    expect(isMissingDraftError(new Error('Draft not found'))).toBe(true);
+  });
+
+  it('does not treat unrelated missing data as a stale draft', () => {
+    expect(isMissingDraftError(new Error('Plant not found'))).toBe(false);
   });
 });

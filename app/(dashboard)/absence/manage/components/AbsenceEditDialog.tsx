@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { toast } from 'sonner';
 
 const ANNUAL_LEAVE_REASON_NAME = 'annual leave';
@@ -41,6 +42,34 @@ export type AbsenceEditDialogMode = 'full' | 'override-only';
 
 function normalizeReasonName(value: string | null | undefined): string {
   return (value || '').trim().toLowerCase();
+}
+
+function buildAbsenceEditDirtySnapshot({
+  startDate,
+  endDate,
+  reasonId,
+  isHalfDay,
+  halfDaySession,
+  notes,
+  allowTimesheetWorkOnLeave,
+}: {
+  startDate: string;
+  endDate: string;
+  reasonId: string;
+  isHalfDay: boolean;
+  halfDaySession: 'AM' | 'PM';
+  notes: string;
+  allowTimesheetWorkOnLeave: boolean;
+}) {
+  return JSON.stringify({
+    startDate,
+    endDate,
+    reasonId,
+    isHalfDay,
+    halfDaySession,
+    notes,
+    allowTimesheetWorkOnLeave,
+  });
 }
 
 interface AbsenceEditDialogProps {
@@ -69,19 +98,58 @@ export function AbsenceEditDialog({
   const [allowTimesheetWorkOnLeave, setAllowTimesheetWorkOnLeave] = useState(false);
   const [workShiftPattern, setWorkShiftPattern] = useState<WorkShiftPattern | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
+  const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
+  const currentDirtySnapshot = buildAbsenceEditDirtySnapshot({
+    startDate,
+    endDate,
+    reasonId,
+    isHalfDay,
+    halfDaySession,
+    notes,
+    allowTimesheetWorkOnLeave,
+  });
+  const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: submitting,
+    onOpenChange,
+  });
 
   useEffect(() => {
     if (!absence || !open) {
       return;
     }
 
-    setStartDate(absence.date);
-    setEndDate(absence.end_date || '');
-    setReasonId(absence.reason_id);
-    setIsHalfDay(absence.is_half_day);
-    setHalfDaySession(absence.half_day_session || 'AM');
-    setNotes(absence.notes || '');
-    setAllowTimesheetWorkOnLeave(Boolean(absence.allow_timesheet_work_on_leave));
+    const nextStartDate = absence.date;
+    const nextEndDate = absence.end_date || '';
+    const nextReasonId = absence.reason_id;
+    const nextIsHalfDay = Boolean(absence.is_half_day);
+    const nextHalfDaySession = absence.half_day_session || 'AM';
+    const nextNotes = absence.notes || '';
+    const nextAllowTimesheetWorkOnLeave = Boolean(absence.allow_timesheet_work_on_leave);
+
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
+    setReasonId(nextReasonId);
+    setIsHalfDay(nextIsHalfDay);
+    setHalfDaySession(nextHalfDaySession);
+    setNotes(nextNotes);
+    setAllowTimesheetWorkOnLeave(nextAllowTimesheetWorkOnLeave);
+    setInitialDirtySnapshot(buildAbsenceEditDirtySnapshot({
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      reasonId: nextReasonId,
+      isHalfDay: nextIsHalfDay,
+      halfDaySession: nextHalfDaySession,
+      notes: nextNotes,
+      allowTimesheetWorkOnLeave: nextAllowTimesheetWorkOnLeave,
+    }));
   }, [absence, open]);
 
   useEffect(() => {
@@ -224,8 +292,13 @@ export function AbsenceEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border max-w-3xl">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-border"
+        onInteractOutside={handleInteractOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <DialogHeader>
           <DialogTitle className="text-foreground">Edit Booking</DialogTitle>
           <DialogDescription className="text-slate-400/90">
@@ -386,9 +459,13 @@ export function AbsenceEditDialog({
           </div>
 
           {startDate && (
-            <div className="bg-slate-800/30 p-3 rounded-lg">
+            <div className="space-y-2 bg-slate-800/30 p-3 rounded-lg">
               <p className="text-sm text-muted-foreground">
                 Duration: <span className="text-white font-medium">{duration} {duration === 1 ? 'day' : 'days'}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Draft/submitted timesheets update from approved absence changes where allowed. Processed or adjusted
+                timesheets remain locked for payroll history.
               </p>
             </div>
           )}
@@ -397,10 +474,10 @@ export function AbsenceEditDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={discard}
             className="border-border text-muted-foreground"
           >
-            Cancel
+            {isFormDirty ? 'Discard Changes' : 'Cancel'}
           </Button>
           <Button
             onClick={handleSubmit}

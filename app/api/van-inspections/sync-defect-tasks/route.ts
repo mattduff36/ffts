@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { getInspectionRouteActorAccess } from '@/lib/server/inspection-route-access';
+import { getVanInspectionsMaintenanceResponse } from '@/lib/server/van-inspections-maintenance';
 import { buildRecentCompletedDefectMap } from '@/lib/utils/inspectionRecentCompletedDefects';
 import {
   buildInspectionDefectSignature,
@@ -43,6 +44,11 @@ export async function POST(request: NextRequest) {
     const { access, errorResponse } = await getInspectionRouteActorAccess('inspections');
     if (errorResponse || !access) {
       return errorResponse ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const maintenanceResponse = getVanInspectionsMaintenanceResponse();
+    if (maintenanceResponse) {
+      return maintenanceResponse;
     }
 
     // Parse request body
@@ -172,7 +178,8 @@ export async function POST(request: NextRequest) {
         description,
         inspection_id,
         inspection_item_id,
-        van_id
+        van_id,
+        created_at
       `)
       .eq('van_id', vehicleId)
       .eq('action_type', 'inspection_defect')
@@ -197,7 +204,8 @@ export async function POST(request: NextRequest) {
         description,
         inspection_id,
         inspection_item_id,
-        van_id
+        van_id,
+        created_at
       `)
       .eq('inspection_id', inspectionId)
       .eq('action_type', 'inspection_defect');
@@ -239,6 +247,26 @@ export async function POST(request: NextRequest) {
     });
 
     const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const normalizeDayNumbers = (values: unknown): number[] =>
+      Array.from(
+        new Set(
+          (Array.isArray(values) ? values : [])
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value >= 1 && value <= 7)
+        )
+      ).sort((left, right) => left - right);
+    const sortTasksByCreatedAt = <T extends { created_at?: string | null; id: string }>(tasks: T[]): T[] =>
+      [...tasks].sort((left, right) => {
+        const leftTime = left.created_at ? new Date(left.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightTime = right.created_at ? new Date(right.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+        if (leftTime !== rightTime) return leftTime - rightTime;
+        return left.id.localeCompare(right.id);
+      });
+    const extractCommentFromDescription = (description?: string | null): string => {
+      if (!description) return '';
+      const commentMatch = description.match(/(?:^|\n)Comment:\s*(.+?)(?:\n|$)/);
+      return commentMatch?.[1]?.trim() || '';
+    };
 
     let created = 0;
     let updated = 0;
@@ -247,7 +275,8 @@ export async function POST(request: NextRequest) {
 
     // Process each defect
     for (const defect of defects) {
-      const { item_number, item_description, days, comment, primaryInspectionItemId } = defect;
+      const { item_number, item_description, days: rawDays, dayOfWeek, comment, primaryInspectionItemId } = defect;
+      const days = normalizeDayNumbers(Array.isArray(rawDays) && rawDays.length > 0 ? rawDays : dayOfWeek ? [dayOfWeek] : []);
 
       const signature = buildInspectionDefectSignature({
         item_number,
@@ -269,16 +298,34 @@ export async function POST(request: NextRequest) {
       const commentText = comment ? `\nComment: ${comment}` : '';
       const title = `${vehicleReg} - ${item_description} (${dayRange})`;
       const description = `Van inspection defect found:\nItem ${item_number} - ${item_description} (${dayRange})${commentText}`;
+      const buildDescriptionWithComment = (descriptionComment: string) =>
+        `Van inspection defect found:\nItem ${item_number} - ${item_description} (${dayRange})${descriptionComment ? `\nComment: ${descriptionComment}` : ''}`;
 
       // CRITICAL CHECK: First check if there are ANY active tasks for this defect on this vehicle
       // (across ALL inspections, not just the current one)
       const activeTasksForDefect = activeTasksMap.get(signature);
 
       if (activeTasksForDefect && activeTasksForDefect.length > 0) {
-        // An active task already exists for this defect (from any inspection)
-        // Skip creation entirely to prevent duplicates
-        console.log(`[sync-defect-tasks] Skipping creation for ${signature}: Active task(s) already exist (${activeTasksForDefect.map(t => `${t.id}:${t.status}`).join(', ')})`);
-        skipped++;
+        const keeperTask = sortTasksByCreatedAt(activeTasksForDefect)[0];
+        const originalComment = extractCommentFromDescription(keeperTask.description) || comment || '';
+        const updates: ActionUpdate = {
+          title,
+          description: buildDescriptionWithComment(originalComment),
+          van_id: vehicleId,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: updateError } = await supabaseAdmin
+          .from('actions')
+          .update(updates)
+          .eq('id', keeperTask.id);
+
+        if (updateError) {
+          console.error(`Error updating active vehicle task ${keeperTask.id}:`, updateError);
+          skipped++;
+        } else {
+          updated++;
+        }
         continue;
       }
 
@@ -306,10 +353,10 @@ export async function POST(request: NextRequest) {
         const activeTask = existing.find(e => e.status !== 'completed');
         
         if (activeTask) {
+          const originalComment = extractCommentFromDescription(activeTask.description) || comment || '';
           const updates: ActionUpdate = {
             title,
-            description,
-            inspection_item_id: primaryInspectionItemId,
+            description: buildDescriptionWithComment(originalComment),
             van_id: vehicleId,
             updated_at: new Date().toISOString(),
           };

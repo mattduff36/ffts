@@ -21,7 +21,7 @@ async function postReminder(body: unknown, headers?: Record<string, string>) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(headers || {}),
+      ...headers,
     },
     body: JSON.stringify(body),
   });

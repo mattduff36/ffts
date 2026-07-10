@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@react-pdf/renderer';
-import { TRUCK_CHECKLIST_ITEMS } from '@/lib/checklists/vehicle-checklists';
+import { HGV_ARTIC_ONLY_START_ITEM, TRUCK_CHECKLIST_ITEMS } from '@/lib/checklists/vehicle-checklists';
 import { formatDate } from '@/lib/utils/date';
 import type { EnrichedDefectItem } from '@/lib/utils/hgvDefectWorkshopDetails';
 import { templateConfig } from '@/lib/config/template-config';
@@ -210,6 +210,32 @@ export function HgvInspectionPDF({ inspection, hgv, operator, items, defectsWith
     });
     return `${formatDate(signedAt)} ${time}`;
   };
+  const checklistItems = (() => {
+    const itemByNumber = new Map<number, string>();
+
+    items.forEach((item) => {
+      if (itemByNumber.has(item.item_number)) return;
+      itemByNumber.set(
+        item.item_number,
+        item.item_description || TRUCK_CHECKLIST_ITEMS[item.item_number - 1] || `Item ${item.item_number}`
+      );
+    });
+
+    if (itemByNumber.size === 0) {
+      return TRUCK_CHECKLIST_ITEMS.map((description, index) => ({
+        number: index + 1,
+        description,
+      }));
+    }
+
+    return [...itemByNumber.entries()]
+      .sort(([leftNumber], [rightNumber]) => leftNumber - rightNumber)
+      .map(([number, description]) => ({ number, description }));
+  })();
+  const hasTransmissionAsItem22 = checklistItems.some(
+    (item) => item.number === 22 && item.description.trim().toLowerCase() === 'transmission'
+  );
+  const articOnlyStartItem = hasTransmissionAsItem22 ? HGV_ARTIC_ONLY_START_ITEM : 22;
 
   return (
     <Document>
@@ -266,10 +292,10 @@ export function HgvInspectionPDF({ inspection, hgv, operator, items, defectsWith
               <Text style={styles.headerText}>COMMENTS</Text>
             </View>
           </View>
-          {TRUCK_CHECKLIST_ITEMS.map((itemLabel, index) => {
-            const itemNumber = index + 1;
+          {checklistItems.map((checklistItem, index) => {
+            const itemNumber = checklistItem.number;
             const item = getSingleItem(itemNumber);
-            const isLast = index === TRUCK_CHECKLIST_ITEMS.length - 1;
+            const isLast = index === checklistItems.length - 1;
             const rowStyle = isLast ? styles.rowLast : styles.row;
             const passMark = item?.status === 'ok' ? 'PASS' : '';
             const failMark = item?.status === 'attention' ? 'FAIL' : '';
@@ -278,7 +304,7 @@ export function HgvInspectionPDF({ inspection, hgv, operator, items, defectsWith
 
             return (
               <React.Fragment key={itemNumber}>
-                {itemNumber === 22 && (
+                {itemNumber === articOnlyStartItem && (
                   <View style={styles.sectionDividerRow}>
                     <Text style={styles.sectionDividerText}>Artics only</Text>
                   </View>
@@ -288,7 +314,7 @@ export function HgvInspectionPDF({ inspection, hgv, operator, items, defectsWith
                     <Text style={styles.numText}>{String(itemNumber).padStart(2, '0')}</Text>
                   </View>
                   <View style={styles.itemCell}>
-                    <Text style={styles.itemText}>{itemLabel}</Text>
+                    <Text style={styles.itemText}>{checklistItem.description}</Text>
                   </View>
                   <View style={styles.passCell}>
                     <Text style={styles.markText}>{passMark}</Text>

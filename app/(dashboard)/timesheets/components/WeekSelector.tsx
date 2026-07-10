@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { getWeekEnding, formatDateISO, getWeekEndingSundayOptions } from '@/lib/utils/date';
 import { Employee } from '@/types/common';
+import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
 
 interface WeekSelectorProps {
   targetUserId: string;
@@ -25,6 +26,13 @@ interface WeekSelectorProps {
 interface ExistingTimesheetSummary {
   id: string;
   status: string;
+}
+
+function normalizeExistingTimesheetSummary(row: { id: string; status: string | null }): ExistingTimesheetSummary {
+  return {
+    id: row.id,
+    status: row.status ?? 'draft',
+  };
 }
 
 function isEditableExistingStatus(status: string): boolean {
@@ -93,8 +101,8 @@ export function WeekSelector({
         if (cancelled) return;
 
         const nextWeekMap: Record<string, ExistingTimesheetSummary> = {};
-        for (const row of (data || []) as Array<{ id: string; week_ending: string; status: string }>) {
-          nextWeekMap[row.week_ending] = { id: row.id, status: row.status };
+        for (const row of (data || []) as Array<{ id: string; week_ending: string; status: string | null }>) {
+          nextWeekMap[row.week_ending] = normalizeExistingTimesheetSummary(row);
         }
 
         setExistingWeekMap(nextWeekMap);
@@ -110,7 +118,9 @@ export function WeekSelector({
           return fallback || current;
         });
       } catch (fetchError) {
-        console.error('Error preloading existing timesheet weeks:', fetchError);
+        if (!isAuthErrorStatus(getErrorStatus(fetchError)) && !isNetworkFetchError(fetchError)) {
+          console.error('Error preloading existing timesheet weeks:', fetchError);
+        }
       }
     };
 
@@ -198,10 +208,11 @@ export function WeekSelector({
       if (queryError) throw queryError;
 
       if (existing) {
+        const existingSummary = normalizeExistingTimesheetSummary(existing);
         // Timesheet exists for this week
-        if (existing.status === 'draft' || existing.status === 'rejected') {
+        if (isEditableExistingStatus(existingSummary.status)) {
           // Can edit this timesheet
-          setExistingTimesheet(existing);
+          setExistingTimesheet(existingSummary);
           setError('');
           setShowSuccess(true);
           
@@ -211,8 +222,8 @@ export function WeekSelector({
           }, 1000);
         } else {
           // Timesheet is submitted/approved - cannot edit
-          setExistingTimesheet(existing);
-          setError(`You already have a ${existing.status} timesheet for this week. You cannot create another timesheet for the same week.`);
+          setExistingTimesheet(existingSummary);
+          setError(`You already have a ${existingSummary.status} timesheet for this week. You cannot create another timesheet for the same week.`);
         }
       } else {
         // No existing timesheet - can create new
@@ -222,8 +233,15 @@ export function WeekSelector({
         }, 500);
       }
     } catch (err) {
-      console.error('Error checking for existing timesheet:', err);
-      setError(err instanceof Error ? err.message : 'Failed to check for existing timesheets');
+      const isNetworkFailure = isNetworkFetchError(err);
+      if (!isAuthErrorStatus(getErrorStatus(err)) && !isNetworkFailure) {
+        console.error('Error checking for existing timesheet:', err);
+      }
+      if (isNetworkFailure) {
+        setError('Connection problem while checking existing timesheets. Please check your connection and try again.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to check for existing timesheets');
+      }
     } finally {
       setChecking(false);
     }
@@ -233,11 +251,11 @@ export function WeekSelector({
     <div className="max-w-2xl mx-auto space-y-6">
       <Card className="">
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-timesheet/10 flex items-center justify-center">
+          <div className="flex items-start gap-3">
+            <div className="h-12 w-12 shrink-0 rounded-full bg-timesheet/10 flex items-center justify-center">
               <Calendar className="h-6 w-6 text-timesheet" />
             </div>
-            <div>
+            <div className="min-w-0">
               <CardTitle className="text-2xl text-foreground">Select Week Ending Date</CardTitle>
               <CardDescription className="text-muted-foreground">
                 Choose the Sunday for the week you want to record
@@ -278,7 +296,7 @@ export function WeekSelector({
               <SelectTrigger
                 id="week-ending"
                 aria-label="Week Ending Date (Sunday)"
-                className="h-16 text-2xl bg-white dark:bg-slate-900 border-border text-foreground"
+                className="h-auto min-h-16 py-3 text-xl bg-white dark:bg-slate-900 border-border text-foreground sm:text-2xl"
               >
                 <SelectValue placeholder="Select week ending Sunday" />
               </SelectTrigger>

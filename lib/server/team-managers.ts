@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export type HierarchyRoleClass = 'admin' | 'manager' | 'employee';
 type SupabaseAdminClient = SupabaseClient;
 
+import { isHiddenSystemTestAccountProfile } from '@/lib/utils/system-test-accounts';
+
 interface ManagerProfileRow {
   id: string;
   full_name: string | null;
@@ -120,6 +122,7 @@ export function formatManagerOptionLabel(option: TeamManagerOption): string {
 
 export function buildTeamManagerOptionsFromProfiles(rows: ManagerProfileRow[]): TeamManagerOption[] {
   return rows
+    .filter((row) => !isHiddenSystemTestAccountProfile(row))
     .map(toManagerCandidate)
     .filter(isEligibleManager)
     .map((row) => ({

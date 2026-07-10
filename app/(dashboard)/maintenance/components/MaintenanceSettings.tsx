@@ -17,10 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CategoryDialog } from './CategoryDialog';
 import { CategoryRecipientsDialog } from './CategoryRecipientsDialog';
 import type { MaintenanceCategory } from '@/types/maintenance';
 import { formatCategoryPeriod } from '@/lib/utils/maintenancePeriods';
+import { getDistanceTypeLabel } from '@/lib/utils/maintenanceCategoryRules';
 
 interface MaintenanceSettingsProps {
   isAdmin: boolean;
@@ -129,7 +131,9 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                         
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
-                            {category.type}
+                            {category.type === 'mileage'
+                              ? getDistanceTypeLabel(category.applies_to)
+                              : category.type}
                           </Badge>
                         </TableCell>
                         
@@ -159,7 +163,9 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                         </TableCell>
                         
                         <TableCell className="text-muted-foreground">
-                          {formatCategoryPeriod(category)}
+                          {category.type === 'mileage'
+                            ? `${category.period_value.toLocaleString()} ${getDistanceTypeLabel(category.applies_to).toLowerCase()}`
+                            : formatCategoryPeriod(category)}
                         </TableCell>
                         
                         <TableCell className="text-muted-foreground">
@@ -167,7 +173,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                             ? `${category.alert_threshold_days} days`
                             : category.type === 'hours'
                             ? `${category.alert_threshold_hours} hours`
-                            : `${category.alert_threshold_miles?.toLocaleString()} miles`
+                            : `${category.alert_threshold_miles?.toLocaleString()} ${getDistanceTypeLabel(category.applies_to).toLowerCase()}`
                           }
                         </TableCell>
                         
@@ -238,16 +244,39 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                             >
                               <Edit className="h-3 w-3" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDeleteDialog(category)}
-                              disabled={!canModifySettings}
-                              className="text-red-400 hover:text-red-300 hover:bg-slate-800 disabled:opacity-30"
-                              title="Delete Category"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {category.is_delete_protected || category.is_system ? (
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled
+                                        className="text-red-400 hover:text-red-300 hover:bg-slate-800 disabled:opacity-30"
+                                        aria-label="Delete disabled for protected category"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">
+                                    This category is linked to system data and cannot be deleted.
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openDeleteDialog(category)}
+                                disabled={!canModifySettings}
+                                className="text-red-400 hover:text-red-300 hover:bg-slate-800 disabled:opacity-30"
+                                title="Delete Category"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -273,8 +302,8 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
                 <strong>Category Types:</strong>
               </p>
               <ul className="list-disc list-inside mt-1 space-y-1">
-                <li><strong>Date-based</strong> (Tax, MOT, LOLOR / Inspection) - Alert X days before due, with periods in weeks or months</li>
-                <li><strong>Mileage-based</strong> (Service, Cambelt) - Alert X miles before due (displayed as KM for HGV frontend)</li>
+                <li><strong>Date-based</strong> (Tax, MOT, LOLER THOROUGH EXAMINATION) - Alert X days before due, with periods in weeks or months</li>
+                <li><strong>Distance-based</strong> (Service, Cambelt) - Alert X miles for vans or kilometres for HGVs before due</li>
                 <li><strong>Hours-based</strong> (Plant Service) - Alert X engine hours before due</li>
               </ul>
               <p className="mt-2">
@@ -332,7 +361,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
               Delete Category
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              Are you sure you want to delete this maintenance category? This action cannot be undone.
+              Are you sure you want to delete this maintenance category? This hides the fleet column while preserving historical values.
             </AlertDialogDescription>
           </AlertDialogHeader>
           

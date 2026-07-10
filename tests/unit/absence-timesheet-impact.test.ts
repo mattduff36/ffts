@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  applyApprovedAbsenceTimesheetEffects,
   applyAbsenceToTimesheetRows,
   assertNoLockedAbsenceTimesheetImpacts,
   buildAbsenceTimesheetImpactMessage,
@@ -66,7 +67,7 @@ describe('absence timesheet impact workflow', () => {
     const impact = { ...baseImpact, status: 'processed' as const };
 
     expect(() => assertNoLockedAbsenceTimesheetImpacts([impact])).toThrow(/locked timesheets/);
-    expect(buildAbsenceTimesheetImpactMessage('Sickness', [impact])).toContain('cannot be saved');
+    expect(buildAbsenceTimesheetImpactMessage('Sickness', [impact])).toContain('payroll history');
   });
 
   it('returns submitted timesheets with leave-specific amendment comments', async () => {
@@ -153,6 +154,58 @@ describe('absence timesheet impact workflow', () => {
       time_started: null,
       time_finished: null,
       job_number: null,
+      did_not_work: true,
+      daily_total: 0,
+      remarks: 'Sickness',
+    });
+  });
+
+  it('overwrites submitted timesheet rows without returning the timesheet', async () => {
+    const snapshots: Array<Record<string, unknown>> = [];
+    const entryUpdates: Array<Record<string, unknown>> = [];
+    const tables: string[] = [];
+    const supabase = {
+      from: vi.fn((table: string) => {
+        tables.push(table);
+        if (table === 'timesheet_entry_leave_snapshots') {
+          return {
+            upsert: vi.fn(async (payload: Record<string, unknown>) => {
+              snapshots.push(payload);
+              return { error: null };
+            }),
+          };
+        }
+        if (table === 'timesheet_entries') {
+          return {
+            update: vi.fn((payload: Record<string, unknown>) => {
+              entryUpdates.push(payload);
+              return { eq: vi.fn(async () => ({ error: null })) };
+            }),
+          };
+        }
+        if (table === 'timesheet_entry_job_codes') {
+          return {
+            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+
+    const returned = await applyApprovedAbsenceTimesheetEffects(supabase as never, {
+      absenceId: 'absence-1',
+      actorUserId: 'manager-1',
+      profileId: 'employee-1',
+      startDate: '2026-04-15',
+      reasonName: 'Sickness',
+      isPaid: false,
+      impacts: [{ ...baseImpact, status: 'submitted' }],
+    });
+
+    expect(returned).toEqual([]);
+    expect(tables).not.toContain('timesheets');
+    expect(snapshots[0]).toMatchObject({ timesheet_id: 'timesheet-1' });
+    expect(entryUpdates[0]).toMatchObject({
       did_not_work: true,
       daily_total: 0,
       remarks: 'Sickness',

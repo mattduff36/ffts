@@ -413,8 +413,8 @@ export function buildAbsenceTimesheetImpactMessage(
   const locked = getLockedAbsenceTimesheetImpacts(impacts);
   const lockedLine =
     locked.length > 0
-      ? 'Processed/adjusted timesheets are locked, so this booking cannot be saved until those weeks are handled separately.'
-      : 'Draft/rejected timesheets will be reconciled. Submitted timesheets will be returned to the employee. Approved timesheets will be manager-adjusted for the leave row.';
+      ? 'Draft/submitted/approved timesheets will be reconciled. Processed/adjusted timesheets are locked and will be recorded without changing payroll history.'
+      : 'Draft/submitted/approved timesheets will be reconciled immediately without returning submitted timesheets to the employee.';
 
   return [
     `This ${reasonName || 'leave'} booking affects existing timesheets:`,
@@ -777,19 +777,11 @@ export async function applyApprovedAbsenceTimesheetEffects(
   input: ApplyAbsenceTimesheetEffectsInput
 ): Promise<string[]> {
   const impacts = input.impacts || await resolveAbsenceTimesheetImpacts(supabase, input);
-  assertNoLockedAbsenceTimesheetImpacts(impacts);
-
-  const returnedTimesheetIds = await returnSubmittedAbsenceTimesheetsForAmendment(supabase, {
-    actorUserId: input.actorUserId,
-    reasonName: input.reasonName,
-    impacts,
-    action: input.returnReason || 'Approved',
-  });
 
   await applyAbsenceToTimesheetRows(supabase, {
     ...input,
     impacts,
   });
 
-  return returnedTimesheetIds;
+  return [];
 }

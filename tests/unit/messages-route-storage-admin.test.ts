@@ -15,5 +15,7 @@ describe('messages route storage access', () => {
     expect(src).toMatch(/await admin\.storage\s*\.from\('toolbox-talk-pdfs'\)\s*\.upload/);
     expect(src).toContain("await admin.storage.from('toolbox-talk-pdfs').remove([pdfFilePath]);");
     expect(src).toContain('await admin.auth.admin.getUserById(userId);');
+    expect(src).toMatch(/await admin\s*\.from\('messages'\)\s*\.insert/);
+    expect(src).toMatch(/await admin\s*\.from\('message_recipients'\)\s*\.insert/);
   });
 });

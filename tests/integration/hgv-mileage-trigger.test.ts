@@ -76,7 +76,7 @@ describeSuite('HGV mileage sync trigger — database integration', () => {
   });
 
   it('trigger_update_maintenance_mileage_hgv trigger exists on hgv_inspections', async () => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('pg_trigger' as string)
       .select('tgname')
       .eq('tgname', 'trigger_update_maintenance_mileage_hgv')
@@ -92,7 +92,7 @@ describeSuite('HGV mileage sync trigger — database integration', () => {
   });
 
   it('vehicle_maintenance table has an hgv_id column', async () => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('vehicle_maintenance')
       .select('hgv_id')
       .limit(0);
@@ -101,7 +101,7 @@ describeSuite('HGV mileage sync trigger — database integration', () => {
   });
 
   it('hgv_inspections table has current_mileage column', async () => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('hgv_inspections')
       .select('current_mileage')
       .limit(0);
@@ -110,7 +110,7 @@ describeSuite('HGV mileage sync trigger — database integration', () => {
   });
 
   it('hgvs table has current_mileage column', async () => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('hgvs')
       .select('current_mileage')
       .limit(0);

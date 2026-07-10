@@ -11,6 +11,7 @@ import {
   Calendar, 
   Briefcase, 
   Home, 
+  Moon,
   XCircle
 } from 'lucide-react';
 import { DAY_NAMES } from '@/types/timesheet';
@@ -26,6 +27,7 @@ interface TimesheetEntry {
   job_number: string;
   job_numbers?: string[];
   working_in_yard: boolean;
+  subsistence_payment_required?: boolean;
   did_not_work: boolean;
   daily_total: number | null;
   remarks: string;
@@ -65,6 +67,9 @@ export function ConfirmationModal({
     const row = leaveAwareTotals.rowByDay.get(entry.day_of_week);
     return !entry.did_not_work && (row?.workedHours || 0) > 0;
   }).length;
+  const subsistenceDays = entries.filter(
+    (entry) => entry.subsistence_payment_required && !entry.did_not_work
+  ).length;
   const daysCoveredByWorkOrLeave = entries.filter((entry) => {
     const row = leaveAwareTotals.rowByDay.get(entry.day_of_week);
     return !entry.did_not_work && (((row?.workedHours || 0) > 0) || Boolean(row?.hasLeave));
@@ -120,7 +125,7 @@ export function ConfirmationModal({
           </Alert>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {/* Total Hours */}
             <div className="bg-slate-50 dark:bg-slate-800/50 border border-border rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -154,6 +159,14 @@ export function ConfirmationModal({
                 <p className="text-xs text-muted-foreground dark:text-muted-foreground font-medium">Vehicle Reg</p>
               </div>
               <p className="text-lg font-bold text-foreground">{regNumber || 'N/A'}</p>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/50 border border-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Moon className="h-4 w-4 text-emerald-500" />
+                <p className="text-xs text-muted-foreground dark:text-muted-foreground font-medium">Subsistence</p>
+              </div>
+              <p className="text-2xl font-bold text-foreground">{subsistenceDays}</p>
             </div>
           </div>
 
@@ -225,6 +238,12 @@ export function ConfirmationModal({
                             <Badge variant="secondary" className="text-xs">
                               <Home className="h-3 w-3 mr-1" />
                               Yard Work
+                            </Badge>
+                          )}
+                          {entry.subsistence_payment_required && !entry.did_not_work && (
+                            <Badge className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                              <Moon className="h-3 w-3 mr-1" />
+                              Subsistence
                             </Badge>
                           )}
                           {dayOffState?.hasTrainingBooking && (

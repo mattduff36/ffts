@@ -6,8 +6,8 @@ import { getDidNotWorkReasonInfo } from '@/lib/utils/timesheetDidNotWork';
 import type { TimesheetOffDayState } from '@/lib/utils/timesheet-off-days';
 import { buildLeaveAwareTotals } from '@/lib/utils/timesheet-leave-totals';
 import { formatEntryJobNumbers, getPrimaryJobNumber } from '@/lib/utils/timesheet-job-codes';
+import { addSubsistenceRemark } from '@/lib/utils/timesheet-subsistence';
 import { templateConfig } from '@/lib/config/template-config';
-import { getPdfContactLine, getPdfRegisteredOfficeLine } from '@/lib/pdf/branding';
 
 // Create styles for the PDF matching the scanned form
 const styles = StyleSheet.create({
@@ -199,9 +199,16 @@ export function TimesheetPDF({ timesheet, employeeName, offDayStates = [] }: Tim
     : '00000';
 
   // Helper to format remarks with job number (entry may be full TimesheetEntry or partial from allDays)
-  const formatRemarks = (entry: { job_number?: string | null; job_numbers?: string[]; remarks?: string | null }) => {
+  const formatRemarks = (entry: {
+    job_number?: string | null;
+    job_numbers?: string[];
+    remarks?: string | null;
+    subsistence_payment_required?: boolean | null;
+  }) => {
     const jobNumber = getPrimaryJobNumber(entry);
-    const remarks = entry.remarks;
+    const remarks = entry.subsistence_payment_required
+      ? addSubsistenceRemark(entry.remarks)
+      : entry.remarks;
     const formattedJobNumbers = formatEntryJobNumbers(entry);
     
     if (jobNumber && remarks) {
@@ -224,6 +231,7 @@ export function TimesheetPDF({ timesheet, employeeName, offDayStates = [] }: Tim
       working_in_yard: false,
       daily_total: 0,
       remarks: '',
+      subsistence_payment_required: false,
       did_not_work: false,
     };
   });
@@ -239,11 +247,11 @@ export function TimesheetPDF({ timesheet, employeeName, offDayStates = [] }: Tim
 
         {/* Company Header */}
         <View style={styles.companyHeader}>
-          <Text style={[styles.companyName, { color: templateConfig.branding.brandColor }]}>
-            {templateConfig.branding.companyName}
+          <Text style={styles.companyName}>{templateConfig.branding.companyName}</Text>
+          <Text style={styles.companyDetails}>
+            REGISTERED OFFICE: VIVIENNE HOUSE, RACECOURSE ROAD, CREW LANE INDUSTRIAL ESTATE, SOUTHWELL, NOTTS. NG25 0TX
           </Text>
-          <Text style={styles.companyDetails}>{getPdfRegisteredOfficeLine()}</Text>
-          <Text style={styles.companyPhone}>{getPdfContactLine()}</Text>
+          <Text style={styles.companyPhone}>Telephone: SOUTHWELL (01636) 812227</Text>
         </View>
 
         {/* Top Info Section */}

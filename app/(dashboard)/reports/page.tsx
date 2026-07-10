@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { PageLoader } from '@/components/ui/page-loader';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { toast } from 'sonner';
 import { useQueryState } from 'nuqs';
@@ -22,6 +23,7 @@ import {
   Loader2,
   Package,
   PlaneTakeoff,
+  Receipt,
   Settings,
 } from 'lucide-react';
 
@@ -70,7 +72,7 @@ interface UserSuggestedReport {
 }
 
 type ReportsPageTab = 'overview' | 'settings';
-type ReportsFilterTab = 'timesheets' | 'daily-checks' | 'absence-leave' | 'future';
+type ReportsFilterTab = 'timesheets' | 'daily-checks' | 'absence-leave' | 'quotes' | 'future';
 
 const TIMESHEET_REPORTS: ReportCardConfig[] = [
   {
@@ -125,6 +127,16 @@ const ABSENCE_REPORTS: ReportCardConfig[] = [
 ];
 const ABSENCE_WEEKLY_PRINT_PDF_ENDPOINT = '/api/reports/absence-leave/weekly-print-pdf';
 
+const QUOTE_REPORTS: ReportCardConfig[] = [
+  {
+    title: 'Quotes Conversion Funnel',
+    description: 'Quotes created, accepted, declined, and aging pipeline by customer, owner, and team.',
+    endpoint: '/api/reports/quotes/conversion-funnel',
+    filenamePrefix: 'Quotes_Conversion_Funnel',
+    buttonClassName: 'bg-brand-yellow hover:bg-brand-yellow/90 text-slate-950',
+  },
+];
+
 const DEFAULT_USER_SUGGESTIONS: Array<Pick<UserSuggestedReport, 'title' | 'description'>> = [
   {
     title: 'Approval SLA & Backlog',
@@ -133,10 +145,6 @@ const DEFAULT_USER_SUGGESTIONS: Array<Pick<UserSuggestedReport, 'title' | 'descr
   {
     title: 'Maintenance Risk Window',
     description: 'Vehicles and equipment due or overdue by mileage/date with severity ranking.',
-  },
-  {
-    title: 'Quotes Conversion Funnel',
-    description: 'Quotes created, accepted, declined, and aging pipeline by customer owner/team.',
   },
 ];
 
@@ -174,7 +182,7 @@ function isReportsPageTab(value: string): value is ReportsPageTab {
 }
 
 function isReportsFilterTab(value: string): value is ReportsFilterTab {
-  return value === 'timesheets' || value === 'daily-checks' || value === 'absence-leave' || value === 'future';
+  return value === 'timesheets' || value === 'daily-checks' || value === 'absence-leave' || value === 'quotes' || value === 'future';
 }
 
 function downloadBase64File(fileName: string, base64Data: string, contentType: string): void {
@@ -617,19 +625,11 @@ function ReportsContent() {
 
   return (
     <AppPageShell>
-      <div className="rounded-lg border border-border bg-white p-6 dark:bg-slate-900">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-brand-yellow/15 p-2 text-brand-yellow">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-foreground">Reports</h1>
-            <p className="text-sm text-muted-foreground">
-              Generate operational reports aligned to your current module and team permissions.
-            </p>
-          </div>
-        </div>
-      </div>
+      <AppPageHeader
+        title="Reports"
+        description="Generate operational reports aligned to your current module and team permissions."
+        icon={<FileText className="h-5 w-5" />}
+      />
 
       <Tabs
         value={activePageTab}
@@ -676,6 +676,10 @@ function ReportsContent() {
                 <TabsTrigger value="absence-leave" className="gap-2">
                   <PlaneTakeoff className="h-4 w-4" />
                   Absence & Leave
+                </TabsTrigger>
+                <TabsTrigger value="quotes" className="gap-2">
+                  <Receipt className="h-4 w-4" />
+                  Quotes
                 </TabsTrigger>
                 <TabsTrigger value="future" className="gap-2">
                   <Package className="h-4 w-4" />
@@ -834,6 +838,30 @@ function ReportsContent() {
               </div>
             )}
 
+          {activeFilterTab === 'quotes' && (
+            <div className="space-y-4">
+              <ReportDateRangeCard
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+                onSetLastWeek={setLastWeek}
+                onSetLastMonth={setLastMonth}
+                onSetThisMonth={setThisMonth}
+              />
+              {QUOTE_REPORTS.map((report) => (
+                <ReportActionCard
+                  key={report.endpoint}
+                  report={report}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  downloadingEndpoint={downloadingEndpoint}
+                  onDownload={downloadReport}
+                />
+              ))}
+            </div>
+          )}
+
           {activeFilterTab === 'future' && (
             <div className="space-y-4">
               <Card className="border-border">
@@ -870,7 +898,7 @@ function ReportsContent() {
                   </Button>
 
                   {suggestionsLoading && (
-                    <p className="text-sm text-muted-foreground">Loading report suggestions...</p>
+                    <PanelLoader message="Loading report suggestions..." accent="reports" className="py-6" />
                   )}
 
                   {!suggestionsLoading && userSuggestedReports.length > 0 && (

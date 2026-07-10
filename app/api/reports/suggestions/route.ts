@@ -3,8 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { z } from 'zod';
 
 const REPORTS_PAGE_HINT = '/reports';
+const createReportSuggestionSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(160, 'Title must be 160 characters or fewer'),
+  body: z.string().trim().min(1, 'Description is required').max(4000, 'Description must be 4000 characters or fewer'),
+});
 
 interface ReportSuggestionRow {
   id: string;
@@ -13,11 +18,6 @@ interface ReportSuggestionRow {
   body: string;
   created_at: string;
   updated_at: string;
-}
-
-interface CreateReportSuggestionRequest {
-  title?: string;
-  body?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: 'Internal server error',
       },
       { status: 500 }
     );
@@ -123,13 +123,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - reports access required' }, { status: 403 });
     }
 
-    const body = (await request.json()) as CreateReportSuggestionRequest;
-    const title = body.title?.trim() || '';
-    const description = body.body?.trim() || '';
+    const body = await request.json().catch(() => null);
+    const parsed = createReportSuggestionSchema.safeParse(body);
 
-    if (!title || !description) {
-      return NextResponse.json({ error: 'Title and description are required' }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: 'Please correct the highlighted fields and try again.',
+          field_errors: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
     }
+
+    const { title, body: description } = parsed.data;
 
     const admin = createAdminClient();
     const { data: suggestion, error } = await admin
@@ -174,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: 'Internal server error',
       },
       { status: 500 }
     );

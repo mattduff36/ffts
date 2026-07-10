@@ -7,7 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -32,7 +34,7 @@ import {
   Undo2
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import type { VehicleMaintenanceWithStatus } from '@/types/maintenance';
+import type { MaintenanceItem, VehicleMaintenanceWithStatus } from '@/types/maintenance';
 import { AddAssetFlowDialog } from './add-asset/AddAssetFlowDialog';
 import { DeleteVehicleDialog } from './DeleteVehicleDialog';
 import { 
@@ -42,6 +44,8 @@ import {
 } from '@/lib/utils/maintenanceCalculations';
 import { EditMaintenanceDialog } from './EditMaintenanceDialog';
 import { useDeletedVehicles, usePermanentlyDeleteArchivedVehicle, useRestoreArchivedVehicle } from '@/lib/hooks/useMaintenance';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
@@ -69,29 +73,15 @@ interface MaintenanceTableProps {
 type SortField = 
   | 'reg_number'
   | 'nickname'
-  | 'current_mileage' 
-  | 'tax_due' 
-  | 'mot_due' 
-  | 'service_due' 
-  | 'cambelt_due'
-  | 'first_aid_expiry'
-  | 'six_weekly_due'
-  | 'fire_extinguisher_due'
-  | 'taco_calibration_due';
+  | 'current_mileage'
+  | `category:${string}`;
 
 type SortDirection = 'asc' | 'desc';
 
 interface ColumnVisibility {
   nickname: boolean;
   current_mileage: boolean;
-  tax_due: boolean;
-  mot_due: boolean;
-  service_due: boolean;
-  cambelt_due: boolean;
-  first_aid_expiry: boolean;
-  six_weekly_due: boolean;
-  fire_extinguisher_due: boolean;
-  taco_calibration_due: boolean;
+  [categoryColumnId: string]: boolean;
 }
 
 export function MaintenanceTable({ 
@@ -107,6 +97,7 @@ export function MaintenanceTable({
   const currentDistanceLabel = isHgvTable ? 'Current KM' : 'Current Mileage';
   const assetLabelPlural = `${assetLabel}s`;
   const assetLabelPluralLower = `${assetLabelLower}s`;
+  const searchPlaceholder = `Search ${assetLabelPlural}...`;
   const router = useRouter();
   const { isAdmin, isManager } = useAuth();
   const { tabletModeEnabled } = useTabletMode();
@@ -118,6 +109,7 @@ export function MaintenanceTable({
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleMaintenanceWithStatus | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [retiredSearchQuery, setRetiredSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   
   // Track pending operations per vehicle ID (vans + HGVs share these)
   const [pendingRestore, setPendingRestore] = useState<Set<string>>(new Set());
@@ -264,15 +256,39 @@ export function MaintenanceTable({
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>({
     nickname: true,
     current_mileage: true,
-    tax_due: true,
-    mot_due: true,
-    service_due: true,
-    cambelt_due: true,
-    first_aid_expiry: true,
-    six_weekly_due: true,
-    fire_extinguisher_due: true,
-    taco_calibration_due: true,
   });
+
+  const maintenanceColumns = useMemo(() => {
+    const columnsByCategoryId = new Map<string, MaintenanceItem>();
+
+    vehicles.forEach(vehicle => {
+      (vehicle.maintenance_items || [])
+        .filter(item => item.asset_type === (isHgvTable ? 'hgv' : 'van'))
+        .forEach(item => {
+          if (!columnsByCategoryId.has(item.category_id)) {
+            columnsByCategoryId.set(item.category_id, item);
+          }
+        });
+    });
+
+    return Array.from(columnsByCategoryId.values())
+      .sort((a, b) => a.sort_order - b.sort_order || a.category_name.localeCompare(b.category_name));
+  }, [isHgvTable, vehicles]);
+
+  useEffect(() => {
+    setColumnVisibility(prev => {
+      const next: ColumnVisibility = {
+        nickname: prev.nickname ?? true,
+        current_mileage: prev.current_mileage ?? true,
+      };
+
+      maintenanceColumns.forEach(column => {
+        next[`category:${column.category_id}`] = prev[`category:${column.category_id}`] ?? true;
+      });
+
+      return next;
+    });
+  }, [maintenanceColumns]);
   
   const toggleColumn = (column: keyof ColumnVisibility) => {
     setColumnVisibility(prev => ({
@@ -291,8 +307,30 @@ export function MaintenanceTable({
     }
   };
   
+  const filteredVehicles = useMemo(() => {
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) return vehicles;
+
+    return vehicles.filter((vehicle) => {
+      const searchableValues = [
+        vehicle.vehicle?.reg_number,
+        vehicle.vehicle?.nickname,
+        vehicle.current_mileage?.toString(),
+        ...(vehicle.maintenance_items || []).flatMap((item) => [
+          item.category_name,
+          item.display_value,
+          item.due_date,
+          item.due_mileage?.toString(),
+          item.due_hours?.toString(),
+        ]),
+      ];
+
+      return searchableValues.some((value) => value?.toLowerCase().includes(query));
+    });
+  }, [debouncedSearchQuery, vehicles]);
+
   // Sort vehicles
-  const sortedVehicles = [...vehicles].sort((a, b) => {
+  const sortedVehicles = [...filteredVehicles].sort((a, b) => {
     const multiplier = sortDirection === 'asc' ? 1 : -1;
     
     switch (sortField) {
@@ -305,52 +343,35 @@ export function MaintenanceTable({
       case 'current_mileage':
         return multiplier * ((a.current_mileage || 0) - (b.current_mileage || 0));
       
-      case 'tax_due':
-        if (!a.tax_due_date && !b.tax_due_date) return 0;
-        if (!a.tax_due_date) return 1;
-        if (!b.tax_due_date) return -1;
-        return multiplier * (new Date(a.tax_due_date).getTime() - new Date(b.tax_due_date).getTime());
-      
-      case 'mot_due':
-        if (!a.mot_due_date && !b.mot_due_date) return 0;
-        if (!a.mot_due_date) return 1;
-        if (!b.mot_due_date) return -1;
-        return multiplier * (new Date(a.mot_due_date).getTime() - new Date(b.mot_due_date).getTime());
-      
-      case 'service_due':
-        return multiplier * ((a.next_service_mileage || 0) - (b.next_service_mileage || 0));
-      
-      case 'cambelt_due':
-        return multiplier * ((a.cambelt_due_mileage || 0) - (b.cambelt_due_mileage || 0));
-      
-      case 'first_aid_expiry':
-        if (!a.first_aid_kit_expiry && !b.first_aid_kit_expiry) return 0;
-        if (!a.first_aid_kit_expiry) return 1;
-        if (!b.first_aid_kit_expiry) return -1;
-        return multiplier * (new Date(a.first_aid_kit_expiry).getTime() - new Date(b.first_aid_kit_expiry).getTime());
-
-      case 'six_weekly_due':
-        if (!a.six_weekly_inspection_due_date && !b.six_weekly_inspection_due_date) return 0;
-        if (!a.six_weekly_inspection_due_date) return 1;
-        if (!b.six_weekly_inspection_due_date) return -1;
-        return multiplier * (new Date(a.six_weekly_inspection_due_date).getTime() - new Date(b.six_weekly_inspection_due_date).getTime());
-
-      case 'fire_extinguisher_due':
-        if (!a.fire_extinguisher_due_date && !b.fire_extinguisher_due_date) return 0;
-        if (!a.fire_extinguisher_due_date) return 1;
-        if (!b.fire_extinguisher_due_date) return -1;
-        return multiplier * (new Date(a.fire_extinguisher_due_date).getTime() - new Date(b.fire_extinguisher_due_date).getTime());
-
-      case 'taco_calibration_due':
-        if (!a.taco_calibration_due_date && !b.taco_calibration_due_date) return 0;
-        if (!a.taco_calibration_due_date) return 1;
-        if (!b.taco_calibration_due_date) return -1;
-        return multiplier * (new Date(a.taco_calibration_due_date).getTime() - new Date(b.taco_calibration_due_date).getTime());
-      
       default:
+        if (sortField.startsWith('category:')) {
+          const categoryId = sortField.replace('category:', '');
+          const aItem = a.maintenance_items?.find(item => item.category_id === categoryId);
+          const bItem = b.maintenance_items?.find(item => item.category_id === categoryId);
+          const getSortValue = (item?: MaintenanceItem) => {
+            if (!item) return Number.POSITIVE_INFINITY;
+            if (item.category_type === 'date') return item.due_date ? new Date(item.due_date).getTime() : Number.POSITIVE_INFINITY;
+            if (item.category_type === 'hours') return item.due_hours ?? Number.POSITIVE_INFINITY;
+            return item.due_mileage ?? Number.POSITIVE_INFINITY;
+          };
+
+          return multiplier * (getSortValue(aItem) - getSortValue(bItem));
+        }
+
         return 0;
     }
   });
+  const paginationKey = [
+    assetLabel,
+    debouncedSearchQuery.trim(),
+    sortField,
+    sortDirection,
+    sortedVehicles.length,
+  ].join(':');
+  const {
+    visibleItems: visibleVehicles,
+    showMore,
+  } = useLoadMorePagination(sortedVehicles, { resetKey: paginationKey });
   
   return (
     <>
@@ -395,7 +416,7 @@ export function MaintenanceTable({
             <div className="relative flex-1">
               <Search className={cn('absolute left-3 text-muted-foreground', tabletModeEnabled ? 'top-3.5 h-5 w-5' : 'top-3 h-4 w-4')} />
               <Input
-                placeholder="Search by registration number..."
+                placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className={cn('bg-slate-900/50 border-slate-600 text-white', tabletModeEnabled ? 'pl-12 min-h-11 text-base' : 'pl-11')}
@@ -425,68 +446,23 @@ export function MaintenanceTable({
                 >
                   {distanceHeaderLabel}
                 </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.tax_due}
-                  onCheckedChange={() => toggleColumn('tax_due')}
-                >
-                  Tax Due
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.mot_due}
-                  onCheckedChange={() => toggleColumn('mot_due')}
-                >
-                  MOT Due
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.service_due}
-                  onCheckedChange={() => toggleColumn('service_due')}
-                >
-                  Service Due
-                </DropdownMenuCheckboxItem>
-                {!isHgvTable && (
+                {maintenanceColumns.map(column => (
                   <DropdownMenuCheckboxItem
-                    checked={columnVisibility.cambelt_due}
-                    onCheckedChange={() => toggleColumn('cambelt_due')}
+                    key={column.category_id}
+                    checked={columnVisibility[`category:${column.category_id}`] ?? true}
+                    onCheckedChange={() => toggleColumn(`category:${column.category_id}`)}
                   >
-                    Cambelt Due
+                    {column.category_name}
                   </DropdownMenuCheckboxItem>
-                )}
-                <DropdownMenuCheckboxItem
-                  checked={columnVisibility.first_aid_expiry}
-                  onCheckedChange={() => toggleColumn('first_aid_expiry')}
-                >
-                  First Aid
-                </DropdownMenuCheckboxItem>
-                {isHgvTable && (
-                  <>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.six_weekly_due}
-                      onCheckedChange={() => toggleColumn('six_weekly_due')}
-                    >
-                      6 Weekly
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.fire_extinguisher_due}
-                      onCheckedChange={() => toggleColumn('fire_extinguisher_due')}
-                    >
-                      Fire Extinguisher
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.taco_calibration_due}
-                      onCheckedChange={() => toggleColumn('taco_calibration_due')}
-                    >
-                      Taco Calibration
-                    </DropdownMenuCheckboxItem>
-                  </>
-                )}
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
           {/* Desktop Table View */}
-          {vehicles.length === 0 ? (
+          {sortedVehicles.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? `No ${assetLabelPluralLower} found matching your search.` : `No ${assetLabelPluralLower} with maintenance records yet.`}
+              {debouncedSearchQuery ? `No ${assetLabelPluralLower} found matching your search.` : `No ${assetLabelPluralLower} with maintenance records yet.`}
             </div>
           ) : (
             <div className={cn('border border-slate-700 rounded-lg', tabletModeEnabled ? 'hidden' : 'hidden md:block')}>
@@ -527,106 +503,25 @@ export function MaintenanceTable({
                           </div>
                         </TableHead>
                       )}
-                      {columnVisibility.tax_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('tax_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Tax Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
-                      {columnVisibility.mot_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('mot_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            MOT Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
-                      {columnVisibility.service_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('service_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Service Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
-                      {!isHgvTable && columnVisibility.cambelt_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('cambelt_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Cambelt Due
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                        </TableHead>
-                      )}
-                      {columnVisibility.first_aid_expiry && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('first_aid_expiry')}
-                        >
-                          <div className="flex items-center gap-2">
-                            First Aid
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                      </TableHead>
-                      )}
-                      {isHgvTable && columnVisibility.six_weekly_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('six_weekly_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            6 Weekly
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                      </TableHead>
-                      )}
-                      {isHgvTable && columnVisibility.fire_extinguisher_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('fire_extinguisher_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Fire Extinguisher
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                      </TableHead>
-                      )}
-                      {isHgvTable && columnVisibility.taco_calibration_due && (
-                      <TableHead 
-                          className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
-                          style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
-                          onClick={() => handleSort('taco_calibration_due')}
-                        >
-                          <div className="flex items-center gap-2">
-                            Taco Calibration
-                            <ArrowUpDown className="h-3 w-3" />
-                          </div>
-                      </TableHead>
-                      )}
+                      {maintenanceColumns
+                        .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                        .map(column => (
+                          <TableHead
+                            key={column.category_id}
+                            className="sticky z-30 bg-slate-900 text-muted-foreground cursor-pointer hover:bg-slate-800 border-b-2 border-border"
+                            style={{ top: 'calc(var(--top-nav-h, 68px) + 0px)' }}
+                            onClick={() => handleSort(`category:${column.category_id}`)}
+                          >
+                            <div className="flex items-center gap-2">
+                              {column.category_name}
+                              <ArrowUpDown className="h-3 w-3" />
+                            </div>
+                          </TableHead>
+                        ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedVehicles.map((vehicle) => (
+                    {visibleVehicles.map((vehicle) => (
                       <TableRow 
                         key={vehicle.van_id ?? vehicle.id ?? vehicle.vehicle?.id}
                         onClick={() => {
@@ -667,71 +562,19 @@ export function MaintenanceTable({
                           </TableCell>
                         )}
                         
-                        {/* Tax Due */}
-                        {columnVisibility.tax_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.tax_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.tax_due_date)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        
-                        {/* MOT Due */}
-                        {columnVisibility.mot_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.mot_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.mot_due_date)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        
-                        {/* Service Due */}
-                        {columnVisibility.service_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.service_status?.status || 'not_set')}`}>
-                              {formatMileage(vehicle.next_service_mileage)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        
-                        {/* Cambelt Due */}
-                        {!isHgvTable && columnVisibility.cambelt_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.cambelt_status?.status || 'not_set')}`}>
-                              {formatMileage(vehicle.cambelt_due_mileage)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        
-                        {/* First Aid */}
-                        {columnVisibility.first_aid_expiry && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.first_aid_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.first_aid_kit_expiry)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {isHgvTable && columnVisibility.six_weekly_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.six_weekly_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.six_weekly_inspection_due_date || null)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {isHgvTable && columnVisibility.fire_extinguisher_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.fire_extinguisher_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.fire_extinguisher_due_date || null)}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {isHgvTable && columnVisibility.taco_calibration_due && (
-                          <TableCell>
-                            <Badge className={`font-medium ${getStatusColorClass(vehicle.taco_calibration_status?.status || 'not_set')}`}>
-                              {formatMaintenanceDate(vehicle.taco_calibration_due_date || null)}
-                            </Badge>
-                          </TableCell>
-                        )}
+                        {maintenanceColumns
+                          .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                          .map(column => {
+                            const item = vehicle.maintenance_items?.find(maintenanceItem => maintenanceItem.category_id === column.category_id);
+
+                            return (
+                              <TableCell key={column.category_id}>
+                                <Badge className={`font-medium ${getStatusColorClass(item?.status.status || 'not_set')}`}>
+                                  {item?.display_value || 'Not Set'}
+                                </Badge>
+                              </TableCell>
+                            );
+                          })}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -740,9 +583,9 @@ export function MaintenanceTable({
           )}
 
           {/* Mobile Card View */}
-          {vehicles.length > 0 && (
+          {sortedVehicles.length > 0 && (
             <div className={cn('space-y-3', tabletModeEnabled ? 'block' : 'md:hidden')}>
-              {sortedVehicles.map((vehicle) => {
+              {visibleVehicles.map((vehicle) => {
                 const cardVehicleId = vehicle.hgv_id ?? vehicle.van_id ?? vehicle.id;
                 const isExpanded = expandedCardId === cardVehicleId;
                 
@@ -832,66 +675,20 @@ export function MaintenanceTable({
                                 <span className="text-white font-medium">{formatMileage(vehicle.current_mileage)}</span>
                               </div>
                             )}
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">Tax Due:</span>
-                              <Badge className={`font-medium ${getStatusColorClass(vehicle.tax_status?.status || 'not_set')}`}>
-                                {formatMaintenanceDate(vehicle.tax_due_date)}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">MOT Due:</span>
-                              <Badge className={`font-medium ${getStatusColorClass(vehicle.mot_status?.status || 'not_set')}`}>
-                                {formatMaintenanceDate(vehicle.mot_due_date)}
-                              </Badge>
-                            </div>
-                            {columnVisibility.service_due && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Next Service:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.service_status?.status || 'not_set')}`}>
-                                  {formatMileage(vehicle.next_service_mileage)}
-                                </Badge>
-                              </div>
-                            )}
-                            {!isHgvTable && columnVisibility.cambelt_due && vehicle.cambelt_due_mileage && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Cambelt Due:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.cambelt_status?.status || 'not_set')}`}>
-                                  {formatMileage(vehicle.cambelt_due_mileage)}
-                                </Badge>
-                              </div>
-                            )}
-                            {columnVisibility.first_aid_expiry && vehicle.first_aid_kit_expiry && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">First Aid Expiry:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.first_aid_status?.status || 'not_set')}`}>
-                                  {formatMaintenanceDate(vehicle.first_aid_kit_expiry)}
-                                </Badge>
-                              </div>
-                            )}
-                            {isHgvTable && columnVisibility.six_weekly_due && vehicle.six_weekly_inspection_due_date && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">6 Weekly Due:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.six_weekly_status?.status || 'not_set')}`}>
-                                  {formatMaintenanceDate(vehicle.six_weekly_inspection_due_date)}
-                                </Badge>
-                              </div>
-                            )}
-                            {isHgvTable && columnVisibility.fire_extinguisher_due && vehicle.fire_extinguisher_due_date && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Fire Extinguisher Due:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.fire_extinguisher_status?.status || 'not_set')}`}>
-                                  {formatMaintenanceDate(vehicle.fire_extinguisher_due_date)}
-                                </Badge>
-                              </div>
-                            )}
-                            {isHgvTable && columnVisibility.taco_calibration_due && vehicle.taco_calibration_due_date && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Taco Calibration Due:</span>
-                                <Badge className={`font-medium ${getStatusColorClass(vehicle.taco_calibration_status?.status || 'not_set')}`}>
-                                  {formatMaintenanceDate(vehicle.taco_calibration_due_date)}
-                                </Badge>
-                              </div>
-                            )}
+                            {maintenanceColumns
+                              .filter(column => columnVisibility[`category:${column.category_id}`] ?? true)
+                              .map(column => {
+                                const item = vehicle.maintenance_items?.find(maintenanceItem => maintenanceItem.category_id === column.category_id);
+
+                                return (
+                                  <div key={column.category_id} className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">{column.category_name}:</span>
+                                    <Badge className={`font-medium ${getStatusColorClass(item?.status.status || 'not_set')}`}>
+                                      {item?.display_value || 'Not Set'}
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
                           </div>
 
                           {/* Actions - All on One Line */}
@@ -948,6 +745,12 @@ export function MaintenanceTable({
               })}
             </div>
           )}
+          <LoadMorePagination
+            visibleCount={visibleVehicles.length}
+            totalCount={sortedVehicles.length}
+            itemLabel={`${assetLabelPluralLower}`}
+            onShowMore={showMore}
+          />
             </TabsContent>
             
             {/* Retired Assets Tab */}
@@ -956,7 +759,7 @@ export function MaintenanceTable({
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={`Search retired ${assetLabelPluralLower} by registration...`}
+                  placeholder={searchPlaceholder}
                   value={retiredSearchQuery}
                   onChange={(e) => setRetiredSearchQuery(e.target.value)}
                   className="pl-11 bg-slate-900/50 border-slate-600 text-white"
@@ -964,10 +767,11 @@ export function MaintenanceTable({
               </div>
               
               {effectiveRetiredLoading ? (
-                <div className="text-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-3" />
-                  <p className="text-muted-foreground">Loading retired {assetLabelPluralLower}...</p>
-                </div>
+                <PanelLoader
+                  message={`Loading retired ${assetLabelPluralLower}...`}
+                  accent="maintenance"
+                  className="py-12"
+                />
               ) : isHgvTable ? (
                 /* ── Retired HGVs (from hgvs table) ── */
                 retiredHgvs.length === 0 ? (

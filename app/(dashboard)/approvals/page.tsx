@@ -14,15 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Clock, CheckCircle2, XCircle, User, Filter, Calendar, Package, LayoutGrid, Table2, Settings2, Loader2 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { FileText, Clock, CheckCircle2, XCircle, User, Filter, Calendar, Package, Edit2 } from 'lucide-react';
+import { ColumnVisibilityMenu, DataViewToggle } from '@/components/ui/data-view-controls';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils/date';
 import { Timesheet } from '@/types/timesheet';
@@ -50,6 +43,7 @@ import { AbsencesApprovalTable, ABSENCE_COLUMN_VISIBILITY_STORAGE_KEY, DEFAULT_A
 import type { AbsenceColumnVisibility } from './components/AbsencesApprovalTable';
 import { ProcessTimesheetModal } from './components/ProcessTimesheetModal';
 import { PageLoader } from '@/components/ui/page-loader';
+import { SectionLoader } from '@/components/ui/section-loader';
 import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
 import {
   type ApprovedAbsenceForTimesheet,
@@ -70,6 +64,7 @@ import {
 } from '@/lib/utils/approvals-filters';
 
 const APPROVALS_PAGE_SIZE = 50;
+const approvalsTabTriggerClassName = 'gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900';
 
 function isAnnualLeaveReason(name: string): boolean {
   return name.trim().toLowerCase() === 'annual leave';
@@ -141,7 +136,6 @@ function ApprovalsContent() {
   
   const [timesheets, setTimesheets] = useState<TimesheetWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasLoadedTimesheets, setHasLoadedTimesheets] = useState(false);
   const [timesheetFilter, setTimesheetFilter] = useState<TimesheetStatusFilter>(defaultStatusFilters.timesheets);
   const [absenceStatusFilter, setAbsenceStatusFilter] = useState<AbsenceStatusFilter>(defaultStatusFilters.absences);
   const statusFilter: StatusFilter = activeTab === 'timesheets' ? timesheetFilter : absenceStatusFilter;
@@ -647,7 +641,6 @@ function ApprovalsContent() {
       toast.error('Failed to load approvals', { id: errorContextId });
     } finally {
       setLoading(false);
-      setHasLoadedTimesheets(true);
     }
   }, [
     dateFrom,
@@ -745,10 +738,7 @@ function ApprovalsContent() {
     }
   };
 
-  const activeTabLoading =
-    activeTab === 'timesheets' ? (!hasLoadedTimesheets && loading) : absencesLoading;
-
-  if (permissionLoading || absenceSecondaryLoading || employeesLoading || activeTabLoading) {
+  if (permissionLoading || absenceSecondaryLoading || employeesLoading) {
     return <PageLoader message="Loading approvals..." />;
   }
 
@@ -895,8 +885,8 @@ function ApprovalsContent() {
     <AppPageShell>
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-foreground mb-2">Approvals</h1>
             <p className="text-muted-foreground">
               Review and manage submissions
@@ -909,7 +899,7 @@ function ApprovalsContent() {
               statusFilter === 'rejected' ? 'destructive' :
               'secondary'
             }
-            className={`text-lg px-4 py-2 ${
+            className={`w-fit text-lg px-4 py-2 ${
               statusFilter === 'approved' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
               statusFilter === 'processed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
               statusFilter === 'adjusted' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
@@ -923,7 +913,7 @@ function ApprovalsContent() {
 
       <Card className="bg-white dark:bg-slate-900 border-border">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-foreground flex items-center gap-2">
               <Filter className="h-4 w-4" />
               Filters
@@ -1035,60 +1025,50 @@ function ApprovalsContent() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full max-w-3xl grid-cols-2 h-auto p-0 bg-slate-100 dark:bg-slate-800 rounded-lg">
-            <TabsTrigger 
-              value="timesheets" 
-              className="flex flex-col items-center gap-1 py-3 rounded-md transition-all duration-200 active:scale-95 border-0"
-              style={activeTab === 'timesheets' ? {
-                backgroundColor: 'hsl(210 90% 50%)', // Timesheet Blue
-                color: 'white',
-                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-              } : {}}
-            >
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                <span className="text-sm font-medium">Timesheets</span>
-                {filteredTimesheets.length > 0 && (
-                  <Badge 
-                    variant="secondary" 
-                    className={activeTab === 'timesheets' ? "bg-white/20 text-white border-white/30" : ""}
+          <div className="flex justify-start">
+            <TabsList className="h-auto flex-wrap justify-start gap-0 p-1.5">
+              <TabsTrigger
+                value="timesheets"
+                className={approvalsTabTriggerClassName}
+              >
+                <FileText className="h-4 w-4" />
+                Timesheets
+                {filteredTimesheets.length > 0 ? (
+                  <Badge
+                    variant="secondary"
+                    className={activeTab === 'timesheets'
+                      ? 'border-brand-yellow/20 bg-slate-900/10 text-slate-900'
+                      : 'border-border bg-background/70 text-muted-foreground'
+                    }
                   >
                     {filteredTimesheets.length}
                   </Badge>
-                )}
-              </div>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="absences" 
-              className="flex flex-col items-center gap-1 py-3 rounded-md transition-all duration-200 active:scale-95 border-0"
-              style={activeTab === 'absences' ? {
-                backgroundColor: 'hsl(260 60% 50%)', // Purple for absences
-                color: 'white',
-                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-              } : {}}
-            >
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                <span className="text-sm font-medium">Absences</span>
-                {filteredAbsences.length > 0 && (
-                  <Badge 
+                ) : null}
+              </TabsTrigger>
+              <TabsTrigger
+                value="absences"
+                className={approvalsTabTriggerClassName}
+              >
+                <Calendar className="h-4 w-4" />
+                Absences
+                {filteredAbsences.length > 0 ? (
+                  <Badge
                     variant="secondary"
-                    className={activeTab === 'absences' ? "bg-white/20 text-white border-white/30" : ""}
+                    className={activeTab === 'absences'
+                      ? 'border-brand-yellow/20 bg-slate-900/10 text-slate-900'
+                      : 'border-border bg-background/70 text-muted-foreground'
+                    }
                   >
                     {filteredAbsences.length}
                   </Badge>
-                )}
-              </div>
-            </TabsTrigger>
-          </TabsList>
+                ) : null}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="timesheets" className="mt-6 space-y-4">
+          <TabsContent value="timesheets" className="mt-4 space-y-4">
             {loading ? (
-              <Card className="border-border">
-                <CardContent className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </CardContent>
-              </Card>
+              <SectionLoader message="Loading timesheet approvals..." />
             ) : filteredTimesheets.length === 0 ? (
               <Card className="border-border">
                 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -1111,55 +1091,25 @@ function ApprovalsContent() {
               <>
                 {/* Toolbar: Columns + View Toggle - Desktop Only */}
                 <div className="hidden md:flex items-center justify-end gap-2">
-                  {timesheetViewMode === 'table' && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="border-slate-600">
-                          <Settings2 className="h-4 w-4 mr-2" />
-                          Columns
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 bg-slate-900 border border-border">
-                        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem checked={columnVisibility.employeeId} onCheckedChange={() => toggleColumn('employeeId')}>
-                          Employee ID
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={columnVisibility.totalHours} onCheckedChange={() => toggleColumn('totalHours')}>
-                          Total Hours
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={columnVisibility.jobNumber} onCheckedChange={() => toggleColumn('jobNumber')}>
-                          Job Number
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={columnVisibility.status} onCheckedChange={() => toggleColumn('status')}>
-                          Status
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={columnVisibility.submittedAt} onCheckedChange={() => toggleColumn('submittedAt')}>
-                          Submitted
-                        </DropdownMenuCheckboxItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setTimesheetViewMode('table'); localStorage.setItem('approvals-ts-view-mode', 'table'); }}
-                      className={`h-8 px-3 ${timesheetViewMode === 'table' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                    >
-                      <Table2 className="h-4 w-4 mr-1.5" />
-                      Table
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setTimesheetViewMode('cards'); localStorage.setItem('approvals-ts-view-mode', 'cards'); }}
-                      className={`h-8 px-3 ${timesheetViewMode === 'cards' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                    >
-                      <LayoutGrid className="h-4 w-4 mr-1.5" />
-                      Cards
-                    </Button>
-                  </div>
+                  {timesheetViewMode === 'table' ? (
+                    <ColumnVisibilityMenu
+                      options={[
+                        { id: 'employeeId', label: 'Employee ID', checked: columnVisibility.employeeId },
+                        { id: 'totalHours', label: 'Total Hours', checked: columnVisibility.totalHours },
+                        { id: 'jobNumber', label: 'Job Number', checked: columnVisibility.jobNumber },
+                        { id: 'status', label: 'Status', checked: columnVisibility.status },
+                        { id: 'submittedAt', label: 'Submitted', checked: columnVisibility.submittedAt },
+                      ]}
+                      onToggle={toggleColumn}
+                    />
+                  ) : null}
+                  <DataViewToggle
+                    value={timesheetViewMode}
+                    onValueChange={(nextViewMode) => {
+                      setTimesheetViewMode(nextViewMode);
+                      localStorage.setItem('approvals-ts-view-mode', nextViewMode);
+                    }}
+                  />
                 </div>
 
                 {/* Table View - Desktop Only */}
@@ -1250,6 +1200,19 @@ function ApprovalsContent() {
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    router.push(`/timesheets/${timesheet.id}`);
+                                  }}
+                                  className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all"
+                                >
+                                  <Edit2 className="h-4 w-4 mr-1" />
+                                  Adjust
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
                                     handleOpenProcessModal(timesheet.id);
                                   }}
                                   className="border-brand-yellow/50 text-brand-yellow hover:bg-brand-yellow/20 hover:text-brand-yellow hover:border-brand-yellow active:bg-brand-yellow/30 active:text-brand-yellow active:scale-95 transition-all"
@@ -1286,13 +1249,9 @@ function ApprovalsContent() {
 
           {/* Inspections tab removed - inspections no longer require approvals */}
 
-          <TabsContent value="absences" className="mt-6 space-y-4">
+          <TabsContent value="absences" className="mt-4 space-y-4">
             {absencesLoading ? (
-              <Card className="border-border">
-                <CardContent className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </CardContent>
-              </Card>
+              <SectionLoader message="Loading absence approvals..." />
             ) : !canAuthoriseBookings || filteredAbsences.length === 0 ? (
               <Card className="border-border">
                 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -1311,58 +1270,26 @@ function ApprovalsContent() {
               <>
                 {/* Toolbar: Columns + View Toggle - Desktop Only */}
                 <div className="hidden md:flex items-center justify-end gap-2">
-                  {absenceViewMode === 'table' && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="border-slate-600">
-                          <Settings2 className="h-4 w-4 mr-2" />
-                          Columns
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 bg-slate-900 border border-border">
-                        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.employeeId} onCheckedChange={() => toggleAbsenceColumn('employeeId')}>
-                          Employee ID
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.reason} onCheckedChange={() => toggleAbsenceColumn('reason')}>
-                          Reason
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.duration} onCheckedChange={() => toggleAbsenceColumn('duration')}>
-                          Duration
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.remainingAllowance} onCheckedChange={() => toggleAbsenceColumn('remainingAllowance')}>
-                          Remaining Allowance
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.paidStatus} onCheckedChange={() => toggleAbsenceColumn('paidStatus')}>
-                          Paid / Unpaid
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={absenceColumnVisibility.submittedAt} onCheckedChange={() => toggleAbsenceColumn('submittedAt')}>
-                          Submitted
-                        </DropdownMenuCheckboxItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setAbsenceViewMode('table'); localStorage.setItem('approvals-abs-view-mode', 'table'); }}
-                      className={`h-8 px-3 ${absenceViewMode === 'table' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                    >
-                      <Table2 className="h-4 w-4 mr-1.5" />
-                      Table
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setAbsenceViewMode('cards'); localStorage.setItem('approvals-abs-view-mode', 'cards'); }}
-                      className={`h-8 px-3 ${absenceViewMode === 'cards' ? 'bg-white text-slate-900' : 'text-muted-foreground hover:text-white'}`}
-                    >
-                      <LayoutGrid className="h-4 w-4 mr-1.5" />
-                      Cards
-                    </Button>
-                  </div>
+                  {absenceViewMode === 'table' ? (
+                    <ColumnVisibilityMenu
+                      options={[
+                        { id: 'employeeId', label: 'Employee ID', checked: absenceColumnVisibility.employeeId },
+                        { id: 'reason', label: 'Reason', checked: absenceColumnVisibility.reason },
+                        { id: 'duration', label: 'Duration', checked: absenceColumnVisibility.duration },
+                        { id: 'remainingAllowance', label: 'Remaining Allowance', checked: absenceColumnVisibility.remainingAllowance },
+                        { id: 'paidStatus', label: 'Paid / Unpaid', checked: absenceColumnVisibility.paidStatus },
+                        { id: 'submittedAt', label: 'Submitted', checked: absenceColumnVisibility.submittedAt },
+                      ]}
+                      onToggle={toggleAbsenceColumn}
+                    />
+                  ) : null}
+                  <DataViewToggle
+                    value={absenceViewMode}
+                    onValueChange={(nextViewMode) => {
+                      setAbsenceViewMode(nextViewMode);
+                      localStorage.setItem('approvals-abs-view-mode', nextViewMode);
+                    }}
+                  />
                 </div>
 
                 {/* Table View - Desktop Only */}

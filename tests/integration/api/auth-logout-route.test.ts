@@ -9,15 +9,6 @@ const {
   revokeAppSession: vi.fn(),
 }));
 
-vi.mock('@/lib/server/account-switch-device', () => ({
-  clearAccountSwitchDevicePin: vi.fn(),
-  parseAccountSwitchDeviceId: vi.fn(() => null),
-}));
-
-vi.mock('@/lib/server/account-switch-audit', () => ({
-  createAccountSwitchAuditEvent: vi.fn(),
-}));
-
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
     auth: {
@@ -72,7 +63,6 @@ describe('auth logout route', () => {
     expect(signOut).not.toHaveBeenCalled();
     expect(revokeAppSession).toHaveBeenCalledWith('session-1', 'logout');
     expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBe('');
-    expect(response.cookies.get('avs_account_locked')?.value).toBe('');
     expect(response.cookies.get('sb-project-auth-token')?.value).toBe('');
   });
 
@@ -104,7 +94,6 @@ describe('auth logout route', () => {
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(revokeAppSession).not.toHaveBeenCalled();
     expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBe('');
-    expect(response.cookies.get('avs_account_locked')?.value).toBe('');
     expect(response.cookies.get('sb-project-auth-token')?.value).toBe('');
   });
 });

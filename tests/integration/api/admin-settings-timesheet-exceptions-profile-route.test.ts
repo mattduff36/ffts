@@ -52,6 +52,44 @@ describe('admin settings timesheet exceptions profile route', () => {
     });
   });
 
+  it('updates an override to user choice with PATCH', async () => {
+    const { createClient } = await import('@/lib/supabase/server');
+    const { getEffectiveRole } = await import('@/lib/utils/view-as');
+    const { canEffectiveRoleAccessModule } = await import('@/lib/utils/rbac');
+    const { upsertTimesheetTypeException, getTimesheetTypeExceptionMatrix } = await import('@/lib/server/timesheet-type-exceptions');
+
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'admin-1' } },
+          error: null,
+        }),
+      },
+    } as never);
+    vi.mocked(canEffectiveRoleAccessModule).mockResolvedValue(true);
+    vi.mocked(getEffectiveRole).mockResolvedValue({
+      is_actual_super_admin: false,
+      is_super_admin: false,
+      role_name: 'admin',
+    } as never);
+    vi.mocked(upsertTimesheetTypeException).mockResolvedValue();
+    vi.mocked(getTimesheetTypeExceptionMatrix).mockResolvedValue({ rows: [] });
+
+    const request = new Request('http://localhost/api/admin/settings/timesheet-exceptions/user-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ timesheet_type: 'user_choice' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const response = await PATCH(request as never, { params: Promise.resolve({ profileId: 'user-1' }) });
+    expect(response.status).toBe(200);
+    expect(upsertTimesheetTypeException).toHaveBeenCalledWith({
+      profile_id: 'user-1',
+      timesheet_type: 'user_choice',
+      actor_id: 'admin-1',
+    });
+  });
+
   it('rejects invalid PATCH timesheet_type values', async () => {
     const { createClient } = await import('@/lib/supabase/server');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');

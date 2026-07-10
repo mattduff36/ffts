@@ -34,7 +34,7 @@ export async function createClient() {
     return { ...init, headers }
   }
 
-  const validation = await validateAppSession({ allowLocked: true, includeEmail: true })
+  const validation = await validateAppSession({ includeEmail: true })
   const session = validation.session
   const canUseAppSession = session && validation.status !== 'invalid' && validation.status !== 'missing'
 
@@ -107,15 +107,6 @@ export async function createClient() {
       error: null,
     })) as typeof baseClient.auth.getUser,
     getSession: (async () => {
-      if (validation.status === 'locked') {
-        return {
-          data: {
-            session: null,
-          },
-          error: null,
-        }
-      }
-
       return {
         data: {
           session: {

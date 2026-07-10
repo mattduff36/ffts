@@ -20,13 +20,13 @@ describe('fetchWithAuth helpers', () => {
     } as unknown as Window);
 
     const { createAuthAwareFetch } = await import('@/lib/utils/fetch-with-auth');
-    const baseFetch = vi.fn(async () => new Response('{}', { status: 423 }));
+    const baseFetch = vi.fn(async () => new Response('{}', { status: 401 }));
     const wrappedFetch = createAuthAwareFetch(baseFetch as unknown as typeof fetch);
 
     await wrappedFetch('/api/messages/pending');
 
     expect(baseFetch).toHaveBeenCalledTimes(1);
-    expect(handleAuthFailureStatus).toHaveBeenCalledWith(423);
+    expect(handleAuthFailureStatus).toHaveBeenCalledWith(401);
   });
 
   it('skips auth recovery for auth routes and explicit opt-outs', async () => {

@@ -13,7 +13,9 @@ import {
 
 interface PermissionSnapshotResponse {
   permissions?: Record<ModuleName, boolean>;
+  permission_levels?: Record<ModuleName, number>;
   enabled_modules?: ModuleName[];
+  sensitive_pin_modules?: ModuleName[];
   effective_team_id?: string | null;
   effective_team_name?: string | null;
 }
@@ -40,6 +42,7 @@ async function fetchPermissionSnapshot(): Promise<PermissionSnapshotResponse> {
 
 export function usePermissionSnapshot() {
   const { profile, isAdmin, isSuperAdmin, isViewingAs, effectiveRole, loading: authLoading } = useAuth();
+  const requiresPermissionSnapshot = !isAdmin && !isSuperAdmin;
 
   const query = useQuery({
     queryKey: [
@@ -49,7 +52,7 @@ export function usePermissionSnapshot() {
       effectiveRole?.name || null,
       effectiveRole?.team_id || null,
     ],
-    enabled: !authLoading && Boolean(profile?.id) && !isAdmin && !isSuperAdmin,
+    enabled: !authLoading && Boolean(profile?.id),
     queryFn: fetchPermissionSnapshot,
     staleTime: 60_000,
     refetchOnMount: false,
@@ -66,6 +69,8 @@ export function usePermissionSnapshot() {
   }, [isAdmin, isSuperAdmin, query.data?.enabled_modules]);
 
   const enabledModuleSet = useMemo(() => new Set<ModuleName>(enabledModules), [enabledModules]);
+  const sensitivePinModules = useMemo(() => query.data?.sensitive_pin_modules || [], [query.data?.sensitive_pin_modules]);
+  const sensitivePinModuleSet = useMemo(() => new Set<ModuleName>(sensitivePinModules), [sensitivePinModules]);
   const errorStatus = getErrorStatus(query.error);
   const holdForRecovery = isAuthErrorStatus(errorStatus) && !query.data;
   const serviceUnavailable = Boolean(query.error) && (errorStatus === null || isServerErrorStatus(errorStatus));
@@ -83,11 +88,14 @@ export function usePermissionSnapshot() {
 
   return {
     permissions,
+    permissionLevels: query.data?.permission_levels || null,
     enabledModules,
     enabledModuleSet,
+    sensitivePinModules,
+    sensitivePinModuleSet,
     effectiveTeamId: query.data?.effective_team_id || effectiveRole?.team_id || null,
     effectiveTeamName: query.data?.effective_team_name || effectiveRole?.team_name || null,
-    isLoading: authLoading || query.isLoading || holdForRecovery,
+    isLoading: authLoading || (requiresPermissionSnapshot && (query.isLoading || holdForRecovery)),
     error: query.error,
     errorStatus,
     serviceUnavailable,

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { shouldGrantFullAccessSnapshot } from '@/app/api/me/permissions/route';
+import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 
 function readSource(relativePath: string): string {
   const absolutePath = path.join(process.cwd(), relativePath);
@@ -53,6 +54,44 @@ describe('shouldGrantFullAccessSnapshot', () => {
         is_super_admin: false,
         is_actual_super_admin: false,
         is_viewing_as: false,
+      })
+    ).toBe(true);
+  });
+});
+
+describe('hasEffectiveRoleFullAccess', () => {
+  it('does not grant actual superadmin bypass while viewing as an employee role', () => {
+    expect(
+      hasEffectiveRoleFullAccess({
+        role_name: 'employee',
+        role_class: 'employee',
+        is_super_admin: false,
+        is_actual_super_admin: true,
+        is_viewing_as: true,
+      })
+    ).toBe(false);
+  });
+
+  it('keeps actual superadmin bypass outside view-as mode', () => {
+    expect(
+      hasEffectiveRoleFullAccess({
+        role_name: 'employee',
+        role_class: 'employee',
+        is_super_admin: false,
+        is_actual_super_admin: true,
+        is_viewing_as: false,
+      })
+    ).toBe(true);
+  });
+
+  it('still grants full access for effective admin roles during view-as', () => {
+    expect(
+      hasEffectiveRoleFullAccess({
+        role_name: 'admin',
+        role_class: 'admin',
+        is_super_admin: false,
+        is_actual_super_admin: true,
+        is_viewing_as: true,
       })
     ).toBe(true);
   });
@@ -136,15 +175,19 @@ describe('module guard alignment checks', () => {
     });
   });
 
-  it('shows account lock/switch entry points in navbar menu variants', () => {
+  it('does not include retired account lock/switch entry points in navbar menu variants', () => {
     const source = readSource('components/layout/Navbar.tsx');
-    expect(source).toContain('Lock / Switch');
-    expect(source).toContain('accountLockLabel');
-    expect(source).toContain("buildLockPathWithReturnTo");
+    expect(source).not.toContain('Lock / Switch');
+    expect(source).not.toContain('accountLockLabel');
+    expect(source).not.toContain("buildLockPathWithReturnTo");
   });
 
-  it('shows account switcher settings in profile hub', () => {
-    const source = readSource('app/(dashboard)/profile/page.tsx');
-    expect(source).toContain('AccountSwitcherSettingsCard');
+  it('keeps biometric settings but removes account switcher settings from profile hub', () => {
+    const profileSource = readSource('app/(dashboard)/profile/page.tsx');
+    const securityTabSource = readSource('components/profile/ProfileSecurityTab.tsx');
+
+    expect(securityTabSource).toContain('ProfileBiometricsCard');
+    expect(profileSource).not.toContain('AccountSwitcherSettingsCard');
+    expect(securityTabSource).not.toContain('AccountSwitcherSettingsCard');
   });
 });

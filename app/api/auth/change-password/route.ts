@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { applyValidationCookieIfNeeded } from '@/lib/server/app-auth/response';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
-import { verifyUserPassword } from '@/lib/server/account-switch-auth';
+import { verifyUserPassword } from '@/lib/server/password-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 interface ChangePasswordBody {

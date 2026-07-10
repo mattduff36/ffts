@@ -1,25 +1,108 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Bell, ClipboardList, IdCard, Settings, ShieldCheck, SlidersHorizontal, UserRound } from 'lucide-react';
+import { useQueryState } from 'nuqs';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { AppPageShell } from '@/components/layout/AppPageShell';
+import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
 import { PROFILE_HUB_PRD_EPIC_ID } from '@/lib/profile/epic';
+import { cn } from '@/lib/utils/cn';
 import { ProfileIdentityCard } from '@/components/profile/ProfileIdentityCard';
-import { ProfileModuleSummaries } from '@/components/profile/ProfileModuleSummaries';
-import { ProfileQuickLinks } from '@/components/profile/ProfileQuickLinks';
-import { ProfileSettingsCard } from '@/components/profile/ProfileSettingsCard';
-import { ProfileHelpShortcuts } from '@/components/profile/ProfileHelpShortcuts';
-import { AccountSwitcherSettingsCard } from '@/components/account-switch/AccountSwitcherSettingsCard';
+import { type ProfileDetailsDraft, ProfileMyDetailsTab } from '@/components/profile/ProfileMyDetailsTab';
+import { ProfileNotificationsTab } from '@/components/profile/ProfileNotificationsTab';
+import { ProfileOverviewTab } from '@/components/profile/ProfileOverviewTab';
+import { ProfilePermissionsTab } from '@/components/profile/ProfilePermissionsTab';
+import { ProfileRecentSubmissionsTab } from '@/components/profile/ProfileRecentSubmissionsTab';
+import { ProfileSecurityTab } from '@/components/profile/ProfileSecurityTab';
 import { Card, CardContent } from '@/components/ui/card';
+import { PanelLoader } from '@/components/ui/panel-loader';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createStatusError, getErrorStatus, isAuthErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
 import {
-  NOTIFICATION_MODULES,
+  canDisableNotificationModule,
+  getAvailableNotificationModules,
   type NotificationModuleKey,
   type NotificationPreference,
 } from '@/types/notifications';
 import type { ProfileOverviewPayload } from '@/types/profile';
+
+type ProfilePageTab = 'overview' | 'recent' | 'settings';
+type ProfileSettingsTab = 'my-details' | 'notifications' | 'security' | 'permissions';
+
+const PROFILE_PAGE_TABS: ProfilePageTab[] = ['overview', 'recent', 'settings'];
+const PROFILE_SETTINGS_TABS: ProfileSettingsTab[] = [
+  'my-details',
+  'notifications',
+  'security',
+  'permissions',
+];
+
+const PROFILE_NAV_ITEMS: Array<{
+  value: ProfilePageTab;
+  label: string;
+  icon: typeof IdCard;
+}> = [
+  { value: 'overview', label: 'Overview', icon: IdCard },
+  { value: 'recent', label: 'Recent Submissions', icon: ClipboardList },
+  { value: 'settings', label: 'Settings', icon: Settings },
+];
+
+const SETTINGS_NAV_ITEMS: Array<{
+  value: ProfileSettingsTab;
+  label: string;
+  icon: typeof UserRound;
+  tileClassName: string;
+  activeClassName: string;
+  iconClassName: string;
+}> = [
+  {
+    value: 'my-details',
+    label: 'My details',
+    icon: UserRound,
+    tileClassName: 'bg-sky-500/[0.06] hover:bg-sky-500/[0.12]',
+    activeClassName: 'bg-sky-500/30',
+    iconClassName: 'bg-sky-500/15 text-sky-300',
+  },
+  {
+    value: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    tileClassName: 'bg-amber-500/[0.06] hover:bg-amber-500/[0.12]',
+    activeClassName: 'bg-amber-500/30',
+    iconClassName: 'bg-amber-500/15 text-amber-300',
+  },
+  {
+    value: 'security',
+    label: 'Security',
+    icon: ShieldCheck,
+    tileClassName: 'bg-emerald-500/[0.06] hover:bg-emerald-500/[0.12]',
+    activeClassName: 'bg-emerald-500/30',
+    iconClassName: 'bg-emerald-500/15 text-emerald-300',
+  },
+  {
+    value: 'permissions',
+    label: 'Permissions',
+    icon: SlidersHorizontal,
+    tileClassName: 'bg-violet-500/[0.06] hover:bg-violet-500/[0.12]',
+    activeClassName: 'bg-violet-500/30',
+    iconClassName: 'bg-violet-500/15 text-violet-300',
+  },
+];
+
+const EMPTY_DETAILS_DRAFT: ProfileDetailsDraft = {
+  full_name: '',
+  phone_number: '',
+  emergency_contact_name: '',
+  emergency_contact_phone: '',
+  emergency_contact_relationship: '',
+  secondary_emergency_contact_name: '',
+  secondary_emergency_contact_phone: '',
+  secondary_emergency_contact_relationship: '',
+  employer_profile_notes: '',
+};
 
 function getStoragePathFromPublicAvatarUrl(url: string): string | null {
   const marker = '/storage/v1/object/public/user-avatars/';
@@ -29,9 +112,42 @@ function getStoragePathFromPublicAvatarUrl(url: string): string | null {
   return path || null;
 }
 
-export default function ProfilePage() {
+function createDetailsDraft(profile: ProfileOverviewPayload['profile'] | null | undefined): ProfileDetailsDraft {
+  if (!profile) return { ...EMPTY_DETAILS_DRAFT };
+  return {
+    full_name: profile.full_name || '',
+    phone_number: profile.phone_number || '',
+    emergency_contact_name: profile.emergency_contact_name || '',
+    emergency_contact_phone: profile.emergency_contact_phone || '',
+    emergency_contact_relationship: profile.emergency_contact_relationship || '',
+    secondary_emergency_contact_name: profile.secondary_emergency_contact_name || '',
+    secondary_emergency_contact_phone: profile.secondary_emergency_contact_phone || '',
+    secondary_emergency_contact_relationship: profile.secondary_emergency_contact_relationship || '',
+    employer_profile_notes: profile.employer_profile_notes || '',
+  };
+}
+
+function isProfilePageTab(value: string): value is ProfilePageTab {
+  return PROFILE_PAGE_TABS.includes(value as ProfilePageTab);
+}
+
+function isProfileSettingsTab(value: string): value is ProfileSettingsTab {
+  return PROFILE_SETTINGS_TABS.includes(value as ProfileSettingsTab);
+}
+
+function ProfilePageContent() {
   const supabase = useMemo(() => createClient(), []);
-  const { user, profile, isAdmin, isManager } = useAuth();
+  const { user, profile, isAdmin, isManager, isSupervisor, isSuperAdmin } = useAuth();
+  const [tabParam, setTabParam] = useQueryState('tab', {
+    defaultValue: 'overview',
+    clearOnDefault: true,
+    shallow: true,
+  });
+  const [settingsTabParam, setSettingsTabParam] = useQueryState('settingsTab', {
+    defaultValue: 'my-details',
+    clearOnDefault: true,
+    shallow: true,
+  });
 
   const [overview, setOverview] = useState<ProfileOverviewPayload | null>(null);
   const [loadingOverview, setLoadingOverview] = useState(true);
@@ -39,35 +155,48 @@ export default function ProfilePage() {
   const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
   const [savingPreferenceModules, setSavingPreferenceModules] = useState<NotificationModuleKey[]>([]);
   const savingPreferenceModulesRef = useRef<Set<NotificationModuleKey>>(new Set());
-  const [savingBasicProfile, setSavingBasicProfile] = useState(false);
+  const [savingProfileDetails, setSavingProfileDetails] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [draftFullName, setDraftFullName] = useState('');
-  const [draftPhoneNumber, setDraftPhoneNumber] = useState('');
+  const [detailsDraft, setDetailsDraft] = useState<ProfileDetailsDraft>(EMPTY_DETAILS_DRAFT);
+  const activeTab = isProfilePageTab(tabParam) ? tabParam : 'overview';
+  const activeSettingsTab = isProfileSettingsTab(settingsTabParam) ? settingsTabParam : 'my-details';
 
   const availableNotificationModules = useMemo(() => {
-    return NOTIFICATION_MODULES.filter((module) => {
-      if (module.availableFor === 'all') return true;
-      if (module.availableFor === 'admin') return isAdmin;
-      if (module.availableFor === 'manager') return isManager || isAdmin;
-      return false;
+    const permissionLevels = Object.fromEntries(
+      (overview?.permission_summary.modules || []).map((module) => [module.module_name, module.access_level])
+    );
+
+    return getAvailableNotificationModules({
+      isAdmin,
+      isManager,
+      permissionLevels,
     });
-  }, [isAdmin, isManager]);
+  }, [isAdmin, isManager, overview?.permission_summary.modules]);
+  const canDisableNotificationPreferences = isSupervisor || isManager || isAdmin || isSuperAdmin;
 
   const fetchProfileOverview = useCallback(async () => {
     setLoadingOverview(true);
     try {
       const response = await fetch('/api/profile/overview', { cache: 'no-store' });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => null) as (ProfileOverviewPayload & { error?: string }) | null;
       if (!response.ok) {
-        throw new Error(payload.error || 'Failed to load profile overview');
+        throw createStatusError(
+          payload?.error || `Failed to load profile overview (${response.status})`,
+          response.status
+        );
+      }
+      if (!payload) {
+        throw createStatusError('Failed to load profile overview', response.status);
       }
 
-      setOverview(payload as ProfileOverviewPayload);
-      setDraftFullName(String(payload.profile?.full_name || ''));
-      setDraftPhoneNumber(String(payload.profile?.phone_number || ''));
+      setOverview(payload);
+      setDetailsDraft(createDetailsDraft(payload.profile));
     } catch (error) {
       const errorContextId = 'profile-load-overview-error';
-      console.error('Error loading profile overview:', error, { errorContextId });
+      const errorStatus = getErrorStatus(error);
+      if (!isAuthErrorStatus(errorStatus) && !isNetworkFetchError(error)) {
+        console.error('Error loading profile overview:', error, { errorContextId });
+      }
       toast.error(error instanceof Error ? error.message : 'Failed to load profile', {
         id: errorContextId,
       });
@@ -102,32 +231,44 @@ export default function ProfilePage() {
   }, [fetchNotificationPreferences, fetchProfileOverview, profile?.id]);
 
   const canEditBasicFields = Boolean(overview?.can_edit_basic_fields);
-  const hasBasicProfileChanges = useMemo(() => {
+  const hasProfileDetailsChanges = useMemo(() => {
     if (!overview) return false;
-    return (
-      draftFullName.trim() !== overview.profile.full_name ||
-      (draftPhoneNumber.trim() || '') !== (overview.profile.phone_number || '')
-    );
-  }, [draftFullName, draftPhoneNumber, overview]);
+    const currentDraft = createDetailsDraft(overview.profile);
+    return Object.keys(currentDraft).some((key) => {
+      const field = key as keyof ProfileDetailsDraft;
+      return detailsDraft[field].trim() !== currentDraft[field];
+    });
+  }, [detailsDraft, overview]);
 
-  async function handleSaveBasicProfile() {
+  function handleDetailsDraftChange(field: keyof ProfileDetailsDraft, value: string) {
+    setDetailsDraft((previous) => ({ ...previous, [field]: value }));
+  }
+
+  async function handleSaveProfileDetails() {
     if (!overview) return;
-    if (!canEditBasicFields) {
-      toast.error('You do not have permission to edit these fields', {
-        id: 'profile-save-basic-forbidden',
-      });
-      return;
-    }
 
-    setSavingBasicProfile(true);
+    setSavingProfileDetails(true);
     try {
+      const body = {
+        ...(canEditBasicFields
+          ? {
+              full_name: detailsDraft.full_name.trim(),
+              phone_number: detailsDraft.phone_number.trim() || null,
+            }
+          : {}),
+        emergency_contact_name: detailsDraft.emergency_contact_name.trim() || null,
+        emergency_contact_phone: detailsDraft.emergency_contact_phone.trim() || null,
+        emergency_contact_relationship: detailsDraft.emergency_contact_relationship.trim() || null,
+        secondary_emergency_contact_name: detailsDraft.secondary_emergency_contact_name.trim() || null,
+        secondary_emergency_contact_phone: detailsDraft.secondary_emergency_contact_phone.trim() || null,
+        secondary_emergency_contact_relationship:
+          detailsDraft.secondary_emergency_contact_relationship.trim() || null,
+        employer_profile_notes: detailsDraft.employer_profile_notes.trim() || null,
+      };
       const response = await fetch('/api/me/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: draftFullName.trim(),
-          phone_number: draftPhoneNumber.trim() || null,
-        }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -140,12 +281,12 @@ export default function ProfilePage() {
           ...previous,
           profile: {
             ...previous.profile,
-            full_name: payload.profile.full_name,
-            phone_number: payload.profile.phone_number,
+            ...payload.profile,
           },
           can_edit_basic_fields: payload.can_edit_basic_fields ?? previous.can_edit_basic_fields,
         };
       });
+      setDetailsDraft(createDetailsDraft(payload.profile));
 
       toast.success('Profile details updated');
     } catch (error) {
@@ -155,7 +296,7 @@ export default function ProfilePage() {
         id: errorContextId,
       });
     } finally {
-      setSavingBasicProfile(false);
+      setSavingProfileDetails(false);
     }
   }
 
@@ -290,6 +431,14 @@ export default function ProfilePage() {
     field: 'notify_in_app' | 'notify_email',
     checked: boolean
   ) {
+    if (!checked && !canDisableNotificationPreferences) {
+      toast.error('Only supervisors and above can disable notifications');
+      return;
+    }
+    if (!checked && !canDisableNotificationModule(moduleKey)) {
+      toast.error('Toolbox Talk notifications cannot be disabled');
+      return;
+    }
     if (loadingPreferences) return;
     if (savingPreferenceModulesRef.current.has(moduleKey)) return;
 
@@ -340,8 +489,8 @@ export default function ProfilePage() {
     return (
       <div className="max-w-6xl">
         <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-yellow" />
+          <CardContent>
+            <PanelLoader message="Loading profile..." className="py-12" />
           </CardContent>
         </Card>
       </div>
@@ -367,47 +516,170 @@ export default function ProfilePage() {
     );
   }
 
+  const sensitiveModules = overview.permission_summary.modules.filter((module) => module.requires_sensitive_pin);
+
   return (
-    <AppPageShell data-prd-epic-id={PROFILE_HUB_PRD_EPIC_ID}>
+    <AppPageShell width="wide" data-prd-epic-id={PROFILE_HUB_PRD_EPIC_ID}>
       <ProfileIdentityCard
         profile={overview.profile}
+        description="Review your account, recent submissions, settings, permissions, and support options."
         onSelectAvatarFile={handleSelectAvatarFile}
         onRemoveAvatar={handleRemoveAvatar}
         isAvatarBusy={avatarBusy}
       />
 
-      <ProfileModuleSummaries
-        timesheets={overview.timesheets}
-        inspections={overview.inspections}
-        absences={overview.absences}
-        annualLeaveSummary={overview.annual_leave_summary}
-      />
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          if (isProfilePageTab(value)) {
+            void setTabParam(value);
+          }
+        }}
+        className="space-y-4"
+      >
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-700/70 bg-slate-700/70 sm:hidden">
+          {PROFILE_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.value;
 
-      <ProfileQuickLinks
-        recentLinks={overview.quick_links.recent}
-        frequentLinks={overview.quick_links.frequent}
-      />
+            return (
+              <button
+                key={item.value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => void setTabParam(item.value)}
+                className={cn(
+                  'flex min-h-16 items-center justify-center gap-2 bg-slate-800/80 px-3 py-4 text-center text-base font-semibold text-white transition-colors hover:bg-slate-700/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow focus-visible:ring-inset',
+                  isActive && 'bg-brand-yellow text-slate-950 hover:bg-brand-yellow/90'
+                )}
+              >
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="whitespace-nowrap">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-      <ProfileSettingsCard
-        canEditBasicFields={canEditBasicFields}
-        fullName={draftFullName}
-        phoneNumber={draftPhoneNumber}
-        onFullNameChange={setDraftFullName}
-        onPhoneNumberChange={setDraftPhoneNumber}
-        onSaveBasicProfile={handleSaveBasicProfile}
-        isSavingBasicProfile={savingBasicProfile}
-        hasBasicProfileChanges={hasBasicProfileChanges}
-        modules={availableNotificationModules}
-        preferences={preferences}
-        isLoadingPreferences={loadingPreferences}
-        savingPreferenceModules={savingPreferenceModules}
-        onTogglePreference={handleTogglePreference}
-      />
+        <TabsList className="hidden w-full justify-start sm:flex">
+          <TabsTrigger value="overview" className="gap-2">
+            <IdCard className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="recent" className="gap-2">
+            <ClipboardList className="h-4 w-4" />
+            Recent Submissions
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-2">
+            <Settings className="h-4 w-4" />
+            Settings
+          </TabsTrigger>
+        </TabsList>
 
-      <AccountSwitcherSettingsCard />
+        <TabsContent value="overview" className="mt-0">
+          <ProfileOverviewTab
+            profile={overview.profile}
+            managers={overview.managers}
+            annualLeaveSummary={overview.annual_leave_summary}
+            permissionModules={overview.permission_summary.modules}
+            helpShortcuts={overview.help_shortcuts}
+            currentFleetAssignment={overview.current_fleet_assignment}
+          />
+        </TabsContent>
 
-      <ProfileHelpShortcuts />
+        <TabsContent value="recent" className="mt-0">
+          <ProfileRecentSubmissionsTab
+            timesheets={overview.timesheets}
+            inspections={overview.inspections}
+            absences={overview.absences}
+            annualLeaveSummary={overview.annual_leave_summary}
+            projectAssignments={overview.project_assignments}
+          />
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-0">
+          <Tabs
+            value={activeSettingsTab}
+            onValueChange={(value) => {
+              if (isProfileSettingsTab(value)) {
+                void setTabParam('settings');
+                void setSettingsTabParam(value);
+              }
+            }}
+          >
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+              <div className="min-w-0">
+                <TabsContent value="my-details" className="mt-0">
+                  <ProfileMyDetailsTab
+                    canEditBasicFields={canEditBasicFields}
+                    draft={detailsDraft}
+                    onDraftChange={handleDetailsDraftChange}
+                    onSave={handleSaveProfileDetails}
+                    isSaving={savingProfileDetails}
+                    hasChanges={hasProfileDetailsChanges}
+                  />
+                </TabsContent>
+
+                <TabsContent value="notifications" className="mt-0">
+                  <ProfileNotificationsTab
+                    modules={availableNotificationModules}
+                    preferences={preferences}
+                    isLoadingPreferences={loadingPreferences}
+                    savingPreferenceModules={savingPreferenceModules}
+                    canDisableNotifications={canDisableNotificationPreferences}
+                    onTogglePreference={handleTogglePreference}
+                  />
+                </TabsContent>
+
+                <TabsContent value="security" className="mt-0">
+                  <ProfileSecurityTab sensitiveModules={sensitiveModules} />
+                </TabsContent>
+
+                <TabsContent value="permissions" className="mt-0">
+                  <ProfilePermissionsTab permissionSummary={overview.permission_summary} />
+                </TabsContent>
+              </div>
+
+              <div className="order-first grid h-auto w-full grid-cols-4 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-900/40 lg:order-none lg:sticky lg:top-4 lg:grid-cols-1">
+                {SETTINGS_NAV_ITEMS.map((item, index) => {
+                  const Icon = item.icon;
+                  const isActive = activeSettingsTab === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => {
+                        void setTabParam('settings');
+                        void setSettingsTabParam(item.value);
+                      }}
+                      className={cn(
+                        'group relative flex min-h-16 flex-col items-center justify-center gap-1 border-slate-700/70 p-2 text-center text-[10px] font-semibold text-slate-100 transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow focus-visible:ring-inset sm:min-h-20 sm:gap-2 sm:text-sm lg:w-full',
+                        index < SETTINGS_NAV_ITEMS.length - 1 && 'border-r lg:border-b lg:border-r-0',
+                        item.tileClassName,
+                        isActive && item.activeClassName
+                      )}
+                    >
+                      <span className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-transform group-hover:scale-105 sm:h-9 sm:w-9 ${item.iconClassName}`}>
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="relative z-10 hidden whitespace-nowrap leading-tight min-[390px]:block lg:block">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </Tabs>
+        </TabsContent>
+      </Tabs>
     </AppPageShell>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <NuqsClientAdapter>
+      <ProfilePageContent />
+    </NuqsClientAdapter>
   );
 }
 

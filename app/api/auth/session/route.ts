@@ -5,12 +5,11 @@ import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { canIssueSupabaseDataToken } from '@/lib/server/app-auth/supabase-token';
 
 export async function GET() {
-  const current = await getCurrentAuthenticatedProfile({ allowLocked: true, includeEmail: true });
+  const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
   if (!current) {
     return NextResponse.json(
       {
         authenticated: false,
-        locked: false,
         user: null,
         profile: null,
         data_token_available: canIssueSupabaseDataToken(null),
@@ -21,7 +20,6 @@ export async function GET() {
 
   const response = NextResponse.json({
     authenticated: true,
-    locked: current.validation.status === 'locked',
     user: {
       id: current.profile.id,
       email: current.profile.email,

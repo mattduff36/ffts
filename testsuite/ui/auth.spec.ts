@@ -28,8 +28,9 @@ test.describe('@auth @critical Authentication', () => {
     await page.getByLabel('Password').fill('WrongPassword123!');
     await page.getByRole('button', { name: 'Sign In' }).click();
 
-    // Should stay on login and show an error
-    await page.waitForTimeout(3_000);
+    await expect(page.getByText(/invalid|incorrect|failed|error|unable|credentials/i).first()).toBeVisible({
+      timeout: 10_000,
+    });
     expect(page.url()).toContain('/login');
   });
 

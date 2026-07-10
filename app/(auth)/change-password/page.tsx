@@ -9,10 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { validatePasswordStrength, getPasswordRequirements } from '@/lib/utils/password';
 import { loadClientAuthSession } from '@/lib/app-auth/client-session';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface AuthSessionResponse {
   authenticated: boolean;
-  locked: boolean;
   profile?: {
     full_name?: string | null;
     must_change_password?: boolean | null;
@@ -40,11 +40,6 @@ export default function ChangePasswordPage() {
     async function checkUser() {
       try {
         const sessionResult = await loadClientAuthSession();
-        if (sessionResult.status === 'locked') {
-          router.replace('/lock');
-          return;
-        }
-
         if (sessionResult.status !== 'authenticated' || !sessionResult.payload) {
           router.replace('/login');
           return;
@@ -150,16 +145,12 @@ export default function ChangePasswordPage() {
   const passwordStrength = getPasswordStrength(newPassword);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
+    return <PageLoader message="Checking password session..." />;
   }
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+      <div className="min-h-dvh flex items-center justify-center bg-slate-950 p-4">
         <Card className="w-full max-w-md border-border">
           <CardContent className="pt-6">
             <div className="text-center space-y-4">
@@ -178,7 +169,7 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+    <div className="min-h-dvh flex items-center justify-center bg-slate-950 p-4">
       <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-2">

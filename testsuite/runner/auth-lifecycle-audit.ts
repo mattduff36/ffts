@@ -160,6 +160,14 @@ async function askForConfirmation(question: string): Promise<boolean> {
 
 export async function enforceAuthLifecycleIssueGate(options?: { interactive?: boolean }): Promise<boolean> {
   const issues = readAuthLifecycleIssues();
+  const blockingIssues = issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high');
+  if (blockingIssues.length > 0) {
+    printIssueSummary(issues);
+    writeFixQueue(blockingIssues);
+    console.warn(`Auth lifecycle gate failed: ${blockingIssues.length} critical/high finding(s) require fixes.`);
+    return false;
+  }
+
   if (issues.length < ISSUE_THRESHOLD) {
     return true;
   }

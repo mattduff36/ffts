@@ -1,4 +1,5 @@
 import type { QuickLinkItem } from '@/lib/profile/quick-links';
+import type { ModuleName, PermissionAccessLevel } from '@/types/roles';
 
 export interface ProfileIdentityPayload {
   id: string;
@@ -10,6 +11,13 @@ export interface ProfileIdentityPayload {
   annual_holiday_allowance_days: number | null;
   super_admin: boolean;
   email: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relationship: string | null;
+  secondary_emergency_contact_name: string | null;
+  secondary_emergency_contact_phone: string | null;
+  secondary_emergency_contact_relationship: string | null;
+  employer_profile_notes: string | null;
   team: {
     id: string;
     name: string;
@@ -21,6 +29,14 @@ export interface ProfileIdentityPayload {
     is_manager_admin: boolean;
     is_super_admin: boolean;
   } | null;
+}
+
+export interface ProfileManagerSummary {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_number: string | null;
+  source: 'line_manager' | 'secondary_manager' | 'team_manager';
 }
 
 export interface ProfileTimesheetSummaryItem {
@@ -54,14 +70,57 @@ export interface ProfileAnnualLeaveSummary {
   remaining: number;
 }
 
+export interface ProfileProjectAssignmentSummaryItem {
+  id: string;
+  document_id: string;
+  title: string;
+  document_type_name: string | null;
+  required_signature: boolean;
+  status: 'pending' | 'read' | 'signed';
+  assigned_at: string | null;
+  signed_at: string | null;
+}
+
+export interface ProfileFleetAssignmentSummary {
+  id: string;
+  user_id: string;
+  asset_type: 'van' | 'hgv' | 'plant';
+  asset_id: string;
+  asset_label: string | null;
+  asset_nickname: string | null;
+  source_location_id: string | null;
+  assigned_at: string;
+}
+
+export interface ProfilePermissionSummaryItem {
+  module_name: ModuleName;
+  display_name: string;
+  description: string;
+  access_level: PermissionAccessLevel;
+  access_label: string;
+  requires_sensitive_pin: boolean;
+}
+
 export interface ProfileOverviewPayload {
   prd_epic_id: string;
   profile: ProfileIdentityPayload;
   can_edit_basic_fields: boolean;
+  managers: ProfileManagerSummary[];
   timesheets: ProfileTimesheetSummaryItem[];
   inspections: ProfileInspectionSummaryItem[];
   absences: ProfileAbsenceSummaryItem[];
   annual_leave_summary: ProfileAnnualLeaveSummary;
+  project_assignments: ProfileProjectAssignmentSummaryItem[];
+  current_fleet_assignment: ProfileFleetAssignmentSummary | null;
+  permission_summary: {
+    effective_team_name: string | null;
+    has_sensitive_module_access: boolean;
+    modules: ProfilePermissionSummaryItem[];
+  };
+  help_shortcuts: {
+    has_unresolved_suggestions: boolean;
+    has_unresolved_error_reports: boolean;
+  };
   quick_links: {
     recent: QuickLinkItem[];
     frequent: QuickLinkItem[];

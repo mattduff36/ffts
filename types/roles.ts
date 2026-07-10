@@ -62,8 +62,26 @@ export interface PermissionModuleMatrixColumn extends PermissionModuleDefinition
   minimum_role_id: string;
   minimum_role_name: string;
   minimum_hierarchy_rank: number;
+  enforced_minimum_access_level: PermissionAccessLevel;
+  requires_full_access_role: boolean;
+  requires_sensitive_pin: boolean;
   sort_order: number;
 }
+
+export type PermissionAccessLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export type PermissionLevelRoleName = 'No access' | 'Contractor' | 'Employee' | 'Supervisor' | 'Manager' | 'Admin';
+
+export const PERMISSION_LEVEL_LABELS: Record<PermissionAccessLevel, PermissionLevelRoleName> = {
+  0: 'No access',
+  1: 'Contractor',
+  2: 'Employee',
+  3: 'Supervisor',
+  4: 'Manager',
+  5: 'Admin',
+};
+
+export const EDITABLE_PERMISSION_ACCESS_LEVELS: PermissionAccessLevel[] = [0, 1, 2, 3, 4, 5];
 
 export interface TeamPermissionMatrixRow {
   id: string;
@@ -80,6 +98,66 @@ export interface TeamPermissionMatrixResponse {
   teams: TeamPermissionMatrixRow[];
 }
 
+export interface UserPermissionMatrixRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone_number: string | null;
+  employee_id: string | null;
+  team_id: string | null;
+  line_manager_id: string | null;
+  team_name: string | null;
+  role_id: string | null;
+  role_name: string | null;
+  role_display_name: string | null;
+  role_class: RoleClass | null;
+  role_hierarchy_rank: number | null;
+  is_super_admin: boolean;
+  is_manager_admin: boolean;
+  is_locked_admin: boolean;
+  permissions: Record<ModuleName, PermissionAccessLevel>;
+  inherited_permissions: Record<ModuleName, PermissionAccessLevel>;
+}
+
+export interface UserPermissionTeamDefaultRow {
+  id: string;
+  name: string;
+  permissions: Record<ModuleName, boolean>;
+}
+
+export interface UserPermissionAssignableRole {
+  id: string;
+  name: string;
+  display_name: string;
+  role_class: RoleClass;
+}
+
+export interface PermissionsAuditModuleInfo {
+  displayName: string;
+  moduleName: ModuleName;
+  matrixGate: string;
+  minimumRole: string;
+  byRole: Partial<Record<PermissionLevelRoleName, string>>;
+}
+
+export interface PermissionsAuditInfo {
+  title: string;
+  auditDate: string;
+  matrixRule: string;
+  modules: PermissionsAuditModuleInfo[];
+  prdRelevantMismatches: string[];
+}
+
+export interface UserPermissionMatrixResponse {
+  success: boolean;
+  roles: PermissionTierRole[];
+  modules: PermissionModuleMatrixColumn[];
+  teams: UserPermissionTeamDefaultRow[];
+  assignable_roles: UserPermissionAssignableRole[];
+  users: UserPermissionMatrixRow[];
+  audit: PermissionsAuditInfo;
+}
+
 export const STANDARD_MODULES: ModuleName[] = [
   'timesheets',
   'inspections',
@@ -91,6 +169,7 @@ export const STANDARD_MODULES: ModuleName[] = [
   'workshop-tasks',
   'admin-vans',
   'inventory',
+  'reminders',
 ];
 
 export const MANAGEMENT_MODULES: ModuleName[] = [
@@ -98,6 +177,7 @@ export const MANAGEMENT_MODULES: ModuleName[] = [
   'actions',
   'reports',
   'toolbox-talks',
+  'training',
   'suggestions',
   'faq-editor',
   'error-reports',
@@ -116,6 +196,7 @@ export const MODULE_SHORT_NAMES: Record<ModuleName, string> = {
   'absence': 'Absence',
   'maintenance': 'Maint.',
   'toolbox-talks': 'Toolbox',
+  'training': 'Training',
   'workshop-tasks': 'Workshop',
   'approvals': 'Approvals',
   'actions': 'Actions',
@@ -129,6 +210,7 @@ export const MODULE_SHORT_NAMES: Record<ModuleName, string> = {
   'customers': 'Customers',
   'quotes': 'Quotes',
   'inventory': 'Inventory',
+  'reminders': 'Reminders',
 };
 
 export const MODULE_CSS_VAR: Record<ModuleName, string> = {
@@ -140,6 +222,7 @@ export const MODULE_CSS_VAR: Record<ModuleName, string> = {
   'absence': '--absence-primary',
   'maintenance': '--maintenance-primary',
   'toolbox-talks': '--brand-yellow',
+  'training': '--brand-yellow',
   'workshop-tasks': '--workshop-primary',
   'approvals': '--brand-yellow',
   'actions': '--brand-yellow',
@@ -153,6 +236,7 @@ export const MODULE_CSS_VAR: Record<ModuleName, string> = {
   'customers': '--brand-yellow',
   'quotes': '--brand-yellow',
   'inventory': '--inventory-primary',
+  'reminders': '--reminders-primary',
 };
 
 // All available modules in the system
@@ -165,6 +249,7 @@ export type ModuleName =
   | 'absence'
   | 'maintenance'
   | 'toolbox-talks'
+  | 'training'
   | 'workshop-tasks'
   | 'approvals'
   | 'actions'
@@ -177,7 +262,10 @@ export type ModuleName =
   | 'admin-vans'
   | 'customers'
   | 'quotes'
-  | 'inventory';
+  | 'inventory'
+  | 'reminders';
+
+export type SensitiveAccessModuleName = ModuleName | 'debug';
 
 export const ALL_MODULES: ModuleName[] = [
   'timesheets',
@@ -188,6 +276,7 @@ export const ALL_MODULES: ModuleName[] = [
   'absence',
   'maintenance',
   'toolbox-talks',
+  'training',
   'workshop-tasks',
   'approvals',
   'actions',
@@ -201,6 +290,7 @@ export const ALL_MODULES: ModuleName[] = [
   'customers',
   'quotes',
   'inventory',
+  'reminders',
 ];
 
 export const MODULE_DISPLAY_NAMES: Record<ModuleName, string> = {
@@ -212,6 +302,7 @@ export const MODULE_DISPLAY_NAMES: Record<ModuleName, string> = {
   'absence': 'Absence & Leave',
   'maintenance': 'Maintenance & Service',
   'toolbox-talks': 'Toolbox Talks',
+  'training': 'Training',
   'workshop-tasks': 'Workshop Tasks',
   'approvals': 'Approvals',
   'actions': 'Actions',
@@ -225,6 +316,7 @@ export const MODULE_DISPLAY_NAMES: Record<ModuleName, string> = {
   'customers': 'Customers',
   'quotes': 'Quotes',
   'inventory': 'Inventory',
+  'reminders': 'Reminders',
 };
 
 export const MODULE_DESCRIPTIONS: Record<ModuleName, string> = {
@@ -236,6 +328,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleName, string> = {
   'absence': 'Request and manage absence',
   'maintenance': 'Track and manage van maintenance schedules',
   'toolbox-talks': 'Send toolbox talks to users (admin/manager only)',
+  'training': 'Track employee training records, cards, qualifications, and expiry dates',
   'workshop-tasks': 'Track van & plant repairs and workshop work',
   'approvals': 'Approve timesheets, daily checks, and absences',
   'actions': 'Manage and track actions',
@@ -249,6 +342,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleName, string> = {
   'customers': 'Manage customer directory',
   'quotes': 'Create and track customer quotations',
   'inventory': 'Track small tools, equipment, and location buckets',
+  'reminders': 'View and action assigned reminders',
 };
 
 // For API responses
@@ -295,8 +389,22 @@ export interface UpdateTeamPermissionsRequest {
   }[];
 }
 
+export interface UpdateUserPermissionLevelsRequest {
+  updates?: {
+    user_id: string;
+    module_name: ModuleName;
+    access_level: PermissionAccessLevel;
+  }[];
+  team_default_updates?: {
+    team_id: string;
+    module_name: ModuleName;
+    enabled: boolean;
+  }[];
+}
+
 export interface ShiftPermissionModuleRequest {
-  direction: 'left' | 'right';
+  direction?: 'left' | 'right';
+  requires_sensitive_pin?: boolean;
 }
 
 export function createEmptyModulePermissionRecord(): Record<ModuleName, boolean> {

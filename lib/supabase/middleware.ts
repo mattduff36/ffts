@@ -6,18 +6,27 @@ import {
   getAppSessionSigningSecret,
 } from '@/lib/server/app-auth/constants'
 import { verifyJwtHS256 } from '@/lib/server/app-auth/jwt'
+import {
+  isPublicBrowserPath,
+  isPublicRequestPath,
+  isSafeInternalRedirectTarget,
+} from '@/lib/routes/public-routes'
+import {
+  DISPLAY_BOARD_LEGACY_TV_PATH,
+  shouldUseLegacyDisplayBoardRoute,
+} from '@/lib/display-board/compatibility'
 import type { Database } from '@/types/database'
 
 interface MiddlewareSessionPayload extends Record<string, unknown> {
   sid: string
   secret: string
-  locked: boolean
   exp: number
   v: number
 }
 
 const CRON_ROUTE_PATHS = new Set([
   '/api/maintenance/sync-dvla-scheduled',
+  '/api/actions/generate-fleet-inspection-reminders',
   '/api/quotes/start-alerts-scheduled',
   '/api/absence/bank-holidays/seed-scheduled',
 ])
@@ -161,11 +170,15 @@ async function getSupabaseUser(
     },
   })
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  return user ? { id: user.id } : null
+    return user ? { id: user.id } : null
+  } catch {
+    return null
+  }
 }
 
 export async function updateSession(request: NextRequest) {
@@ -173,17 +186,13 @@ export async function updateSession(request: NextRequest) {
   const session = await getMiddlewareSession(request)
   await getSupabaseUser(request, response)
   const hasLegacyCookie = hasLegacySupabaseSessionCookie(request)
-  const publicPaths = ['/login', '/change-password', '/offline']
-  const publicApiPaths: string[] = []
-  const isPublicPath = publicPaths.some((path) => request.nextUrl.pathname.startsWith(path))
-  const isPublicApiRoute = publicApiPaths.some((path) => request.nextUrl.pathname.startsWith(path))
+  const isPublicPath = isPublicRequestPath(request.nextUrl.pathname)
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
-  const isLockRoute = request.nextUrl.pathname.startsWith('/lock')
   const isAuthRoute = request.nextUrl.pathname.startsWith('/api/auth/')
-  const isAccountSwitchRoute = request.nextUrl.pathname.startsWith('/api/account-switch/')
-  const isVersionRoute = request.nextUrl.pathname === '/api/version'
-  const allowLockedApi =
-    isAuthRoute || isAccountSwitchRoute || isVersionRoute
+  const shouldRedirectLegacyDisplayBoard = shouldUseLegacyDisplayBoardRoute(
+    request.nextUrl.pathname,
+    request.headers.get('user-agent')
+  )
 
   if (isAuthorizedCronRequest(request)) {
     return response
@@ -199,20 +208,22 @@ export async function updateSession(request: NextRequest) {
   if (!session && hasLegacyCookie) {
     clearAllAuthCookies(request, response)
 
-    if (
-      isApiRoute &&
-      !isPublicApiRoute &&
-      !LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)
-    ) {
+    if (shouldRedirectLegacyDisplayBoard) {
+      const url = request.nextUrl.clone()
+      url.pathname = DISPLAY_BOARD_LEGACY_TV_PATH
+      return redirectWithMiddlewareCookies(response, url, 307)
+    }
+
+    if (isPublicPath || LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
+      return response
+    }
+
+    if (isApiRoute && !LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
       return jsonWithMiddlewareCookies(
         response,
         { error: 'Legacy session expired', code: 'LEGACY_SESSION_EXPIRED' },
         { status: 401 }
       )
-    }
-
-    if (isPublicPath || isPublicApiRoute || LEGACY_SESSION_ALLOWED_AUTH_ROUTES.has(request.nextUrl.pathname)) {
-      return response
     }
 
     const url = request.nextUrl.clone()
@@ -225,7 +236,6 @@ export async function updateSession(request: NextRequest) {
   }
 
   const isAuthenticated = Boolean(session)
-  const isLocked = session?.locked === true
 
   if (request.nextUrl.pathname.startsWith('/rams')) {
     const url = request.nextUrl.clone()
@@ -233,10 +243,16 @@ export async function updateSession(request: NextRequest) {
     return redirectWithMiddlewareCookies(response, url, 301)
   }
 
+  if (shouldRedirectLegacyDisplayBoard) {
+    const url = request.nextUrl.clone()
+    url.pathname = DISPLAY_BOARD_LEGACY_TV_PATH
+    return redirectWithMiddlewareCookies(response, url, 307)
+  }
+
   if (request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone()
     if (isAuthenticated) {
-      url.pathname = isLocked ? '/lock' : '/dashboard'
+      url.pathname = '/dashboard'
       return redirectWithMiddlewareCookies(response, url, 307)
     }
     if (hasLegacyCookie) {
@@ -249,32 +265,23 @@ export async function updateSession(request: NextRequest) {
     return redirectWithMiddlewareCookies(response, url, 307)
   }
 
-  if (
-    isAuthenticated &&
-    isLocked &&
-    !isPublicPath &&
-    !isLockRoute &&
-    !isApiRoute &&
-    request.nextUrl.pathname !== '/login'
-  ) {
-    const returnTo = `${request.nextUrl.pathname}${request.nextUrl.search}`
-    const url = request.nextUrl.clone()
-    url.pathname = '/lock'
-    url.search = ''
-    url.searchParams.set('returnTo', returnTo)
+  if (request.nextUrl.pathname === '/login') {
+    const redirectTarget = request.nextUrl.searchParams.get('redirect')
+    if (isSafeInternalRedirectTarget(redirectTarget)) {
+      const targetUrl = new URL(redirectTarget, request.nextUrl.origin)
 
-    return redirectWithMiddlewareCookies(response, url, 307)
+      if (targetUrl.pathname !== '/login' && isPublicBrowserPath(targetUrl.pathname)) {
+        const url = request.nextUrl.clone()
+        url.pathname = shouldUseLegacyDisplayBoardRoute(targetUrl.pathname, request.headers.get('user-agent'))
+          ? DISPLAY_BOARD_LEGACY_TV_PATH
+          : targetUrl.pathname
+        url.search = targetUrl.search
+        return redirectWithMiddlewareCookies(response, url, 307)
+      }
+    }
   }
 
-  if (isAuthenticated && isLocked && isApiRoute && !isPublicApiRoute && !allowLockedApi) {
-    return jsonWithMiddlewareCookies(
-      response,
-      { error: 'Session is locked', code: 'SESSION_LOCKED' },
-      { status: 423 }
-    )
-  }
-
-  if (!isPublicPath && !isPublicApiRoute && !isAuthenticated && !isAuthRoute) {
+  if (!isPublicPath && !isAuthenticated && !isAuthRoute) {
     if (isApiRoute) {
       return jsonWithMiddlewareCookies(
         response,
@@ -285,13 +292,24 @@ export async function updateSession(request: NextRequest) {
 
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('redirect', request.nextUrl.pathname)
+    url.search = ''
+    url.searchParams.set('redirect', `${request.nextUrl.pathname}${request.nextUrl.search}`)
     return redirectWithMiddlewareCookies(response, url)
   }
 
-  if (request.nextUrl.pathname === '/login' && isAuthenticated && !isLocked) {
+  if (request.nextUrl.pathname === '/login' && isAuthenticated) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    const redirectTarget = request.nextUrl.searchParams.get('redirect')
+    if (isSafeInternalRedirectTarget(redirectTarget)) {
+      const targetUrl = new URL(redirectTarget, request.nextUrl.origin)
+      url.pathname = shouldUseLegacyDisplayBoardRoute(targetUrl.pathname, request.headers.get('user-agent'))
+        ? DISPLAY_BOARD_LEGACY_TV_PATH
+        : targetUrl.pathname
+      url.search = targetUrl.search
+    } else {
+      url.pathname = '/dashboard'
+      url.search = ''
+    }
     return redirectWithMiddlewareCookies(response, url)
   }
 

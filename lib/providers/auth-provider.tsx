@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type SupabaseClient, type User } from '@supabase/supabase-js';
 import {
   broadcastAuthStateChange,
-  clearLegacyAccountSwitchClientState,
+  clearRetiredAccountSwitchClientState,
   subscribeToAuthStateChange,
 } from '@/lib/app-auth/client';
 import {
@@ -33,6 +33,10 @@ import {
   createClient,
   invalidateCachedDataToken,
 } from '@/lib/supabase/client';
+import {
+  isPublicBrowserPath,
+  isSafeInternalRedirectTarget,
+} from '@/lib/routes/public-routes';
 import { getClientServiceOutage } from '@/lib/app-auth/client-service-health';
 import type { Database } from '@/types/database';
 import { isAdminRole } from '@/lib/utils/role-access';
@@ -74,17 +78,18 @@ interface EffectiveRole {
   team_name?: string | null;
 }
 
-interface OrgTeamsQueryClient {
-  from: (relation: 'org_teams') => {
-    select: (columns: 'id, name') => {
-      eq: (column: 'id', value: string) => {
-        single: () => Promise<{
-          data: { id: string; name: string } | null;
-          error: { message?: string } | null;
-        }>;
-      };
-    };
-  };
+interface ViewAsRoleOption {
+  id: string;
+  name: string;
+  display_name: string;
+  role_class?: 'admin' | 'manager' | 'employee';
+  is_manager_admin: boolean;
+  is_super_admin: boolean;
+}
+
+interface ViewAsTeamOption {
+  id: string;
+  name: string;
 }
 
 interface AuthRecoveryOptions {
@@ -96,11 +101,15 @@ interface AuthContextValue {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  locked: boolean;
   signIn: (
     email: string,
     password: string,
-    options?: { rememberMe?: boolean; deviceId?: string | null; deviceLabel?: string | null }
+    options?: {
+      rememberMe?: boolean;
+      deviceId?: string | null;
+      deviceLabel?: string | null;
+      deferRedirect?: boolean;
+    }
   ) => Promise<{
     data: {
       error?: string;
@@ -109,7 +118,7 @@ interface AuthContextValue {
     } | null;
     error: { message: string } | null;
   }>;
-  signOut: (options?: { deviceId?: string | null }) => Promise<{ error: { message: string } | null }>;
+  signOut: () => Promise<{ error: { message: string } | null }>;
   signUp: (
     email: string,
     password: string,
@@ -138,7 +147,6 @@ interface AuthProviderProps {
 
 type BrowserSupabaseClient = SupabaseClient<Database>;
 
-const PUBLIC_PATHS = ['/login', '/change-password', '/offline'];
 const AUTH_SCOPED_QUERY_KEYS = [
   'permission-snapshot',
   'absence-secondary-permissions',
@@ -189,10 +197,6 @@ function getCurrentPath(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
-function isPublicPath(path: string): boolean {
-  return PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath));
-}
-
 function buildLoginRedirectUrl(): string {
   if (typeof window === 'undefined') {
     return '/login';
@@ -201,23 +205,8 @@ function buildLoginRedirectUrl(): string {
   const url = new URL('/login', window.location.origin);
   const currentPath = getCurrentPath();
 
-  if (!isPublicPath(currentPath) && !currentPath.startsWith('/lock')) {
+  if (!isPublicBrowserPath(currentPath)) {
     url.searchParams.set('redirect', currentPath);
-  }
-
-  return url.toString();
-}
-
-function buildLockRedirectUrl(): string {
-  if (typeof window === 'undefined') {
-    return '/lock';
-  }
-
-  const url = new URL('/lock', window.location.origin);
-  const currentPath = getCurrentPath();
-
-  if (!currentPath.startsWith('/lock')) {
-    url.searchParams.set('returnTo', currentPath);
   }
 
   return url.toString();
@@ -242,11 +231,7 @@ function buildAuthenticatedRedirectUrl(payload: ClientAuthSessionResponse): stri
     }
 
     const redirectTarget = currentUrl.searchParams.get('redirect');
-    if (
-      redirectTarget &&
-      redirectTarget.startsWith('/') &&
-      !redirectTarget.startsWith('/lock')
-    ) {
+    if (isSafeInternalRedirectTarget(redirectTarget)) {
       return redirectTarget;
     }
 
@@ -269,15 +254,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const previousUserIdRef = useRef<string | null>(null);
   const sessionSnapshotRef = useRef<AuthSessionSnapshot>(getUnauthenticatedSessionSnapshot());
-  const redirectInProgressRef = useRef<'login' | 'lock' | null>(null);
+  const redirectInProgressRef = useRef<'login' | null>(null);
   const recoveryPromiseRef = useRef<Promise<boolean> | null>(null);
   const lastBackgroundRefreshAtRef = useRef(0);
   const pendingResumeRefreshTimeoutRef = useRef<number | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [locked, setLocked] = useState(false);
   const [effectiveRole, setEffectiveRole] = useState<EffectiveRole | null>(null);
+  const [effectiveRoleLoading, setEffectiveRoleLoading] = useState(false);
   const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
   const [viewAsSelection, setViewAsSelection] = useState<ViewAsSelection>({ roleId: '', teamId: '' });
 
@@ -331,8 +316,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     sessionSnapshotRef.current = getUnauthenticatedSessionSnapshot();
     setUser(null);
     setProfile(null);
-    setLocked(false);
     setEffectiveRole(null);
+    setEffectiveRoleLoading(false);
   }, []);
 
   const invalidateAuthScopedQueries = useCallback(async () => {
@@ -347,7 +332,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const currentPath = getCurrentPath();
-    if (isPublicPath(currentPath) || redirectInProgressRef.current === 'login') {
+    if (isPublicBrowserPath(currentPath) || redirectInProgressRef.current === 'login') {
       return;
     }
 
@@ -366,25 +351,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     window.location.replace(buildLoginRedirectUrl());
   }, [clearLocalAuthState]);
 
-  const redirectToLock = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const currentPath = getCurrentPath();
-    if (currentPath.startsWith('/lock') || redirectInProgressRef.current === 'lock' || isPublicPath(currentPath)) {
-      return;
-    }
-
-    redirectInProgressRef.current = 'lock';
-    invalidateCachedDataToken();
-    window.location.replace(buildLockRedirectUrl());
-  }, []);
-
   const applySessionPayload = useCallback((payload: ClientAuthSessionResponse) => {
     setUser(buildSyntheticUser(payload));
     setProfile(payload.profile ? ({ ...payload.profile } as Profile) : null);
-    setLocked(payload.locked === true);
   }, []);
 
   const onAuthTransition = useCallback(async (
@@ -412,8 +381,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (
       transition.authChanged ||
       transition.userChanged ||
-      transition.profileChanged ||
-      transition.lockChanged
+      transition.profileChanged
     ) {
       await invalidateAuthScopedQueries();
     }
@@ -441,15 +409,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return result;
     }
 
-    if (result.status === 'locked' && result.payload) {
-      redirectInProgressRef.current = null;
-      await onAuthTransition(buildSessionSnapshot(result.payload), reason);
-      applySessionPayload(result.payload);
-      setLoading(false);
-      redirectToLock();
-      return result;
-    }
-
     if (result.status === 'unauthenticated') {
       if (shouldDeferUnauthenticatedHandling(reason, { silent: options?.silent })) {
         setLoading(false);
@@ -465,7 +424,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     setLoading(false);
     return result;
-  }, [applySessionPayload, clearLocalAuthState, onAuthTransition, redirectToLock, redirectToLogin]);
+  }, [applySessionPayload, clearLocalAuthState, onAuthTransition, redirectToLogin]);
 
   const requestBackgroundAuthRefresh = useCallback(async (
     reason: Extract<AuthTransitionReason, 'focus' | 'visibility' | 'online' | 'interval'>
@@ -501,7 +460,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [requestBackgroundAuthRefresh]);
 
   useEffect(() => {
-    clearLegacyAccountSwitchClientState();
+    clearRetiredAccountSwitchClientState();
     void loadAuthSession({ reason: 'initial_load' });
 
     const unsubscribe = subscribeToAuthStateChange(() => {
@@ -594,12 +553,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const isActualSuper =
       profile?.super_admin === true || profile?.role?.is_super_admin === true;
 
-    if ((!viewAsRoleId && !viewAsTeamId) || !isActualSuper || !supabase) {
+    if ((!viewAsRoleId && !viewAsTeamId) || !isActualSuper) {
       setEffectiveRole(null);
+      setEffectiveRoleLoading(false);
       return;
     }
 
-    const currentSupabase = supabase;
+    let cancelled = false;
+    setEffectiveRoleLoading(true);
 
     async function fetchEffectiveRole() {
       try {
@@ -616,15 +577,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             : null;
 
+        const response = await fetch('/api/superadmin/view-as/options', { cache: 'no-store' });
+        const data = await response.json() as {
+          roles?: ViewAsRoleOption[];
+          teams?: ViewAsTeamOption[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load view-as metadata');
+        }
+
         if (viewAsRoleId) {
-          const { data, error } = await currentSupabase
-            .from('roles')
-            .select('name, display_name, role_class, is_manager_admin, is_super_admin')
-            .eq('id', viewAsRoleId)
-            .single();
-          if (!error && data) {
+          const selectedRole = (data.roles || []).find((role) => role.id === viewAsRoleId);
+          if (selectedRole) {
             nextRole = {
-              ...(data as EffectiveRole),
+              name: selectedRole.name,
+              display_name: selectedRole.display_name,
+              role_class: selectedRole.role_class,
+              is_manager_admin: selectedRole.is_manager_admin,
+              is_super_admin: selectedRole.is_super_admin,
               team_id: nextRole?.team_id ?? profile?.team_id ?? null,
               team_name: null,
             };
@@ -632,14 +604,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         if (viewAsTeamId) {
-          const orgTeamsClient = currentSupabase as unknown as OrgTeamsQueryClient;
-          const { data: teamData, error: teamError } = await orgTeamsClient
-            .from('org_teams')
-            .select('id, name')
-            .eq('id', viewAsTeamId)
-            .single();
-
-          if (!teamError && teamData) {
+          const selectedTeam = (data.teams || []).find((team) => team.id === viewAsTeamId);
+          if (selectedTeam) {
             nextRole = {
               ...(nextRole ?? {
                 name: profile?.role?.name || '',
@@ -648,31 +614,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 is_manager_admin: profile?.role?.is_manager_admin || false,
                 is_super_admin: profile?.role?.is_super_admin || false,
               }),
-              team_id: teamData.id,
-              team_name: teamData.name,
+              team_id: selectedTeam.id,
+              team_name: selectedTeam.name,
             };
           }
         }
 
-        setEffectiveRole(nextRole);
+        if (!cancelled) {
+          setEffectiveRole(nextRole);
+        }
       } catch {
-        setEffectiveRole(null);
+        if (!cancelled) {
+          setEffectiveRole(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setEffectiveRoleLoading(false);
+        }
       }
     }
 
     void fetchEffectiveRole();
-  }, [profile, supabase, viewAsSelection]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, viewAsSelection]);
 
   useEffect(() => installGlobalAuthAwareFetch(), []);
 
   const forceAuthRedirect = useCallback(async (statusCode?: number | null) => {
-    if (statusCode === 423 || locked) {
-      redirectToLock();
-      return;
-    }
-
+    void statusCode;
     await redirectToLogin();
-  }, [locked, redirectToLock, redirectToLogin]);
+  }, [redirectToLogin]);
 
   const recoverFromAuthFailure = useCallback(async (options?: AuthRecoveryOptions) => {
     if (recoveryPromiseRef.current) {
@@ -704,7 +678,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signIn = useCallback(async (
     email: string,
     password: string,
-    options?: { rememberMe?: boolean; deviceId?: string | null; deviceLabel?: string | null }
+    options?: {
+      rememberMe?: boolean;
+      deviceId?: string | null;
+      deviceLabel?: string | null;
+      deferRedirect?: boolean;
+    }
   ) => {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
@@ -734,22 +713,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     broadcastAuthStateChange('signed_in');
-    await loadAuthSession({ silent: true, reason: 'sign_in' });
+    if (!options?.deferRedirect) {
+      await loadAuthSession({ silent: true, reason: 'sign_in' });
+    }
     return {
       data: payload,
       error: null,
     };
   }, [loadAuthSession]);
 
-  const signOut = useCallback(async (options?: { deviceId?: string | null }) => {
+  const signOut = useCallback(async () => {
     const response = await fetch('/api/auth/logout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        deviceId: options?.deviceId || null,
-      }),
+      body: JSON.stringify({}),
     });
 
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -796,14 +775,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const isActualSuperAdmin =
     profile?.super_admin === true || profile?.role?.is_super_admin === true;
-  const isViewingAs = isActualSuperAdmin && effectiveRole !== null;
+  const hasActiveViewAsSelection =
+    isActualSuperAdmin && (viewAsSelection.roleId !== '' || viewAsSelection.teamId !== '');
+  const isViewingAs = hasActiveViewAsSelection;
   const roleForFlags = isViewingAs ? effectiveRole : profile?.role ?? null;
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
     profile,
-    loading,
-    locked,
+    loading: loading || effectiveRoleLoading,
     signIn,
     signOut,
     signUp,
@@ -820,12 +800,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     forceAuthRedirect,
   }), [
     effectiveRole,
+    effectiveRoleLoading,
     forceAuthRedirect,
     isActualSuperAdmin,
     isViewingAs,
     loadAuthSession,
     loading,
-    locked,
     profile,
     recoverFromAuthFailure,
     roleForFlags,

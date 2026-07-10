@@ -5,7 +5,6 @@ import { signJwtHS256, verifyJwtHS256 } from '@/lib/server/app-auth/jwt';
 export interface AppSessionCookiePayload extends Record<string, unknown> {
   sid: string;
   secret: string;
-  locked: boolean;
   exp: number;
   v: number;
 }
@@ -13,7 +12,6 @@ export interface AppSessionCookiePayload extends Record<string, unknown> {
 export interface AppSessionCookieOptions {
   sid: string;
   secret: string;
-  locked: boolean;
   expiresAt: Date;
 }
 
@@ -49,7 +47,6 @@ export async function buildAppSessionCookieValue(
     {
       sid: options.sid,
       secret: options.secret,
-      locked: options.locked,
       exp: Math.floor(options.expiresAt.getTime() / 1000),
       v: 1,
     },

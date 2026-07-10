@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
-import { isHiddenUserManagementUser } from '@/lib/utils/hidden-superadmin';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
+import { isHiddenSystemTestAccountEmail } from '@/lib/utils/system-test-accounts';
 
 // Helper to create admin client with service role key
 function getSupabaseAdmin() {
@@ -21,26 +21,6 @@ function getSupabaseAdmin() {
 interface AuthUserActivityRow {
   user_id: string;
   last_active_at: string | null;
-}
-
-interface AdminProfileSummary {
-  id: string;
-  full_name: string | null;
-  phone_number: string | null;
-  employee_id: string | null;
-  created_at: string | null;
-  role_id: string | null;
-  line_manager_id: string | null;
-  secondary_manager_id: string | null;
-  team_id: string | null;
-  is_placeholder: boolean | null;
-  role?: {
-    name: string | null;
-    display_name: string | null;
-    role_class: 'admin' | 'manager' | 'employee' | null;
-    is_super_admin: boolean | null;
-    is_manager_admin: boolean | null;
-  } | null;
 }
 
 async function fetchLastActiveByUserId(userIds: string[]): Promise<Map<string, string | null>> {
@@ -90,13 +70,8 @@ async function fetchLastActiveByUserId(userIds: string[]): Promise<Map<string, s
 
 export async function GET() {
   try {
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-    if (!canAccessUserAdmin) {
-      return NextResponse.json(
-        { error: 'Forbidden: admin-users access required' },
-        { status: 403 }
-      );
-    }
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     // Fetch ALL auth users by paginating (default page size is 50)
     const supabaseAdmin = getSupabaseAdmin();
@@ -105,7 +80,6 @@ export async function GET() {
       email: string | undefined;
       last_sign_in_at: string | null;
       last_active_at: string | null;
-      profile?: AdminProfileSummary | null;
     }> = [];
     let page = 1;
     const perPage = 1000;
@@ -123,7 +97,7 @@ export async function GET() {
       }
 
       authUsers.push(
-        ...data.users.map((user) => ({
+        ...data.users.filter((user) => !isHiddenSystemTestAccountEmail(user.email)).map((user) => ({
           id: user.id,
           email: user.email,
           last_sign_in_at: user.last_sign_in_at || null,
@@ -135,53 +109,16 @@ export async function GET() {
     }
 
     const lastActiveByUserId = await fetchLastActiveByUserId(authUsers.map((user) => user.id));
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('profiles')
-      .select(`
-        id,
-        full_name,
-        phone_number,
-        employee_id,
-        created_at,
-        role_id,
-        line_manager_id,
-        secondary_manager_id,
-        team_id,
-        is_placeholder,
-        role:roles(
-          name,
-          display_name,
-          role_class,
-          is_super_admin,
-          is_manager_admin
-        )
-      `)
-      .in('id', authUsers.map((user) => user.id));
-
-    if (profilesError) {
-      console.warn('Unable to fetch profile summaries for admin users list:', profilesError);
-    }
-
-    const profileById = new Map<string, AdminProfileSummary>(
-      ((profiles || []) as unknown as AdminProfileSummary[]).map((profile) => [profile.id, profile])
-    );
-
     for (const user of authUsers) {
       allUsers.push({
         id: user.id,
         email: user.email,
         last_sign_in_at: user.last_sign_in_at || null,
         last_active_at: lastActiveByUserId.get(user.id) || null,
-        profile: profileById.get(user.id) || null,
       });
     }
 
-    const hiddenSuperadminEmails = [
-      process.env.DEMO_SUPERADMIN_EMAIL,
-      process.env.TEMPLATE_SUPERADMIN_EMAIL,
-      'admin@mpdee.co.uk',
-    ].filter(Boolean) as string[];
-    const usersWithEmails = allUsers.filter((user) => !isHiddenUserManagementUser(user, hiddenSuperadminEmails));
+    const usersWithEmails = allUsers;
 
     return NextResponse.json({ users: usersWithEmails });
   } catch (error) {

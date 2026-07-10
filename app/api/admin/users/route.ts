@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { generateSecurePassword } from '@/lib/utils/password';
 import { sendPasswordEmail } from '@/lib/utils/email';
 import { getEffectiveRole } from '@/lib/utils/view-as';
-import { canEffectiveRoleAccessModule, canEffectiveRoleAssignRole } from '@/lib/utils/rbac';
+import { canEffectiveRoleAssignRole } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { isMissingTeamManagerSchemaError, reconcileProfileHierarchy } from '@/lib/server/team-managers';
 import { applyTemplateToProfiles } from '@/lib/server/work-shifts';
@@ -107,10 +108,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-    if (!canAccessUserAdmin) {
-      return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-    }
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     // Get request body
     const body = await request.json();

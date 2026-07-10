@@ -7,6 +7,7 @@ import { clearAllAuthCookies } from '@/lib/server/app-auth/response';
 import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 import { issueAppSession, validateAppSession, revokeAppSession } from '@/lib/server/app-auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { trackServerUsageEvent } from '@/lib/server/user-analytics';
 import type { Database } from '@/types/database';
 
 interface LoginRequestBody {
@@ -55,6 +56,15 @@ export async function POST(request: NextRequest) {
     const password = typeof body.password === 'string' ? body.password : '';
 
     if (!email || !password) {
+      await trackServerUsageEvent({
+        eventName: 'auth_login_failed',
+        request,
+        metadata: {
+          method: 'password',
+          reason: 'missing_credentials',
+          status: 400,
+        },
+      });
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
@@ -64,13 +74,22 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const user = await verifyPasswordLogin(supabase, email, password);
     if (!user) {
+      await trackServerUsageEvent({
+        eventName: 'auth_login_failed',
+        request,
+        metadata: {
+          method: 'password',
+          reason: 'invalid_credentials',
+          status: 401,
+        },
+      });
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
-    const existing = await validateAppSession({ allowLocked: true });
+    const existing = await validateAppSession();
     const nextSession = await issueAppSession({
       profileId: user.id,
       source: 'password_login',
@@ -85,6 +104,18 @@ export async function POST(request: NextRequest) {
     }
 
     const profile = await getAppAuthProfile(user.id, user.email || null);
+    await trackServerUsageEvent({
+      eventName: 'auth_login_success',
+      userId: user.id,
+      appSessionId: nextSession.row.id,
+      request,
+      metadata: {
+        method: 'password',
+        rememberMe: body.rememberMe === true,
+        hadExistingSession: Boolean(existing.session),
+        deviceLabelProvided: Boolean(body.deviceLabel),
+      },
+    });
     const response = NextResponse.json({
       success: true,
       user: {

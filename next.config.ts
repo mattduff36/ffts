@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 import withBundleAnalyzer from "@next/bundle-analyzer";
+import releaseVersionState from "./lib/config/release-version.json";
+import { formatReleaseVersion } from "./lib/config/release-version-logic";
 
 const bundleAnalyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
@@ -22,8 +24,13 @@ if (supabaseUrl) {
   }
 }
 
+const publicReleaseVersion = formatReleaseVersion(releaseVersionState);
+
 const nextConfig: NextConfig = {
   /* config options here */
+  env: {
+    NEXT_PUBLIC_APP_RELEASE_VERSION: publicReleaseVersion,
+  },
   reactStrictMode: true,
   images: {
     remotePatterns: supabaseImageRemotePatterns,

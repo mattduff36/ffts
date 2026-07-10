@@ -16,10 +16,10 @@ describe('auth session route', () => {
     vi.clearAllMocks();
   });
 
-  it('reports locked=true when the active auth path is locked', async () => {
+  it('reports the active authenticated session without lock state', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       validation: {
-        status: 'locked',
+        status: 'active',
         session: {
           id: 'session-1',
           profile_id: 'user-1',
@@ -40,6 +40,6 @@ describe('auth session route', () => {
 
     expect(response.status).toBe(200);
     expect(payload.authenticated).toBe(true);
-    expect(payload.locked).toBe(true);
+    expect(payload.locked).toBeUndefined();
   });
 });

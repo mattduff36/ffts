@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { hasEffectiveRoleFullAccess } from '@/lib/utils/role-access';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import type { GetRolesResponse, CreateRoleRequest, RoleWithUserCount, RoleMatrixRow, ModuleName, RoleClass } from '@/types/roles';
 import { createEmptyModulePermissionRecord } from '@/types/roles';
 import { managerFlagFromRoleClass, normalizeRoleInternalName, roleClassFromLegacyRoleType } from '@/lib/utils/role-name';
@@ -22,6 +23,9 @@ export async function GET(request: NextRequest) {
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const effectiveRole = await getEffectiveRole();
     const isAdminOrSuper = hasEffectiveRoleFullAccess(effectiveRole);
@@ -131,6 +135,9 @@ export async function POST(request: NextRequest) {
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const effectiveRole = await getEffectiveRole();
     const isAdminOrSuper = hasEffectiveRoleFullAccess(effectiveRole);

@@ -7,14 +7,14 @@ import type { Database } from '@/types/database';
 
 function getReturnTo(request: NextRequest): string {
   const candidate = request.nextUrl.searchParams.get('returnTo') || '/dashboard';
-  if (!candidate.startsWith('/') || candidate.startsWith('/lock')) {
+  if (!candidate.startsWith('/')) {
     return '/dashboard';
   }
   return candidate;
 }
 
 export async function GET(request: NextRequest) {
-  const existing = await validateAppSession({ allowLocked: true });
+  const existing = await validateAppSession();
   const redirectUrl = request.nextUrl.clone();
   redirectUrl.pathname = getReturnTo(request);
   redirectUrl.search = '';

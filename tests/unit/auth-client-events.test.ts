@@ -125,7 +125,7 @@ describe('auth client event bus', () => {
     windowMock.dispatchEvent(storageEvent);
 
     const externalChannel = new BroadcastChannelMock('avs-auth-session');
-    externalChannel.postMessage(JSON.stringify({ event: 'pin_unlock', at: Date.now() }));
+    externalChannel.postMessage(JSON.stringify({ event: 'signed_in', at: Date.now() }));
 
     unsubscribe();
     externalChannel.close();

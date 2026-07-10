@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { requireAdminUsersModuleAccess } from '@/lib/server/admin-users-module-access';
 import { runHierarchyValidation } from '@/lib/server/hierarchy-validation';
 
 function getSupabaseAdmin() {
@@ -17,10 +17,8 @@ function getSupabaseAdmin() {
 }
 
 export async function GET(request: NextRequest) {
-  const canAccessUserAdmin = await canEffectiveRoleAccessModule('admin-users');
-  if (!canAccessUserAdmin) {
-    return NextResponse.json({ error: 'Forbidden: admin-users access required' }, { status: 403 });
-  }
+  const sensitiveAccessResponse = await requireAdminUsersModuleAccess();
+  if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
   try {
     const supabaseAdmin = getSupabaseAdmin();

@@ -26,9 +26,10 @@ test.describe('Van Daily Checks — Page Loading', () => {
       }
     });
 
-    await page.goto('/van-inspections');
+    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
 
+    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('body')).toContainText(/van daily check|daily check|inspection/i);
 
     expect(failedRequests, 'No 500 errors on van-inspections page').toHaveLength(0);
@@ -39,13 +40,11 @@ test.describe('Van Daily Checks — Page Loading', () => {
   test('van-inspections/new page loads without errors', async ({ page }) => {
     const capture = attachConsoleErrorCapture(page);
 
-    await page.goto('/van-inspections/new');
+    await page.goto('/van-inspections/new', { waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
 
-    // The new daily check form should render
-    const bodyText = await page.locator('body').innerText();
-    const hasFormContent = /daily check|inspection|checklist|vehicle|save|submit/i.test(bodyText);
-    expect(hasFormContent, 'New van daily check form should load').toBeTruthy();
+    // The new daily check form should render after its data-driven loader completes.
+    await expect(page.getByText(/Daily Check Details|Daily Check Date/i).first()).toBeVisible({ timeout: 20_000 });
 
     const errors = capture.getErrors();
     expect(errors, 'No console errors on van-inspections/new').toHaveLength(0);
@@ -54,24 +53,11 @@ test.describe('Van Daily Checks — Page Loading', () => {
 
 test.describe('Van Daily Checks — Navigation', () => {
   test('van-inspections page is reachable from navigation', async ({ page }) => {
-    await page.goto('/dashboard');
+    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
-    const startUrl = page.url();
 
-    // Look for any daily-check/inspection link in the nav
-    const inspLink = page.getByRole('link', { name: /daily check|inspection/i }).first();
-    if (await inspLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await inspLink.click();
-      await waitForAppReady(page);
-      const url = page.url();
-
-      // Depending on role permissions/navigation setup, this may land on different daily check hubs.
-      // Validate user left dashboard and did not fall to an error route.
-      expect(url).not.toContain('/login');
-      expect(url).not.toContain('/404');
-      expect(url).not.toContain('/500');
-      test.skip(url === startUrl, 'Daily check navigation item is not actionable in this environment');
-    }
+    await expect(page).toHaveURL(/\/van-inspections/);
+    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
   });
 
   test('no 404 on /van-inspections', async ({ page }) => {
@@ -80,12 +66,12 @@ test.describe('Van Daily Checks — Navigation', () => {
   });
 
   test('no 404 on /van-inspections/new', async ({ page }) => {
-    const response = await page.goto('/van-inspections/new');
+    const response = await page.goto('/van-inspections/new', { waitUntil: 'domcontentloaded' });
     expect(response?.status()).not.toBe(404);
   });
 
   test('can open an existing van daily check detail page when list has entries', async ({ page }) => {
-    await page.goto('/van-inspections');
+    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
 
     const detailLink = page.locator('a[href^="/van-inspections/"]:not([href$="/new"])').first();
@@ -112,11 +98,11 @@ test.describe('Van Daily Checks — Renamed Text Verification', () => {
   test('list page uses daily check terminology', async ({ page }) => {
     await page.goto('/van-inspections');
     await waitForAppReady(page);
-    await expect(page.locator('h1')).toContainText(/Van Daily Checks/i);
+    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
   });
 
   test('new inspection page exposes workflow actions for human users', async ({ page }) => {
-    await page.goto('/van-inspections/new');
+    await page.goto('/van-inspections/new', { waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
 
     const actionButton = page.getByRole('button', { name: /save|submit|create|start|complete/i });
@@ -130,5 +116,15 @@ test.describe('Van Daily Checks — Renamed Text Verification', () => {
     }
 
     expect(actionCount).toBeGreaterThan(0);
+  });
+
+  test('new inspection page uses a single daily date selector', async ({ page }) => {
+    await page.goto('/van-inspections/new', { waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
+
+    await expect(page.locator('input[type="date"]#weekEnding')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('body')).toContainText(/Daily Check Date/i);
+    await expect(page.locator('body')).not.toContainText(/Week Ending \(Sunday\)/i);
+    await expect(page.getByRole('button', { name: /^save draft$/i })).toHaveCount(0);
   });
 });

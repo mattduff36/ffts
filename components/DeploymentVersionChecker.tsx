@@ -23,6 +23,7 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { forceAppRefresh } from '@/lib/client/force-app-refresh';
+import { hasWorkshopDirtyDrafts } from '@/lib/client/workshop-draft-activity';
 
 // Baked in at build time by Vercel's system env vars.
 // Will be undefined in local dev → checker is a no-op.
@@ -55,6 +56,13 @@ export function DeploymentVersionChecker() {
       const { deploymentId } = await res.json() as { deploymentId: string };
 
       if (deploymentId && deploymentId !== 'local' && deploymentId !== CLIENT_DEPLOYMENT_ID) {
+        if (hasWorkshopDirtyDrafts()) {
+          console.info(
+            `[DeploymentChecker] Stale bundle detected (running=${CLIENT_DEPLOYMENT_ID}, server=${deploymentId}, reason=${reason}) but workshop drafts are dirty. Deferring reload.`
+          );
+          return;
+        }
+
         console.info(
           `[DeploymentChecker] Stale bundle detected (running=${CLIENT_DEPLOYMENT_ID}, server=${deploymentId}, reason=${reason}). Reloading…`
         );

@@ -1,0 +1,1 @@
+export const WORKSHOP_TASK_COMMENT_MIN_LENGTH = 5;

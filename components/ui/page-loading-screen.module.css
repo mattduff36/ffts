@@ -1,0 +1,205 @@
+.screen {
+  --loader-accent: var(--brand-yellow);
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, hsl(var(--loader-accent) / 0.12), transparent 34rem),
+    linear-gradient(135deg, hsl(217 33% 17%), hsl(222 47% 11%) 48%, hsl(222 47% 7%));
+}
+
+.compact {
+  --loader-accent: var(--brand-yellow);
+
+  display: flex;
+  min-height: 10rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+}
+
+.content {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.compactContent {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.progressTrack {
+  width: min(16rem, calc(100vw - 4rem));
+  height: 0.875rem;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid hsl(210 40% 98% / 0.16);
+  background: hsl(222 47% 7% / 0.72);
+  box-shadow:
+    0 0 0 1px hsl(222 47% 7% / 0.45),
+    0 1rem 3rem hsl(222 47% 4% / 0.5);
+}
+
+.compact .progressTrack {
+  width: min(10rem, calc(100vw - 4rem));
+  height: 0.5rem;
+  box-shadow:
+    0 0 0 1px hsl(222 47% 7% / 0.35),
+    0 0.75rem 2rem hsl(222 47% 4% / 0.3);
+}
+
+.progressBar {
+  width: 200%;
+  height: 100%;
+  background-image:
+    linear-gradient(
+      90deg,
+      #3b82f6 0 12.5%,
+      #22c55e 12.5% 25%,
+      #facc15 25% 37.5%,
+      #f97316 37.5% 50%,
+      #ef4444 50% 62.5%,
+      #a855f7 62.5% 75%,
+      #06b6d4 75% 87.5%,
+      #3b82f6 87.5% 100%
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      hsl(0 0% 100% / 0.22) 0 0.5rem,
+      transparent 0.5rem 1rem
+    );
+  background-blend-mode: screen;
+  animation: colorBarMove 1.1s linear infinite;
+}
+
+.screen[data-loader-palette="module"] .progressBar,
+.compact[data-loader-palette="module"] .progressBar {
+  background-image:
+    linear-gradient(
+      90deg,
+      hsl(var(--brand-yellow)) 0 12.5%,
+      hsl(var(--loader-accent)) 12.5% 25%,
+      hsl(var(--brand-yellow)) 25% 37.5%,
+      hsl(var(--loader-accent)) 37.5% 50%,
+      hsl(var(--brand-yellow)) 50% 62.5%,
+      hsl(var(--loader-accent)) 62.5% 75%,
+      hsl(var(--brand-yellow)) 75% 87.5%,
+      hsl(var(--loader-accent)) 87.5% 100%
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      hsl(0 0% 100% / 0.22) 0 0.5rem,
+      transparent 0.5rem 1rem
+    );
+}
+
+.label {
+  color: hsl(210 40% 98%);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0.125rem 1rem hsl(222 47% 4% / 0.75);
+}
+
+.compact .label {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.screen[data-loader-accent="timesheet"],
+.screen[data-loader-accent="timesheets"],
+.compact[data-loader-accent="timesheet"],
+.compact[data-loader-accent="timesheets"] {
+  --loader-accent: var(--timesheet-primary);
+}
+
+.screen[data-loader-accent="inspection"],
+.screen[data-loader-accent="inspections"],
+.compact[data-loader-accent="inspection"],
+.compact[data-loader-accent="inspections"] {
+  --loader-accent: var(--inspection-primary);
+}
+
+.screen[data-loader-accent="plant-inspection"],
+.screen[data-loader-accent="plant-inspections"],
+.compact[data-loader-accent="plant-inspection"],
+.compact[data-loader-accent="plant-inspections"] {
+  --loader-accent: var(--plant-inspection-primary);
+}
+
+.screen[data-loader-accent="hgv-inspection"],
+.screen[data-loader-accent="hgv-inspections"],
+.compact[data-loader-accent="hgv-inspection"],
+.compact[data-loader-accent="hgv-inspections"] {
+  --loader-accent: var(--hgv-inspection-primary);
+}
+
+.screen[data-loader-accent="rams"],
+.compact[data-loader-accent="rams"] {
+  --loader-accent: var(--rams-primary);
+}
+
+.screen[data-loader-accent="absence"],
+.compact[data-loader-accent="absence"] {
+  --loader-accent: var(--absence-primary);
+}
+
+.screen[data-loader-accent="maintenance"],
+.compact[data-loader-accent="maintenance"] {
+  --loader-accent: var(--maintenance-primary);
+}
+
+.screen[data-loader-accent="fleet"],
+.compact[data-loader-accent="fleet"] {
+  --loader-accent: var(--fleet-primary);
+}
+
+.screen[data-loader-accent="workshop"],
+.compact[data-loader-accent="workshop"] {
+  --loader-accent: var(--workshop-primary);
+}
+
+.screen[data-loader-accent="inventory"],
+.compact[data-loader-accent="inventory"] {
+  --loader-accent: var(--inventory-primary);
+}
+
+.screen[data-loader-accent="reminders"],
+.compact[data-loader-accent="reminders"] {
+  --loader-accent: var(--reminders-primary);
+}
+
+.screen[data-loader-accent="reports"],
+.compact[data-loader-accent="reports"] {
+  --loader-accent: var(--report-primary);
+}
+
+.screen[data-loader-accent="debug"],
+.compact[data-loader-accent="debug"] {
+  --loader-accent: var(--debug-primary);
+}
+
+@keyframes colorBarMove {
+  from {
+    transform: translateX(-50%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressBar {
+    animation: none;
+    transform: translateX(-25%);
+  }
+}

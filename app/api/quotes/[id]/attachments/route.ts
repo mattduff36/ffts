@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { appendQuoteTimelineEvent, fetchQuoteBundle } from '@/lib/server/quote-workflow';
+import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,6 +20,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: 'You must be signed in to use quotes.' }, { status: 401 });
     }
+
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const { data, error } = await supabase
       .from('quote_attachments')
@@ -47,6 +51,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: 'You must be signed in to use quotes.' }, { status: 401 });
     }
+
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const bundle = await fetchQuoteBundle(admin, id);
     if (!bundle.quote.is_latest_version) {

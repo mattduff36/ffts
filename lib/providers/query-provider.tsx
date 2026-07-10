@@ -9,7 +9,8 @@ import {
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { handleAuthFailureStatus } from '@/lib/app-auth/recovery-bridge';
-import { getErrorStatus, isAuthErrorStatus } from '@/lib/utils/http-error';
+import { markDatabaseBackedSuccess, nudgeDatabaseHealthCheck } from '@/lib/database/client-health';
+import { getErrorStatus, isAuthErrorStatus, isServerErrorStatus } from '@/lib/utils/http-error';
 
 const ReactQueryDevtools = dynamic(
   () => import('@tanstack/react-query-devtools').then((mod) => ({ default: mod.ReactQueryDevtools })),
@@ -22,8 +23,15 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       const handledQueryErrorCounts = new Map<string, number>();
 
       const queryCache = new QueryCache({
+        onSuccess: () => {
+          markDatabaseBackedSuccess();
+        },
         onError: (error, query) => {
           const statusCode = getErrorStatus(error);
+          if (isServerErrorStatus(statusCode)) {
+            nudgeDatabaseHealthCheck();
+          }
+
           if (!isAuthErrorStatus(statusCode)) {
             return;
           }
@@ -48,8 +56,15 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       });
 
       const mutationCache = new MutationCache({
+        onSuccess: () => {
+          markDatabaseBackedSuccess();
+        },
         onError: (error) => {
           const statusCode = getErrorStatus(error);
+          if (isServerErrorStatus(statusCode)) {
+            nudgeDatabaseHealthCheck();
+          }
+
           if (!isAuthErrorStatus(statusCode)) {
             return;
           }

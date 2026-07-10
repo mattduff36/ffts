@@ -1,29 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { filterHiddenSystemTestAccountProfiles } from '@/lib/server/system-test-accounts';
+import { canAccessDebugConsole } from '@/lib/utils/debug-access';
 import { getEffectiveRole } from '@/lib/utils/view-as';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import type {
   GetAllNotificationPreferencesResponse,
   AdminUpdatePreferenceRequest,
   UpdateNotificationPreferenceResponse,
-  NotificationModuleKey,
 } from '@/types/notifications';
+import { canDisableNotificationModule, NOTIFICATION_MODULE_KEYS } from '@/types/notifications';
+import { isEffectiveSupervisorOrHigherRole } from '@/lib/utils/role-access';
+
+function isDisablePreferenceRequest(input: {
+  enabled?: boolean;
+  notify_in_app?: boolean;
+  notify_email?: boolean;
+}): boolean {
+  return input.enabled === false || input.notify_in_app === false || input.notify_email === false;
+}
 
 /**
  * GET /api/notification-preferences/admin
- * Fetch all users' notification preferences (superadmin only)
+ * Fetch all users' notification preferences (debug access only)
  */
 export async function GET(request: NextRequest) {
   try {
-    // Check effective role (respects View As mode)
-    const effectiveRole = await getEffectiveRole();
-
-    if (!effectiveRole.user_id) {
+    const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
+    if (!current) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!effectiveRole.is_super_admin) {
-      return NextResponse.json({ error: 'Forbidden: SuperAdmin access required' }, { status: 403 });
+    // Check effective role and shared debug access (respects View As mode)
+    const effectiveRole = await getEffectiveRole();
+
+    if (!canAccessDebugConsole({
+      email: current.profile.email,
+      isActualSuperAdmin: effectiveRole.is_actual_super_admin,
+      isViewingAs: effectiveRole.is_viewing_as,
+    })) {
+      return NextResponse.json({ error: 'Forbidden: Debug access required' }, { status: 403 });
     }
 
     // Use admin client to bypass RLS for fetching all users and preferences
@@ -35,7 +52,9 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         full_name,
-        role:roles(name)
+        employee_id,
+        is_placeholder,
+        role:roles(name, display_name, role_class, is_super_admin)
       `)
       .order('full_name');
 
@@ -53,12 +72,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Build response with users and their preferences
-    const users = (profiles || []).map(p => ({
+    const visibleProfiles = await filterHiddenSystemTestAccountProfiles(adminClient, profiles || []);
+
+    const users = visibleProfiles.map(p => {
+      const role = p.role as {
+        name?: string | null;
+        display_name?: string | null;
+        role_class?: 'admin' | 'manager' | 'employee' | null;
+        is_super_admin?: boolean | null;
+      } | null;
+
+      return {
       user_id: p.id,
       full_name: p.full_name,
-      role_name: (p.role as { name?: string } | null)?.name || 'unknown',
+      role_name: role?.name || 'unknown',
+      role_display_name: role?.display_name || role?.name || 'Unknown',
+      role_class: role?.role_class || null,
+      is_super_admin: role?.is_super_admin === true,
       preferences: (allPrefs || []).filter(pref => pref.user_id === p.id),
-    }));
+      };
+    });
 
     const response: GetAllNotificationPreferencesResponse = {
       success: true,
@@ -85,19 +118,24 @@ export async function GET(request: NextRequest) {
 
 /**
  * PUT /api/notification-preferences/admin
- * Update any user's notification preference (superadmin override)
+ * Update any user's notification preference (debug access override)
  */
 export async function PUT(request: NextRequest) {
   try {
-    // Check effective role (respects View As mode)
-    const effectiveRole = await getEffectiveRole();
-
-    if (!effectiveRole.user_id) {
+    const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
+    if (!current) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!effectiveRole.is_super_admin) {
-      return NextResponse.json({ error: 'Forbidden: SuperAdmin access required' }, { status: 403 });
+    // Check effective role and shared debug access (respects View As mode)
+    const effectiveRole = await getEffectiveRole();
+
+    if (!canAccessDebugConsole({
+      email: current.profile.email,
+      isActualSuperAdmin: effectiveRole.is_actual_super_admin,
+      isViewingAs: effectiveRole.is_viewing_as,
+    })) {
+      return NextResponse.json({ error: 'Forbidden: Debug access required' }, { status: 403 });
     }
 
     // Parse request body
@@ -110,11 +148,19 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const validModules: NotificationModuleKey[] = ['errors', 'maintenance', 'rams', 'approvals', 'inspections'];
-    if (!validModules.includes(module_key)) {
+    if (!NOTIFICATION_MODULE_KEYS.includes(module_key)) {
       return NextResponse.json({ 
-        error: 'Invalid module_key. Must be: errors, maintenance, rams, approvals, or inspections' 
+        error: `Invalid module_key. Must be one of: ${NOTIFICATION_MODULE_KEYS.join(', ')}`
       }, { status: 400 });
+    }
+
+    const isDisableRequest = isDisablePreferenceRequest({ enabled, notify_in_app, notify_email });
+    if (isDisableRequest && !canDisableNotificationModule(module_key)) {
+      return NextResponse.json({ error: 'Toolbox Talk notifications cannot be disabled' }, { status: 400 });
+    }
+
+    if (isDisableRequest && !isEffectiveSupervisorOrHigherRole(effectiveRole)) {
+      return NextResponse.json({ error: 'Only supervisors and above can disable notifications' }, { status: 403 });
     }
 
     // Build upsert data

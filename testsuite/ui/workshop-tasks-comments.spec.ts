@@ -21,6 +21,26 @@ test.describe('@workshop @critical Workshop Tasks & Comments', () => {
     expect(errors, 'No page errors on workshop tasks').toHaveLength(0);
   });
 
+  test('comment API rejects malformed JSON without a server error', async ({ page }) => {
+    await page.goto('/workshop-tasks');
+    await waitForAppReady(page);
+
+    const response = await page.evaluate(async () => {
+      const res = await fetch('/api/workshop-tasks/tasks/00000000-0000-4000-8000-000000000001/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{',
+      });
+      return {
+        status: res.status,
+        body: await res.json(),
+      };
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'Comment cannot be empty' });
+  });
+
   test('comments button opens drawer on a task', async ({ page }) => {
     await page.goto('/workshop-tasks');
     await waitForAppReady(page);

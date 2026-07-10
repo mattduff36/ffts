@@ -8,6 +8,19 @@ export interface QuoteLineItem {
   sort_order: number;
 }
 
+export interface CustomerContact {
+  id: string;
+  customer_id: string;
+  name: string | null;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+}
+
 export interface QuoteAttachment {
   id: string;
   quote_id: string;
@@ -43,6 +56,7 @@ export interface QuoteInvoiceAllocation {
 export interface QuoteInvoice {
   id: string;
   quote_id: string;
+  invoice_request_id: string | null;
   invoice_number: string;
   invoice_date: string;
   amount: number;
@@ -52,6 +66,24 @@ export interface QuoteInvoice {
   created_at: string;
   updated_at: string;
   allocations?: QuoteInvoiceAllocation[];
+}
+
+export interface QuoteInvoiceRequest {
+  id: string;
+  quote_id: string;
+  requested_amount: number;
+  requested_invoice_date: string;
+  requested_invoice_scope: 'full' | 'partial';
+  manager_comments: string | null;
+  status: 'pending' | 'fulfilled' | 'cancelled';
+  requested_by: string | null;
+  requested_at: string;
+  notified_at: string | null;
+  fulfilled_invoice_id: string | null;
+  fulfilled_by: string | null;
+  fulfilled_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface QuoteManagerOption {
@@ -74,6 +106,114 @@ export interface QuoteManagerOption {
     full_name: string | null;
     email: string | null;
   } | null;
+}
+
+const QUOTE_MANAGER_NAME_FILTER_PREFIX = 'manager-name:';
+
+export function normalizeQuoteManagerName(value: string | null | undefined) {
+  return value?.replace(/\s+/g, ' ').trim() || '';
+}
+
+export function getQuoteManagerNameFilterValue(value: string | null | undefined) {
+  const normalizedName = normalizeQuoteManagerName(value).toLowerCase();
+  return normalizedName ? `${QUOTE_MANAGER_NAME_FILTER_PREFIX}${normalizedName}` : '';
+}
+
+export function isQuoteManagerNameFilterValue(value: string) {
+  return value.startsWith(QUOTE_MANAGER_NAME_FILTER_PREFIX);
+}
+
+export interface LegacyQuote {
+  id: string;
+  source_row: number;
+  quote_reference: string | null;
+  customer_name: string;
+  title: string;
+  quote_date: string | null;
+  quote_date_raw: string | null;
+  quote_manager_name: string;
+  quote_manager_initials: string | null;
+  quote_value_text: string | null;
+  quote_value_amount: number | null;
+  comments: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type QuoteProjectNumberStatus = 'open' | 'linked' | 'converted' | 'cancelled';
+export type QuoteProjectCostCategory = 'materials' | 'subcontractor' | 'plant' | 'labour' | 'other';
+
+export interface QuoteProjectCost {
+  id: string;
+  project_number_id: string;
+  cost_date: string;
+  category: QuoteProjectCostCategory;
+  supplier: string | null;
+  description: string;
+  amount: number;
+  notes: string | null;
+  linked_quote_id: string | null;
+  linked_quote_line_item_id: string | null;
+  linked_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuoteProjectLabourSummary {
+  total_hours: number;
+  entry_count: number;
+  timesheet_count: number;
+  employee_count: number;
+  first_week_ending: string | null;
+  last_week_ending: string | null;
+}
+
+export interface QuoteProjectNumber {
+  id: string;
+  project_reference: string;
+  manager_profile_id: string;
+  requester_initials: string;
+  title: string;
+  description: string | null;
+  status: QuoteProjectNumberStatus;
+  linked_quote_id: string | null;
+  linked_at: string | null;
+  converted_quote_id: string | null;
+  converted_at: string | null;
+  cancelled_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  manager?: {
+    id: string;
+    full_name: string | null;
+  } | null;
+  linked_quote?: {
+    id: string;
+    quote_reference: string;
+    base_quote_reference: string;
+    subject_line: string | null;
+    customer?: {
+      company_name: string;
+    } | null;
+  } | null;
+  converted_quote?: {
+    id: string;
+    quote_reference: string;
+    base_quote_reference: string;
+    subject_line: string | null;
+    customer?: {
+      company_name: string;
+    } | null;
+  } | null;
+  costs?: QuoteProjectCost[];
+  manual_cost_total?: number;
+  unlinked_manual_cost_total?: number;
+  labour_summary?: QuoteProjectLabourSummary;
 }
 
 export interface QuoteTimelineEvent {
@@ -158,6 +298,10 @@ export interface Quote {
   sent_at: string | null;
   accepted_at: string | null;
   invoiced_at: string | null;
+  sage_posted_at: string | null;
+  sage_posted_by: string | null;
+  sage_status?: QuoteSageStatus;
+  can_manage_sage?: boolean;
   // Joined
   customer?: {
     id: string;
@@ -170,19 +314,25 @@ export interface Quote {
     city?: string | null;
     county?: string | null;
     postcode?: string | null;
+    secondary_contacts?: CustomerContact[];
   };
+  selected_secondary_contact_ids?: string[];
+  selected_secondary_contacts?: CustomerContact[];
   line_items?: QuoteLineItem[];
   attachments?: QuoteAttachment[];
   rams_documents?: QuoteRamsDocument[];
   invoices?: QuoteInvoice[];
+  invoice_requests?: QuoteInvoiceRequest[];
   versions?: Quote[];
   previous_versions?: Quote[];
   timeline?: QuoteTimelineEvent[];
   invoice_summary?: {
     invoicedTotal: number;
+    pendingRequestedTotal: number;
     remainingBalance: number;
+    availableToRequest: number;
     lastInvoiceAt: string | null;
-    status: 'not_invoiced' | 'partially_invoiced' | 'invoiced';
+    status: 'not_invoiced' | 'ready_to_invoice' | 'partially_invoiced' | 'invoiced';
   };
 }
 
@@ -192,6 +342,10 @@ export interface QuoteListSummary {
   accepted_quotes: number;
   accepted_value: number;
 }
+
+export type QuoteSageStatus =
+  | 'not_on_sage'
+  | 'on_sage';
 
 export type QuoteRevisionType =
   | 'original'
@@ -305,6 +459,7 @@ export interface QuoteFormData {
   start_date: string;
   start_alert_days: number | '';
   estimated_duration_days: number | '';
+  secondary_contact_ids: string[];
   line_items: QuoteLineItem[];
   attachment_files?: File[];
 }

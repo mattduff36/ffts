@@ -10,9 +10,25 @@ import {
   calculateQuoteTotals,
   createQuoteNotification,
   fetchQuoteBundle,
+  generateQuoteReferenceForManager,
+  getInitialsFromName,
+  getQuoteEmailCcEmails,
+  getQuoteManagerOption,
+  sendQuotePoRequestEmail,
   sendQuoteRamsRequestEmail,
   sendQuoteToCustomerEmail,
 } from '@/lib/server/quote-workflow';
+import { buildQuoteDisplayName } from '@/lib/quotes/quote-display-name';
+import { renderConfiguredQuoteEmailTemplate } from '@/lib/server/quote-email-templates';
+import {
+  copyQuoteCustomerContactRecipients,
+  normalizeSecondaryContactIds,
+  replaceQuoteCustomerContactRecipients,
+  validateSecondaryContactIdsForCustomer,
+} from '@/lib/server/quote-recipient-contacts';
+import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
+import { canManageQuoteSage } from '@/lib/server/quote-sage-access';
+import { syncQuoteSiteLocation } from '@/lib/server/inventory-site-location-sync';
 
 type QuoteFieldErrors = Record<string, string>;
 
@@ -43,6 +59,60 @@ function isMeaningfulLineItem(item: { description?: string; unit?: string; quant
   );
 }
 
+function getCustomerRecipientDescription(primaryEmail: string, secondaryContacts: Array<{ email: string | null }>) {
+  const additionalToEmails = Array.from(new Set(
+    secondaryContacts
+      .map(contact => contact.email?.trim())
+      .filter((email): email is string => Boolean(email))
+  ));
+
+  return [primaryEmail, ...additionalToEmails].join(', ');
+}
+
+function normalizeEmailAddress(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const email = value.trim();
+  return email && email.includes('@') ? email : null;
+}
+
+function normalizeEmailList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  value.forEach(item => {
+    const email = normalizeEmailAddress(item);
+    if (!email) return;
+
+    const key = email.toLowerCase();
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    emails.push(email);
+  });
+
+  return emails;
+}
+
+function getQuoteCustomerRecipientEmails(current: Awaited<ReturnType<typeof fetchQuoteBundle>>): string[] {
+  const emails = normalizeEmailList([
+    current.quote.attention_email,
+    current.quote.customer?.contact_email,
+    ...current.selectedSecondaryContacts.map(contact => contact.email),
+  ]);
+
+  return emails;
+}
+
+function getQuoteCustomerCopyExclusionIds(requesterId?: string | null): string[] {
+  return requesterId ? [requesterId] : [];
+}
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
@@ -57,15 +127,22 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'You must be signed in to use quotes.' }, { status: 401 });
     }
 
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
+
     const bundle = await fetchQuoteBundle(admin, id);
+    await syncQuoteSiteLocation(admin, bundle.quote, user.id);
+    const canManageSage = await canManageQuoteSage();
 
     return NextResponse.json({
       quote: {
         ...bundle.quote,
+        can_manage_sage: canManageSage,
         line_items: bundle.lineItems,
         attachments: bundle.attachments,
         rams_documents: bundle.ramsDocuments,
         invoices: bundle.invoices,
+        invoice_requests: bundle.invoiceRequests,
         versions: bundle.versions,
         timeline: bundle.timeline,
         invoice_summary: bundle.invoiceSummary,
@@ -87,8 +164,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'You must be signed in to use quotes.' }, { status: 401 });
     }
 
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
+
     const body = await request.json();
-    const { action, line_items, manager_profile_id, approver_profile_id, ...quoteUpdates } = body as {
+    const { action, line_items, manager_profile_id, approver_profile_id, secondary_contact_ids, ...quoteUpdates } = body as {
       action?: string;
       manager_profile_id?: string;
       approver_profile_id?: string;
@@ -105,6 +185,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       estimated_duration_days?: number | null;
       pricing_mode?: 'itemized' | 'attachments_only';
       rams_comments?: string | null;
+      on_sage?: boolean;
+      secondary_contact_ids?: unknown;
       [key: string]: unknown;
     };
 
@@ -124,12 +206,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const normalizedStartAlertDays = normalizeOptionalInteger(quoteUpdates.start_alert_days);
     const normalizedEstimatedDurationDays = normalizeOptionalInteger(quoteUpdates.estimated_duration_days);
     const pricingMode = quoteUpdates.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
+    const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
 
     if (action === 'submit_for_approval' || action === 'confirm_and_send') {
       const customerEmail = current.quote.attention_email?.trim() || current.quote.customer?.contact_email?.trim() || '';
       if (!customerEmail) {
         return NextResponse.json(
-          { error: 'Add a customer contact email before confirming this quote.' },
+          { error: 'Add a primary customer contact email before confirming this quote.' },
           { status: 400 }
         );
       }
@@ -141,15 +224,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const quoteCopyEmails = await getQuoteEmailCcEmails(
+        admin,
+        'quote_customer_email_copy',
+        getQuoteCustomerCopyExclusionIds(current.quote.requester_id)
+      );
       const emailResult = await sendQuoteToCustomerEmail(current, [
         current.quote.manager_email || '',
-        'rob@example.com',
-        'debug.user@example.com',
-      ]);
+        ...quoteCopyEmails,
+      ], user.email);
 
       if (!emailResult.success) {
         return NextResponse.json({ error: emailResult.error || 'Failed to send quote email' }, { status: 500 });
       }
+      const recipientDescription = getCustomerRecipientDescription(customerEmail, current.selectedSecondaryContacts);
 
       const now = new Date().toISOString();
       const { error } = await supabase
@@ -172,7 +260,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         quoteReference: current.quote.quote_reference,
         eventType: 'confirmed_and_sent',
         title: 'Confirmed and sent',
-        description: `Quote emailed to ${customerEmail}.`,
+        description: `Quote emailed to customer recipient(s): ${recipientDescription}.`,
         fromStatus: current.quote.status,
         toStatus: 'sent',
         actorUserId: user.id,
@@ -192,11 +280,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (error) throw error;
 
       if (current.quote.requester_id) {
+        const returnComments = String(quoteUpdates.return_comments || 'This quote has been returned for changes.');
+        const notificationTemplate = await renderConfiguredQuoteEmailTemplate(admin, 'quote_returned', {
+          quote_reference: current.quote.quote_reference,
+          quote_name: buildQuoteDisplayName(current.quote),
+          return_comments: returnComments,
+        });
         await createQuoteNotification({
           senderId: user.id,
           recipientIds: [current.quote.requester_id],
-          subject: `Quote returned: ${current.quote.quote_reference}`,
-          body: String(quoteUpdates.return_comments || 'This quote has been returned for changes.'),
+          subject: notificationTemplate.subject,
+          body: notificationTemplate.bodyText,
         });
       }
       await appendQuoteTimelineEvent(admin, {
@@ -216,20 +310,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const customerEmail = current.quote.attention_email?.trim() || current.quote.customer?.contact_email?.trim() || '';
       if (!customerEmail) {
         return NextResponse.json(
-          { error: 'Add a customer contact email before sending this quote.' },
+          { error: 'Add a primary customer contact email before sending this quote.' },
           { status: 400 }
         );
       }
 
+      const quoteCopyEmails = await getQuoteEmailCcEmails(
+        admin,
+        'quote_customer_email_copy',
+        getQuoteCustomerCopyExclusionIds(current.quote.requester_id)
+      );
       const emailResult = await sendQuoteToCustomerEmail(current, [
         current.quote.manager_email || '',
-        'rob@example.com',
-        'debug.user@example.com',
-      ]);
+        ...quoteCopyEmails,
+      ], user.email);
 
       if (!emailResult.success) {
         return NextResponse.json({ error: emailResult.error || 'Failed to send quote email' }, { status: 500 });
       }
+      const recipientDescription = getCustomerRecipientDescription(customerEmail, current.selectedSecondaryContacts);
 
       const now = new Date().toISOString();
       const { error } = await supabase
@@ -252,11 +351,64 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         quoteReference: current.quote.quote_reference,
         eventType: 'approved_and_sent',
         title: 'Approved and sent',
-        description: `Quote emailed to ${customerEmail}.`,
+        description: `Quote emailed to customer recipient(s): ${recipientDescription}.`,
         fromStatus: current.quote.status,
         toStatus: 'sent',
         actorUserId: user.id,
         createdAt: now,
+      });
+    } else if (action === 'request_po') {
+      if (!current.quote.is_latest_version) {
+        return NextResponse.json({ error: 'Only the latest quote version can request a PO.' }, { status: 400 });
+      }
+
+      if (!current.quote.sent_at && !current.quote.customer_sent_at && current.quote.status !== 'sent') {
+        return NextResponse.json({ error: 'Send this quote to the customer before requesting a PO.' }, { status: 400 });
+      }
+
+      if (current.quote.po_number) {
+        return NextResponse.json({ error: 'A PO number has already been saved for this quote.' }, { status: 400 });
+      }
+
+      const selectedRecipientEmails = normalizeEmailList(quoteUpdates.po_request_recipient_emails);
+      if (selectedRecipientEmails.length === 0) {
+        return NextResponse.json({ error: 'Select at least one customer recipient for the PO request.' }, { status: 400 });
+      }
+
+      const allowedRecipientEmails = getQuoteCustomerRecipientEmails(current);
+      const allowedRecipientKeys = new Set(allowedRecipientEmails.map(email => email.toLowerCase()));
+      const invalidRecipientEmails = selectedRecipientEmails.filter(email => !allowedRecipientKeys.has(email.toLowerCase()));
+      if (invalidRecipientEmails.length > 0) {
+        return NextResponse.json({ error: 'PO request recipients must be saved customer contacts on this quote.' }, { status: 400 });
+      }
+
+      const { data: senderProfile } = await admin
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      const emailResult = await sendQuotePoRequestEmail({
+        bundle: current,
+        recipientEmails: selectedRecipientEmails,
+        cc: await getQuoteEmailCcEmails(admin, 'quote_po_request_copy', [user.id]),
+        senderEmail: user.email,
+        senderName: senderProfile?.full_name || null,
+      });
+
+      if (!emailResult.success) {
+        return NextResponse.json({ error: emailResult.error || 'Failed to send PO request email.' }, { status: 500 });
+      }
+
+      await appendQuoteTimelineEvent(admin, {
+        quoteId: id,
+        quoteThreadId: current.quote.quote_thread_id,
+        quoteReference: current.quote.quote_reference,
+        eventType: 'po_request_sent',
+        title: 'PO request sent',
+        description: `PO request emailed to ${selectedRecipientEmails.join(', ')}.`,
+        fromStatus: current.quote.status,
+        toStatus: current.quote.status,
+        actorUserId: user.id,
       });
     } else if (action === 'save_po_details') {
       const now = new Date().toISOString();
@@ -270,7 +422,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           po_received_at: hasPoDetails ? (current.quote.po_received_at || now) : current.quote.po_received_at,
           updated_by: user.id,
         })
-        .eq('id', id);
+        .eq('quote_thread_id', current.quote.quote_thread_id);
 
       if (error) throw error;
       await appendQuoteTimelineEvent(admin, {
@@ -283,6 +435,39 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           normalizedPoNumber ? `PO: ${normalizedPoNumber}` : null,
           normalizedPoValue !== null ? `Value: £${Number(normalizedPoValue).toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : null,
         ].filter(Boolean).join(' • ') || 'PO details were updated.',
+        actorUserId: user.id,
+        createdAt: now,
+      });
+    } else if (action === 'toggle_sage') {
+      if (!await canManageQuoteSage()) {
+        return NextResponse.json({ error: 'Only Accounts or admin users can update Sage status.' }, { status: 403 });
+      }
+
+      if (typeof quoteUpdates.on_sage !== 'boolean') {
+        return NextResponse.json({ error: 'Choose whether this quote is on Sage.' }, { status: 400 });
+      }
+
+      const now = new Date().toISOString();
+      const nextSagePostedAt = quoteUpdates.on_sage ? now : null;
+      const { error } = await supabase
+        .from('quotes')
+        .update({
+          sage_posted_at: nextSagePostedAt,
+          sage_posted_by: nextSagePostedAt ? user.id : null,
+          updated_by: user.id,
+        })
+        .eq('quote_thread_id', current.quote.quote_thread_id);
+
+      if (error) throw error;
+      await appendQuoteTimelineEvent(admin, {
+        quoteId: id,
+        quoteThreadId: current.quote.quote_thread_id,
+        quoteReference: current.quote.quote_reference,
+        eventType: nextSagePostedAt ? 'quote_marked_on_sage' : 'quote_removed_from_sage',
+        title: nextSagePostedAt ? 'Quote marked on Sage' : 'Quote removed from Sage',
+        description: buildQuoteDisplayName(current.quote),
+        fromStatus: current.quote.status,
+        toStatus: current.quote.status,
         actorUserId: user.id,
         createdAt: now,
       });
@@ -304,6 +489,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         quoteReference: current.quote.quote_reference,
         customerName: current.quote.customer?.company_name || 'Unknown customer',
         subjectLine: current.quote.subject_line || 'No subject provided',
+        cc: await getQuoteEmailCcEmails(admin, 'quote_rams_request_copy', [user.id]),
         scope: current.quote.scope || null,
         poNumber: String(normalizedPoNumber || current.quote.po_number || 'Not supplied'),
         managerName: current.quote.manager_name || 'Unknown manager',
@@ -420,24 +606,67 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const nextRevisionNumber = current.quote.revision_number + 1;
       const newQuoteId = crypto.randomUUID();
       const isDuplicate = action === 'duplicate';
-      const baseReference = isDuplicate ? buildVersionReference(current.quote.base_quote_reference, 'duplicate', nextRevisionNumber) : current.quote.base_quote_reference;
+      const duplicateManagerProfileId = isDuplicate
+        ? (typeof manager_profile_id === 'string' && manager_profile_id.trim()
+          ? manager_profile_id.trim()
+          : current.quote.requester_id || user.id)
+        : null;
+      let duplicateManagerName = current.quote.manager_name;
+      let duplicateManagerEmail = current.quote.manager_email;
+      let duplicateRequesterInitials = current.quote.requester_initials;
+      let duplicateSignoffName = current.quote.signoff_name;
+      let duplicateSignoffTitle = current.quote.signoff_title;
+
       const quoteReference = isDuplicate
-        ? baseReference
+        ? await (async () => {
+          const managerOption = await getQuoteManagerOption(duplicateManagerProfileId!);
+          const { data: managerProfile, error: managerProfileError } = await admin
+            .from('profiles')
+            .select('id, full_name')
+            .eq('id', duplicateManagerProfileId)
+            .single();
+
+          if (managerProfileError || !managerProfile) {
+            throw managerProfileError || new Error('Unable to load manager profile');
+          }
+
+          const generated = await generateQuoteReferenceForManager({
+            managerProfileId: duplicateManagerProfileId!,
+            fallbackInitials: managerOption?.initials
+              || current.quote.requester_initials
+              || getInitialsFromName(managerProfile.full_name || ''),
+          });
+
+          duplicateRequesterInitials = generated.initials;
+          duplicateManagerName = managerOption?.profile?.full_name || managerProfile.full_name || current.quote.manager_name;
+          duplicateManagerEmail = managerOption?.manager_email || current.quote.manager_email;
+          duplicateSignoffName = managerOption?.signoff_name || managerProfile.full_name || current.quote.signoff_name;
+          duplicateSignoffTitle = managerOption?.signoff_title || current.quote.signoff_title;
+
+          return generated.quoteReference;
+        })()
         : buildVersionReference(current.quote.base_quote_reference, revisionType, nextRevisionNumber);
+      const baseReference = isDuplicate ? quoteReference : current.quote.base_quote_reference;
 
       const insertPayload = {
         ...current.quote,
         id: newQuoteId,
         quote_reference: quoteReference,
-        base_quote_reference: isDuplicate ? quoteReference : current.quote.base_quote_reference,
+        base_quote_reference: baseReference,
         quote_thread_id: isDuplicate ? newQuoteId : current.quote.quote_thread_id,
         parent_quote_id: current.quote.id,
         revision_number: isDuplicate ? 0 : nextRevisionNumber,
-        revision_type: revisionType,
+        revision_type: isDuplicate ? 'original' : revisionType,
         version_label: isDuplicate ? 'Original' : buildVersionLabel(revisionType, nextRevisionNumber),
         version_notes: quoteUpdates.version_notes || null,
         is_latest_version: true,
         duplicate_source_quote_id: current.quote.id,
+        requester_id: isDuplicate ? duplicateManagerProfileId : current.quote.requester_id,
+        requester_initials: isDuplicate ? duplicateRequesterInitials : current.quote.requester_initials,
+        manager_name: isDuplicate ? duplicateManagerName : current.quote.manager_name,
+        manager_email: isDuplicate ? duplicateManagerEmail : current.quote.manager_email,
+        signoff_name: isDuplicate ? duplicateSignoffName : current.quote.signoff_name,
+        signoff_title: isDuplicate ? duplicateSignoffTitle : current.quote.signoff_title,
         status: 'draft',
         return_comments: null,
         returned_at: null,
@@ -459,6 +688,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         invoice_number: null,
         invoice_notes: null,
         last_invoice_at: null,
+        sage_posted_at: isDuplicate ? null : current.quote.sage_posted_at,
+        sage_posted_by: isDuplicate ? null : current.quote.sage_posted_by,
         accepted: false,
         accepted_at: null,
         invoiced_at: null,
@@ -469,6 +700,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       };
 
       delete (insertPayload as { customer?: unknown }).customer;
+      delete (insertPayload as { selected_secondary_contact_ids?: unknown }).selected_secondary_contact_ids;
+      delete (insertPayload as { selected_secondary_contacts?: unknown }).selected_secondary_contacts;
 
       const { error: insertError } = await supabase
         .from('quotes')
@@ -501,13 +734,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         if (lineError) throw lineError;
       }
 
+      await copyQuoteCustomerContactRecipients(
+        supabase,
+        newQuoteId,
+        current.selectedSecondaryContacts,
+        user.id
+      );
+
       await appendQuoteTimelineEvent(admin, {
         quoteId: newQuoteId,
         quoteThreadId: isDuplicate ? newQuoteId : current.quote.quote_thread_id,
         quoteReference,
         eventType: isDuplicate ? 'quote_duplicated' : 'version_created',
         title: isDuplicate ? 'Quote duplicated' : 'New version created',
-        description: quoteUpdates.version_notes ? String(quoteUpdates.version_notes) : null,
+        description: isDuplicate
+          ? `Duplicated from ${current.quote.quote_reference}.${quoteUpdates.version_notes ? ` ${String(quoteUpdates.version_notes)}` : ''}`
+          : (quoteUpdates.version_notes ? String(quoteUpdates.version_notes) : null),
         toStatus: 'draft',
         actorUserId: user.id,
       });
@@ -516,9 +758,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         quote: {
           ...bundle.quote,
+          can_manage_sage: await canManageQuoteSage(),
           line_items: bundle.lineItems,
           attachments: bundle.attachments,
           invoices: bundle.invoices,
+          invoice_requests: bundle.invoiceRequests,
           versions: bundle.versions,
           timeline: bundle.timeline,
           invoice_summary: bundle.invoiceSummary,
@@ -534,6 +778,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ? approver_profile_id.trim()
         : null;
       const customerId = typeof quoteUpdates.customer_id === 'string' ? quoteUpdates.customer_id.trim() : '';
+      const recipientCustomerId = customerId || current.quote.customer_id;
 
       if ('customer_id' in quoteUpdates && !customerId) {
         fieldErrors.customer_id = 'Select a customer.';
@@ -543,12 +788,47 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         fieldErrors.manager_profile_id = 'Select a manager.';
       }
 
+      if ('quote_date' in quoteUpdates && !normalizeOptionalString(quoteUpdates.quote_date)) {
+        fieldErrors.quote_date = 'Select a quote date.';
+      }
+
+      if ('validity_days' in quoteUpdates) {
+        const normalizedValidityDays = Number(quoteUpdates.validity_days);
+        if (!Number.isFinite(normalizedValidityDays) || normalizedValidityDays < 1) {
+          fieldErrors.validity_days = 'Enter quote validity in days.';
+        }
+      }
+
+      if ('attention_name' in quoteUpdates && !normalizeOptionalString(quoteUpdates.attention_name)) {
+        fieldErrors.attention_name = 'Enter who this quote is for the attention of.';
+      }
+
+      if ('attention_email' in quoteUpdates && !normalizeOptionalString(quoteUpdates.attention_email)) {
+        fieldErrors.attention_email = 'Enter the contact email.';
+      }
+
       if (Number.isNaN(normalizedStartAlertDays)) {
         fieldErrors.start_alert_days = 'Alert days before start must be a whole number.';
       }
 
       if (Number.isNaN(normalizedEstimatedDurationDays)) {
         fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
+      }
+
+      if ('site_address' in quoteUpdates && !normalizeOptionalString(quoteUpdates.site_address)) {
+        fieldErrors.site_address = 'Enter the site address for this quote.';
+      }
+
+      if ('subject_line' in quoteUpdates && !normalizeOptionalString(quoteUpdates.subject_line)) {
+        fieldErrors.subject_line = 'Enter a quote title.';
+      }
+
+      if ('project_description' in quoteUpdates && !normalizeOptionalString(quoteUpdates.project_description)) {
+        fieldErrors.project_description = 'Enter a quote summary.';
+      }
+
+      if ('scope' in quoteUpdates && !normalizeOptionalString(quoteUpdates.scope)) {
+        fieldErrors.scope = 'Enter the quote scope.';
       }
 
       const normalizedItems = Array.isArray(line_items)
@@ -568,6 +848,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             fieldErrors[`line_items.${item.originalIndex}.description`] = 'Enter a description for this line item.';
           }
         });
+      }
+
+      if (
+        (typeof secondary_contact_ids !== 'undefined' || 'customer_id' in quoteUpdates)
+        && recipientCustomerId
+        && normalizedSecondaryContactIds.length > 0
+      ) {
+        Object.assign(
+          fieldErrors,
+          await validateSecondaryContactIdsForCustomer(admin, recipientCustomerId, normalizedSecondaryContactIds)
+        );
       }
 
       if (Object.keys(fieldErrors).length > 0) {
@@ -657,16 +948,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       if (typeof manager_profile_id !== 'undefined' && normalizedManagerProfileId) {
-        const managerOption = await admin
-          .from('quote_manager_series')
-          .select('profile_id, initials, signoff_name, signoff_title, manager_email, approver_profile_id')
-          .eq('profile_id', normalizedManagerProfileId)
-          .maybeSingle();
-
-        if (managerOption.error) {
-          throw managerOption.error;
-        }
-
+        const managerOption = await getQuoteManagerOption(normalizedManagerProfileId);
         const { data: managerProfile, error: managerProfileError } = await admin
           .from('profiles')
           .select('id, full_name')
@@ -678,21 +960,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
 
         updates.requester_id = normalizedManagerProfileId;
-        updates.requester_initials = managerOption.data?.initials || current.quote.requester_initials;
+        updates.requester_initials = managerOption?.initials || current.quote.requester_initials;
         updates.manager_name = normalizeOptionalString(quoteUpdates.manager_name)
-          || managerOption.data?.signoff_name
+          || managerOption?.signoff_name
           || managerProfile.full_name;
-        updates.manager_email = normalizeOptionalString(quoteUpdates.manager_email)
-          || managerOption.data?.manager_email
-          || null;
+        updates.manager_email = managerOption?.manager_email || null;
         updates.approver_profile_id = normalizedApproverProfileId
-          || managerOption.data?.approver_profile_id
+          || managerOption?.approver_profile_id
           || normalizedManagerProfileId;
         updates.signoff_name = normalizeOptionalString(quoteUpdates.signoff_name)
-          || managerOption.data?.signoff_name
+          || managerOption?.signoff_name
           || managerProfile.full_name;
         updates.signoff_title = normalizeOptionalString(quoteUpdates.signoff_title)
-          || managerOption.data?.signoff_title
+          || managerOption?.signoff_title
           || null;
       } else if (typeof approver_profile_id !== 'undefined') {
         updates.approver_profile_id = normalizedApproverProfileId;
@@ -741,6 +1021,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
 
+      if (typeof secondary_contact_ids !== 'undefined' || 'customer_id' in quoteUpdates) {
+        const recipientFieldErrors = await replaceQuoteCustomerContactRecipients(
+          supabase,
+          id,
+          recipientCustomerId,
+          normalizedSecondaryContactIds,
+          user.id
+        );
+        if (Object.keys(recipientFieldErrors).length > 0) {
+          return NextResponse.json(
+            {
+              error: 'Please correct the highlighted fields and try again.',
+              field_errors: recipientFieldErrors,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
       await appendQuoteTimelineEvent(admin, {
         quoteId: id,
         quoteThreadId: current.quote.quote_thread_id,
@@ -753,9 +1052,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const bundle = await fetchQuoteBundle(admin, id);
+    const canManageSage = await canManageQuoteSage();
     return NextResponse.json({
       quote: {
         ...bundle.quote,
+        can_manage_sage: canManageSage,
         line_items: bundle.lineItems,
         attachments: bundle.attachments,
         invoices: bundle.invoices,
@@ -782,6 +1083,9 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: 'You must be signed in to use quotes.' }, { status: 401 });
     }
+
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const bundle = await fetchQuoteBundle(admin, id);
     if (!bundle.quote.is_latest_version) {

@@ -13,6 +13,7 @@ import {
   Phone,
   MapPin,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Customer } from '../types';
 
 interface CustomersTableProps {
@@ -22,6 +23,19 @@ interface CustomersTableProps {
 
 type SortField = 'company_name' | 'contact_name' | 'city' | 'status' | 'created_at';
 type SortDir = 'asc' | 'desc';
+
+function getSecondaryContactSummary(customer: Customer): string {
+  const count = customer.secondary_contacts?.length || 0;
+  if (count === 0) {
+    return '';
+  }
+
+  return `${count} secondary contact${count === 1 ? '' : 's'}`;
+}
+
+function isTestCustomerName(name: string | null | undefined) {
+  return name?.toLowerCase().includes('test customer') ?? false;
+}
 
 export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
   const [search, setSearch] = useState('');
@@ -43,6 +57,12 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
         c.short_name?.toLowerCase().includes(q) ||
         c.contact_name?.toLowerCase().includes(q) ||
         c.contact_email?.toLowerCase().includes(q) ||
+        c.secondary_contacts?.some(contact => (
+          contact.name?.toLowerCase().includes(q) ||
+          contact.job_title?.toLowerCase().includes(q) ||
+          contact.email?.toLowerCase().includes(q) ||
+          contact.phone?.toLowerCase().includes(q)
+        )) ||
         c.city?.toLowerCase().includes(q) ||
         c.postcode?.toLowerCase().includes(q)
       );
@@ -147,9 +167,13 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
                   className="hover:bg-slate-800/50 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-white">{customer.company_name}</div>
+                    <div className={cn('font-medium text-white', isTestCustomerName(customer.company_name) && 'text-red-300')}>
+                      {customer.company_name}
+                    </div>
                     {customer.short_name && customer.short_name !== customer.company_name && (
-                      <div className="text-xs text-muted-foreground">{customer.short_name}</div>
+                      <div className={cn('text-xs text-muted-foreground', isTestCustomerName(customer.short_name) && 'text-red-300')}>
+                        {customer.short_name}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-300">
@@ -157,8 +181,18 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
                     {customer.contact_job_title && (
                       <div className="text-xs text-muted-foreground">{customer.contact_job_title}</div>
                     )}
+                    {getSecondaryContactSummary(customer) && (
+                      <div className="text-xs text-slate-400">{getSecondaryContactSummary(customer)}</div>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">{customer.contact_email || '—'}</td>
+                  <td className="px-4 py-3 text-slate-300 text-xs">
+                    {customer.contact_email || '—'}
+                    {customer.secondary_contacts?.some(contact => contact.email) && (
+                      <div className="mt-1 text-muted-foreground">
+                        CC: {customer.secondary_contacts.filter(contact => contact.email).map(contact => contact.email).join(', ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-300 text-xs">{customer.contact_phone || '—'}</td>
                   <td className="px-4 py-3 text-slate-300 text-xs">
                     {[customer.city, customer.postcode].filter(Boolean).join(', ') || '—'}
@@ -195,7 +229,9 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-brand-yellow" />
-                  <span className="font-semibold text-white">{customer.company_name}</span>
+                  <span className={cn('font-semibold text-white', isTestCustomerName(customer.company_name) && 'text-red-300')}>
+                    {customer.company_name}
+                  </span>
                 </div>
                 <Badge variant="outline" className={
                   customer.status === 'active'
@@ -213,6 +249,9 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
                   )}
                 </div>
               )}
+              {getSecondaryContactSummary(customer) && (
+                <div className="text-xs text-slate-400">{getSecondaryContactSummary(customer)}</div>
+              )}
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                 {customer.contact_email && (
                   <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {customer.contact_email}</span>
@@ -224,6 +263,11 @@ export function CustomersTable({ customers, onRowClick }: CustomersTableProps) {
                   <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {customer.city}</span>
                 )}
               </div>
+              {customer.secondary_contacts?.some(contact => contact.email) && (
+                <div className="text-xs text-muted-foreground">
+                  CC: {customer.secondary_contacts.filter(contact => contact.email).map(contact => contact.email).join(', ')}
+                </div>
+              )}
             </div>
           ))
         )}

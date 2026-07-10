@@ -1,3 +1,5 @@
+import { createStatusError } from '@/lib/utils/http-error';
+
 interface PaginationPayload {
   error?: string;
   pagination?: {
@@ -30,10 +32,14 @@ export async function fetchAllPaginatedItems<TItem>(
       `${endpoint}${separator}limit=${options.limit}&offset=${offset}`,
       { cache: options.cache || 'no-store' }
     );
-    const payload = (await response.json()) as PaginationPayload;
+    const payload = (await response.json().catch(() => ({}))) as PaginationPayload;
 
     if (!response.ok) {
-      throw new Error(payload.error || options.errorMessage || 'Failed to load paginated data');
+      throw createStatusError(
+        payload.error || options.errorMessage || 'Failed to load paginated data',
+        response.status,
+        payload
+      );
     }
 
     if (!firstPagePayload) {

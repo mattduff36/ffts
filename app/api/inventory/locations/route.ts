@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireInventoryAccess, requireInventoryManagerAccess } from '@/lib/server/inventory-auth';
 import type { FleetAssetLinkType } from '@/app/(dashboard)/inventory/types';
+import { buildLinkedAssetColumns, getLocationTypeForLinkedAsset } from '@/lib/server/inventory-locations';
+import type { Database } from '@/types/database';
+
+const SUPABASE_PAGE_SIZE = 1000;
+
+type InventoryLocationRow = Database['public']['Tables']['inventory_locations']['Row'];
 
 interface LocationRequestBody {
   name?: string;
@@ -10,15 +16,77 @@ interface LocationRequestBody {
   linked_asset_id?: string | null;
 }
 
-function buildLinkedAssetColumns(body: LocationRequestBody) {
-  const linkedAssetType = body.linked_asset_type || 'none';
-  const linkedAssetId = body.linked_asset_id?.trim() || null;
+interface InventoryLocationAssigneeRow {
+  location_id: string | null;
+  user?: { full_name: string | null } | { full_name: string | null }[] | null;
+}
 
-  return {
-    linked_van_id: linkedAssetType === 'van' ? linkedAssetId : null,
-    linked_hgv_id: linkedAssetType === 'hgv' ? linkedAssetId : null,
-    linked_plant_id: linkedAssetType === 'plant' ? linkedAssetId : null,
-  };
+function pickAssigneeProfile(
+  user: InventoryLocationAssigneeRow['user']
+): { full_name: string | null } | null {
+  if (!user) return null;
+  return Array.isArray(user) ? user[0] ?? null : user;
+}
+
+function getAssignedUserNamesByLocationId(...rowGroups: InventoryLocationAssigneeRow[][]): Map<string, string[]> {
+  const namesByLocationId = new Map<string, string[]>();
+
+  rowGroups.flat().forEach((row) => {
+    const fullName = pickAssigneeProfile(row.user)?.full_name?.trim();
+    if (!row.location_id || !fullName) return;
+
+    const names = namesByLocationId.get(row.location_id) || [];
+    if (!names.includes(fullName)) names.push(fullName);
+    namesByLocationId.set(row.location_id, names);
+  });
+
+  namesByLocationId.forEach((names) => names.sort((a, b) => a.localeCompare(b)));
+  return namesByLocationId;
+}
+
+async function loadActiveInventoryLocations(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<InventoryLocationRow[]> {
+  const locations: InventoryLocationRow[] = [];
+
+  for (let offset = 0; ; offset += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from('inventory_locations')
+      .select('*')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = data || [];
+    locations.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return locations;
+}
+
+async function loadActiveInventoryItemLocationIds(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<Array<{ location_id: string | null }>> {
+  const rows: Array<{ location_id: string | null }> = [];
+
+  for (let offset = 0; ; offset += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from('inventory_items')
+      .select('location_id')
+      .eq('status', 'active')
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
 }
 
 export async function GET() {
@@ -29,16 +97,9 @@ export async function GET() {
     }
 
     const admin = createAdminClient();
-    const [locationsResult, itemsResult, vansResult, hgvsResult, plantResult] = await Promise.all([
-      admin
-        .from('inventory_locations')
-        .select('*')
-        .eq('is_active', true)
-        .order('name', { ascending: true }),
-      admin
-        .from('inventory_items')
-        .select('location_id')
-        .eq('status', 'active'),
+    const [locationRows, itemLocationRows, vansResult, hgvsResult, plantResult, assignedUsersResult, assignedSiteUsersResult] = await Promise.all([
+      loadActiveInventoryLocations(admin),
+      loadActiveInventoryItemLocationIds(admin),
       admin
         .from('vans')
         .select('id, reg_number, nickname'),
@@ -48,26 +109,43 @@ export async function GET() {
       admin
         .from('plant')
         .select('id, plant_id, reg_number, nickname'),
+      admin
+        .from('inventory_user_locations')
+        .select(`
+          location_id,
+          user:profiles!inventory_user_locations_user_id_fkey(full_name)
+        `),
+      admin
+        .from('inventory_user_site_locations')
+        .select(`
+          location_id,
+          user:profiles!inventory_user_site_locations_user_id_fkey(full_name)
+        `),
     ]);
 
-    if (locationsResult.error) throw locationsResult.error;
-    if (itemsResult.error) throw itemsResult.error;
     if (vansResult.error) throw vansResult.error;
     if (hgvsResult.error) throw hgvsResult.error;
     if (plantResult.error) throw plantResult.error;
+    if (assignedUsersResult.error) throw assignedUsersResult.error;
+    if (assignedSiteUsersResult.error) throw assignedSiteUsersResult.error;
 
     const countByLocationId = new Map<string, number>();
-    (itemsResult.data || []).forEach((item) => {
+    itemLocationRows.forEach((item) => {
       if (!item.location_id) return;
       countByLocationId.set(item.location_id, (countByLocationId.get(item.location_id) || 0) + 1);
     });
     const vanById = new Map((vansResult.data || []).map((van) => [van.id, van]));
     const hgvById = new Map((hgvsResult.data || []).map((hgv) => [hgv.id, hgv]));
     const plantById = new Map((plantResult.data || []).map((asset) => [asset.id, asset]));
+    const assignedUserNamesByLocationId = getAssignedUserNamesByLocationId(
+      (assignedUsersResult.data || []) as unknown as InventoryLocationAssigneeRow[],
+      (assignedSiteUsersResult.data || []) as unknown as InventoryLocationAssigneeRow[]
+    );
 
-    const locations = (locationsResult.data || []).map((location) => ({
+    const locations = locationRows.map((location) => ({
       ...location,
       item_count: countByLocationId.get(location.id) || 0,
+      assigned_user_names: assignedUserNamesByLocationId.get(location.id) || [],
       ...getLinkedAssetDisplay(location, vanById, hgvById, plantById),
     }));
 
@@ -131,6 +209,7 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as LocationRequestBody;
     const name = body.name?.trim();
+    const linkedAssetType = body.linked_asset_type || 'none';
     if (!name) {
       return NextResponse.json({ error: 'Location name is required' }, { status: 400 });
     }
@@ -140,7 +219,10 @@ export async function POST(request: NextRequest) {
       .insert({
         name,
         description: body.description?.trim() || null,
-        ...buildLinkedAssetColumns(body),
+        location_type: getLocationTypeForLinkedAsset(linkedAssetType),
+        source_type: linkedAssetType === 'none' ? 'manual' : 'fleet',
+        sync_status: linkedAssetType === 'none' ? 'manual' : 'needs_review',
+        ...buildLinkedAssetColumns(linkedAssetType, body.linked_asset_id),
         created_by: access.userId,
         updated_by: access.userId,
       })
@@ -149,7 +231,10 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       if (error.code === '23505') {
-        return NextResponse.json({ error: 'An active location with this name already exists' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'An active location with this name or linked asset already exists' },
+          { status: 400 }
+        );
       }
       throw error;
     }

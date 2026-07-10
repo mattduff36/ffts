@@ -22,6 +22,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = (await request.json()) as UpdateInventoryCategoryBody;
+    const admin = createAdminClient();
+    const { error: currentCategoryError } = await admin
+      .from('inventory_item_categories')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (currentCategoryError) {
+      if (currentCategoryError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Inventory category not found' }, { status: 404 });
+      }
+      throw currentCategoryError;
+    }
+
     const update: Record<string, unknown> = {
       updated_by: access.userId,
     };
@@ -37,7 +51,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.sort_order !== undefined) update.sort_order = Number.isFinite(body.sort_order) ? body.sort_order : 0;
     if (body.is_active !== undefined) update.is_active = body.is_active;
 
-    const { data, error } = await createAdminClient()
+    const { data, error } = await admin
       .from('inventory_item_categories')
       .update(update)
       .eq('id', id)

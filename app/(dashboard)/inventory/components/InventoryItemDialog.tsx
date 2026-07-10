@@ -24,16 +24,20 @@ import {
   EMPTY_INVENTORY_ITEM_FORM,
   INVENTORY_CATEGORY_LABELS,
   type InventoryCategory,
-  type InventoryItem,
   type InventoryItemCategory,
   type InventoryItemFormData,
   type InventoryLocation,
-  type InventoryStatus,
 } from '../types';
+import {
+  CHECK_INTERVAL_MONTHS,
+  isInventoryCheckExempt,
+  isInventoryUnknownLocation,
+} from '../utils';
+import { toast } from 'sonner';
+import { InventoryLocationSelect } from './InventoryLocationSelect';
 
 interface InventoryItemDialogProps {
   open: boolean;
-  item?: InventoryItem | null;
   locations: InventoryLocation[];
   categories: InventoryItemCategory[];
   onClose: () => void;
@@ -42,7 +46,6 @@ interface InventoryItemDialogProps {
 
 export function InventoryItemDialog({
   open,
-  item,
   locations,
   categories,
   onClose,
@@ -50,27 +53,22 @@ export function InventoryItemDialog({
 }: InventoryItemDialogProps) {
   const [form, setForm] = useState<InventoryItemFormData>(EMPTY_INVENTORY_ITEM_FORM);
   const [saving, setSaving] = useState(false);
-  const isEditing = !!item;
+  const [submitError, setSubmitError] = useState('');
+  const selectedLocation = locations.find((location) => location.id === form.location_id) || null;
+  const hasSpecialCheckStatus = isInventoryCheckExempt({
+    category: form.category,
+    location: selectedLocation,
+    last_checked_at: form.last_checked_at || null,
+  });
+  const isUnknownLocationSelected = isInventoryUnknownLocation(selectedLocation);
 
   useEffect(() => {
-    if (item) {
-      setForm({
-        item_number: item.item_number,
-        name: item.name,
-        category: item.category,
-        location_id: item.location_id || '',
-        last_checked_at: item.last_checked_at || '',
-        check_interval_days: item.check_interval_days ? String(item.check_interval_days) : '',
-        status: item.status,
-      });
-      return;
-    }
-
+    setSubmitError('');
     setForm({
       ...EMPTY_INVENTORY_ITEM_FORM,
       category: categories[0]?.slug || EMPTY_INVENTORY_ITEM_FORM.category,
     });
-  }, [categories, item, locations, open]);
+  }, [categories, open]);
 
   const categoryOptions = categories.length > 0
     ? [...categories]
@@ -82,15 +80,21 @@ export function InventoryItemDialog({
     : (Object.entries(INVENTORY_CATEGORY_LABELS) as Array<[InventoryCategory, string]>);
 
   function updateField<K extends keyof InventoryItemFormData>(key: K, value: InventoryItemFormData[K]) {
+    setSubmitError('');
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    setSubmitError('');
     setSaving(true);
     try {
       await onSubmit(form);
       onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save inventory item';
+      setSubmitError(message);
+      toast.error(message, { id: 'inventory-item-save-error' });
     } finally {
       setSaving(false);
     }
@@ -98,12 +102,12 @@ export function InventoryItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !saving) onClose(); }}>
-      <DialogContent className="max-w-2xl bg-slate-900 text-white border-slate-700">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto bg-slate-900 text-white border-slate-700">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit Inventory Item' : 'Add Inventory Item'}</DialogTitle>
+            <DialogTitle>Add Inventory Item</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Track item identity, location, and the last six-week check date.
+              Track item identity, location, and the last check date.
             </DialogDescription>
           </DialogHeader>
 
@@ -135,6 +139,14 @@ export function InventoryItemDialog({
               </div>
             </div>
 
+            {hasSpecialCheckStatus ? (
+              <div className="rounded-md border border-slate-500/25 bg-slate-500/10 p-3 text-xs text-slate-200">
+                {isUnknownLocationSelected
+                  ? 'Unknown is a system location for lost or missing items. It does not generate check due dates; the item list will show how long the item has been in Unknown.'
+                  : 'This item will not generate check due dates while the special status applies.'}
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Category</Label>
@@ -154,21 +166,12 @@ export function InventoryItemDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>Location</Label>
-                <Select
-                  value={form.location_id || 'unassigned'}
-                  onValueChange={(value) => updateField('location_id', value === 'unassigned' ? '' : value)}
-                >
-                  <SelectTrigger className="bg-slate-800 border-slate-600">
-                    <SelectValue placeholder="Select location" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned" className="text-muted-foreground">No location assigned</SelectItem>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Location *</Label>
+                <InventoryLocationSelect
+                  value={form.location_id}
+                  onValueChange={(value) => updateField('location_id', value)}
+                  locations={locations}
+                />
               </div>
             </div>
 
@@ -184,46 +187,35 @@ export function InventoryItemDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="check_interval_days">Check Interval Days</Label>
+                <Label htmlFor="check_interval_months">Check Interval Months</Label>
                 <Input
-                  id="check_interval_days"
+                  id="check_interval_months"
                   type="number"
                   min={1}
-                  max={3650}
-                  value={form.check_interval_days}
-                  onChange={(event) => updateField('check_interval_days', event.target.value)}
-                  placeholder="Default 42"
+                  max={120}
+                  value={form.check_interval_months}
+                  onChange={(event) => updateField('check_interval_months', event.target.value)}
+                  placeholder={`Default ${CHECK_INTERVAL_MONTHS}`}
                   className="bg-slate-800 border-slate-600"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(value) => updateField('status', value as InventoryStatus)}
-                >
-                  <SelectTrigger className="bg-slate-800 border-slate-600">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+            {submitError ? (
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
+                {submitError}
               </div>
-            </div>
+            ) : null}
+
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-inventory text-white hover:bg-inventory-dark" disabled={saving}>
+            <Button type="submit" className="bg-inventory text-white hover:bg-inventory-dark" disabled={saving || !form.location_id}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEditing ? 'Save Changes' : 'Add Item'}
+              Add Item
             </Button>
           </DialogFooter>
         </form>

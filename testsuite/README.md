@@ -1,6 +1,57 @@
 # Testsuite
 
-Comprehensive test suite for DigiDocs. Converted from the legacy `testsprite_tests/` Python scripts into Playwright (TypeScript) for UI workflows and Vitest for API/integration checks.
+The dedicated `testsuite/` folder is the finalise smoke and workflow suite. It complements the main `tests/` Vitest workspace.
+
+## Test Tiers
+
+- API guards: fast unauthenticated or schema checks in `testsuite/api`.
+- UI smoke: route, role, tab, and page-shell checks in `testsuite/ui`.
+- Seeded workflows: tests that create TESTSUITE-tagged records and clean them up with helpers from `testsuite/helpers`.
+
+## Role Projects
+
+Playwright projects are configured in `testsuite/config/playwright.config.ts`:
+
+- `setup` logs in admin, manager, and employee accounts.
+- `auth-tests` runs login tests with no stored session.
+- `auth-lifecycle-tests` runs session lifecycle checks and writes lifecycle findings.
+- `permissions-tests` uses employee storage state.
+- `timesheets-tests` uses manager storage state.
+- `employee-tests` covers employee daily-check/message routes.
+- `admin-tests` covers remaining admin/superadmin surfaces.
+- `responsive-tests` runs viewport smoke checks.
+
+## Commands
+
+```bash
+npm run testsuite:setup
+npm run testsuite:api
+npm run testsuite:ui
+npm run testsuite
+```
+
+`npm run testsuite` uses `testsuite/runner/run.ts`, which runs API and UI checks, writes reports, and enforces the auth-lifecycle gate.
+
+For targeted runs:
+
+```bash
+npx tsx testsuite/runner/run.ts --api
+npx tsx testsuite/runner/run.ts --ui
+npx tsx testsuite/runner/run.ts --tag @actions
+npx tsx testsuite/runner/run.ts --grep "reminders"
+```
+
+## Seeded Data Rules
+
+- Only mutate records created by the current testsuite run.
+- Tag records with a TESTSUITE prefix or `runTag`.
+- Register created records with cleanup helpers.
+- Do not mutate the first existing production-like row just because it is available.
+
+Some history-link and drawer tests may still skip when the environment has no matching seed data. Prefer adding deterministic seeded helpers before converting those checks into hard workflow assertions.
+# Testsuite
+
+Comprehensive test suite for Forest Farm Operations (Forest Farm Operations). Converted from the legacy `testsprite_tests/` Python scripts into Playwright (TypeScript) for UI workflows and Vitest for API/integration checks.
 
 ## Data Safety
 

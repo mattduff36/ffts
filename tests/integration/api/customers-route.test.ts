@@ -2,15 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { GET } from '@/app/api/customers/route';
+import { GET, POST } from '@/app/api/customers/route';
 
 const {
   mockCreateAdminClient,
+  mockCreateClient,
   mockGetCurrentAuthenticatedProfile,
   mockGetPermissionMapForUser,
   mockGetEffectiveRole,
 } = vi.hoisted(() => ({
   mockCreateAdminClient: vi.fn(),
+  mockCreateClient: vi.fn(),
   mockGetCurrentAuthenticatedProfile: vi.fn(),
   mockGetPermissionMapForUser: vi.fn(),
   mockGetEffectiveRole: vi.fn(),
@@ -33,7 +35,11 @@ vi.mock('@/lib/utils/view-as', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(),
+  createClient: mockCreateClient,
+}));
+
+vi.mock('@/lib/server/sensitive-module-access', () => ({
+  requireSensitiveModuleAccess: vi.fn().mockResolvedValue(null),
 }));
 
 function createCustomerListQuery(rows: Array<Record<string, unknown>>) {
@@ -70,11 +76,37 @@ describe('GET /api/customers', () => {
       { id: 'customer-1', company_name: 'Acme Ltd' },
       { id: 'customer-2', company_name: 'Bravo Ltd' },
     ]);
+    const contactsOrder = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'contact-1',
+          customer_id: 'customer-1',
+          name: 'Chris CC',
+          email: 'chris@example.com',
+          job_title: null,
+          phone: null,
+        },
+      ],
+      error: null,
+    });
+    const contactsIn = vi.fn().mockReturnValue({ order: contactsOrder });
 
     mockCreateAdminClient.mockReturnValue({
-      from: vi.fn(() => ({
-        select,
-      })),
+      from: vi.fn((table: string) => {
+        if (table === 'customers') {
+          return { select };
+        }
+
+        if (table === 'customer_contacts') {
+          return {
+            select: vi.fn(() => ({
+              in: contactsIn,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }),
     } as unknown as SupabaseClient);
 
     const response = await GET(new NextRequest('http://localhost/api/customers?limit=10&offset=5'));
@@ -85,12 +117,26 @@ describe('GET /api/customers', () => {
       'user-1',
       'role-1',
       expect.any(Object),
-      'team-1'
+      'team-1',
+      { includeUserOverrides: true }
     );
     expect(range).toHaveBeenCalledWith(5, 14);
     expect(payload.customers).toEqual([
-      { id: 'customer-1', company_name: 'Acme Ltd' },
-      { id: 'customer-2', company_name: 'Bravo Ltd' },
+      {
+        id: 'customer-1',
+        company_name: 'Acme Ltd',
+        secondary_contacts: [
+          {
+            id: 'contact-1',
+            customer_id: 'customer-1',
+            name: 'Chris CC',
+            email: 'chris@example.com',
+            job_title: null,
+            phone: null,
+          },
+        ],
+      },
+      { id: 'customer-2', company_name: 'Bravo Ltd', secondary_contacts: [] },
     ]);
   });
 
@@ -117,5 +163,42 @@ describe('GET /api/customers', () => {
 
     expect(response.status).toBe(403);
     expect(payload).toEqual({ error: 'Forbidden' });
+  });
+});
+
+describe('POST /api/customers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns field errors for invalid secondary contact email addresses', async () => {
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+    } as unknown as SupabaseClient);
+
+    const response = await POST(new NextRequest('http://localhost/api/customers', {
+      method: 'POST',
+      body: JSON.stringify({
+        company_name: 'Acme Ltd',
+        secondary_contacts: [
+          {
+            name: 'Chris CC',
+            email: 'not-an-email',
+          },
+        ],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.field_errors).toEqual({
+      'secondary_contacts.0.email': 'Enter a valid secondary contact email.',
+    });
   });
 });

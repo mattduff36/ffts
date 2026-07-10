@@ -8,7 +8,10 @@ import {
   getTimesheetTypeExceptionMatrix,
   upsertTimesheetTypeException,
 } from '@/lib/server/timesheet-type-exceptions';
-import { normalizeTimesheetExceptionType } from '@/types/timesheet-type-exceptions';
+import {
+  normalizeTimesheetExceptionOverrideType,
+  type TimesheetExceptionOverrideType,
+} from '@/types/timesheet-type-exceptions';
 
 function isActorAdmin(effectiveRole: {
   is_actual_super_admin: boolean;
@@ -44,7 +47,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'profileId is required' }, { status: 400 });
   }
 
-  let nextTimesheetType: 'civils' | 'plant' | null;
+  let nextTimesheetType: TimesheetExceptionOverrideType | null;
   try {
     const body = (await request.json()) as { timesheet_type?: unknown };
     if (!Object.prototype.hasOwnProperty.call(body, 'timesheet_type')) {
@@ -53,7 +56,7 @@ export async function PATCH(
     if (body.timesheet_type === null) {
       nextTimesheetType = null;
     } else {
-      nextTimesheetType = normalizeTimesheetExceptionType(body.timesheet_type);
+      nextTimesheetType = normalizeTimesheetExceptionOverrideType(body.timesheet_type);
       if (nextTimesheetType === null) {
         return NextResponse.json({ error: 'Invalid timesheet_type value' }, { status: 400 });
       }

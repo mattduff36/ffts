@@ -18,6 +18,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/help',
   useRouter: () => ({
     replace: replaceMock,
   }),
@@ -29,6 +30,12 @@ vi.mock('@/lib/hooks/useAuth', () => ({
     profile: { id: 'user-1' },
     isAdmin: false,
     signOut: signOutMock,
+  }),
+}));
+
+vi.mock('@/lib/hooks/usePermissionSnapshot', () => ({
+  usePermissionSnapshot: () => ({
+    enabledModuleSet: new Set(),
   }),
 }));
 
@@ -83,7 +90,7 @@ describe('Help page install tab', () => {
     renderHelpPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Install DigiDocs App')).toBeInTheDocument();
+      expect(screen.getByText('Install Forest Farm Operations App')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Quick Support Actions')).toBeInTheDocument();

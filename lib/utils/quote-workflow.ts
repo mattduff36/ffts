@@ -1,8 +1,10 @@
 export interface InvoiceSummary {
   invoicedTotal: number;
+  pendingRequestedTotal: number;
   remainingBalance: number;
+  availableToRequest: number;
   lastInvoiceAt: string | null;
-  status: 'not_invoiced' | 'partially_invoiced' | 'invoiced';
+  status: 'not_invoiced' | 'ready_to_invoice' | 'partially_invoiced' | 'invoiced';
 }
 
 export function calculateQuoteTotals(lineItems: Array<{ quantity: number; unit_rate: number }>) {
@@ -51,11 +53,18 @@ export function buildVersionReference(baseReference: string, revisionType: strin
 export function getInvoiceSummary(input: {
   total: number;
   invoices: Array<{ amount: number; invoice_date?: string | null }>;
+  invoiceRequests?: Array<{ requested_amount: number; status?: string | null }>;
 }): InvoiceSummary {
   const invoicedTotal = Math.round(
     input.invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0) * 100
   ) / 100;
+  const pendingRequestedTotal = Math.round(
+    (input.invoiceRequests || [])
+      .filter(request => (request.status || 'pending') === 'pending')
+      .reduce((sum, request) => sum + Number(request.requested_amount || 0), 0) * 100
+  ) / 100;
   const remainingBalance = Math.round((Number(input.total || 0) - invoicedTotal) * 100) / 100;
+  const availableToRequest = Math.max(0, Math.round((remainingBalance - pendingRequestedTotal) * 100) / 100);
   const lastInvoiceAt = input.invoices.length > 0
     ? input.invoices
         .map(invoice => invoice.invoice_date || null)
@@ -66,12 +75,16 @@ export function getInvoiceSummary(input: {
 
   return {
     invoicedTotal,
+    pendingRequestedTotal,
     remainingBalance,
+    availableToRequest,
     lastInvoiceAt,
-    status: invoicedTotal <= 0
-      ? 'not_invoiced'
-      : remainingBalance > 0
-        ? 'partially_invoiced'
-        : 'invoiced',
+    status: remainingBalance <= 0
+      ? 'invoiced'
+      : pendingRequestedTotal > 0
+        ? 'ready_to_invoice'
+        : invoicedTotal > 0
+          ? 'partially_invoiced'
+          : 'not_invoiced',
   };
 }

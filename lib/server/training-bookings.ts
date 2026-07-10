@@ -187,6 +187,7 @@ async function createNotification(
       priority: 'LOW',
       sender_id: senderId,
       created_via: 'timesheet_training_decline',
+      module_key: 'training',
     })
     .select('id')
     .single();

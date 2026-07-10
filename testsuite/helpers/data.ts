@@ -24,7 +24,7 @@ interface CreatedRecord {
 
 const createdRecords: CreatedRecord[] = [];
 
-function getAdminClient(): SupabaseClient {
+export function getTestsuiteAdminClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -40,8 +40,17 @@ export function getRunTag(): string {
 }
 
 export async function createTestVehicle(overrides?: Record<string, unknown>): Promise<{ id: string; reg_number: string }> {
-  const supabase = getAdminClient();
+  const supabase = getTestsuiteAdminClient();
   const regNumber = `${TEST_ASSET_PREFIX}${RUN_TAG.slice(-6)}`;
+  const { data: category, error: categoryError } = await supabase
+    .from('van_categories')
+    .select('id')
+    .limit(1)
+    .single();
+
+  if (categoryError || !category?.id) {
+    throw new Error(`Failed to load vehicle category for test vehicle: ${categoryError?.message || 'no category'}`);
+  }
 
   const { data, error } = await supabase
     .from('vans')
@@ -49,6 +58,7 @@ export async function createTestVehicle(overrides?: Record<string, unknown>): Pr
       reg_number: regNumber,
       nickname: `Test Vehicle ${RUN_TAG}`,
       status: 'active',
+      category_id: category.id,
       ...overrides,
     })
     .select('id, reg_number')
@@ -67,7 +77,7 @@ export async function createTestWorkshopTask(
   userId: string,
   overrides?: Record<string, unknown>
 ): Promise<{ id: string }> {
-  const supabase = getAdminClient();
+  const supabase = getTestsuiteAdminClient();
 
   // Get default category
   const { data: category } = await supabase
@@ -99,8 +109,82 @@ export async function createTestWorkshopTask(
   return data;
 }
 
+export async function createTestReminderAction({
+  vanId,
+  createdBy,
+  overrides,
+}: {
+  vanId: string;
+  createdBy: string;
+  overrides?: Record<string, unknown>;
+}): Promise<{ id: string }> {
+  const supabase = getTestsuiteAdminClient();
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('reminder_actions')
+    .insert({
+      workflow_key: 'fleet_inspection_overdue',
+      source_type: 'system_generated',
+      dedupe_key: `${RUN_TAG}:van:${vanId}`,
+      status: 'open',
+      priority: 'medium',
+      title: `Testsuite reminder ${RUN_TAG}`,
+      description: `Testsuite reminder action ${RUN_TAG}`,
+      asset_type: 'van',
+      van_id: vanId,
+      metadata: { testsuite: true, runTag: RUN_TAG },
+      created_by: createdBy,
+      first_detected_at: nowIso,
+      last_detected_at: nowIso,
+      ...overrides,
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create test reminder action: ${error?.message || 'no data'}`);
+  }
+
+  createdRecords.push({ table: 'reminder_actions', id: data.id });
+  return data;
+}
+
+export async function createTestReminderAssignment({
+  actionId,
+  assignedTo,
+  assignedBy,
+  overrides,
+}: {
+  actionId: string;
+  assignedTo: string;
+  assignedBy: string;
+  overrides?: Record<string, unknown>;
+}): Promise<{ id: string }> {
+  const supabase = getTestsuiteAdminClient();
+
+  const { data, error } = await supabase
+    .from('reminders')
+    .insert({
+      action_id: actionId,
+      assigned_to: assignedTo,
+      assigned_by: assignedBy,
+      status: 'pending',
+      ...overrides,
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create test reminder assignment: ${error?.message || 'no data'}`);
+  }
+
+  createdRecords.push({ table: 'reminders', id: data.id });
+  return data;
+}
+
 export async function cleanupTestData(): Promise<void> {
-  const supabase = getAdminClient();
+  const supabase = getTestsuiteAdminClient();
 
   // Reverse order to respect FK dependencies
   for (const record of [...createdRecords].reverse()) {

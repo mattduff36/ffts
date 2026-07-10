@@ -189,6 +189,7 @@ describe('training booking decline helper', () => {
     expect(state.createdMessage).toMatchObject({
       type: 'NOTIFICATION',
       created_via: 'timesheet_training_decline',
+      module_key: 'training',
     });
     expect(state.createdRecipients).toEqual([
       { message_id: 'message-1', user_id: 'manager-1', status: 'PENDING' },

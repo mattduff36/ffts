@@ -5,6 +5,9 @@ import { getEffectiveRole } from '@/lib/utils/view-as';
 import { logServerError } from '@/lib/utils/server-error-logger';
 import { validateRegistrationNumber, formatRegistrationForStorage } from '@/lib/utils/registration';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { createDVLAApiService } from '@/lib/services/dvla-api';
+import { createMotHistoryService } from '@/lib/services/mot-history-api';
+import { isRoadEligibleRegistration, runFleetDvlaSync } from '@/lib/services/fleet-dvla-sync';
 
 function getSupabaseAdmin() {
   return createClient(
@@ -17,6 +20,10 @@ function getSupabaseAdmin() {
       },
     }
   );
+}
+
+function normalizeRegistration(registrationNumber: string | null | undefined): string {
+  return registrationNumber?.replace(/\s+/g, '').trim().toUpperCase() || '';
 }
 
 // PUT - Update van
@@ -66,15 +73,32 @@ export async function PUT(
       updates.nickname = nickname?.trim() || null;
     }
 
+    let currentVan: { reg_number: string | null; category_id: string | null } | null = null;
+
     if ('reg_number' in updates || 'category_id' in updates) {
-      const { data: currentVan } = await supabase
+      const { data: currentVanData, error: currentVanError } = await supabase
         .from('vans')
         .select('reg_number, category_id')
         .eq('id', vanId)
-        .single();
+        .maybeSingle();
 
-      const finalRegNumber = updates.reg_number || currentVan?.reg_number;
-      const finalCategoryId = updates.category_id || currentVan?.category_id;
+      if (currentVanError) throw currentVanError;
+
+      if (!currentVanData) {
+        return NextResponse.json(
+          { error: 'Van not found' },
+          { status: 404 }
+        );
+      }
+
+      currentVan = currentVanData;
+
+      const finalRegNumber = typeof updates.reg_number === 'string'
+        ? updates.reg_number
+        : currentVan.reg_number;
+      const finalCategoryId = typeof updates.category_id === 'string'
+        ? updates.category_id
+        : currentVan.category_id;
 
       if (!finalRegNumber) {
         return NextResponse.json(
@@ -90,6 +114,16 @@ export async function PUT(
         );
       }
     }
+
+    const previousRegNumber = currentVan?.reg_number || null;
+    const nextRegNumber = typeof updates.reg_number === 'string'
+      ? updates.reg_number
+      : previousRegNumber;
+    const hasRegistrationChanged = Boolean(
+      previousRegNumber &&
+      nextRegNumber &&
+      normalizeRegistration(previousRegNumber) !== normalizeRegistration(nextRegNumber)
+    );
 
     const { data, error } = await supabase
       .from('vans')
@@ -108,7 +142,50 @@ export async function PUT(
       throw error;
     }
 
-    return NextResponse.json({ vehicle: data });
+    let syncResult: unknown = null;
+    if (hasRegistrationChanged && data.reg_number && isRoadEligibleRegistration(data.reg_number)) {
+      try {
+        const dvlaService = createDVLAApiService();
+        if (dvlaService) {
+          syncResult = await runFleetDvlaSync({
+            supabase,
+            dvlaService,
+            motService: createMotHistoryService(),
+            targets: [
+              {
+                assetType: 'van',
+                assetId: vanId,
+                registrationNumber: data.reg_number,
+              },
+            ],
+            triggerType: 'manual',
+            triggeredBy: effectiveRole.user_id,
+            logPrefix: '[VRN CHANGE] ',
+          });
+        } else {
+          syncResult = {
+            total: 1,
+            successful: 0,
+            failed: 1,
+            warning: 'DVLA API not configured; registration updated but DVLA/MOT refresh did not run',
+            results: [],
+          };
+        }
+      } catch (syncError) {
+        console.error('Error syncing van after VRN change:', syncError);
+        syncResult = {
+          total: 1,
+          successful: 0,
+          failed: 1,
+          warning: syncError instanceof Error
+            ? syncError.message
+            : 'Registration updated but DVLA/MOT refresh failed',
+          results: [],
+        };
+      }
+    }
+
+    return NextResponse.json({ vehicle: data, syncResult });
   } catch (error) {
     console.error('Error updating van:', error);
 

@@ -1,7 +1,7 @@
 /**
- * E2E: Inspection Refactor Regression Checks
+ * E2E: Core Dashboard Regression Checks
  *
- * Smoke tests for pages that could break due to the inspection table rename:
+ * Smoke tests for high-traffic dashboard pages:
  * - Dashboard still loads
  * - Fleet page still loads
  * - Workshop tasks still loads
@@ -20,7 +20,7 @@ const SMOKE_ROUTES = [
   { path: '/fleet', name: 'Fleet' },
   { path: '/workshop-tasks', name: 'Workshop Tasks' },
   { path: '/reports', name: 'Reports' },
-  { path: '/actions', name: 'Actions (Legacy)' },
+  { path: '/actions', name: 'Actions and Reminders' },
   { path: '/timesheets', name: 'Timesheets' },
 ];
 

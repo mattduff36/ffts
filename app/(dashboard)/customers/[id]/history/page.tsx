@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
+import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { CustomerFormDialog } from '../../components/CustomerFormDialog';
 import type { Customer, CustomerFormData } from '../../types';
 import { ACCEPTED_QUOTE_STATUSES, getQuoteStatusConfig, type QuoteListSummary, type QuoteStatus } from '@/app/(dashboard)/quotes/types';
@@ -49,6 +50,7 @@ interface PageProps {
 export default function CustomerHistoryPage({ params }: PageProps) {
   const { id } = use(params);
   const { hasPermission: canViewCustomers, loading: permissionLoading } = usePermissionCheck('customers', false);
+  const sensitiveAccess = useSensitiveModuleAccess('customers');
   const router = useRouter();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -83,13 +85,14 @@ export default function CustomerHistoryPage({ params }: PageProps) {
   }, [id]);
 
   useEffect(() => {
-    if (permissionLoading) return;
+    if (permissionLoading || sensitiveAccess.loading) return;
     if (!canViewCustomers) {
       router.push('/dashboard');
       return;
     }
+    if (!sensitiveAccess.canAccess) return;
     Promise.all([fetchCustomer(), fetchQuotes()]).finally(() => setLoading(false));
-  }, [permissionLoading, canViewCustomers, router, fetchCustomer, fetchQuotes]);
+  }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewCustomers, router, fetchCustomer, fetchQuotes]);
 
   async function handleUpdate(data: CustomerFormData) {
     const res = await fetch(`/api/customers/${id}`, {
@@ -102,8 +105,12 @@ export default function CustomerHistoryPage({ params }: PageProps) {
     await fetchCustomer();
   }
 
-  if (permissionLoading || loading) {
+  if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
     return <PageLoader message="Loading customer history..." />;
+  }
+
+  if (!sensitiveAccess.canAccess) {
+    return <SensitiveModuleGate moduleLabel="Customers" access={sensitiveAccess} />;
   }
 
   if (!customer) return null;
@@ -121,6 +128,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <SensitiveModuleSessionManager moduleLabel="Customers" access={sensitiveAccess} />
       {/* Back nav */}
       <Link href="/customers" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-white transition-colors">
         <ArrowLeft className="h-4 w-4" /> Back to Customers
@@ -203,14 +211,19 @@ export default function CustomerHistoryPage({ params }: PageProps) {
             <CardTitle className="text-sm font-semibold text-muted-foreground">Contact Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            {customer.contact_name && (
-              <div>
-                <span className="font-medium text-white">{customer.contact_name}</span>
-                {customer.contact_job_title && (
-                  <span className="text-muted-foreground"> — {customer.contact_job_title}</span>
-                )}
-              </div>
-            )}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Primary Contact</p>
+              {customer.contact_name ? (
+                <div className="mt-1">
+                  <span className="font-medium text-white">{customer.contact_name}</span>
+                  {customer.contact_job_title && (
+                    <span className="text-muted-foreground"> — {customer.contact_job_title}</span>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-1 text-muted-foreground">No primary contact name on file</p>
+              )}
+            </div>
             {customer.contact_email && (
               <div className="flex items-center gap-2 text-slate-300">
                 <Mail className="h-4 w-4 text-muted-foreground" />
@@ -223,6 +236,24 @@ export default function CustomerHistoryPage({ params }: PageProps) {
                 {customer.contact_phone}
               </div>
             )}
+
+            {customer.secondary_contacts?.length ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Secondary Contacts</p>
+                <div className="space-y-2">
+                  {customer.secondary_contacts.map(contact => (
+                    <div key={contact.id} className="rounded-md border border-slate-700/70 bg-slate-950/30 p-2">
+                      <p className="font-medium text-white">{contact.name || 'Unnamed contact'}</p>
+                      {contact.job_title && <p className="text-xs text-muted-foreground">{contact.job_title}</p>}
+                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-300">
+                        {contact.email && <a href={`mailto:${contact.email}`} className="hover:text-brand-yellow">{contact.email}</a>}
+                        {contact.phone && <span>{contact.phone}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

@@ -7,6 +7,9 @@ export interface LinkedInspectionTaskSummary {
   created_at: string | null;
   logged_at: string | null;
   actioned_at: string | null;
+  inspection_item_id?: string | null;
+  logged_comment?: string | null;
+  workshop_comments?: string | null;
 }
 
 export async function fetchInspectionLinks(

@@ -29,6 +29,7 @@ export const createMockTimesheetEntry = (overrides?: Partial<TimesheetEntry>): T
   time_finished: '17:00',
   job_number: 'JOB123',
   working_in_yard: false,
+  subsistence_payment_required: false,
   did_not_work: false,
   daily_total: 8.0,
   remarks: null,

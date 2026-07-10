@@ -18,6 +18,10 @@ import { isClosedFinancialYearDate } from '@/lib/services/absence-archive';
 import { getErrorMessage, shouldLogAbsenceManageError } from '@/lib/utils/absence-error-handling';
 import { getCrossFinancialYearAbsenceError } from '@/lib/utils/absence-financial-year';
 import { ANNUAL_LEAVE_MIN_REMAINING_DAYS } from '@/lib/utils/annual-leave';
+import {
+  canEmployeeSelfBookAbsenceRange,
+  getEmployeeAbsenceSelfServiceDeadlineForRange,
+} from '@/lib/utils/absence-self-service-deadline';
 import { isAdminRole } from '@/lib/utils/role-access';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isTrainingReasonName } from '@/lib/utils/timesheet-off-days';
@@ -42,8 +46,85 @@ interface AbsenceValidationShape {
   notes: string | null;
 }
 
+type ProcessedAbsenceChangeAction = 'updated' | 'cancelled' | 'deleted';
+
+interface ProcessedAbsenceClientSnapshot {
+  id: string;
+  profileId: string;
+  employeeName: string | null;
+  reasonName: string | null;
+  startDate: string;
+  endDate: string | null;
+  status: string | null;
+}
+
+interface AbsenceNotificationRelationShape extends AbsenceValidationShape {
+  id?: string;
+  allow_timesheet_work_on_leave?: boolean | null;
+  absence_reasons?: { name: string | null } | Array<{ name: string | null }> | null;
+  profile?: { full_name: string | null } | Array<{ full_name: string | null }> | null;
+}
+
 interface AbsenceQueryOptions {
   enabled?: boolean;
+}
+
+function pickSingleRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function buildProcessedAbsenceSnapshot(
+  id: string,
+  absence: AbsenceNotificationRelationShape
+): ProcessedAbsenceClientSnapshot {
+  return {
+    id,
+    profileId: absence.profile_id,
+    employeeName: pickSingleRelation(absence.profile)?.full_name || null,
+    reasonName: pickSingleRelation(absence.absence_reasons)?.name || null,
+    startDate: absence.date,
+    endDate: absence.end_date,
+    status: absence.status,
+  };
+}
+
+function getChangedAbsenceFields(
+  before: AbsenceNotificationRelationShape,
+  after: Partial<AbsenceNotificationRelationShape>,
+  fields: Array<keyof AbsenceNotificationRelationShape>
+): string[] {
+  return fields.filter((field) => before[field] !== after[field]).map(String);
+}
+
+async function notifyProcessedAbsenceChange(input: {
+  absenceId: string;
+  action: ProcessedAbsenceChangeAction;
+  previousAbsence: ProcessedAbsenceClientSnapshot;
+  changedFields?: string[];
+}): Promise<void> {
+  if (input.previousAbsence.status !== 'processed') return;
+
+  try {
+    const response = await fetch(`/api/absence/${input.absenceId}/processed-change-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: input.action,
+        previousAbsence: input.previousAbsence,
+        changedFields: input.changedFields || [],
+      }),
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      console.error('Failed to notify processed absence change:', message);
+    }
+  } catch (error) {
+    console.error('Failed to notify processed absence change:', error);
+  }
 }
 
 function hasFilterValue(value?: string): value is string {
@@ -669,6 +750,13 @@ export function useCreateAbsence() {
       if (isClosedFinancialYearDate(absence.date) && !actorIsManagerOrHigher) {
         throw new Error('This absence is in a closed financial year and is read-only');
       }
+      if (
+        !actorIsManagerOrHigher &&
+        !canEmployeeSelfBookAbsenceRange(absence.date, absence.end_date ?? null)
+      ) {
+        const deadline = getEmployeeAbsenceSelfServiceDeadlineForRange(absence.date, absence.end_date ?? null);
+        throw new Error(`Absences can only be self-booked until the Monday after the affected week (${deadline}). Please contact your manager.`);
+      }
 
       const validatedAbsence = await buildValidatedAbsence(
         supabase,
@@ -687,7 +775,9 @@ export function useCreateAbsence() {
       );
 
       await assertAnnualLeaveAllowanceAvailable(supabase, validatedAbsence);
-      await assertAbsenceTimesheetChangesUnlocked(supabase, validatedAbsence);
+      if (!actorIsManagerOrHigher) {
+        await assertAbsenceTimesheetChangesUnlocked(supabase, validatedAbsence);
+      }
 
       const { data, error } = await supabase
         .from('absences')
@@ -738,12 +828,32 @@ export function useUpdateAbsence() {
       const { data: existingAbsence, error: existingAbsenceError } = await supabase
         .from('absences')
         .select(
-          'profile_id, date, end_date, reason_id, duration_days, is_half_day, half_day_session, status, notes, is_bank_holiday, auto_generated, bulk_batch_id, allow_timesheet_work_on_leave'
+          `
+          profile_id,
+          date,
+          end_date,
+          reason_id,
+          duration_days,
+          is_half_day,
+          half_day_session,
+          status,
+          notes,
+          is_bank_holiday,
+          auto_generated,
+          bulk_batch_id,
+          allow_timesheet_work_on_leave,
+          absence_reasons(name),
+          profile:profiles!absences_profile_id_fkey(full_name)
+        `
         )
         .eq('id', id)
         .single();
 
       if (existingAbsenceError) throw existingAbsenceError;
+      const previousProcessedAbsenceSnapshot = buildProcessedAbsenceSnapshot(
+        id,
+        existingAbsence as unknown as AbsenceNotificationRelationShape
+      );
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
@@ -814,6 +924,16 @@ export function useUpdateAbsence() {
           user.id,
           'Updated'
         );
+        await notifyProcessedAbsenceChange({
+          absenceId: id,
+          action: 'updated',
+          previousAbsence: previousProcessedAbsenceSnapshot,
+          changedFields: getChangedAbsenceFields(
+            existingAbsence as unknown as AbsenceNotificationRelationShape,
+            data as unknown as Partial<AbsenceNotificationRelationShape>,
+            ['allow_timesheet_work_on_leave']
+          ),
+        });
         return data;
       }
 
@@ -825,7 +945,7 @@ export function useUpdateAbsence() {
           end_date: resolveUpdatedField('end_date', existingAbsence.end_date),
           reason_id: resolveUpdatedField('reason_id', existingAbsence.reason_id),
           duration_days: resolveUpdatedField('duration_days', existingAbsence.duration_days),
-          is_half_day: resolveUpdatedField('is_half_day', existingAbsence.is_half_day),
+          is_half_day: Boolean(resolveUpdatedField('is_half_day', existingAbsence.is_half_day)),
           half_day_session: resolveUpdatedField('half_day_session', existingAbsence.half_day_session),
           status: resolveUpdatedField('status', existingAbsence.status),
           notes: resolveUpdatedField('notes', existingAbsence.notes),
@@ -879,6 +999,27 @@ export function useUpdateAbsence() {
         user.id,
         'Updated'
       );
+      await notifyProcessedAbsenceChange({
+        absenceId: id,
+        action: 'updated',
+        previousAbsence: previousProcessedAbsenceSnapshot,
+        changedFields: getChangedAbsenceFields(
+          existingAbsence as unknown as AbsenceNotificationRelationShape,
+          data as unknown as Partial<AbsenceNotificationRelationShape>,
+          [
+            'profile_id',
+            'date',
+            'end_date',
+            'reason_id',
+            'duration_days',
+            'is_half_day',
+            'half_day_session',
+            'status',
+            'notes',
+            'allow_timesheet_work_on_leave',
+          ]
+        ),
+      });
       return data;
     },
     onSuccess: () => {
@@ -906,11 +1047,30 @@ export function useCancelAbsence() {
       if (!user) throw new Error('Not authenticated');
       const { data: existingAbsence, error: existingAbsenceError } = await supabase
         .from('absences')
-        .select('profile_id, date, end_date, reason_id, duration_days, is_half_day, half_day_session, status, notes, allow_timesheet_work_on_leave')
+        .select(`
+          profile_id,
+          date,
+          end_date,
+          reason_id,
+          duration_days,
+          is_half_day,
+          half_day_session,
+          status,
+          notes,
+          allow_timesheet_work_on_leave,
+          absence_reasons(name),
+          profile:profiles!absences_profile_id_fkey(full_name)
+        `)
         .eq('id', id)
         .maybeSingle();
 
       if (existingAbsenceError) throw existingAbsenceError;
+      const previousProcessedAbsenceSnapshot = existingAbsence
+        ? buildProcessedAbsenceSnapshot(
+            id,
+            existingAbsence as unknown as AbsenceNotificationRelationShape
+          )
+        : null;
       if (existingAbsence) {
         await assertAbsenceTimesheetChangesUnlocked(supabase, existingAbsence as AbsenceValidationShape);
       }
@@ -933,6 +1093,14 @@ export function useCancelAbsence() {
           },
           user.id
         );
+      }
+      if (previousProcessedAbsenceSnapshot) {
+        await notifyProcessedAbsenceChange({
+          absenceId: id,
+          action: 'cancelled',
+          previousAbsence: previousProcessedAbsenceSnapshot,
+          changedFields: ['status'],
+        });
       }
       if (!data) return { id, status: 'cancelled' } as const;
       return data;
@@ -958,11 +1126,28 @@ export function useDeleteAbsence() {
       if (!user) throw new Error('Not authenticated');
       const { data: existingAbsence, error: existingAbsenceError } = await supabase
         .from('absences')
-        .select('profile_id, date, end_date, reason_id, duration_days, is_half_day, half_day_session, status, notes, allow_timesheet_work_on_leave')
+        .select(`
+          profile_id,
+          date,
+          end_date,
+          reason_id,
+          duration_days,
+          is_half_day,
+          half_day_session,
+          status,
+          notes,
+          allow_timesheet_work_on_leave,
+          absence_reasons(name),
+          profile:profiles!absences_profile_id_fkey(full_name)
+        `)
         .eq('id', id)
         .single();
 
       if (existingAbsenceError) throw existingAbsenceError;
+      const previousProcessedAbsenceSnapshot = buildProcessedAbsenceSnapshot(
+        id,
+        existingAbsence as unknown as AbsenceNotificationRelationShape
+      );
       await assertAbsenceTimesheetChangesUnlocked(supabase, existingAbsence as AbsenceValidationShape);
 
       const { error } = await supabase
@@ -980,6 +1165,11 @@ export function useDeleteAbsence() {
         },
         user.id
       );
+      await notifyProcessedAbsenceChange({
+        absenceId: id,
+        action: 'deleted',
+        previousAbsence: previousProcessedAbsenceSnapshot,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['absences'] });
@@ -1144,13 +1334,10 @@ export function useApproveAbsence() {
         .select('profile_id, date, end_date, reason_id, duration_days, is_half_day, half_day_session, status, notes, allow_timesheet_work_on_leave')
         .eq('id', id)
         .eq('status', 'pending')
-        .single();
+        .maybeSingle();
 
       if (existingAbsenceError) throw existingAbsenceError;
-      await assertAbsenceTimesheetChangesUnlocked(supabase, {
-        ...(existingAbsence as AbsenceValidationShape),
-        status: 'approved',
-      });
+      if (!existingAbsence) return { id, status: 'approved' } as const;
       
       const { data, error } = await supabase
         .from('absences')
@@ -1162,9 +1349,10 @@ export function useApproveAbsence() {
         .eq('id', id)
         .eq('status', 'pending')
         .select()
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      if (!data) return { id, status: 'approved' } as const;
       await applyApprovedLeaveTimesheetEffects(
         supabase,
         {
@@ -1173,7 +1361,7 @@ export function useApproveAbsence() {
           end_date: data.end_date,
           reason_id: data.reason_id,
           duration_days: data.duration_days,
-          is_half_day: data.is_half_day,
+          is_half_day: Boolean(data.is_half_day),
           half_day_session: data.half_day_session,
           status: data.status,
           notes: data.notes,

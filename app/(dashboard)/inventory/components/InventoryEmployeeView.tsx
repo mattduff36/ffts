@@ -1,20 +1,21 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { MapPin, PackageSearch, Send } from 'lucide-react';
-import type { InventoryItem, InventoryLocation, InventoryMovePayload, InventoryUserLocation } from '../types';
+import { MapPin, PackageSearch, Send, Truck } from 'lucide-react';
+import type {
+  CurrentFleetAssignment,
+  InventoryItem,
+  InventoryLocation,
+  InventoryUserLocation,
+  InventoryUserSiteLocation,
+} from '../types';
+import { InventoryLocationSelect } from './InventoryLocationSelect';
 import { InventoryTable } from './InventoryTable';
 
 const LOCATION_NOT_SHOWN_VALUE = '__location_not_shown__';
@@ -24,10 +25,12 @@ interface InventoryEmployeeViewProps {
   locations: InventoryLocation[];
   categoryLabels?: Record<string, string>;
   userLocation: InventoryUserLocation | null;
+  secondarySiteLocations?: InventoryUserSiteLocation[];
+  currentFleetAssignment?: CurrentFleetAssignment | null;
   onSetUserLocation: (locationId: string) => Promise<void>;
   onRequestLocation: (payload: { suggested_name: string; note: string }) => Promise<void>;
-  onMoveItems: (items: InventoryItem[], payload: InventoryMovePayload) => Promise<void>;
   onOpenMoveDialog: (items: InventoryItem[]) => void;
+  onChangeLocation: () => void;
 }
 
 export function InventoryEmployeeView({
@@ -35,10 +38,12 @@ export function InventoryEmployeeView({
   locations,
   categoryLabels,
   userLocation,
+  secondarySiteLocations = [],
+  currentFleetAssignment,
   onSetUserLocation,
   onRequestLocation,
-  onMoveItems,
   onOpenMoveDialog,
+  onChangeLocation,
 }: InventoryEmployeeViewProps) {
   const initialLocationId = userLocation?.location?.is_active === false ? '' : userLocation?.location_id || '';
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId);
@@ -56,9 +61,23 @@ export function InventoryEmployeeView({
     setSelectedLocationId(userLocation?.location?.is_active === false ? '' : userLocation?.location_id || '');
   }, [userLocation?.location?.is_active, userLocation?.location_id]);
 
-  const locationItems = useMemo(
-    () => items.filter((item) => item.status === 'active' && item.location_id === activeLocation?.id),
-    [activeLocation?.id, items]
+  const activeItemsByLocationId = useMemo(() => {
+    const nextItemsByLocationId = new Map<string, InventoryItem[]>();
+    items.forEach((item) => {
+      if (item.status !== 'active') return;
+      const locationItems = nextItemsByLocationId.get(item.location_id) || [];
+      locationItems.push(item);
+      nextItemsByLocationId.set(item.location_id, locationItems);
+    });
+    return nextItemsByLocationId;
+  }, [items]);
+  const locationItems = activeLocation ? activeItemsByLocationId.get(activeLocation.id) || [] : [];
+  const activeSecondarySiteLocations = useMemo(
+    () => secondarySiteLocations.filter((siteLocation) => (
+      siteLocation.location?.is_active === true &&
+      siteLocation.location.location_type === 'site'
+    )),
+    [secondarySiteLocations]
   );
   const claimableItems = useMemo(() => {
     const query = claimSearch.trim().toLowerCase();
@@ -96,22 +115,6 @@ export function InventoryEmployeeView({
     } finally {
       setIsRequestingLocation(false);
     }
-  }
-
-  function renderLocationOptions() {
-    return (
-      <>
-        {locations.map((location) => (
-          <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
-        ))}
-        <SelectItem
-          value={LOCATION_NOT_SHOWN_VALUE}
-          className="mt-1 border-t border-amber-500/30 bg-amber-500/10 font-semibold text-amber-200 focus:bg-amber-500/20 focus:text-amber-100"
-        >
-          Location not shown
-        </SelectItem>
-      </>
-    );
   }
 
   function renderLocationRequestCard() {
@@ -164,12 +167,7 @@ export function InventoryEmployeeView({
       return;
     }
 
-    await onMoveItems([item], {
-      location_id: activeLocation.id,
-      note: 'Claimed from employee inventory view',
-      scope: 'claim',
-      group_id: null,
-    });
+    onOpenMoveDialog([item]);
     setClaimSearch('');
   }
 
@@ -189,14 +187,17 @@ export function InventoryEmployeeView({
             </p>
             <div className="space-y-2">
               <Label>Location</Label>
-              <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger className="bg-slate-800 border-slate-600">
-                  <SelectValue placeholder="Choose your location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {renderLocationOptions()}
-                </SelectContent>
-              </Select>
+              <InventoryLocationSelect
+                value={selectedLocationId}
+                onValueChange={setSelectedLocationId}
+                locations={locations}
+                placeholder="Choose your location"
+                extraOptions={[{
+                  value: LOCATION_NOT_SHOWN_VALUE,
+                  label: 'Location not shown',
+                  className: 'mt-1 border-t border-amber-500/30 bg-amber-500/10 font-semibold text-amber-200 hover:bg-amber-500/20 focus:bg-amber-500/20',
+                }]}
+              />
             </div>
             <Button
               onClick={handleSetLocation}
@@ -215,6 +216,35 @@ export function InventoryEmployeeView({
 
   return (
     <div className="space-y-6">
+      <Card className="border-slate-700 bg-slate-900/70">
+        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-white">
+              <MapPin className="h-4 w-4 text-inventory" />
+              Current inventory location: {activeLocation.name}
+            </div>
+            {currentFleetAssignment ? (
+              <div className="mt-2">
+                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                  <Truck className="mr-1 h-3 w-3" />
+                  Linked {currentFleetAssignment.asset_type.toUpperCase()}: {[
+                    currentFleetAssignment.asset_label,
+                    currentFleetAssignment.asset_nickname,
+                  ].filter(Boolean).join(' - ') || 'Fleet asset'}
+                </Badge>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                This location is not linked to a current fleet asset assignment.
+              </p>
+            )}
+          </div>
+          <Button variant="outline" onClick={onChangeLocation} className="border-slate-600">
+            Change Location
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="border-slate-700 bg-slate-900/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
@@ -236,6 +266,47 @@ export function InventoryEmployeeView({
           )}
         </CardContent>
       </Card>
+
+      {activeSecondarySiteLocations.length > 0 ? (
+        <div className="space-y-4">
+          {activeSecondarySiteLocations.map((siteLocation) => {
+            const site = siteLocation.location;
+            if (!site) return null;
+            const siteItems = activeItemsByLocationId.get(site.id) || [];
+
+            return (
+              <Card key={siteLocation.location_id} className="border-slate-700 bg-slate-900/70">
+                <CardHeader>
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-white">
+                    <MapPin className="h-5 w-5 text-inventory" />
+                    Site: {site.name}
+                    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                      Secondary Location
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {site.description ? (
+                    <p className="mb-4 text-sm text-muted-foreground">{site.description}</p>
+                  ) : null}
+                  {siteItems.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No active inventory items are currently assigned to this Site location.</p>
+                  ) : (
+                    <InventoryTable
+                      items={siteItems}
+                      selectedItemIds={selectedItemIds}
+                      onSelectedItemIdsChange={setSelectedItemIds}
+                      onMove={onOpenMoveDialog}
+                      categoryLabels={categoryLabels}
+                      tableLabel={site.external_reference ? `site ${site.external_reference}` : site.name}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : null}
 
       <Card className="border-slate-700 bg-slate-900/70">
         <CardHeader>

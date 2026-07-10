@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { GET, POST } from '@/app/api/quotes/route';
+import { createSupabaseQueryMock } from '@/tests/utils/supabase-query-mock';
 
 const {
   mockCreateClient,
@@ -13,6 +14,7 @@ const {
   mockGetInitialsFromName,
   mockGetInvoiceSummary,
   mockGetQuoteManagerOption,
+  mockLoadQuoteModuleSettings,
 } = vi.hoisted(() => ({
   mockCreateClient: vi.fn(),
   mockCreateAdminClient: vi.fn(),
@@ -23,6 +25,7 @@ const {
   mockGetInitialsFromName: vi.fn(),
   mockGetInvoiceSummary: vi.fn(),
   mockGetQuoteManagerOption: vi.fn(),
+  mockLoadQuoteModuleSettings: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -33,6 +36,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));
 
+vi.mock('@/lib/server/sensitive-module-access', () => ({
+  requireSensitiveModuleAccess: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@/lib/server/quote-workflow', () => ({
   calculateQuoteTotals: mockCalculateQuoteTotals,
   appendQuoteTimelineEvent: mockAppendQuoteTimelineEvent,
@@ -41,18 +48,12 @@ vi.mock('@/lib/server/quote-workflow', () => ({
   getInitialsFromName: mockGetInitialsFromName,
   getInvoiceSummary: mockGetInvoiceSummary,
   getQuoteManagerOption: mockGetQuoteManagerOption,
+  loadQuoteModuleSettings: mockLoadQuoteModuleSettings,
 }));
 
 function createQueryableResult<T>(rows: T[]) {
   const result = { data: rows, error: null };
-  const query = {
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    order: vi.fn().mockResolvedValue(result),
-    then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
-  };
-
-  return query;
+  return createSupabaseQueryMock(result, ['eq', 'in', 'order']);
 }
 
 function createPaginatedQuoteQuery(rows: Array<Record<string, unknown>>) {
@@ -68,7 +69,9 @@ describe('GET /api/quotes', () => {
     vi.clearAllMocks();
     mockGetInvoiceSummary.mockImplementation(({ total, invoices }) => ({
       invoicedTotal: (invoices || []).reduce((sum: number, invoice: { amount: number }) => sum + invoice.amount, 0),
+      pendingRequestedTotal: 0,
       remainingBalance: total,
+      availableToRequest: total,
       lastInvoiceAt: null,
       status: 'not_invoiced',
     }));
@@ -94,6 +97,7 @@ describe('GET /api/quotes', () => {
         status: 'in_progress',
         quote_date: '2026-03-23',
         base_quote_reference: 'Q-002',
+        sage_posted_at: '2026-03-24T10:00:00.000Z',
         customer: { company_name: 'Bravo Ltd' },
       },
     ];
@@ -107,6 +111,10 @@ describe('GET /api/quotes', () => {
     const previousVersionsQuery = createQueryableResult([]);
     const summaryQuery = createQueryableResult(summaryRows);
     const invoiceIn = vi.fn().mockResolvedValue({
+      data: [],
+      error: null,
+    });
+    const invoiceRequestIn = vi.fn().mockResolvedValue({
       data: [],
       error: null,
     });
@@ -130,6 +138,9 @@ describe('GET /api/quotes', () => {
     const selectInvoices = vi.fn(() => ({
       in: invoiceIn,
     }));
+    const selectInvoiceRequests = vi.fn(() => ({
+      in: invoiceRequestIn,
+    }));
 
     mockCreateClient.mockResolvedValue({
       auth: {
@@ -147,6 +158,10 @@ describe('GET /api/quotes', () => {
           return { select: selectInvoices };
         }
 
+        if (table === 'quote_invoice_requests') {
+          return { select: selectInvoiceRequests };
+        }
+
         throw new Error(`Unexpected table: ${table}`);
       }),
     } as unknown as SupabaseClient);
@@ -161,6 +176,7 @@ describe('GET /api/quotes', () => {
     expect(previousVersionsQuery.eq).toHaveBeenCalledWith('is_latest_version', false);
     expect(summaryQuery.eq).toHaveBeenCalledWith('is_latest_version', true);
     expect(invoiceIn).toHaveBeenCalledWith('quote_id', ['quote-1', 'quote-2']);
+    expect(invoiceRequestIn).toHaveBeenCalledWith('quote_id', ['quote-1', 'quote-2']);
     expect(payload.summary).toEqual({
       total_quotes: 4,
       status_counts: expect.objectContaining({
@@ -178,6 +194,10 @@ describe('GET /api/quotes', () => {
       has_more: true,
     });
     expect(payload.quotes[0].previous_versions).toEqual([]);
+    expect(payload.quotes.map((quote: { sage_status: string }) => quote.sage_status)).toEqual([
+      'not_on_sage',
+      'on_sage',
+    ]);
   });
 });
 
@@ -191,7 +211,7 @@ describe('POST /api/quotes', () => {
     mockGetQuoteManagerOption.mockResolvedValue({
       profile_id: 'manager-1',
       initials: 'MD',
-      manager_email: 'template-admin@example.com',
+      manager_email: 'admin@mpdee.co.uk',
       approver_profile_id: 'approver-1',
       signoff_name: 'Example Admin',
       signoff_title: 'Contracts Manager',
@@ -202,16 +222,24 @@ describe('POST /api/quotes', () => {
       initials: 'MD',
     });
     mockGetInitialsFromName.mockReturnValue('MD');
+    mockLoadQuoteModuleSettings.mockResolvedValue({
+      default_start_alert_days: null,
+      default_estimated_duration_days: null,
+    });
     mockFetchQuoteBundle.mockResolvedValue({
       quote: { id: 'quote-1', quote_reference: '80000-MD' },
       lineItems: [],
       attachments: [],
       ramsDocuments: [],
       invoices: [],
+      invoiceRequests: [],
       versions: [],
+      selectedSecondaryContacts: [],
       invoiceSummary: {
         invoicedTotal: 0,
+        pendingRequestedTotal: 0,
         remainingBalance: 0,
+        availableToRequest: 0,
         lastInvoiceAt: null,
         status: 'not_invoiced',
       },
@@ -245,8 +273,16 @@ describe('POST /api/quotes', () => {
     expect(response.status).toBe(400);
     expect(payload.error).toBe('Please correct the highlighted fields and try again.');
     expect(payload.field_errors).toEqual({
+      attention_email: 'Enter the contact email.',
+      attention_name: 'Enter who this quote is for the attention of.',
       customer_id: 'Select a customer.',
       manager_profile_id: 'Select a manager.',
+      project_description: 'Enter a quote summary.',
+      quote_date: 'Select a quote date.',
+      scope: 'Enter the quote scope.',
+      site_address: 'Enter the site address for this quote.',
+      subject_line: 'Enter a quote title.',
+      validity_days: 'Enter quote validity in days.',
     });
     expect(mockGetQuoteManagerOption).not.toHaveBeenCalled();
   });
@@ -300,7 +336,11 @@ describe('POST /api/quotes', () => {
         customer_id: 'customer-1',
         manager_profile_id: 'manager-1',
         quote_date: '2026-03-24',
-        subject_line: '',
+        validity_days: 30,
+        attention_name: 'Jane Customer',
+        attention_email: 'jane@example.com',
+        site_address: '1 Test Street',
+        subject_line: 'Fence works',
         project_description: 'Short summary',
         scope: 'Install fencing',
         pricing_mode: 'attachments_only',
@@ -329,7 +369,7 @@ describe('POST /api/quotes', () => {
       start_alert_days: null,
       start_date: null,
       estimated_duration_days: 5,
-      subject_line: null,
+      subject_line: 'Fence works',
       project_description: 'Short summary',
       scope: 'Install fencing',
       pricing_mode: 'attachments_only',
@@ -337,5 +377,193 @@ describe('POST /api/quotes', () => {
       total: 0,
     }));
     expect(lineItemInsert).not.toHaveBeenCalled();
+  });
+
+  it('persists selected secondary customer contact recipients', async () => {
+    const quoteInsert = vi.fn().mockResolvedValue({ error: null });
+    const lineItemInsert = vi.fn().mockResolvedValue({ error: null });
+    const recipientDeleteEq = vi.fn().mockResolvedValue({ error: null });
+    const recipientInsert = vi.fn().mockResolvedValue({ error: null });
+    const profileSingle = vi.fn().mockResolvedValue({
+      data: { id: 'manager-1', full_name: 'Matt Duffill' },
+      error: null,
+    });
+    const profileEq = vi.fn().mockReturnValue({ single: profileSingle });
+    const contactIn = vi.fn().mockResolvedValue({
+      data: [{ id: 'contact-1' }, { id: 'contact-2' }],
+      error: null,
+    });
+    const contactEq = vi.fn().mockReturnValue({ in: contactIn });
+
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quotes') {
+          return { insert: quoteInsert };
+        }
+
+        if (table === 'quote_line_items') {
+          return { insert: lineItemInsert };
+        }
+
+        if (table === 'quote_customer_contact_recipients') {
+          return {
+            delete: vi.fn(() => ({
+              eq: recipientDeleteEq,
+            })),
+            insert: recipientInsert,
+          };
+        }
+
+        if (table === 'customer_contacts') {
+          return {
+            select: vi.fn(() => ({
+              eq: contactEq,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    } as unknown as SupabaseClient);
+
+    mockCreateAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: vi.fn(() => ({
+              eq: profileEq,
+            })),
+          };
+        }
+
+        if (table === 'customer_contacts') {
+          return {
+            select: vi.fn(() => ({
+              eq: contactEq,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    });
+
+    const response = await POST(new NextRequest('http://localhost/api/quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_id: 'customer-1',
+        manager_profile_id: 'manager-1',
+        quote_date: '2026-03-24',
+        validity_days: 30,
+        attention_name: 'Jane Customer',
+        attention_email: 'jane@example.com',
+        site_address: '1 Test Street',
+        subject_line: 'Recipient quote',
+        project_description: 'Recipient summary',
+        scope: 'Recipient scope',
+        pricing_mode: 'attachments_only',
+        secondary_contact_ids: ['contact-1', 'contact-2', 'contact-1'],
+        line_items: [],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    expect(response.status).toBe(201);
+    const insertedQuoteId = quoteInsert.mock.calls[0][0].id;
+    expect(contactEq).toHaveBeenCalledWith('customer_id', 'customer-1');
+    expect(contactIn).toHaveBeenCalledWith('id', ['contact-1', 'contact-2']);
+    expect(recipientDeleteEq).toHaveBeenCalledWith('quote_id', insertedQuoteId);
+    expect(recipientInsert).toHaveBeenCalledWith([
+      {
+        quote_id: insertedQuoteId,
+        customer_contact_id: 'contact-1',
+        created_by: 'user-1',
+      },
+      {
+        quote_id: insertedQuoteId,
+        customer_contact_id: 'contact-2',
+        created_by: 'user-1',
+      },
+    ]);
+  });
+
+  it('applies quote module defaults when schedule fields are blank', async () => {
+    const quoteInsert = vi.fn().mockResolvedValue({ error: null });
+    const lineItemInsert = vi.fn().mockResolvedValue({ error: null });
+    const profileSingle = vi.fn().mockResolvedValue({
+      data: { id: 'manager-1', full_name: 'Matt Duffill' },
+      error: null,
+    });
+    const profileEq = vi.fn().mockReturnValue({ single: profileSingle });
+
+    mockLoadQuoteModuleSettings.mockResolvedValue({
+      default_start_alert_days: 7,
+      default_estimated_duration_days: 3,
+    });
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quotes') {
+          return { insert: quoteInsert };
+        }
+
+        if (table === 'quote_line_items') {
+          return { insert: lineItemInsert };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    } as unknown as SupabaseClient);
+    mockCreateAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: vi.fn(() => ({
+              eq: profileEq,
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    });
+
+    const response = await POST(new NextRequest('http://localhost/api/quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_id: 'customer-1',
+        manager_profile_id: 'manager-1',
+        quote_date: '2026-03-24',
+        validity_days: 30,
+        attention_name: 'Jane Customer',
+        attention_email: 'jane@example.com',
+        site_address: '1 Test Street',
+        subject_line: 'Scheduled quote',
+        project_description: 'Scheduled summary',
+        scope: 'Scheduled scope',
+        pricing_mode: 'attachments_only',
+        start_alert_days: '',
+        estimated_duration_days: '',
+        line_items: [],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    expect(response.status).toBe(201);
+    expect(quoteInsert).toHaveBeenCalledWith(expect.objectContaining({
+      start_alert_days: 7,
+      estimated_duration_days: 3,
+    }));
   });
 });

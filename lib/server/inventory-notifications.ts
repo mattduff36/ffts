@@ -82,6 +82,7 @@ export async function createInventoryLocationRequestNotification(
       priority: 'LOW',
       sender_id: input.requesterId,
       created_via: 'inventory_location_request',
+      module_key: 'inventory',
     })
     .select('id')
     .single();

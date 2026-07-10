@@ -66,41 +66,89 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
   SelectPrimitive.ScrollDownButton.displayName
 
+function handleSelectViewportTouchStart(
+  event: React.TouchEvent<HTMLDivElement>,
+  touchYRef: React.MutableRefObject<number | null>
+) {
+  event.stopPropagation();
+  touchYRef.current = event.touches[0]?.clientY ?? null;
+}
+
+function handleSelectViewportTouchMove(
+  event: React.TouchEvent<HTMLDivElement>,
+  touchYRef: React.MutableRefObject<number | null>
+) {
+  event.stopPropagation();
+
+  const currentY = event.touches[0]?.clientY;
+  if (currentY === undefined) return;
+
+  const previousY = touchYRef.current;
+  touchYRef.current = currentY;
+  if (previousY === null) return;
+
+  const deltaY = currentY - previousY;
+  const viewport = event.currentTarget;
+  const canScroll = viewport.scrollHeight > viewport.clientHeight + 1;
+  if (!canScroll) {
+    event.preventDefault();
+    return;
+  }
+
+  const isAtTop = viewport.scrollTop <= 0;
+  const isAtBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1;
+  if ((deltaY > 0 && isAtTop) || (deltaY < 0 && isAtBottom)) {
+    event.preventDefault();
+  }
+}
+
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", sideOffset = 6, collisionPadding = 12, ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      collisionPadding={collisionPadding}
-      avoidCollisions
-      sticky="partial"
-      className={cn(
-        "ui-component relative z-50 min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-slate-900 backdrop-blur-xl text-slate-100 shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-select-content-transform-origin]",
-        "max-h-[min(var(--radix-select-content-available-height),300px)] md:max-h-[min(var(--radix-select-content-available-height),400px)] max-w-[calc(100vw-1rem)]",
-        position === "popper" &&
-          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-        className
-      )}
-      position={position}
-      {...props}
-    >
-      <SelectScrollUpButton />
-      <SelectPrimitive.Viewport
+>(({ className, children, position = "popper", sideOffset = 6, collisionPadding = 12, ...props }, ref) => {
+  const viewportTouchYRef = React.useRef<number | null>(null);
+
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
+        avoidCollisions
+        sticky="partial"
+        data-mobile-scroll-lock="true"
         className={cn(
-          "p-1",
+          "ui-component relative z-50 min-w-[8rem] overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y rounded-md border bg-slate-900 backdrop-blur-xl text-slate-100 shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-select-content-transform-origin]",
+          "max-h-[min(var(--radix-select-content-available-height),300px)] md:max-h-[min(var(--radix-select-content-available-height),400px)] max-w-[calc(100vw-1rem)]",
           position === "popper" &&
-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+          className
         )}
+        position={position}
+        {...props}
       >
-        {children}
-      </SelectPrimitive.Viewport>
-      <SelectScrollDownButton />
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-))
+        <SelectScrollUpButton />
+        <SelectPrimitive.Viewport
+          data-mobile-scroll-lock="true"
+          onTouchStartCapture={(event) => handleSelectViewportTouchStart(event, viewportTouchYRef)}
+          onTouchMoveCapture={(event) => handleSelectViewportTouchMove(event, viewportTouchYRef)}
+          onTouchEndCapture={(event) => {
+            event.stopPropagation();
+            viewportTouchYRef.current = null;
+          }}
+          className={cn(
+            "p-1 overscroll-contain touch-pan-y",
+            position === "popper" &&
+              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+          )}
+        >
+          {children}
+        </SelectPrimitive.Viewport>
+        <SelectScrollDownButton />
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  );
+})
 SelectContent.displayName = SelectPrimitive.Content.displayName
 
 const SelectLabel = React.forwardRef<

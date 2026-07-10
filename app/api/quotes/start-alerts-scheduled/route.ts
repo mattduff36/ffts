@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   createQuoteNotification,
+  getQuoteEmailCcEmails,
+  getQuoteInvoiceNotificationRecipientIds,
   sendQuoteStartAlertEmail,
 } from '@/lib/server/quote-workflow';
+import { renderConfiguredQuoteEmailTemplate } from '@/lib/server/quote-email-templates';
 
 async function handleQuoteStartAlerts(request: NextRequest, method: 'GET' | 'POST') {
   const startedAt = Date.now();
@@ -23,6 +26,7 @@ async function handleQuoteStartAlerts(request: NextRequest, method: 'GET' | 'POS
     const admin = createAdminClient();
     const today = new Date();
     const todayIso = today.toISOString().slice(0, 10);
+    const todayStart = new Date(`${todayIso}T00:00:00Z`);
     const limit = Math.min(
       Math.max(Number.parseInt(request.nextUrl.searchParams.get('limit') || '100', 10) || 100, 1),
       250
@@ -79,14 +83,15 @@ async function handleQuoteStartAlerts(request: NextRequest, method: 'GET' | 'POS
         continue;
       }
 
-      const startDate = new Date(`${quote.start_date}T00:00:00`);
-      const diffDays = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const startDate = new Date(`${quote.start_date}T00:00:00Z`);
+      const diffDays = Math.ceil((startDate.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays > quote.start_alert_days || diffDays < 0) {
         continue;
       }
 
       const emailResult = await sendQuoteStartAlertEmail({
         to: managerEmail,
+        cc: await getQuoteEmailCcEmails(admin, 'quote_start_alert_copy', [quote.requester_id]),
         managerName: manager?.full_name || 'Manager',
         quoteReference: quote.quote_reference,
         customerName: customer?.company_name || 'Unknown customer',
@@ -95,6 +100,14 @@ async function handleQuoteStartAlerts(request: NextRequest, method: 'GET' | 'POS
       });
 
       if (emailResult.success) {
+        const copyRecipientIds = await getQuoteInvoiceNotificationRecipientIds(admin, 'start_alert_copy', [quote.requester_id]);
+        const notificationTemplate = await renderConfiguredQuoteEmailTemplate(admin, 'start_alert_copy', {
+          quote_reference: quote.quote_reference,
+          quote_name: quote.quote_reference,
+          start_date: quote.start_date,
+          customer_name: customer?.company_name || 'Unknown customer',
+          subject_line: quote.subject_line || 'No subject provided',
+        });
         await admin
           .from('quotes')
           .update({ start_alert_sent_at: new Date().toISOString() })
@@ -103,9 +116,20 @@ async function handleQuoteStartAlerts(request: NextRequest, method: 'GET' | 'POS
         await createQuoteNotification({
           senderId: quote.requester_id || quote.created_by || quote.updated_by || quote.id,
           recipientIds: quote.requester_id ? [quote.requester_id] : [],
-          subject: `Job start reminder: ${quote.quote_reference}`,
-          body: `This quote is due to start on ${quote.start_date}.`,
+          subject: notificationTemplate.subject,
+          body: notificationTemplate.bodyText,
         });
+
+        if (copyRecipientIds.length > 0) {
+          await createQuoteNotification({
+            senderId: quote.requester_id || quote.created_by || quote.updated_by || quote.id,
+            recipientIds: copyRecipientIds,
+            subject: notificationTemplate.subject,
+            body: notificationTemplate.bodyText,
+            sendEmail: true,
+            emailCcType: 'quote_start_alert_copy',
+          });
+        }
 
         processed += 1;
       }

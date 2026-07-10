@@ -18,6 +18,10 @@ vi.mock('@/lib/server/hierarchy-validation', () => ({
     ['MISSING_TEAM', 'MISSING_LINE_MANAGER', 'SELF_MANAGER', 'UNKNOWN_MANAGER', 'MANAGER_CYCLE'].includes(code),
 }));
 
+vi.mock('@/lib/server/admin-users-module-access', () => ({
+  requireAdminUsersModuleAccess: vi.fn().mockResolvedValue(null),
+}));
+
 describe('Hierarchy admin routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();

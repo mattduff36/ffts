@@ -20,8 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
-import type { Customer, CustomerFormData } from '../types';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
+import type { Customer, CustomerContactFormData, CustomerFormData } from '../types';
 import { EMPTY_CUSTOMER_FORM } from '../types';
 
 interface CustomerFormDialogProps {
@@ -31,14 +32,34 @@ interface CustomerFormDialogProps {
   customer?: Customer | null;
 }
 
+function buildCustomerFormDirtySnapshot(form: CustomerFormData) {
+  return JSON.stringify(form);
+}
+
 export function CustomerFormDialog({ open, onClose, onSubmit, customer }: CustomerFormDialogProps) {
-  const [form, setForm] = useState<CustomerFormData>(EMPTY_CUSTOMER_FORM);
+  const [form, setForm] = useState<CustomerFormData>({ ...EMPTY_CUSTOMER_FORM, secondary_contacts: [] });
   const [saving, setSaving] = useState(false);
+  const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
   const isEditing = !!customer;
+  const currentDirtySnapshot = buildCustomerFormDirtySnapshot(form);
+  const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: saving,
+    onOpenChange: (isOpen) => {
+      if (!isOpen && !saving) onClose();
+    },
+  });
 
   useEffect(() => {
     if (customer) {
-      setForm({
+      const nextForm: CustomerFormData = {
         company_name: customer.company_name,
         short_name: customer.short_name || '',
         contact_name: customer.contact_name || '',
@@ -54,14 +75,55 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
         default_validity_days: customer.default_validity_days,
         status: customer.status,
         notes: customer.notes || '',
-      });
+        secondary_contacts: (customer.secondary_contacts || []).map(contact => ({
+          id: contact.id,
+          name: contact.name || '',
+          job_title: contact.job_title || '',
+          email: contact.email || '',
+          phone: contact.phone || '',
+        })),
+      };
+      setForm(nextForm);
+      setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     } else {
-      setForm(EMPTY_CUSTOMER_FORM);
+      const nextForm = { ...EMPTY_CUSTOMER_FORM, secondary_contacts: [] };
+      setForm(nextForm);
+      setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     }
   }, [customer, open]);
 
   function updateField<K extends keyof CustomerFormData>(key: K, value: CustomerFormData[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  function updateSecondaryContact<K extends keyof CustomerContactFormData>(
+    index: number,
+    key: K,
+    value: CustomerContactFormData[K]
+  ) {
+    setForm(prev => ({
+      ...prev,
+      secondary_contacts: prev.secondary_contacts.map((contact, idx) => (
+        idx === index ? { ...contact, [key]: value } : contact
+      )),
+    }));
+  }
+
+  function addSecondaryContact() {
+    setForm(prev => ({
+      ...prev,
+      secondary_contacts: [
+        ...prev.secondary_contacts,
+        { name: '', job_title: '', email: '', phone: '' },
+      ],
+    }));
+  }
+
+  function removeSecondaryContact(index: number) {
+    setForm(prev => ({
+      ...prev,
+      secondary_contacts: prev.secondary_contacts.filter((_, idx) => idx !== index),
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -76,8 +138,13 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
   }
 
   return (
-    <Dialog open={open} onOpenChange={isOpen => { if (!isOpen && !saving) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
+        onInteractOutside={handleInteractOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="text-white">
@@ -155,11 +222,94 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
                   />
                 </div>
               </div>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h5 className="text-xs font-semibold tracking-wide text-muted-foreground">Secondary Contact(s)</h5>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addSecondaryContact}
+                    className="border-slate-600 text-muted-foreground"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add another contact?
+                  </Button>
+                </div>
+
+                {form.secondary_contacts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No secondary contacts added.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {form.secondary_contacts.map((contact, index) => (
+                      <div key={contact.id || index} className="rounded-lg border border-slate-700 bg-slate-950/30 p-3">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-white">Secondary Contact {index + 1}</p>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSecondaryContact(index)}
+                            className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor={`secondary_contact_name_${index}`}>Contact Name</Label>
+                            <Input
+                              id={`secondary_contact_name_${index}`}
+                              value={contact.name}
+                              onChange={e => updateSecondaryContact(index, 'name', e.target.value)}
+                              className="bg-slate-800 border-slate-600"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`secondary_contact_job_title_${index}`}>Job Title</Label>
+                            <Input
+                              id={`secondary_contact_job_title_${index}`}
+                              value={contact.job_title}
+                              onChange={e => updateSecondaryContact(index, 'job_title', e.target.value)}
+                              className="bg-slate-800 border-slate-600"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`secondary_contact_email_${index}`}>Email</Label>
+                            <Input
+                              id={`secondary_contact_email_${index}`}
+                              type="email"
+                              value={contact.email}
+                              onChange={e => updateSecondaryContact(index, 'email', e.target.value)}
+                              className="bg-slate-800 border-slate-600"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`secondary_contact_phone_${index}`}>Phone</Label>
+                            <Input
+                              id={`secondary_contact_phone_${index}`}
+                              value={contact.phone}
+                              onChange={e => updateSecondaryContact(index, 'phone', e.target.value)}
+                              className="bg-slate-800 border-slate-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Address */}
             <div className="border-t border-slate-700 pt-4">
-              <h4 className="text-sm font-semibold text-muted-foreground mb-3">Address</h4>
+              <div className="mb-3 space-y-1">
+                <h4 className="text-sm font-semibold text-muted-foreground">Address</h4>
+                <p className="text-xs text-slate-400">
+                  Only add an address here if customer only has a single address / site.
+                </p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="address_line_1">Address Line 1</Label>
@@ -264,8 +414,8 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="border-slate-600 text-muted-foreground">
-              Cancel
+            <Button type="button" variant="outline" onClick={discard} disabled={saving} className="border-slate-600 text-muted-foreground">
+              {isFormDirty ? 'Discard Changes' : 'Cancel'}
             </Button>
             <Button type="submit" disabled={saving || !form.company_name.trim()} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold">
               {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : isEditing ? 'Update Customer' : 'Add Customer'}

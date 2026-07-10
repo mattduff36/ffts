@@ -27,7 +27,7 @@ test.describe('@critical Help & FAQ', () => {
     await page.goto('/help?tab=install');
     await waitForAppReady(page);
     const hasInstallContent = await page
-      .getByText(/install digidocs|quick support actions|install app/i)
+      .getByText(/install ffts|quick support actions|install app/i)
       .first()
       .isVisible({ timeout: 5_000 })
       .catch(() => false);

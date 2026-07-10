@@ -14,6 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  dialogContentViewportClassName,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { PanelLoader } from '@/components/ui/panel-loader';
 import {
   Shield,
   Plus,
@@ -227,11 +229,7 @@ export function JobRolesTab() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
+    return <PanelLoader message="Loading job roles..." className="py-12" />;
   }
 
   return (
@@ -406,7 +404,7 @@ export function JobRolesTab() {
 
       {/* Add Role Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="border-border text-white max-w-md">
+        <DialogContent className={dialogContentViewportClassName({ size: 'md', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle>Add New Role</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -511,7 +509,7 @@ export function JobRolesTab() {
 
       {/* Edit Role Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="border-border text-white max-w-md">
+        <DialogContent className={dialogContentViewportClassName({ size: 'md', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle>Edit Role</DialogTitle>
             <DialogDescription className="text-muted-foreground">Update role details</DialogDescription>
@@ -604,7 +602,7 @@ export function JobRolesTab() {
 
       {/* Delete Role Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="border-border text-white">
+        <DialogContent className={dialogContentViewportClassName({ className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-500" />

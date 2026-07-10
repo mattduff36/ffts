@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { getQuotesCustomersEmailConfig } from '@/lib/server/quotes-customers-email-config';
+import { getPrimaryResendEmailConfig, getQuoteResendEmailConfig } from '@/lib/server/resend-email-config';
 
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
@@ -26,27 +27,48 @@ function restoreEnv(key: 'RESEND_API_KEY' | 'RESEND_FROM_EMAIL' | 'RESEND_API_KE
 }
 
 describe('getQuotesCustomersEmailConfig', () => {
-  it('prefers the dedicated quotes/customers resend settings when present', () => {
+  it('prefers the dedicated quote resend settings when present', () => {
     process.env.RESEND_API_KEY = 'primary-key';
     process.env.RESEND_FROM_EMAIL = 'Primary <primary@example.com>';
     process.env.RESEND_API_KEY_2 = 'secondary-key';
     process.env.RESEND_FROM_EMAIL_2 = 'Quotes <quotes@example.com>';
 
-    expect(getQuotesCustomersEmailConfig()).toEqual({
+    expect(getQuoteResendEmailConfig()).toEqual({
       apiKey: 'secondary-key',
       fromEmail: 'Quotes <quotes@example.com>',
     });
   });
 
-  it('falls back to the primary resend settings when the dedicated values are missing', () => {
+  it('falls back to the primary resend settings when quote values are missing', () => {
     process.env.RESEND_API_KEY = 'primary-key';
     process.env.RESEND_FROM_EMAIL = 'Primary <primary@example.com>';
     delete process.env.RESEND_API_KEY_2;
     delete process.env.RESEND_FROM_EMAIL_2;
 
-    expect(getQuotesCustomersEmailConfig()).toEqual({
+    expect(getQuoteResendEmailConfig()).toEqual({
       apiKey: 'primary-key',
       fromEmail: 'Primary <primary@example.com>',
     });
+  });
+
+  it('keeps the shared primary config on the main resend account when quote values exist', () => {
+    process.env.RESEND_API_KEY = 'primary-key';
+    process.env.RESEND_FROM_EMAIL = 'Primary <primary@example.com>';
+    process.env.RESEND_API_KEY_2 = 'secondary-key';
+    process.env.RESEND_FROM_EMAIL_2 = 'Quotes <quotes@example.com>';
+
+    expect(getPrimaryResendEmailConfig()).toEqual({
+      apiKey: 'primary-key',
+      fromEmail: 'Primary <primary@example.com>',
+    });
+  });
+
+  it('keeps the legacy quote helper on the quote routing config', () => {
+    process.env.RESEND_API_KEY = 'primary-key';
+    process.env.RESEND_FROM_EMAIL = 'Primary <primary@example.com>';
+    process.env.RESEND_API_KEY_2 = 'secondary-key';
+    process.env.RESEND_FROM_EMAIL_2 = 'Quotes <quotes@example.com>';
+
+    expect(getQuotesCustomersEmailConfig()).toEqual(getQuoteResendEmailConfig());
   });
 });

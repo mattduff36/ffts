@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createDebugAccessErrorBody } from '@/lib/server/debug-console-access';
+import { requireErrorLogAdminAccess } from '@/lib/server/error-logs';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 /**
@@ -6,11 +8,36 @@ import { logServerError } from '@/lib/utils/server-error-logger';
  * GET /api/test-error-logging?type=throw|catch|async
  */
 export async function GET(request: NextRequest) {
+  const access = await requireErrorLogAdminAccess();
+  if (!access.ok) {
+    return NextResponse.json(createDebugAccessErrorBody(access), { status: access.status });
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const type = searchParams.get('type') || 'throw';
 
   try {
-    if (type === 'throw') {
+    if (type === 'client') {
+      try {
+        throw new Error('Test client-side error: Button click handler failed');
+      } catch (error) {
+        await logServerError({
+          error: error as Error,
+          request,
+          componentName: 'GET /api/test-error-logging client marker',
+          additionalData: {
+            testType: 'client_marker',
+            endpoint: '/api/test-error-logging',
+            description: 'Test marker used to verify client-triggered error visibility in the debug console',
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: 'Client error marker logged',
+        });
+      }
+    } else if (type === 'throw') {
       // Test 1: Thrown error
       throw new Error('Test server-side error: Simulated API failure');
     } else if (type === 'catch') {

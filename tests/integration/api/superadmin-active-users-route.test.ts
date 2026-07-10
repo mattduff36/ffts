@@ -95,7 +95,7 @@ describe('GET /api/superadmin/active-users', () => {
     vi.mocked(createClient).mockResolvedValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: 'super-1', email: 'template-admin@example.com' } },
+          data: { user: { id: 'super-1', email: 'admin@mpdee.co.uk' } },
           error: null,
         }),
       },
@@ -155,7 +155,7 @@ describe('GET /api/superadmin/active-users', () => {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     vi.mocked(createAdminClient).mockReturnValue(
       createAdminClientMock(visits, true, [
-        { id: 'super-1', email: 'template-admin@example.com' },
+        { id: 'super-1', email: 'admin@mpdee.co.uk' },
         { id: 'u1', email: 'u1@example.com' },
         { id: 'u2', email: 'u2@example.com' },
       ]) as never
@@ -178,7 +178,7 @@ describe('GET /api/superadmin/active-users', () => {
     ]);
   });
 
-  it('excludes template-admin@example.com from active and recent lists for any superadmin viewer', async () => {
+  it('excludes admin@mpdee.co.uk from active and recent lists for any superadmin viewer', async () => {
     const { createClient } = await import('@/lib/supabase/server');
     vi.mocked(createClient).mockResolvedValue({
       auth: {
@@ -214,7 +214,7 @@ describe('GET /api/superadmin/active-users', () => {
     vi.mocked(createAdminClient).mockReturnValue(
       createAdminClientMock(visits, true, [
         { id: 'super-2', email: 'other-superadmin@example.com' },
-        { id: 'excluded-user-id', email: 'template-admin@example.com' },
+        { id: 'excluded-user-id', email: 'admin@mpdee.co.uk' },
         { id: 'u2', email: 'u2@example.com' },
         { id: 'u3', email: 'u3@example.com' },
       ]) as never

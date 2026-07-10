@@ -8,6 +8,7 @@ import { isRoadEligibleRegistration, runFleetDvlaSync } from '@/lib/services/fle
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
+import { validateAndNormalizePlantSerialNumber } from '@/lib/utils/plant-serial-number';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,6 +35,11 @@ export async function POST(request: NextRequest) {
     if (!plant_id) return NextResponse.json({ error: 'Plant ID is required' }, { status: 400 });
     if (!category_id) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
 
+    const serialNumberResult = validateAndNormalizePlantSerialNumber(serial_number);
+    if (!serialNumberResult.valid) {
+      return NextResponse.json({ error: serialNumberResult.error || 'Serial Number is invalid' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('plant')
       .insert({
@@ -41,7 +47,7 @@ export async function POST(request: NextRequest) {
         category_id,
         nickname: nickname?.trim() || null,
         reg_number: reg_number?.trim() || null,
-        serial_number: serial_number?.trim() || null,
+        serial_number: serialNumberResult.value,
         year: typeof year === 'number' ? year : null,
         weight_class: weight_class?.trim() || null,
         status,
@@ -50,6 +56,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      if (error.code === '23505' && String(error.message || '').includes('serial_number'))
+        return NextResponse.json({ error: 'Plant with this Serial Number already exists' }, { status: 400 });
       if (error.code === '23505')
         return NextResponse.json({ error: 'Plant with this ID already exists' }, { status: 400 });
       throw error;

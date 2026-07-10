@@ -1,0 +1,302 @@
+{
+  "title": "Permissions Secondary Audit",
+  "auditDate": "2026-05-27",
+  "matrixRule": "For Contractor, Employee, Supervisor, and Manager, module access requires the user's team to have the module enabled and the user's hierarchy rank to meet the module minimum. Admin and super-admin roles are full-access roles and do not depend on the team matrix.",
+  "modules": [
+    {
+      "displayName": "Timesheets",
+      "moduleName": "timesheets",
+      "matrixGate": "Employee+ and team-enabled",
+      "minimumRole": "Employee",
+      "byRole": {
+        "Contractor": "No module access by rank. Legacy direct RLS has own-user policies, but normal app module gates should block access.",
+        "Employee": "Own timesheets only: create, view, update own rows, entries, and job codes. No employee/team filters.",
+        "Supervisor": "Same as Employee in timesheet RLS because Supervisor is role_class employee and not is_manager_admin. In reports, helper code can treat Supervisor as manager-like if Reports access exists.",
+        "Manager": "Elevated timesheet user: employee/team filters, create for others, view/update/delete all timesheets and entries via is_manager_admin RLS.",
+        "Admin": "Full access and unscoped report/admin behavior."
+      }
+    },
+    {
+      "displayName": "Van Checks",
+      "moduleName": "inspections",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Own van checks: create, view, update, and delete own drafts and related items/hours/photos.",
+        "Employee": "Same own-check workflow as Contractor.",
+        "Supervisor": "Own write flow plus read-all visibility for van inspections, items, daily hours, and photos via effective_is_supervisor. Not granted manager write/delete paths.",
+        "Manager": "Read all; create checks for users; update/delete draft checks and manage related items/hours/photos via is_manager_admin, with workshop-team carve-outs in RLS.",
+        "Admin": "Full access. Admin/super-admin bypasses the matrix and manager carve-outs."
+      }
+    },
+    {
+      "displayName": "Plant Checks",
+      "moduleName": "plant-inspections",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Own plant checks: create, view, update, and delete own drafts and related records.",
+        "Employee": "Same own-check workflow as Contractor.",
+        "Supervisor": "Own write flow plus read-all visibility for plant inspections, items, daily hours, and photos. Not granted manager write/delete paths.",
+        "Manager": "Read all; create checks for users; update/delete draft checks and manage related items/hours/photos via is_manager_admin, with workshop-team carve-outs in RLS.",
+        "Admin": "Full access. Admin/super-admin bypasses the matrix and manager carve-outs."
+      }
+    },
+    {
+      "displayName": "HGV Checks",
+      "moduleName": "hgv-inspections",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Own HGV check workflow for authored checks.",
+        "Employee": "Same own-check workflow as Contractor.",
+        "Supervisor": "Own write flow plus read-all visibility for HGV inspections, items, daily hours, and photos. Not granted manager write/delete paths.",
+        "Manager": "Read all; update/delete draft checks and manage related items/hours/photos via is_manager_admin, with workshop-team carve-outs in RLS.",
+        "Admin": "Full access. Admin/super-admin bypasses the matrix and manager carve-outs."
+      }
+    },
+    {
+      "displayName": "Projects",
+      "moduleName": "rams",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Assigned document access: view/read/sign assigned project documents and record visitor signatures where exposed.",
+        "Employee": "Same assigned-document workflow as Contractor.",
+        "Supervisor": "Module access exists, but UI treats Supervisor as employee for management pages. RLS still reserves document/assignment management for is_manager_admin.",
+        "Manager": "Manage project documents and assignments: upload/update/delete docs, view all assignments, create/update assignments, and manage document types/favourites where routes allow.",
+        "Admin": "Full management, plus admin override where policies distinguish admin."
+      }
+    },
+    {
+      "displayName": "Absence",
+      "moduleName": "absence",
+      "matrixGate": "Employee+ and team-enabled",
+      "minimumRole": "Employee",
+      "byRole": {
+        "Contractor": "No module access by rank in the current live matrix. If granted, absence secondary maps Contractor to the Employee tier.",
+        "Employee": "Default secondary: see own bookings and add/edit own bookings.",
+        "Supervisor": "Default secondary: see all/team/own bookings; add/edit team bookings; view team work shifts; authorise team bookings. No allowance visibility, overview/reasons tabs, work-shift edit, own edit, or own authorise by default.",
+        "Manager": "Default secondary: see all/team/own bookings; add/edit team and own bookings; see team allowances; view/edit team work shifts; authorise team and own bookings. Manager-admin RLS also covers several archival/generation tables.",
+        "Admin": "All absence secondary permissions true by default, including all scopes, reasons, overview, work shifts, generation/closure/admin flows."
+      }
+    },
+    {
+      "displayName": "Maintenance",
+      "moduleName": "maintenance",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "Can view maintenance overview/data and can reach module-based maintenance create/update APIs if exposed. Settings tab is hidden; category/recipient management remains manager/admin gated.",
+        "Manager": "Can view and update maintenance plus Settings tab: categories, recipients, retired asset restore/delete UI.",
+        "Admin": "Full maintenance access and settings control."
+      }
+    },
+    {
+      "displayName": "Toolbox Talks",
+      "moduleName": "toolbox-talks",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "Can pass the module gate, but message creation/reporting/export still hit manager-admin RLS or API checks. This is a current mismatch.",
+        "Manager": "Create toolbox talks/reminders, manage recipients, and view reports/export compliance data.",
+        "Admin": "Full access. Strict admin notification audit tools remain admin-only."
+      }
+    },
+    {
+      "displayName": "Workshop",
+      "moduleName": "workshop-tasks",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Workshop task user flow where team-enabled: view/create workshop tasks, comments, task attachments, and attachment responses through module-based policies.",
+        "Employee": "Same workshop task user flow as Contractor.",
+        "Supervisor": "Same module-user workflow. Settings/template/category UI is hidden; template/category RLS remains manager-admin gated.",
+        "Manager": "Module-user workflow plus manager-admin controls for categories, subcategories, templates, template versions/sections/fields, and manager comment/delete paths.",
+        "Admin": "Full workshop and template administration."
+      }
+    },
+    {
+      "displayName": "Approvals",
+      "moduleName": "approvals",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank in the live matrix, even though Absence secondary defaults include authorise_bookings_team. This is a current matrix mismatch.",
+        "Manager": "Approvals page for timesheets and absences. Absence approval scope follows secondary absence permissions, typically team and own by default.",
+        "Admin": "All approvals scopes; admin/super tier bypasses team scoping."
+      }
+    },
+    {
+      "displayName": "Actions",
+      "moduleName": "actions",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank in the live matrix. Not manager-admin, so legacy actions table RLS does not grant all-row management.",
+        "Manager": "Manage action/reminder workflow records, assignment directory, action settings, and fleet-inspection reminder generation.",
+        "Admin": "Full action workflow control."
+      }
+    },
+    {
+      "displayName": "Reports",
+      "moduleName": "reports",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank in the live matrix. Report scope helper treats Supervisor as manager-like if access is ever granted, but current module minimum is Manager.",
+        "Manager": "Can run reports. Scope is team-limited for manager-like users unless admin tier or Accounts override applies; reports also require source module access.",
+        "Admin": "All report scopes and settings; admin tier bypasses report team scoping."
+      }
+    },
+    {
+      "displayName": "Suggestions",
+      "moduleName": "suggestions",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "Can create own suggestions and view own suggestion/update thread through general authenticated policies; no management view.",
+        "Employee": "Same as Contractor.",
+        "Supervisor": "Manage suggestions: view all, update statuses/details, create/view suggestion updates.",
+        "Manager": "Same module-level suggestion management as Supervisor.",
+        "Admin": "Same plus full admin override."
+      }
+    },
+    {
+      "displayName": "FAQ Editor",
+      "moduleName": "faq-editor",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "No editor access; can use normal Help/FAQ content.",
+        "Employee": "No editor access; can use normal Help/FAQ content.",
+        "Supervisor": "Manage FAQ categories and articles through module-based API/RLS.",
+        "Manager": "Same FAQ editor management as Supervisor.",
+        "Admin": "Same plus full admin override."
+      }
+    },
+    {
+      "displayName": "Error Reports",
+      "moduleName": "error-reports",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "Can submit error reports and view own reports/updates; no management view.",
+        "Employee": "Same as Contractor.",
+        "Supervisor": "Manage all error reports: view/update reports and create/view report updates through module-based policies.",
+        "Manager": "Same error-report management as Supervisor.",
+        "Admin": "Same plus full admin override."
+      }
+    },
+    {
+      "displayName": "User Management",
+      "moduleName": "admin-users",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank.",
+        "Manager": "Can access user admin if team-enabled. Can create/update users, but can only assign employee-class non-super roles; role creation is limited to employee roles and no new permission tiers. Role edit/delete UI is admin-only.",
+        "Admin": "Full user, role, hierarchy, team, and permission administration."
+      }
+    },
+    {
+      "displayName": "Admin Settings",
+      "moduleName": "admin-settings",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank.",
+        "Manager": "Can access Admin Settings when the module is enabled. Manager-level access covers layout preferences and module-gated settings surfaces; admin-only tools remain reserved for Admin/Super Admin where separately guarded.",
+        "Admin": "Admin settings UI, layout preferences, timesheet exception settings, and admin-only settings tools."
+      }
+    },
+    {
+      "displayName": "Fleet",
+      "moduleName": "admin-vans",
+      "matrixGate": "Supervisor+ and team-enabled",
+      "minimumRole": "Supervisor",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "Can access Fleet overview and module-gated asset APIs where RLS permits. Settings/category UI is hidden. Some asset writes are mixed between module-based API gates and manager/admin RLS.",
+        "Manager": "Fleet overview plus Settings tab and manager asset operations. Some category sections/actions remain admin-only in UI/RLS.",
+        "Admin": "Full fleet/category/settings control."
+      }
+    },
+    {
+      "displayName": "Customers",
+      "moduleName": "customers",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank.",
+        "Manager": "View/create/update customers through module-based policies. Customer delete is admin-only.",
+        "Admin": "Full customer access including admin-only delete."
+      }
+    },
+    {
+      "displayName": "Quotes",
+      "moduleName": "quotes",
+      "matrixGate": "Manager+ and team-enabled",
+      "minimumRole": "Manager",
+      "byRole": {
+        "Contractor": "No module access by rank.",
+        "Employee": "No module access by rank.",
+        "Supervisor": "No module access by rank.",
+        "Manager": "Create, view, update quote records, sequences, line items, workflow data where module-based. Quote/customer top-level deletes are admin-only; some legacy quote workflow tables still use is_manager_admin policies.",
+        "Admin": "Full quote access including admin-only delete paths."
+      }
+    },
+    {
+      "displayName": "Inventory",
+      "moduleName": "inventory",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "Employee inventory view: set/change own location, view assigned/location inventory, request locations, move/claim items through module-based user endpoints. Direct RLS is broader on some inventory tables than the UI/API manager split.",
+        "Employee": "Same as Contractor.",
+        "Supervisor": "Same employee inventory view. Not is_manager_admin, so no inventory manager endpoints, groups, categories, item admin, check history admin, or minor-plant management.",
+        "Manager": "Full inventory manager view: items, locations, categories, groups, check intervals/history, location requests, minor-plant move/restore flows. Some delete paths are admin-only.",
+        "Admin": "Full inventory manager/admin access, including admin-only delete paths."
+      }
+    },
+    {
+      "displayName": "Reminders",
+      "moduleName": "reminders",
+      "matrixGate": "Contractor+ and team-enabled",
+      "minimumRole": "Contractor",
+      "byRole": {
+        "Contractor": "View/action reminders assigned to self. No reminder-action creation or assignment management.",
+        "Employee": "Same as Contractor.",
+        "Supervisor": "Same assigned-reminder workflow. No Actions module by rank in the live matrix, so cannot create/update reminder_actions or assign reminders.",
+        "Manager": "Assigned-reminder workflow plus Actions-based manager creation/update/assignment of reminder actions and workflow settings.",
+        "Admin": "Full reminder/action workflow control."
+      }
+    }
+  ],
+  "prdRelevantMismatches": [
+    "Approvals: Supervisor has absence authorise_team by default, but cannot access the Approvals module because the live module minimum is Manager.",
+    "Toolbox Talks: Supervisor can pass the module gate, but message creation/reports still rely on manager-admin RLS/API paths.",
+    "Fleet and Maintenance: several write/settings actions mix module checks, isManager UI flags, admin-only UI, and manager-admin RLS.",
+    "Projects: some APIs are module-gated, but UI and RLS still preserve Manager/Admin management semantics.",
+    "Work shifts: absence secondary grants Supervisor team-view intent, but work-shift RLS remains manager-admin for some team rows/templates.",
+    "Actions vs Reminders: reminders use the Actions module for manager workflow, while legacy actions-table RLS still relies on is_manager_admin.",
+    "Team overrides: Workshop affects inspection read/write scope; Accounts can elevate timesheet/report visibility for manager-like roles."
+  ]
+}

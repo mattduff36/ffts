@@ -3,19 +3,23 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
-import { AppPageShell } from '@/components/layout/AppPageShell';
+import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Building2, Plus, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
+import { getErrorStatus } from '@/lib/utils/http-error';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { CustomersTable } from './components/CustomersTable';
 import { CustomerFormDialog } from './components/CustomerFormDialog';
 import type { Customer, CustomerFormData } from './types';
 
 export default function CustomersPage() {
   const { hasPermission: canViewCustomers, loading: permissionLoading } = usePermissionCheck('customers', false);
+  const sensitiveAccess = useSensitiveModuleAccess('customers');
+  const refreshSensitiveAccess = sensitiveAccess.refresh;
   const router = useRouter();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -32,23 +36,31 @@ export default function CustomersPage() {
       });
       setCustomers(items);
     } catch (error) {
+      if (getErrorStatus(error) === 428) {
+        setCustomers([]);
+        await refreshSensitiveAccess();
+        toast.info('Customers locked. Enter your sensitive PIN to continue.', { id: 'customers-sensitive-access-required' });
+        return;
+      }
+
       const errorContextId = 'customers-fetch-list-error';
       console.error('Error fetching customers:', error, { errorContextId });
       toast.error('Failed to load customers', { id: errorContextId });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshSensitiveAccess]);
 
   useEffect(() => {
-    if (permissionLoading) return;
+    if (permissionLoading || sensitiveAccess.loading) return;
     if (!canViewCustomers) {
       toast.error('Access denied', { id: 'customers-access-denied' });
       router.push('/dashboard');
       return;
     }
+    if (!sensitiveAccess.canAccess) return;
     fetchCustomers();
-  }, [permissionLoading, canViewCustomers, router, fetchCustomers]);
+  }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewCustomers, router, fetchCustomers]);
 
   async function handleCreate(data: CustomerFormData) {
     const res = await fetch('/api/customers', {
@@ -84,29 +96,40 @@ export default function CustomersPage() {
     router.push(`/customers/${customer.id}/history`);
   }
 
-  if (permissionLoading || loading) {
+  if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
     return <PageLoader message="Loading customers..." />;
+  }
+
+  if (!canViewCustomers) {
+    return <PageLoader message="Redirecting..." />;
+  }
+
+  if (!sensitiveAccess.canAccess) {
+    return (
+      <AppPageShell>
+        <SensitiveModuleGate moduleLabel="Customers" access={sensitiveAccess} />
+      </AppPageShell>
+    );
   }
 
   return (
     <AppPageShell>
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-border p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-brand-yellow/10">
-              <Building2 className="h-5 w-5 text-brand-yellow" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Customers</h1>
-              <p className="text-muted-foreground">Manage your customer directory and key contact records.</p>
-            </div>
-          </div>
-          <Button onClick={() => { setEditingCustomer(null); setFormOpen(true); }} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold">
+      <SensitiveModuleSessionManager moduleLabel="Customers" access={sensitiveAccess} />
+      <AppPageHeader
+        title="Customers"
+        description="Manage your customer directory and key contact records."
+        icon={<Building2 className="h-5 w-5 text-brand-yellow" />}
+        iconContainerClassName="flex h-10 w-10 items-center justify-center bg-brand-yellow/10 p-0"
+        contentClassName="sm:flex-row sm:items-center sm:justify-between"
+        headingClassName="space-y-0"
+        descriptionClassName="text-base"
+        actions={(
+          <Button onClick={() => { setEditingCustomer(null); setFormOpen(true); }} className="w-full bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Add Customer
           </Button>
-        </div>
-      </div>
+        )}
+      />
 
       <Tabs value={pageTab} onValueChange={(value) => setPageTab(value as 'overview' | 'settings')}>
         <TabsList>

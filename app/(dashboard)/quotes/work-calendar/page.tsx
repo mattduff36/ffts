@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageLoader } from '@/components/ui/page-loader';
 import { Badge } from '@/components/ui/badge';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 
 interface QuoteCalendarRow {
   id: string;
@@ -63,6 +64,7 @@ function buildEventEnd(startDate: Date, durationDays: number | null | undefined)
 
 export default function QuoteWorkCalendarPage() {
   const { hasPermission: canViewQuotes, loading: permissionLoading } = usePermissionCheck('quotes', false);
+  const sensitiveAccess = useSensitiveModuleAccess('quotes');
   const [cursorDate, setCursorDate] = useState(() => new Date());
   const [quotes, setQuotes] = useState<QuoteCalendarRow[]>([]);
   const [manualEntries, setManualEntries] = useState<ManualCalendarEntry[]>([]);
@@ -101,8 +103,10 @@ export default function QuoteWorkCalendarPage() {
   }, [calendarDays]);
 
   useEffect(() => {
-    if (!permissionLoading && canViewQuotes) void fetchCalendar();
-  }, [permissionLoading, canViewQuotes, fetchCalendar]);
+    if (!permissionLoading && !sensitiveAccess.loading && canViewQuotes && sensitiveAccess.canAccess) {
+      void fetchCalendar();
+    }
+  }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewQuotes, fetchCalendar]);
 
   const events = useMemo<CalendarEvent[]>(() => {
     const quoteEvents = quotes.map((quote) => {
@@ -181,11 +185,19 @@ export default function QuoteWorkCalendarPage() {
     }
   }
 
-  if (permissionLoading || loading) return <PageLoader message="Loading work calendar..." />;
+  if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) return <PageLoader message="Loading work calendar..." />;
   if (!canViewQuotes) return null;
+  if (!sensitiveAccess.canAccess) {
+    return (
+      <AppPageShell>
+        <SensitiveModuleGate moduleLabel="Quotes" access={sensitiveAccess} />
+      </AppPageShell>
+    );
+  }
 
   return (
     <AppPageShell>
+      <SensitiveModuleSessionManager moduleLabel="Quotes" access={sensitiveAccess} />
       <AppPageHeader
         title="Quote Work Calendar"
         description="Planned quote starts, estimated durations, and manual work entries."

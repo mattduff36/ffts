@@ -37,6 +37,13 @@ export default defineConfig({
       testMatch: /auth\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
+    // --- Auth lifecycle: clean context, own issue gate ---
+    {
+      name: 'auth-lifecycle-tests',
+      dependencies: ['setup'],
+      testMatch: /auth-lifecycle\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // --- Permissions tests: employee storage state ---
     {
       name: 'permissions-tests',
@@ -74,6 +81,7 @@ export default defineConfig({
       testIgnore: [
         /auth\.setup\.ts/,
         /auth\.spec\.ts/,
+        /auth-lifecycle\.spec\.ts/,
         /permissions\.spec\.ts/,
         /timesheets-workflow\.spec\.ts/,
         /inspections-rams-messages\.spec\.ts/,

@@ -24,6 +24,7 @@ export type LoaderAccent =
   | 'workshop'
   | 'inventory'
   | 'reminders'
+  | 'scheduling'
   | 'reports'
   | 'debug';
 
@@ -48,6 +49,7 @@ const ROUTE_ACCENT_TO_LOADER_ACCENT: Record<AccentType, LoaderAccent> = {
   workshop: 'workshop',
   inventory: 'inventory',
   reminders: 'reminders',
+  scheduling: 'scheduling',
   reports: 'reports',
   debug: 'debug',
   brand: 'brand',

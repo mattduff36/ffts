@@ -177,6 +177,11 @@
   --loader-accent: var(--reminders-primary);
 }
 
+.screen[data-loader-accent="scheduling"],
+.compact[data-loader-accent="scheduling"] {
+  --loader-accent: var(--scheduling-primary);
+}
+
 .screen[data-loader-accent="reports"],
 .compact[data-loader-accent="reports"] {
   --loader-accent: var(--report-primary);

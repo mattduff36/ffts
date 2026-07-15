@@ -170,6 +170,7 @@ export const STANDARD_MODULES: ModuleName[] = [
   'admin-vans',
   'inventory',
   'reminders',
+  'scheduling',
 ];
 
 export const MANAGEMENT_MODULES: ModuleName[] = [
@@ -211,6 +212,7 @@ export const MODULE_SHORT_NAMES: Record<ModuleName, string> = {
   'quotes': 'Quotes',
   'inventory': 'Inventory',
   'reminders': 'Reminders',
+  'scheduling': 'Schedule',
 };
 
 export const MODULE_CSS_VAR: Record<ModuleName, string> = {
@@ -237,6 +239,7 @@ export const MODULE_CSS_VAR: Record<ModuleName, string> = {
   'quotes': '--brand-yellow',
   'inventory': '--inventory-primary',
   'reminders': '--reminders-primary',
+  'scheduling': '--scheduling-primary',
 };
 
 // All available modules in the system
@@ -263,7 +266,8 @@ export type ModuleName =
   | 'customers'
   | 'quotes'
   | 'inventory'
-  | 'reminders';
+  | 'reminders'
+  | 'scheduling';
 
 export type SensitiveAccessModuleName = ModuleName | 'debug';
 
@@ -291,6 +295,7 @@ export const ALL_MODULES: ModuleName[] = [
   'quotes',
   'inventory',
   'reminders',
+  'scheduling',
 ];
 
 export const MODULE_DISPLAY_NAMES: Record<ModuleName, string> = {
@@ -317,6 +322,7 @@ export const MODULE_DISPLAY_NAMES: Record<ModuleName, string> = {
   'quotes': 'Quotes',
   'inventory': 'Inventory',
   'reminders': 'Reminders',
+  'scheduling': 'Job Scheduling',
 };
 
 export const MODULE_DESCRIPTIONS: Record<ModuleName, string> = {
@@ -343,6 +349,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleName, string> = {
   'quotes': 'Create and track customer quotations',
   'inventory': 'Track small tools, equipment, and location buckets',
   'reminders': 'View and action assigned reminders',
+  'scheduling': 'Schedule employees and plant against operational jobs',
 };
 
 // For API responses

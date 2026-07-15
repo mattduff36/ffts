@@ -179,6 +179,14 @@ export const MODULE_PAGES: ModulePage[] = [
     ],
   },
   {
+    module: 'scheduling',
+    displayName: MODULE_DISPLAY_NAMES.scheduling,
+    subPages: [
+      { value: 'scheduling-board', label: 'Scheduling Board' },
+      { value: 'scheduling-my', label: 'My Schedule' },
+    ],
+  },
+  {
     module: 'other',
     displayName: 'Other',
     subPages: [
@@ -308,6 +316,10 @@ export function getPageUrl(value: string): string {
 
     // Reminders
     'reminders-list': '/reminders',
+
+    // Scheduling
+    'scheduling-board': '/scheduling',
+    'scheduling-my': '/scheduling/my',
     
     // Admin - FAQ
     'admin-faq-list': '/admin/faq',

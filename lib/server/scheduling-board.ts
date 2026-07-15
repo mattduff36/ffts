@@ -1,0 +1,345 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
+import type {
+  ScheduleAssignment,
+  ScheduleEmployeeAssignment,
+  ScheduleEmployeeResource,
+  ScheduleJob,
+  SchedulePlantAssignment,
+  SchedulePlantResource,
+  SchedulingBoardPayload,
+  SchedulingConflict,
+  SchedulingSelfPayload,
+} from '@/types/scheduling';
+
+function pickRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function mapEmployee(row: Record<string, unknown>): ScheduleEmployeeResource {
+  const team = pickRelation(row.team as { name?: string | null } | Array<{ name?: string | null }> | null);
+  return {
+    id: String(row.id),
+    full_name: String(row.full_name || 'Unknown employee'),
+    employee_id: typeof row.employee_id === 'string' ? row.employee_id : null,
+    team_id: typeof row.team_id === 'string' ? row.team_id : null,
+    team_name: team?.name || null,
+  };
+}
+
+function mapPlant(row: Record<string, unknown>): SchedulePlantResource {
+  return {
+    id: String(row.id),
+    plant_id: String(row.plant_id),
+    nickname: typeof row.nickname === 'string' ? row.nickname : null,
+    make: typeof row.make === 'string' ? row.make : null,
+    model: typeof row.model === 'string' ? row.model : null,
+    status: (row.status as SchedulePlantResource['status']) || null,
+  };
+}
+
+function hasAbsence(
+  profileId: string,
+  workDate: string,
+  absences: Array<{ profile_id: string; date: string; end_date: string | null }>
+): boolean {
+  return absences.some(
+    (absence) =>
+      absence.profile_id === profileId &&
+      absence.date <= workDate &&
+      (absence.end_date || absence.date) >= workDate
+  );
+}
+
+export function buildEmployeeAssignmentConflicts(
+  row: Record<string, unknown>,
+  allRows: Array<Record<string, unknown>>,
+  jobs: Map<string, ScheduleJob>,
+  absences: Array<{ profile_id: string; date: string; end_date: string | null }>,
+  shifts: Map<string, Record<string, boolean>>
+): SchedulingConflict[] {
+  const profileId = String(row.profile_id);
+  const jobId = String(row.job_id);
+  const workDate = String(row.work_date);
+  const conflicts: SchedulingConflict[] = allRows
+    .filter(
+      (candidate) =>
+        String(candidate.profile_id) === profileId &&
+        String(candidate.work_date) === workDate &&
+        String(candidate.job_id) !== jobId
+    )
+    .map((candidate) => {
+      const conflictingJob = jobs.get(String(candidate.job_id));
+      return {
+        code: 'employee_double_booked',
+        severity: 'warning',
+        conflictingJobId: String(candidate.job_id),
+        conflictingJobReference: conflictingJob?.job_reference,
+        message: `Employee is also assigned to ${conflictingJob?.job_reference || 'another job'}.`,
+      };
+    });
+
+  if (hasAbsence(profileId, workDate, absences)) {
+    conflicts.push({
+      code: 'employee_absent',
+      severity: 'warning',
+      message: 'Employee has an approved or processed absence.',
+    });
+  }
+  if (!isEmployeeWorkingOnDate(workDate, shifts.get(profileId))) {
+    conflicts.push({
+      code: 'employee_off_shift',
+      severity: 'warning',
+      message: 'Employee is not scheduled to work on this day.',
+    });
+  }
+  return conflicts;
+}
+
+export function buildPlantAssignmentConflicts(
+  row: Record<string, unknown>,
+  allRows: Array<Record<string, unknown>>,
+  jobs: Map<string, ScheduleJob>,
+  plants: Map<string, SchedulePlantResource>,
+  blocks: Array<{ plant_id: string; start_date: string; end_date: string; reason: string }>
+): SchedulingConflict[] {
+  const plantId = String(row.plant_id);
+  const jobId = String(row.job_id);
+  const workDate = String(row.work_date);
+  const conflicts: SchedulingConflict[] = allRows
+    .filter(
+      (candidate) =>
+        String(candidate.plant_id) === plantId &&
+        String(candidate.work_date) === workDate &&
+        String(candidate.job_id) !== jobId
+    )
+    .map((candidate) => {
+      const conflictingJob = jobs.get(String(candidate.job_id));
+      return {
+        code: 'plant_double_booked',
+        severity: 'warning',
+        conflictingJobId: String(candidate.job_id),
+        conflictingJobReference: conflictingJob?.job_reference,
+        message: `Plant is also assigned to ${conflictingJob?.job_reference || 'another job'}.`,
+      };
+    });
+
+  const plant = plants.get(plantId);
+  if (plant?.status !== 'active') {
+    conflicts.push({
+      code: 'plant_inactive',
+      severity: 'warning',
+      message: `Plant status is ${plant?.status || 'unknown'}.`,
+    });
+  }
+  for (const block of blocks.filter(
+    (block) => block.plant_id === plantId && block.start_date <= workDate && block.end_date >= workDate
+  )) {
+    conflicts.push({
+      code: 'plant_unavailable',
+      severity: 'warning',
+      message: `Plant is unavailable: ${block.reason}.`,
+    });
+  }
+  return conflicts;
+}
+
+function normalizeBaseAssignment(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    job_id: String(row.job_id),
+    work_date: String(row.work_date),
+    notes: typeof row.notes === 'string' ? row.notes : null,
+    conflict_override: row.conflict_override === true,
+    conflict_codes: Array.isArray(row.conflict_codes) ? row.conflict_codes : [],
+    conflict_override_by: typeof row.conflict_override_by === 'string' ? row.conflict_override_by : null,
+    conflict_override_at: typeof row.conflict_override_at === 'string' ? row.conflict_override_at : null,
+    assigned_by: typeof row.assigned_by === 'string' ? row.assigned_by : null,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
+export async function loadSchedulingBoard(
+  admin: SupabaseClient,
+  weekStart: string,
+  weekEnd: string
+): Promise<SchedulingBoardPayload> {
+  const [jobsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
+    await Promise.all([
+      admin
+        .from('schedule_jobs')
+        .select('*')
+        .lte('start_date', weekEnd)
+        .gte('end_date', weekStart)
+        .order('start_date')
+        .order('job_reference'),
+      admin
+        .from('schedule_employee_assignments')
+        .select('*')
+        .gte('work_date', weekStart)
+        .lte('work_date', weekEnd),
+      admin
+        .from('schedule_plant_assignments')
+        .select('*')
+        .gte('work_date', weekStart)
+        .lte('work_date', weekEnd),
+      admin
+        .from('profiles')
+        .select('id, full_name, employee_id, team_id, is_placeholder, team:org_teams!profiles_team_id_fkey(name)')
+        .eq('is_placeholder', false)
+        .order('full_name'),
+      admin
+        .from('plant')
+        .select('id, plant_id, nickname, make, model, status')
+        .neq('status', 'retired')
+        .order('plant_id'),
+      admin
+        .from('schedule_plant_unavailability')
+        .select('*')
+        .lte('start_date', weekEnd)
+        .gte('end_date', weekStart)
+        .order('start_date'),
+      admin
+        .from('absences')
+        .select('profile_id, date, end_date')
+        .in('status', ['approved', 'processed'])
+        .lte('date', weekEnd)
+        .or(`end_date.gte.${weekStart},end_date.is.null`),
+      admin.from('employee_work_shifts').select('*'),
+    ]);
+
+  const results = [
+    jobsResult,
+    employeeAssignmentsResult,
+    plantAssignmentsResult,
+    employeesResult,
+    plantResult,
+    blocksResult,
+    absencesResult,
+    shiftsResult,
+  ];
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
+
+  const jobs = (jobsResult.data || []) as ScheduleJob[];
+  const employeeRows = (employeeAssignmentsResult.data || []) as Array<Record<string, unknown>>;
+  const plantRows = (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>;
+  const employees = ((employeesResult.data || []) as Array<Record<string, unknown>>).map(mapEmployee);
+  const plants = ((plantResult.data || []) as Array<Record<string, unknown>>).map(mapPlant);
+  const blocks = (blocksResult.data || []) as Array<{
+    plant_id: string;
+    start_date: string;
+    end_date: string;
+    reason: string;
+  }>;
+  const absences = (absencesResult.data || []) as Array<{
+    profile_id: string;
+    date: string;
+    end_date: string | null;
+  }>;
+  const shifts = new Map(
+    ((shiftsResult.data || []) as Array<Record<string, unknown>>).map((row) => [
+      String(row.profile_id),
+      row as Record<string, boolean>,
+    ])
+  );
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+  const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
+  const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
+
+  const employeeAssignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
+    ...normalizeBaseAssignment(row),
+    resource_type: 'employee',
+    profile_id: String(row.profile_id),
+    employee: employeesById.get(String(row.profile_id)) || null,
+    conflicts: buildEmployeeAssignmentConflicts(row, employeeRows, jobsById, absences, shifts),
+  }));
+  const plantAssignments: SchedulePlantAssignment[] = plantRows.map((row) => ({
+    ...normalizeBaseAssignment(row),
+    resource_type: 'plant',
+    plant_id: String(row.plant_id),
+    plant: plantsById.get(String(row.plant_id)) || null,
+    conflicts: buildPlantAssignmentConflicts(row, plantRows, jobsById, plantsById, blocks),
+  }));
+
+  return {
+    week: { start: weekStart, end: weekEnd },
+    jobs,
+    assignments: [...employeeAssignments, ...plantAssignments],
+    resources: { employees, plant: plants },
+    plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
+  };
+}
+
+export async function loadSchedulingSelf(
+  admin: SupabaseClient,
+  userId: string,
+  weekStart: string,
+  weekEnd: string
+): Promise<SchedulingSelfPayload> {
+  const employeeResult = await admin
+    .from('schedule_employee_assignments')
+    .select('*')
+    .eq('profile_id', userId)
+    .gte('work_date', weekStart)
+    .lte('work_date', weekEnd)
+    .order('work_date');
+  if (employeeResult.error) throw employeeResult.error;
+
+  const employeeRows = (employeeResult.data || []) as Array<Record<string, unknown>>;
+  const jobIds = Array.from(new Set(employeeRows.map((row) => String(row.job_id))));
+  if (jobIds.length === 0) {
+    return { week: { start: weekStart, end: weekEnd }, assignments: [], jobs: [], plant_assignments: [] };
+  }
+
+  const dates = Array.from(new Set(employeeRows.map((row) => String(row.work_date))));
+  const [jobsResult, plantAssignmentsResult] = await Promise.all([
+    admin.from('schedule_jobs').select('*').in('id', jobIds),
+    admin
+      .from('schedule_plant_assignments')
+      .select('*, plant:plant(id, plant_id, nickname, make, model, status)')
+      .in('job_id', jobIds)
+      .in('work_date', dates),
+  ]);
+  if (jobsResult.error) throw jobsResult.error;
+  if (plantAssignmentsResult.error) throw plantAssignmentsResult.error;
+
+  const assignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
+    ...normalizeBaseAssignment(row),
+    resource_type: 'employee',
+    profile_id: userId,
+    employee: null,
+    conflicts: [],
+  }));
+  const plantAssignments: SchedulePlantAssignment[] = (
+    (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>
+  ).map((row) => {
+    const plant = pickRelation(row.plant as Record<string, unknown> | Array<Record<string, unknown>> | null);
+    return {
+      ...normalizeBaseAssignment(row),
+      resource_type: 'plant',
+      plant_id: String(row.plant_id),
+      plant: plant ? mapPlant(plant) : null,
+      conflicts: [],
+    };
+  });
+
+  return {
+    week: { start: weekStart, end: weekEnd },
+    assignments,
+    jobs: (jobsResult.data || []) as ScheduleJob[],
+    plant_assignments: plantAssignments,
+  };
+}
+
+export function assignmentsForJobDate(
+  assignments: ScheduleAssignment[],
+  jobId: string,
+  workDate: string
+): ScheduleAssignment[] {
+  return assignments.filter(
+    (assignment) => assignment.job_id === jobId && assignment.work_date === workDate
+  );
+}

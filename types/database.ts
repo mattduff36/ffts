@@ -5990,6 +5990,252 @@ export type Database = {
           },
         ]
       }
+      schedule_employee_assignments: {
+        Row: {
+          id: string
+          job_id: string
+          work_date: string
+          profile_id: string
+          notes: string | null
+          conflict_override: boolean
+          conflict_codes: string[]
+          conflict_override_by: string | null
+          conflict_override_at: string | null
+          assigned_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          work_date: string
+          profile_id: string
+          notes?: string | null
+          conflict_override?: boolean
+          conflict_codes?: string[]
+          conflict_override_by?: string | null
+          conflict_override_at?: string | null
+          assigned_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          work_date?: string
+          profile_id?: string
+          notes?: string | null
+          conflict_override?: boolean
+          conflict_codes?: string[]
+          conflict_override_by?: string | null
+          conflict_override_at?: string | null
+          assigned_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_employee_assignments_job_id_fkey'
+            columns: ['job_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_employee_assignments_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      schedule_jobs: {
+        Row: {
+          id: string
+          job_reference: string
+          title: string
+          description: string | null
+          site_address: string | null
+          status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+          source_type: 'sample' | 'manual' | 'quote'
+          start_date: string
+          end_date: string
+          quote_id: string | null
+          quote_project_number_id: string | null
+          customer_id: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_reference: string
+          title: string
+          description?: string | null
+          site_address?: string | null
+          status?: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+          source_type?: 'sample' | 'manual' | 'quote'
+          start_date: string
+          end_date: string
+          quote_id?: string | null
+          quote_project_number_id?: string | null
+          customer_id?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_reference?: string
+          title?: string
+          description?: string | null
+          site_address?: string | null
+          status?: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+          source_type?: 'sample' | 'manual' | 'quote'
+          start_date?: string
+          end_date?: string
+          quote_id?: string | null
+          quote_project_number_id?: string | null
+          customer_id?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_jobs_customer_id_fkey'
+            columns: ['customer_id']
+            isOneToOne: false
+            referencedRelation: 'customers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_jobs_quote_id_fkey'
+            columns: ['quote_id']
+            isOneToOne: false
+            referencedRelation: 'quotes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_jobs_quote_project_number_id_fkey'
+            columns: ['quote_project_number_id']
+            isOneToOne: false
+            referencedRelation: 'quote_project_numbers'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      schedule_plant_assignments: {
+        Row: {
+          id: string
+          job_id: string
+          work_date: string
+          plant_id: string
+          notes: string | null
+          conflict_override: boolean
+          conflict_codes: string[]
+          conflict_override_by: string | null
+          conflict_override_at: string | null
+          assigned_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          work_date: string
+          plant_id: string
+          notes?: string | null
+          conflict_override?: boolean
+          conflict_codes?: string[]
+          conflict_override_by?: string | null
+          conflict_override_at?: string | null
+          assigned_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          work_date?: string
+          plant_id?: string
+          notes?: string | null
+          conflict_override?: boolean
+          conflict_codes?: string[]
+          conflict_override_by?: string | null
+          conflict_override_at?: string | null
+          assigned_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_plant_assignments_job_id_fkey'
+            columns: ['job_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_plant_assignments_plant_id_fkey'
+            columns: ['plant_id']
+            isOneToOne: false
+            referencedRelation: 'plant'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      schedule_plant_unavailability: {
+        Row: {
+          id: string
+          plant_id: string
+          start_date: string
+          end_date: string
+          reason: string
+          notes: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plant_id: string
+          start_date: string
+          end_date: string
+          reason: string
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plant_id?: string
+          start_date?: string
+          end_date?: string
+          reason?: string
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_plant_unavailability_plant_id_fkey'
+            columns: ['plant_id']
+            isOneToOne: false
+            referencedRelation: 'plant'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       role_permissions: {
         Row: {
           id: string

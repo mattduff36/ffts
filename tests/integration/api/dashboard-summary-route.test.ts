@@ -124,6 +124,7 @@ describe('GET /api/dashboard/summary', () => {
       inventory: false,
       training: false,
       reminders: false,
+      scheduling: false,
       quotes: true,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -344,6 +345,7 @@ describe('GET /api/dashboard/summary', () => {
       inventory: false,
       training: false,
       reminders: false,
+      scheduling: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -478,6 +480,7 @@ describe('GET /api/dashboard/summary', () => {
       inventory: false,
       training: false,
       reminders: false,
+      scheduling: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({
@@ -600,6 +603,7 @@ describe('GET /api/dashboard/summary', () => {
       inventory: false,
       training: false,
       reminders: false,
+      scheduling: false,
       quotes: false,
     });
 
@@ -756,6 +760,7 @@ describe('GET /api/dashboard/summary', () => {
       inventory: false,
       training: false,
       reminders: false,
+      scheduling: false,
       quotes: false,
     });
     vi.mocked(getActorAbsenceSecondaryPermissions).mockResolvedValue({

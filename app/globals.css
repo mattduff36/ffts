@@ -88,6 +88,10 @@
     --reminders-primary: 187 85% 42%;
     --reminders-light: 187 80% 95%;
     --reminders-dark: 187 85% 30%;
+
+    --scheduling-primary: 158 64% 46%;
+    --scheduling-light: 158 60% 95%;
+    --scheduling-dark: 158 64% 32%;
     
     --report-primary: 150 70% 45%;
     --report-light: 150 100% 96%;
@@ -206,6 +210,12 @@
     --primary: var(--reminders-primary);
     --primary-foreground: 210 40% 98%;
     --ring: var(--reminders-primary);
+  }
+
+  [data-accent="scheduling"] {
+    --primary: var(--scheduling-primary);
+    --primary-foreground: 222 47% 11%;
+    --ring: var(--scheduling-primary);
   }
 
   [data-accent="reports"] {
@@ -516,6 +526,14 @@ html[data-display-board-text-size="5"] {
   .bg-reminders-dark { background-color: hsl(var(--reminders-dark)); }
   .text-reminders { color: hsl(var(--reminders-primary)); }
   .border-reminders { border-color: hsl(var(--reminders-primary)); }
+
+  /* Scheduling */
+  .bg-scheduling { background-color: hsl(var(--scheduling-primary)); }
+  .bg-scheduling-light { background-color: hsl(var(--scheduling-light)); }
+  .bg-scheduling-soft { background-color: hsl(var(--scheduling-primary) / 0.12); }
+  .bg-scheduling-dark { background-color: hsl(var(--scheduling-dark)); }
+  .text-scheduling { color: hsl(var(--scheduling-primary)); }
+  .border-scheduling { border-color: hsl(var(--scheduling-primary)); }
   
   /* Tab styling */
   [role="tab"][data-state="active"] {

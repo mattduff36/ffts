@@ -28,6 +28,7 @@
     "db:baseline": "tsx scripts/migrations/apply-baseline.ts",
     "forest:bootstrap-production": "tsx scripts/production/bootstrap-forest-farm.ts",
     "permissions:migrate:team-matrix": "tsx scripts/run-team-permission-matrix-migration.ts",
+    "scheduling:migrate": "tsx scripts/migrations/run-scheduling-module-migration.ts",
     "hierarchy:preflight": "tsx scripts/hierarchy/preflight-organogram-check.ts",
     "hierarchy:migrate:bigbang": "tsx scripts/run-org-hierarchy-bigbang-migration.ts",
     "hierarchy:backfill": "tsx scripts/hierarchy/backfill-organogram-hierarchy.ts",
@@ -65,6 +66,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",
+    "@dnd-kit/dom": "^0.5.0",
+    "@dnd-kit/react": "^0.5.0",
     "@hookform/resolvers": "^5.2.2",
     "@maptiler/sdk": "^3.11.1",
     "@radix-ui/react-accordion": "^1.2.12",

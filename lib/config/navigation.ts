@@ -32,6 +32,7 @@ import {
   SlidersHorizontal,
   PackageSearch,
   GraduationCap,
+  CalendarDays,
   LucideIcon
 } from 'lucide-react';
 import { ModuleName } from '@/types/roles';
@@ -47,6 +48,8 @@ export interface NavItem {
 
 const clientNavigationPriorityHrefs: string[] = [
   '/projects',
+  '/scheduling',
+  '/scheduling/my',
   '/inventory',
   '/quotes',
   '/customers',
@@ -143,6 +146,13 @@ const baseEmployeeNavItems: NavItem[] = [
     category: 'employee'
   },
   {
+    href: '/scheduling/my',
+    label: 'My Schedule',
+    icon: CalendarDays,
+    module: 'scheduling',
+    category: 'employee'
+  },
+  {
     href: '/inventory',
     label: 'Inventory',
     icon: PackageSearch,
@@ -194,6 +204,13 @@ const baseManagerNavItems: NavItem[] = [
     label: 'Toolbox Talks', 
     icon: MessageSquare,
     module: 'toolbox-talks',
+    category: 'manager'
+  },
+  {
+    href: '/scheduling',
+    label: 'Job Scheduling',
+    icon: CalendarDays,
+    module: 'scheduling',
     category: 'manager'
   },
   {

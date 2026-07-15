@@ -113,6 +113,7 @@ function getPermissionModuleHref(moduleName: ModuleName): string {
     quotes: '/quotes',
     inventory: '/inventory',
     reminders: '/reminders',
+    scheduling: '/scheduling/my',
   };
 
   return moduleHrefs[moduleName] || '/dashboard';

@@ -1,31 +1,35 @@
 [
   {
-    "version": "0726.1.0",
+    "version": "0726.2.0",
     "updateKind": "major",
-    "title": "Forest Farm parity release",
-    "description": "Established the Forest Farm production application with the current operations platform and product modules.",
-    "summary": "Established the Forest Farm production application with the current operations platform and product modules.",
+    "title": "Data storage update",
+    "description": "Updated Data storage, Navigation, Profile, and Sign in. Allow password login without WebAuthn config. Complete FFTS AVS parity sync. Align inherited assets and defaults with Forest Farm. Establish Forest baseline history. Close parity verification gaps. Complete Forest production sanitization. Apply Forest-safe parity schema. Add full Forest product parity. Sync dashboard and field workflows. Add secure Forest access foundation. Make FFTS production-only.",
+    "summary": "Updated Data storage, Navigation, Profile, and Sign in. Allow password login without WebAuthn config. Complete FFTS AVS parity sync. Align inherited assets and defaults with Forest Farm. Establish Forest baseline history. Close parity verification gaps. Complete Forest production sanitization. Apply Forest-safe parity schema. Add full Forest product parity. Sync dashboard and field workflows. Add secure Forest access foundation. Make FFTS production-only.",
     "details": [
-      "Added secure application sessions, biometric sign-in support, sensitive-module PIN protection, and role-based module access.",
-      "Updated dashboard, field operations, fleet, maintenance, inventory, quotes, training, reminders, display boards, analytics, and offline support.",
-      "Applied and validated the Forest-safe production schema while removing inherited demo data and customer-specific content."
+      "Updated Data storage, Navigation, Profile, and Sign in, with changes to background routes, interface components, shared logic, shared typing, automation scripts, automated tests, data storage, and documentation.",
+      "Updated quotes, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.",
+      "Updated inventory, with changes to background routes, app screens, shared logic, automation scripts, automated tests, data storage, and documentation.",
+      "Updated daily tasks, with changes to background routes, app screens, interface components, shared logic, shared typing, automation scripts, automated tests, data storage, and documentation.",
+      "Updated notifications, with changes to background routes, app screens, interface components, shared logic, shared typing, automation scripts, automated tests, data storage, and documentation.",
+      "Updated timesheets, with changes to background routes, app screens, interface components, shared logic, shared typing, automation scripts, automated tests, and data storage.",
+      "Updated help and FAQ, with changes to app screens, interface components, shared logic, automation scripts, automated tests, data storage, and documentation.",
+      "Updated workshop tasks, with changes to background routes, app screens, interface components, shared logic, automated tests, data storage, and documentation."
     ],
     "areas": [
-      "Dashboard",
-      "Timesheets",
-      "Inventory",
-      "Quotes",
-      "Training",
-      "Reminders"
+      "Data storage",
+      "Sign in",
+      "Release automation",
+      "Navigation",
+      "Profile",
+      "Field workflows. Add secure Forest access foundation. Make FFTS production-only"
     ],
     "areaKeys": [
-      "dashboard",
-      "timesheets",
-      "inventory",
-      "quotes",
-      "training",
-      "reminders"
+      "data-storage",
+      "sign-in",
+      "release-automation",
+      "navigation",
+      "profile"
     ],
-    "pushedAt": "2026-07-10T00:00:00.000Z"
+    "pushedAt": "2026-07-15T22:53:43.862Z"
   }
 ]

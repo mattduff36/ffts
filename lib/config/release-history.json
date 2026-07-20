@@ -1,5 +1,37 @@
 [
   {
+    "version": "0726.5.0",
+    "updateKind": "major",
+    "title": "Data storage update",
+    "description": "Updated Data storage, Help and FAQ, User Management, Quotes, Error reporting, and Navigation.",
+    "summary": "Updated Data storage, Help and FAQ, User Management, Quotes, Error reporting, and Navigation.",
+    "details": [
+      "Updated Data storage, Help and FAQ, User Management, Quotes, Error reporting, and Navigation, with changes to shared typing, automation scripts, automated tests, and data storage.",
+      "Updated help and FAQ, with changes to background routes, app screens, shared typing, automated tests, data storage, and documentation.",
+      "Updated quotes, with changes to shared logic, automation scripts, automated tests, and data storage.",
+      "Updated user management, with changes to background routes, app screens, and automated tests.",
+      "Updated error reporting, with changes to automated tests.",
+      "Updated navigation, with changes to interface components."
+    ],
+    "areas": [
+      "Data storage",
+      "Help",
+      "FAQ",
+      "User Management",
+      "Quotes",
+      "Error reporting",
+      "Navigation"
+    ],
+    "areaKeys": [
+      "data-storage",
+      "user-management",
+      "quotes",
+      "error-reporting",
+      "navigation"
+    ],
+    "pushedAt": "2026-07-20T21:34:42.351Z"
+  },
+  {
     "version": "0726.4.1",
     "updateKind": "minor",
     "title": "Readme Md maintenance update",

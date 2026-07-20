@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
 
     <!-- Action Button -->
     <div style="text-align: center; margin-top: 30px; padding-top: 30px; border-top: 2px solid #eee;">
-      <a href="https://your-app.example.com/debug" 
+      <a href="${templateConfig.branding.publicUrl}/debug"
          style="background: linear-gradient(135deg, #dc2626 0%, #ea580c 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);">
         🔍 View Full Error Log
       </a>

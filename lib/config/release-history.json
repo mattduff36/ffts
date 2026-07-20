@@ -1,5 +1,28 @@
 [
   {
+    "version": "0726.4.0",
+    "updateKind": "major",
+    "title": "Dashboard update",
+    "description": "Updated Dashboard, Daily Tasks, and Navigation.",
+    "summary": "Updated Dashboard, Daily Tasks, and Navigation.",
+    "details": [
+      "Updated Dashboard, Daily Tasks, and Navigation, with changes to app screens.",
+      "Updated daily tasks, with changes to automated tests.",
+      "Updated navigation, with changes to automated tests."
+    ],
+    "areas": [
+      "Dashboard",
+      "Daily Tasks",
+      "Navigation"
+    ],
+    "areaKeys": [
+      "dashboard",
+      "daily-tasks",
+      "navigation"
+    ],
+    "pushedAt": "2026-07-20T15:24:36.697Z"
+  },
+  {
     "version": "0726.3.1",
     "updateKind": "minor",
     "title": "Help and FAQ guidance update",

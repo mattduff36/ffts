@@ -2,6 +2,25 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0726.4.0
+
+**GIT COMMIT MESSAGE**
+`feat(dashboard): update Dashboard, Daily Tasks, and Navigation`
+
+**PUSHED AT**
+2026-07-20T15:24:36.697Z
+
+**WHAT CHANGED**
+Update Dashboard, Daily Tasks, and Navigation.
+
+**VERSION HISTORY DETAILS**
+- Updated Dashboard, Daily Tasks, and Navigation, with changes to app screens.
+- Updated daily tasks, with changes to automated tests.
+- Updated navigation, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(dashboard): update Dashboard, Daily Tasks, and Navigation`
+
 ## 0726.3.1
 
 **GIT COMMIT MESSAGE**

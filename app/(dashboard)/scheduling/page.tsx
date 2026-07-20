@@ -101,7 +101,7 @@ export default function SchedulingPage() {
         icon={<CalendarDays className="h-5 w-5" />}
       />
       {contextQuery.data?.is_manager_or_admin ? (
-        <SchedulingManagerBoard />
+        <SchedulingManagerBoard userId={contextQuery.data.user_id} />
       ) : (
         <Card className="border-border">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">

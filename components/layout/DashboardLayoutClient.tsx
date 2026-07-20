@@ -317,7 +317,7 @@ function DashboardLayoutShell({
       
       <Navbar />
       <PullToRefresh />
-      <DashboardContent>
+      <DashboardContent isFullWidth={pathname === '/scheduling'}>
         {children}
       </DashboardContent>
       

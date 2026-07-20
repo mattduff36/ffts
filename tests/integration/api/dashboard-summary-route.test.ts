@@ -427,7 +427,7 @@ describe('GET /api/dashboard/summary', () => {
     });
   });
 
-  it('returns error log badge counts for additional debug access', async () => {
+  it('returns error log badge counts for an actual Super Admin', async () => {
     const { createClient } = await import('@/lib/supabase/server');
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
@@ -450,9 +450,9 @@ describe('GET /api/dashboard/summary', () => {
       role_class: 'admin',
       display_name: 'Admin',
       is_manager_admin: true,
-      is_super_admin: false,
+      is_super_admin: true,
       is_viewing_as: false,
-      is_actual_super_admin: false,
+      is_actual_super_admin: true,
       user_id: 'support-id',
       team_id: 'team-accounts',
       team_name: 'Accounts',

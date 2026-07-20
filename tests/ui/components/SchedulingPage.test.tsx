@@ -20,7 +20,9 @@ vi.mock('@/lib/hooks/usePermissionCheck', () => ({
 }));
 
 vi.mock('@/app/(dashboard)/scheduling/components/SchedulingManagerBoard', () => ({
-  SchedulingManagerBoard: () => <div>Manager scheduling board</div>,
+  SchedulingManagerBoard: ({ userId }: { userId: string }) => (
+    <div>Manager scheduling board for {userId}</div>
+  ),
 }));
 
 function renderPage() {
@@ -64,6 +66,14 @@ describe('SchedulingPage access states', () => {
 
     expect(screen.getByText('Scheduling is not enabled for your account')).toBeInTheDocument();
     expect(screen.getByText(/team and individual scheduling permissions/i)).toBeInTheDocument();
+  });
+
+  it('scopes the management board to the scheduling context user', async () => {
+    renderPage();
+
+    expect(
+      await screen.findByText('Manager scheduling board for manager-1')
+    ).toBeInTheDocument();
   });
 
   it('shows a retryable error when scheduling context fails', async () => {

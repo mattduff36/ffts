@@ -3,13 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 
 export async function GET() {
-  const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
+  const current = await getCurrentAuthenticatedProfile();
   if (!current) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const userId = current.profile.id;
-  const userEmail = current.profile.email;
 
   const admin = createAdminClient();
   const { data: profile, error: profileError } = await admin
@@ -34,8 +33,7 @@ export async function GET() {
 
   const isActualSuperAdmin =
     typedProfile.super_admin === true ||
-    typedProfile.role?.is_super_admin === true ||
-    userEmail === 'admin@mpdee.co.uk';
+    typedProfile.role?.is_super_admin === true;
 
   if (!isActualSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

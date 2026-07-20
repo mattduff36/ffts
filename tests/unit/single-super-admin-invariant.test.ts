@@ -6,6 +6,13 @@ const migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260720_single_super_admin_invariant.sql'),
   'utf8'
 );
+const assignmentFunctionMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    'supabase/migrations/20260720_harden_super_admin_role_assignment_function.sql'
+  ),
+  'utf8'
+);
 
 describe('single Super Admin invariant migration', () => {
   it('normalizes existing assignments to the configured owner', () => {
@@ -31,5 +38,17 @@ describe('single Super Admin invariant migration', () => {
     expect(migration).toContain(
       'existing_super_admin IS NOT DISTINCT FROM COALESCE(target_super_admin, FALSE)'
     );
+  });
+
+  it('checks the target role before granting admin assignment rights', () => {
+    const targetRoleCheck = assignmentFunctionMigration.indexOf(
+      'IF target_role_class IS NULL OR COALESCE(target_is_super, FALSE)'
+    );
+    const actorAdminCheck = assignmentFunctionMigration.indexOf(
+      "IF COALESCE(eff_is_super, FALSE) OR eff_role_class = 'admin'"
+    );
+
+    expect(targetRoleCheck).toBeGreaterThan(-1);
+    expect(actorAdminCheck).toBeGreaterThan(targetRoleCheck);
   });
 });

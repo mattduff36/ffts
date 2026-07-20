@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canAccessDebugConsole, isAdditionalDebugAccessUser } from '@/lib/utils/debug-access';
+import { canAccessDebugConsole } from '@/lib/utils/debug-access';
 import { ALL_MODULES } from '@/types/roles';
-
-describe('isAdditionalDebugAccessUser', () => {
-  it('matches the configured Forest support account case-insensitively', () => {
-    expect(isAdditionalDebugAccessUser('ADMIN@MPDEE.CO.UK')).toBe(true);
-  });
-
-  it('rejects other emails', () => {
-    expect(isAdditionalDebugAccessUser('someone@example.test')).toBe(false);
-  });
-});
 
 describe('canAccessDebugConsole', () => {
   it('allows actual superadmins in actual-role mode', () => {
@@ -23,14 +13,14 @@ describe('canAccessDebugConsole', () => {
     ).toBe(true);
   });
 
-  it('allows the configured support account without superadmin access', () => {
+  it('does not grant access from email identity alone', () => {
     expect(
       canAccessDebugConsole({
         email: 'admin@mpdee.co.uk',
         isActualSuperAdmin: false,
         isViewingAs: false,
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('blocks view-as mode even for otherwise eligible users', () => {

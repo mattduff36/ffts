@@ -59,13 +59,12 @@ export async function getEffectiveRole(): Promise<EffectiveRoleInfo> {
   };
 
   try {
-    const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
+    const current = await getCurrentAuthenticatedProfile();
     if (!current) {
       return none;
     }
 
     const userId = current.profile.id;
-    const userEmail = current.profile.email;
 
     // Fetch actual profile + role using admin client to bypass RLS
     const admin = createAdminClient();
@@ -122,8 +121,7 @@ export async function getEffectiveRole(): Promise<EffectiveRoleInfo> {
 
     const isActualSuperAdmin =
       typedProfile.super_admin === true ||
-      actualRole?.is_super_admin === true ||
-      userEmail === 'admin@mpdee.co.uk';
+      actualRole?.is_super_admin === true;
 
     // Build baseline result from actual role
     const result: EffectiveRoleInfo = {

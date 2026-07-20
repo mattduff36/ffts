@@ -33,9 +33,9 @@ const baseEffectiveRole: EffectiveRoleInfo = {
   display_name: 'Admin',
   role_class: 'admin',
   is_manager_admin: true,
-  is_super_admin: false,
+  is_super_admin: true,
   is_viewing_as: false,
-  is_actual_super_admin: false,
+  is_actual_super_admin: true,
   user_id: 'debug-admin-id',
   team_id: null,
   team_name: null,
@@ -46,7 +46,7 @@ describe('notification preferences admin route', () => {
     vi.clearAllMocks();
   });
 
-  it('allows configured debug access to fetch notification preferences', async () => {
+  it('allows an actual Super Admin to fetch notification preferences', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
@@ -104,7 +104,7 @@ describe('notification preferences admin route', () => {
     ]);
   });
 
-  it('allows configured debug access to update notification preferences', async () => {
+  it('allows an actual Super Admin to update notification preferences', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       profile: { id: 'debug-admin-id', email: 'admin@mpdee.co.uk' },
     } as never);
@@ -208,7 +208,7 @@ describe('notification preferences admin route', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(403);
-    expect(payload.error).toBe('Only supervisors and above can disable notifications');
+    expect(payload.error).toBe('Forbidden: Debug access required');
     expect(createAdminClient).not.toHaveBeenCalled();
   });
 

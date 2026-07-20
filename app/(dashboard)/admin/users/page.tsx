@@ -303,6 +303,10 @@ function isContractorRole(role?: { name?: string | null; display_name?: string |
   return matchesNamedRole(role, 'contractor');
 }
 
+function isSuperAdminUser(user: ProfileWithEmail): boolean {
+  return user.super_admin === true || user.role?.is_super_admin === true;
+}
+
 export default function UsersAdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -459,7 +463,7 @@ export default function UsersAdminPage() {
 
   const getUserRolePriority = useMemo(() => {
     return (user: ProfileWithEmail) => {
-      if (user.email === 'admin@mpdee.co.uk') {
+      if (isSuperAdminUser(user)) {
         return getRoleSortPriority('admin');
       }
 
@@ -1681,7 +1685,7 @@ export default function UsersAdminPage() {
                           >
                             <Badge
                               variant={
-                                user.email === 'admin@mpdee.co.uk'
+                                isSuperAdminUser(user)
                                   ? 'destructive'
                                   : isSupervisorRole(user.role)
                                     ? 'outline'
@@ -1697,7 +1701,7 @@ export default function UsersAdminPage() {
                                   : undefined
                               }
                             >
-                              {user.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
+                              {isSuperAdminUser(user) ? 'SuperAdmin' : (user.role?.display_name || 'No Role')}
                             </Badge>
                           </button>
                         </TableCell>
@@ -2321,7 +2325,7 @@ export default function UsersAdminPage() {
                   <span className="text-muted-foreground">Role:</span>{' '}
                   <Badge
                     variant={
-                      selectedUser.email === 'admin@mpdee.co.uk'
+                      isSuperAdminUser(selectedUser)
                         ? 'destructive'
                         : selectedUser.role?.role_class === 'admin'
                           ? 'destructive'
@@ -2330,14 +2334,14 @@ export default function UsersAdminPage() {
                             : 'default'
                     }
                     className={
-                      selectedUser.email === 'admin@mpdee.co.uk' || selectedUser.role?.role_class === 'admin'
+                      isSuperAdminUser(selectedUser) || selectedUser.role?.role_class === 'admin'
                         ? undefined
                         : isSupervisorRole(selectedUser.role)
                           ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
                           : 'bg-slate-700 border-slate-500 text-slate-100 hover:bg-slate-600'
                     }
                   >
-                    {selectedUser.email === 'admin@mpdee.co.uk' ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
+                    {isSuperAdminUser(selectedUser) ? 'SuperAdmin' : (selectedUser.role?.display_name || 'No Role')}
                   </Badge>
                 </div>
               </div>

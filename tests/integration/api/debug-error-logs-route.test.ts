@@ -128,7 +128,7 @@ describe('debug error logs route', () => {
     ]);
   });
 
-  it('returns enriched error logs for additional debug access', async () => {
+  it('returns enriched error logs for an actual Super Admin', async () => {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
 
@@ -168,9 +168,9 @@ describe('debug error logs route', () => {
       display_name: 'Admin',
       role_class: 'admin',
       is_manager_admin: true,
-      is_super_admin: false,
+      is_super_admin: true,
       is_viewing_as: false,
-      is_actual_super_admin: false,
+      is_actual_super_admin: true,
       user_id: 'debug-admin-id',
       team_id: null,
       team_name: null,

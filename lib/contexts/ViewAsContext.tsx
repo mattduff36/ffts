@@ -17,12 +17,11 @@ const ViewAsContext = createContext<ViewAsContextType | undefined>(undefined);
 
 export function ViewAsProvider({ 
   children,
-  userEmail 
+  isSuperAdmin,
 }: { 
   children: React.ReactNode;
-  userEmail: string | null;
+  isSuperAdmin: boolean;
 }) {
-  const isSuperAdmin = userEmail === 'admin@mpdee.co.uk';
   const [viewAsRoleId, setViewAsRoleIdState] = useState<string>(() => {
     if (typeof window === 'undefined' || !isSuperAdmin) {
       return '';

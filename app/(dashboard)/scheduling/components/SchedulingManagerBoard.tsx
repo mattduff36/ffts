@@ -39,9 +39,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchSchedulingBoard, deleteScheduleAssignment } from '@/lib/client/scheduling';
+import {
+  SCHEDULING_BOARD_VIEWS,
+  readSchedulingViewPreference,
+  type SchedulingBoardView,
+  writeSchedulingViewPreference,
+} from '@/lib/config/scheduling-view-preference';
 import { cn } from '@/lib/utils/cn';
 import {
   enumerateScheduleDates,
+  formatScheduleDate,
   formatScheduleVisitTime,
   getScheduleVisitDate,
   getSchedulingWeek,
@@ -60,7 +67,7 @@ import {
 } from './ScheduleAssignmentDialog';
 import { ScheduleJobDialog } from './ScheduleJobDialog';
 import { ScheduleVisitDialog } from './ScheduleVisitDialog';
-import { SchedulingWeekNav } from './SchedulingWeekNav';
+import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 
 interface ResourceCardProps {
   resource: SelectedScheduleResource;
@@ -407,10 +414,17 @@ function resourceFromPlant(plant: SchedulePlantResource): SelectedScheduleResour
   };
 }
 
-export function SchedulingManagerBoard() {
+interface SchedulingManagerBoardProps {
+  userId: string;
+}
+
+export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) {
   const queryClient = useQueryClient();
   const wideDragEnabled = useWideDragEnabled();
-  const [weekStart, setWeekStart] = useState(() => getSchedulingWeek().start);
+  const [selectedDate, setSelectedDate] = useState(() => formatScheduleDate(new Date()));
+  const [view, setView] = useState<SchedulingBoardView>(() =>
+    readSchedulingViewPreference(userId)
+  );
   const [resourceType, setResourceType] = useState<'employee' | 'plant'>('employee');
   const [resourceSearch, setResourceSearch] = useState('');
   const [jobSearch, setJobSearch] = useState('');
@@ -428,14 +442,19 @@ export function SchedulingManagerBoard() {
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
 
+  const weekStart = getSchedulingWeek(selectedDate).start;
   const boardQuery = useQuery({
     queryKey: ['scheduling-board', weekStart],
     queryFn: () => fetchSchedulingBoard(weekStart),
   });
   const board = boardQuery.data;
   const weekDates = useMemo(
-    () => (board ? enumerateScheduleDates(board.week.start, board.week.end) : []),
-    [board]
+    () => {
+      if (!board) return [];
+      if (view === SCHEDULING_BOARD_VIEWS.daily) return [selectedDate];
+      return enumerateScheduleDates(board.week.start, board.week.end);
+    },
+    [board, selectedDate, view]
   );
 
   const teams = useMemo(() => {
@@ -467,14 +486,19 @@ export function SchedulingManagerBoard() {
   }, [board, resourceSearch]);
   const filteredJobs = useMemo(() => {
     const search = jobSearch.trim().toLowerCase();
+    const rangeStart = weekDates[0];
+    const rangeEnd = weekDates[weekDates.length - 1];
     return (board?.jobs || []).filter(
       (job) =>
-        !search ||
-        job.job_reference.toLowerCase().includes(search) ||
-        job.title.toLowerCase().includes(search) ||
-        (job.site_address || '').toLowerCase().includes(search)
+        (!rangeStart || !rangeEnd || (job.start_date <= rangeEnd && job.end_date >= rangeStart))
+        && (
+          !search
+          || job.job_reference.toLowerCase().includes(search)
+          || job.title.toLowerCase().includes(search)
+          || (job.site_address || '').toLowerCase().includes(search)
+        )
     );
-  }, [board, jobSearch]);
+  }, [board, jobSearch, weekDates]);
   const assignmentsByCell = useMemo(() => {
     const grouped = new Map<string, ScheduleAssignment[]>();
     for (const assignment of board?.assignments || []) {
@@ -515,6 +539,11 @@ export function SchedulingManagerBoard() {
 
   function openVisitEditor(job: ScheduleJob, date: string, visit: ScheduleVisit | null = null) {
     setVisitTarget({ job, visit, date });
+  }
+
+  function handleViewChange(nextView: SchedulingBoardView) {
+    setView(nextView);
+    writeSchedulingViewPreference(userId, nextView);
   }
 
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
@@ -581,7 +610,12 @@ export function SchedulingManagerBoard() {
     >
       <div className="space-y-4">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/70 p-4 xl:flex-row xl:items-center xl:justify-between">
-          <SchedulingWeekNav weekStart={weekStart} onChange={setWeekStart} />
+          <SchedulingDateRangeControls
+            selectedDate={selectedDate}
+            view={view}
+            onDateChange={setSelectedDate}
+            onViewChange={handleViewChange}
+          />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setUnavailabilityOpen(true)}>
               <CalendarOff className="mr-2 h-4 w-4" />
@@ -681,7 +715,9 @@ export function SchedulingManagerBoard() {
           <Card className="min-w-0 border-border">
             <CardHeader className="gap-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle>Weekly job board</CardTitle>
+                <CardTitle>
+                  {view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily' : 'Weekly'} job board
+                </CardTitle>
                 <div className="relative w-full sm:w-72">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input value={jobSearch} onChange={(event) => setJobSearch(event.target.value)} placeholder="Search jobs" className="pl-9" />
@@ -696,8 +732,15 @@ export function SchedulingManagerBoard() {
             </CardHeader>
             <CardContent>
               <div className="hidden overflow-auto rounded-lg border border-border md:block">
-                <div className="min-w-[1260px]">
-                  <div className="grid grid-cols-[240px_repeat(7,minmax(140px,1fr))] bg-muted/60">
+                <div className={view === SCHEDULING_BOARD_VIEWS.daily ? 'min-w-[560px]' : 'min-w-[1260px]'}>
+                  <div
+                    className={cn(
+                      'grid bg-muted/60',
+                      view === SCHEDULING_BOARD_VIEWS.daily
+                        ? 'grid-cols-[240px_minmax(320px,1fr)]'
+                        : 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                    )}
+                  >
                     <div className="sticky left-0 z-20 border-r border-border p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Job
                     </div>
@@ -709,7 +752,15 @@ export function SchedulingManagerBoard() {
                     ))}
                   </div>
                   {filteredJobs.map((job) => (
-                    <div key={job.id} className="grid grid-cols-[240px_repeat(7,minmax(140px,1fr))] border-t border-border">
+                    <div
+                      key={job.id}
+                      className={cn(
+                        'grid border-t border-border',
+                        view === SCHEDULING_BOARD_VIEWS.daily
+                          ? 'grid-cols-[240px_minmax(320px,1fr)]'
+                          : 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                      )}
+                    >
                       <div className="sticky left-0 z-10 border-r border-border bg-card p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -851,15 +902,17 @@ export function SchedulingManagerBoard() {
                 <div className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
                   <div>
                     <p className="font-medium text-foreground">
-                      {board.jobs.length === 0 ? 'No jobs scheduled for this week' : 'No jobs match your search'}
+                      {board.jobs.length === 0 || !jobSearch.trim()
+                        ? `No jobs scheduled for this ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}`
+                        : 'No jobs match your search'}
                     </p>
                     <p className="mt-1 text-sm">
-                      {board.jobs.length === 0
-                        ? 'Add a job that overlaps this week, or choose another week.'
+                      {board.jobs.length === 0 || !jobSearch.trim()
+                        ? `Add a job that overlaps this ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}, or choose another ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}.`
                         : 'Clear or change the job search to see more results.'}
                     </p>
                   </div>
-                  {board.jobs.length === 0 ? (
+                  {board.jobs.length === 0 || !jobSearch.trim() ? (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -868,7 +921,7 @@ export function SchedulingManagerBoard() {
                       }}
                     >
                       <Plus className="mr-2 h-4 w-4" />
-                      Add this week&apos;s first job
+                      Add this {view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}&apos;s first job
                     </Button>
                   ) : null}
                 </div>
@@ -910,7 +963,7 @@ export function SchedulingManagerBoard() {
         open={jobDialogOpen}
         onOpenChange={setJobDialogOpen}
         job={editingJob}
-        defaultDate={board.week.start}
+        defaultDate={weekDates[0] || board.week.start}
         onSaved={() => void refresh()}
       />
       <PlantUnavailabilityDialog
@@ -918,7 +971,7 @@ export function SchedulingManagerBoard() {
         onOpenChange={setUnavailabilityOpen}
         plant={board.resources.plant}
         blocks={board.plant_unavailability}
-        defaultDate={board.week.start}
+        defaultDate={weekDates[0] || board.week.start}
         onSaved={() => void refresh()}
       />
       <AlertDialog

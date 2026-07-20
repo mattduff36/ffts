@@ -6,6 +6,14 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SchedulingManagerBoard } from '@/app/(dashboard)/scheduling/components/SchedulingManagerBoard';
+import {
+  getSchedulingViewStorageKey,
+  SCHEDULING_BOARD_VIEWS,
+} from '@/lib/config/scheduling-view-preference';
+import {
+  formatScheduleDate,
+  getSchedulingWeek,
+} from '@/lib/utils/scheduling';
 import type { SchedulingBoardPayload } from '@/types/scheduling';
 
 interface DragEndEvent {
@@ -197,7 +205,7 @@ function renderBoard() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SchedulingManagerBoard />
+      <SchedulingManagerBoard userId="manager-1" />
     </QueryClientProvider>
   );
 }
@@ -207,10 +215,61 @@ describe('SchedulingManagerBoard', () => {
     vi.clearAllMocks();
     dndState.onDragEnd = undefined;
     dndState.draggableOptions.length = 0;
+    localStorage.clear();
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
     mockCreateAssignment.mockResolvedValue(undefined);
     mockSaveVisit.mockResolvedValue(undefined);
+  });
+
+  it('uses the weekly board when no saved preference exists', async () => {
+    renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
+    expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
+  });
+
+  it('switches to daily and persists the user-scoped preference', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Daily' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(screen.getByText('Daily job board')).toBeInTheDocument();
+    expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBe(
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+  });
+
+  it('restores the saved view for the current user', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [],
+      assignments: [],
+    });
+
+    renderBoard();
+
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Daily' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId(`schedule-cell-job-1-${today}`)).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^schedule-cell-/)).toHaveLength(1);
   });
 
   it('uses select and Assign as the reliable narrow-screen workflow', async () => {

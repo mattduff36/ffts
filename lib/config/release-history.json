@@ -1,5 +1,37 @@
 [
   {
+    "version": "0726.6.0",
+    "updateKind": "major",
+    "title": "Debug tools update",
+    "description": "Updated Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage.",
+    "summary": "Updated Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage.",
+    "details": [
+      "Updated Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage, with changes to shared logic and automated tests.",
+      "Updated navigation, with changes to interface components.",
+      "Updated data storage, with changes to data storage.",
+      "Updated user management, with changes to app screens.",
+      "Updated notifications, with changes to automated tests.",
+      "Updated error reporting, with changes to automated tests."
+    ],
+    "areas": [
+      "Debug tools",
+      "Navigation",
+      "User Management",
+      "Notifications",
+      "Error reporting",
+      "Data storage"
+    ],
+    "areaKeys": [
+      "debug",
+      "navigation",
+      "user-management",
+      "notifications",
+      "error-reporting",
+      "data-storage"
+    ],
+    "pushedAt": "2026-07-20T21:56:53.254Z"
+  },
+  {
     "version": "0726.5.0",
     "updateKind": "major",
     "title": "Data storage update",

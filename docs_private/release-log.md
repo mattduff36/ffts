@@ -2,6 +2,28 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0726.6.0
+
+**GIT COMMIT MESSAGE**
+`feat(debug): update Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage`
+
+**PUSHED AT**
+2026-07-20T21:56:53.254Z
+
+**WHAT CHANGED**
+Update Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage.
+
+**VERSION HISTORY DETAILS**
+- Updated Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage, with changes to shared logic and automated tests.
+- Updated navigation, with changes to interface components.
+- Updated data storage, with changes to data storage.
+- Updated user management, with changes to app screens.
+- Updated notifications, with changes to automated tests.
+- Updated error reporting, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(debug): update Debug tools, Navigation, User Management, Notifications, Error reporting, and Data storage`
+
 ## 0726.5.0
 
 **GIT COMMIT MESSAGE**

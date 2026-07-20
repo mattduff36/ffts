@@ -1,5 +1,22 @@
 [
   {
+    "version": "0726.3.0",
+    "updateKind": "major",
+    "title": "Error reporting update",
+    "description": "Updated error reporting.",
+    "summary": "Updated error reporting.",
+    "details": [
+      "Updated error reporting, with changes to background routes."
+    ],
+    "areas": [
+      "Error reporting"
+    ],
+    "areaKeys": [
+      "error-reporting"
+    ],
+    "pushedAt": "2026-07-20T13:49:55.195Z"
+  },
+  {
     "version": "0726.2.1",
     "updateKind": "minor",
     "title": "Repo maintenance update",

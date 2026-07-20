@@ -564,18 +564,34 @@ export default function HelpPage() {
   }
 
   // Render a small, controlled markdown subset after escaping raw HTML.
-  const renderMarkdown = (content: string) => {
-    return escapeHtml(content)
+  function renderMarkdown(content: string) {
+    const codeBlocks: string[] = [];
+    const escapedContent = escapeHtml(content).replace(
+      /```(?:[a-z0-9_-]+)?\n([\s\S]*?)```/gi,
+      (_match, code: string) => {
+        const placeholder = `@@FAQ_CODE_BLOCK_${codeBlocks.length}@@`;
+        codeBlocks.push(
+          `<pre class="my-3 overflow-x-auto rounded-md border border-border bg-muted p-3 text-sm"><code>${code.trim()}</code></pre>`
+        );
+        return placeholder;
+      }
+    );
+    const rendered = escapedContent
       .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2 text-foreground">$1</h3>')
       .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mt-6 mb-3 text-foreground">$1</h2>')
       .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-6 mb-4 text-foreground">$1</h1>')
       .replace(/\*\*([^*\n]+)\*\*/gim, '<strong>$1</strong>')
       .replace(/\*([^*\n]+)\*/gim, '<em>$1</em>')
+      .replace(/`([^`\n]+)`/gim, '<code class="rounded bg-muted px-1 py-0.5 text-sm">$1</code>')
       .replace(/^- (.*$)/gim, '<li class="ml-4">$1</li>')
       .replace(/^(\d+)\. (.*$)/gim, '<li class="ml-4">$2</li>')
       .replace(/\n\n/g, '</p><p class="mb-3 text-foreground">')
       .replace(/\n/g, '<br/>');
-  };
+    return codeBlocks.reduce(
+      (html, block, index) => html.replace(`@@FAQ_CODE_BLOCK_${index}@@`, block),
+      rendered
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {

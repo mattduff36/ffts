@@ -52,6 +52,24 @@ vi.mock('@/lib/supabase/admin', () => ({
           insert: mockInsert,
         };
       }
+      if (table === 'schedule_visits') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  id: '55555555-5555-4555-8555-555555555555',
+                  job_id: '11111111-1111-4111-8111-111111111111',
+                  starts_at: '2026-07-14T08:00:00.000Z',
+                  ends_at: '2026-07-14T12:00:00.000Z',
+                  status: 'planned',
+                },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     },
   }),
@@ -122,6 +140,33 @@ describe('POST /api/scheduling/assignments', () => {
     expect(response.status).toBe(409);
     expect(payload.conflicts_by_date['2026-07-14'][0].code).toBe('employee_absent');
     expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('creates a visit-scoped assignment and passes visit times to conflict detection', async () => {
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const response = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+    }));
+
+    expect(response.status).toBe(201);
+    expect(mockDetectEmployeeConflicts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        workDate: '2026-07-14',
+        visit: expect.objectContaining({
+          id: '55555555-5555-4555-8555-555555555555',
+        }),
+      })
+    );
+    expect(mockInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        visit_id: '55555555-5555-4555-8555-555555555555',
+        work_date: '2026-07-14',
+      }),
+    ]);
   });
 
   it('audits an explicit manager conflict override', async () => {

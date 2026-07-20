@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
 const BASE_URL = process.env.TESTSUITE_BASE_URL || 'http://localhost:4000';
+const parsedBaseUrl = new URL(BASE_URL);
+const webServerPort = Number(parsedBaseUrl.port || (parsedBaseUrl.protocol === 'https:' ? 443 : 80));
+const webServerCommand = process.env.TESTSUITE_BASE_URL
+  ? `npm run dev -- -p ${webServerPort}`
+  : 'npm run dev';
 const STATE_DIR = path.resolve(__dirname, '../.state');
 
 export default defineConfig({
@@ -108,7 +113,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: webServerCommand,
     url: BASE_URL,
     reuseExistingServer: true,
     timeout: 120_000,

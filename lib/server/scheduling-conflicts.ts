@@ -1,6 +1,11 @@
 import { parseISO } from 'date-fns';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SchedulingConflict, SchedulingConflictCode } from '@/types/scheduling';
+import { formatScheduleVisitTime, scheduleVisitIntervalsOverlap } from '@/lib/utils/scheduling';
+import type {
+  ScheduleVisit,
+  SchedulingConflict,
+  SchedulingConflictCode,
+} from '@/types/scheduling';
 
 const DAY_NAMES = [
   'sunday',
@@ -14,6 +19,13 @@ const DAY_NAMES = [
 
 interface JobRelation {
   job_reference?: string | null;
+}
+
+interface VisitRelation {
+  id?: string;
+  starts_at?: string;
+  ends_at?: string;
+  status?: string;
 }
 
 function pickRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -40,15 +52,19 @@ export function conflictCodes(conflicts: SchedulingConflict[]): SchedulingConfli
 
 export async function detectEmployeeConflicts(
   admin: SupabaseClient,
-  input: { jobId: string; workDate: string; profileId: string }
+  input: {
+    jobId: string;
+    workDate: string;
+    profileId: string;
+    visit?: Pick<ScheduleVisit, 'id' | 'starts_at' | 'ends_at'>;
+  }
 ): Promise<SchedulingConflict[]> {
   const [assignmentResult, absenceResult, shiftResult] = await Promise.all([
     admin
       .from('schedule_employee_assignments')
-      .select('job_id, job:schedule_jobs(job_reference)')
+      .select('job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
       .eq('profile_id', input.profileId)
-      .eq('work_date', input.workDate)
-      .neq('job_id', input.jobId),
+      .eq('work_date', input.workDate),
     admin
       .from('absences')
       .select('id')
@@ -74,13 +90,29 @@ export async function detectEmployeeConflicts(
 
   const conflicts: SchedulingConflict[] = [];
   for (const row of assignmentResult.data || []) {
+    const visit = pickRelation(row.visit as VisitRelation | VisitRelation[] | null);
+    if (input.visit && row.visit_id === input.visit.id) continue;
+    if (visit?.status === 'cancelled') continue;
+    if (
+      input.visit
+      && visit?.starts_at
+      && visit.ends_at
+      && !scheduleVisitIntervalsOverlap(input.visit, {
+        starts_at: visit.starts_at,
+        ends_at: visit.ends_at,
+      })
+    ) {
+      continue;
+    }
     const job = pickRelation(row.job as JobRelation | JobRelation[] | null);
     conflicts.push({
       code: 'employee_double_booked',
       severity: 'warning',
       conflictingJobId: row.job_id,
       conflictingJobReference: job?.job_reference || undefined,
-      message: `Employee is already assigned to ${job?.job_reference || 'another job'} on this date.`,
+      message: input.visit && visit?.starts_at && visit.ends_at
+        ? `Employee is already assigned to ${job?.job_reference || 'another job'} from ${formatScheduleVisitTime(visit.starts_at)} to ${formatScheduleVisitTime(visit.ends_at)}.`
+        : `Employee is already assigned to ${job?.job_reference || 'another job'} on this date.`,
     });
   }
 
@@ -105,15 +137,19 @@ export async function detectEmployeeConflicts(
 
 export async function detectPlantConflicts(
   admin: SupabaseClient,
-  input: { jobId: string; workDate: string; plantId: string }
+  input: {
+    jobId: string;
+    workDate: string;
+    plantId: string;
+    visit?: Pick<ScheduleVisit, 'id' | 'starts_at' | 'ends_at'>;
+  }
 ): Promise<SchedulingConflict[]> {
   const [assignmentResult, plantResult, unavailabilityResult] = await Promise.all([
     admin
       .from('schedule_plant_assignments')
-      .select('job_id, job:schedule_jobs(job_reference)')
+      .select('job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
       .eq('plant_id', input.plantId)
-      .eq('work_date', input.workDate)
-      .neq('job_id', input.jobId),
+      .eq('work_date', input.workDate),
     admin
       .from('plant')
       .select('status')
@@ -133,13 +169,29 @@ export async function detectPlantConflicts(
 
   const conflicts: SchedulingConflict[] = [];
   for (const row of assignmentResult.data || []) {
+    const visit = pickRelation(row.visit as VisitRelation | VisitRelation[] | null);
+    if (input.visit && row.visit_id === input.visit.id) continue;
+    if (visit?.status === 'cancelled') continue;
+    if (
+      input.visit
+      && visit?.starts_at
+      && visit.ends_at
+      && !scheduleVisitIntervalsOverlap(input.visit, {
+        starts_at: visit.starts_at,
+        ends_at: visit.ends_at,
+      })
+    ) {
+      continue;
+    }
     const job = pickRelation(row.job as JobRelation | JobRelation[] | null);
     conflicts.push({
       code: 'plant_double_booked',
       severity: 'warning',
       conflictingJobId: row.job_id,
       conflictingJobReference: job?.job_reference || undefined,
-      message: `Plant is already assigned to ${job?.job_reference || 'another job'} on this date.`,
+      message: input.visit && visit?.starts_at && visit.ends_at
+        ? `Plant is already assigned to ${job?.job_reference || 'another job'} from ${formatScheduleVisitTime(visit.starts_at)} to ${formatScheduleVisitTime(visit.ends_at)}.`
+        : `Plant is already assigned to ${job?.job_reference || 'another job'} on this date.`,
     });
   }
 

@@ -1,13 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Accessibility } from '@dnd-kit/dom';
 import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
+import Link from 'next/link';
 import {
   AlertTriangle,
   CalendarOff,
+  Clock3,
+  ExternalLink,
   GripVertical,
   Pencil,
   Plus,
@@ -37,12 +40,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchSchedulingBoard, deleteScheduleAssignment } from '@/lib/client/scheduling';
 import { cn } from '@/lib/utils/cn';
-import { enumerateScheduleDates, getSchedulingWeek } from '@/lib/utils/scheduling';
+import {
+  enumerateScheduleDates,
+  formatScheduleVisitTime,
+  getScheduleVisitDate,
+  getSchedulingWeek,
+} from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
+  ScheduleVisit,
 } from '@/types/scheduling';
 import { PlantUnavailabilityDialog } from './PlantUnavailabilityDialog';
 import {
@@ -50,12 +59,14 @@ import {
   type SelectedScheduleResource,
 } from './ScheduleAssignmentDialog';
 import { ScheduleJobDialog } from './ScheduleJobDialog';
+import { ScheduleVisitDialog } from './ScheduleVisitDialog';
 import { SchedulingWeekNav } from './SchedulingWeekNav';
 
 interface ResourceCardProps {
   resource: SelectedScheduleResource;
   subtitle: string;
   selected: boolean;
+  dragEnabled: boolean;
   warning?: string;
   onSelect: () => void;
 }
@@ -73,38 +84,101 @@ interface DndAnnouncementEvent {
   canceled?: boolean;
 }
 
-function ResourceCard({ resource, subtitle, selected, warning, onSelect }: ResourceCardProps) {
-  const { ref, handleRef, isDragging } = useDraggable({
+function useWideDragEnabled() {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1280px)');
+    const update = () => setEnabled(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  return enabled;
+}
+
+function ResourceCard({
+  resource,
+  subtitle,
+  selected,
+  dragEnabled,
+  warning,
+  onSelect,
+}: ResourceCardProps) {
+  if (dragEnabled) {
+    return (
+      <DraggableResourceCard
+        resource={resource}
+        subtitle={subtitle}
+        selected={selected}
+        warning={warning}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}`}
+      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
+      className={cn(
+        'flex w-full items-center gap-2 rounded-lg border p-2 text-left transition',
+        selected
+          ? 'border-scheduling bg-scheduling-soft'
+          : 'border-border bg-muted/20 hover:border-muted-foreground'
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{resource.label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+      </span>
+      {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
+    </button>
+  );
+}
+
+function DraggableResourceCard({
+  resource,
+  subtitle,
+  selected,
+  warning,
+  onSelect,
+}: Omit<ResourceCardProps, 'dragEnabled'>) {
+  const { ref, isDragging } = useDraggable({
     id: `resource:${resource.type}:${resource.id}`,
     type: 'schedule-resource',
     data: { resource },
   });
 
   return (
-    <div
+    <button
       ref={ref}
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}, or drag to an available job day`}
+      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'flex items-center gap-2 rounded-lg border p-2 transition',
+        'flex w-full cursor-grab items-center gap-2 rounded-lg border p-2 text-left transition active:cursor-grabbing',
         selected
           ? 'border-scheduling bg-scheduling-soft'
           : 'border-border bg-muted/20 hover:border-muted-foreground',
         isDragging && 'opacity-40'
       )}
     >
-      <button
-        ref={handleRef}
-        type="button"
-        className="touch-none rounded p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
-        aria-label={`Drag ${resource.label}`}
-      >
+      <span className="rounded p-1 text-muted-foreground" aria-hidden="true">
         <GripVertical className="h-4 w-4" />
-      </button>
-      <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
+      </span>
+      <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">{resource.label}</span>
         <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
-      </button>
+      </span>
       {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
-    </div>
+    </button>
   );
 }
 
@@ -159,42 +233,79 @@ function AssignmentChip({ assignment, onDelete }: AssignmentChipProps) {
 interface DayCellProps {
   job: ScheduleJob;
   date: string;
+  visits: ScheduleVisit[];
   assignments: ScheduleAssignment[];
-  onActivate: () => void;
+  onAddVisit: () => void;
+  onAssignVisit: (visit: ScheduleVisit) => void;
+  onEditVisit: (visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
 }
 
-function DayCell({ job, date, assignments, onActivate, onDeleteAssignment }: DayCellProps) {
-  const active = date >= job.start_date && date <= job.end_date;
+interface VisitCardProps {
+  job: ScheduleJob;
+  visit: ScheduleVisit;
+  assignments: ScheduleAssignment[];
+  isDropEnabled: boolean;
+  onAssign: () => void;
+  onEdit: () => void;
+  onDeleteAssignment: (assignment: ScheduleAssignment) => void;
+}
+
+function VisitCard({
+  job,
+  visit,
+  assignments,
+  isDropEnabled,
+  onAssign,
+  onEdit,
+  onDeleteAssignment,
+}: VisitCardProps) {
+  const workDate = getScheduleVisitDate(visit.starts_at);
   const { ref, isDropTarget } = useDroppable({
-    id: `cell:${job.id}:${date}`,
-    type: 'schedule-cell',
+    id: isDropEnabled ? `visit:${visit.id}` : `mobile-visit:${visit.id}`,
+    type: 'schedule-visit',
     accept: 'schedule-resource',
-    disabled: !active,
-    data: { jobId: job.id, workDate: date },
+    disabled: !isDropEnabled || visit.status === 'cancelled',
+    data: { jobId: job.id, visitId: visit.id, workDate },
   });
 
   return (
     <div
       ref={ref}
-      role={active ? 'button' : undefined}
-      tabIndex={active ? 0 : -1}
-      aria-label={active ? `Assign resource to ${job.job_reference} on ${date}` : undefined}
-      onClick={() => active && onActivate()}
-      onKeyDown={(event) => {
-        if (active && (event.key === 'Enter' || event.key === ' ')) {
-          event.preventDefault();
-          onActivate();
-        }
-      }}
+      data-testid={`schedule-visit-${visit.id}`}
       className={cn(
-        'min-h-24 border-l border-border p-1.5 outline-none',
-        active
-          ? 'cursor-pointer bg-muted/10 hover:bg-scheduling-soft focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-scheduling'
-          : 'bg-muted/40 opacity-45',
-        isDropTarget && 'bg-scheduling-soft ring-2 ring-inset ring-scheduling'
+        'rounded-md border border-border bg-card/80 p-1.5',
+        visit.status === 'cancelled' && 'opacity-60',
+        isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
     >
+      <div className="mb-1 flex items-start justify-between gap-1">
+        <button
+          type="button"
+          onClick={visit.status === 'cancelled' ? onEdit : onAssign}
+          className="min-w-0 text-left text-xs font-semibold text-foreground hover:text-scheduling"
+          aria-label={
+            visit.status === 'cancelled'
+              ? `Edit cancelled visit ${visit.sequence_number} for ${job.job_reference}`
+              : `Assign resource to visit ${visit.sequence_number} for ${job.job_reference}`
+          }
+        >
+          <span className="flex items-center gap-1">
+            <Clock3 className="h-3 w-3 shrink-0" />
+            {formatScheduleVisitTime(visit.starts_at)}–{formatScheduleVisitTime(visit.ends_at)}
+            {visit.status !== 'planned' ? ` · ${visit.status.replace('_', ' ')}` : ''}
+          </span>
+          {visit.title ? <span className="mt-0.5 block truncate font-normal text-muted-foreground">{visit.title}</span> : null}
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label={`Edit visit ${visit.sequence_number}`}
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      </div>
       <div className="space-y-1">
         {assignments.map((assignment) => (
           <AssignmentChip
@@ -204,6 +315,82 @@ function DayCell({ job, date, assignments, onActivate, onDeleteAssignment }: Day
           />
         ))}
       </div>
+      {visit.status !== 'cancelled' ? (
+        <button
+          type="button"
+          onClick={onAssign}
+          className="mt-1 flex w-full items-center justify-center gap-1 rounded px-1 py-1 text-[11px] font-medium text-scheduling hover:bg-scheduling-soft"
+        >
+          <Plus className="h-3 w-3" />
+          Assign
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DayCell({
+  job,
+  date,
+  visits,
+  assignments,
+  onAddVisit,
+  onAssignVisit,
+  onEditVisit,
+  onDeleteAssignment,
+}: DayCellProps) {
+  const active = date >= job.start_date && date <= job.end_date;
+  const dayVisits = visits.filter(
+    (visit) => getScheduleVisitDate(visit.starts_at) === date
+  );
+  const legacyAssignments = assignments.filter((assignment) => !assignment.visit_id);
+
+  return (
+    <div
+      data-testid={`schedule-cell-${job.id}-${date}`}
+      className={cn(
+        'flex min-h-24 flex-col border-l border-border p-1.5',
+        active
+          ? 'bg-muted/10'
+          : 'bg-muted/40 opacity-45'
+      )}
+    >
+      <div className="space-y-1">
+        {legacyAssignments.map((assignment) => (
+          <AssignmentChip
+            key={`${assignment.resource_type}-${assignment.id}`}
+            assignment={assignment}
+            onDelete={onDeleteAssignment}
+          />
+        ))}
+        {dayVisits.map((visit) => (
+          <VisitCard
+            key={visit.id}
+            job={job}
+            visit={visit}
+            assignments={assignments.filter((assignment) => assignment.visit_id === visit.id)}
+            isDropEnabled
+            onAssign={() => onAssignVisit(visit)}
+            onEdit={() => onEditVisit(visit)}
+            onDeleteAssignment={onDeleteAssignment}
+          />
+        ))}
+      </div>
+      {active ? (
+        <button
+          type="button"
+          onClick={onAddVisit}
+          className="mt-auto flex w-full items-center justify-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-scheduling transition hover:bg-scheduling-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+          aria-label={`Add visit to ${job.job_reference} on ${date}`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add visit
+        </button>
+      ) : (
+        <span className="m-auto px-2 text-center text-[11px] text-muted-foreground">
+          Outside job dates
+        </span>
+      )}
     </div>
   );
 }
@@ -222,6 +409,7 @@ function resourceFromPlant(plant: SchedulePlantResource): SelectedScheduleResour
 
 export function SchedulingManagerBoard() {
   const queryClient = useQueryClient();
+  const wideDragEnabled = useWideDragEnabled();
   const [weekStart, setWeekStart] = useState(() => getSchedulingWeek().start);
   const [resourceType, setResourceType] = useState<'employee' | 'plant'>('employee');
   const [resourceSearch, setResourceSearch] = useState('');
@@ -229,7 +417,12 @@ export function SchedulingManagerBoard() {
   const [teamFilter, setTeamFilter] = useState('all');
   const [selectedResource, setSelectedResource] = useState<SelectedScheduleResource | null>(null);
   const [draggedResource, setDraggedResource] = useState<SelectedScheduleResource | null>(null);
-  const [assignmentTarget, setAssignmentTarget] = useState<{ job: ScheduleJob; date: string } | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<{ job: ScheduleJob; visit: ScheduleVisit } | null>(null);
+  const [visitTarget, setVisitTarget] = useState<{
+    job: ScheduleJob;
+    visit: ScheduleVisit | null;
+    date: string;
+  } | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduleJob | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
@@ -282,11 +475,19 @@ export function SchedulingManagerBoard() {
         (job.site_address || '').toLowerCase().includes(search)
     );
   }, [board, jobSearch]);
+  const assignmentsByCell = useMemo(() => {
+    const grouped = new Map<string, ScheduleAssignment[]>();
+    for (const assignment of board?.assignments || []) {
+      const key = `${assignment.job_id}:${assignment.work_date}`;
+      const current = grouped.get(key);
+      if (current) current.push(assignment);
+      else grouped.set(key, [assignment]);
+    }
+    return grouped;
+  }, [board]);
 
   function assignmentsFor(jobId: string, date: string): ScheduleAssignment[] {
-    return (board?.assignments || []).filter(
-      (assignment) => assignment.job_id === jobId && assignment.work_date === date
-    );
+    return assignmentsByCell.get(`${jobId}:${date}`) || [];
   }
 
   async function refresh() {
@@ -303,9 +504,17 @@ export function SchedulingManagerBoard() {
     }
   }
 
-  function openAssignment(job: ScheduleJob, date: string, resource = selectedResource) {
+  function visitsFor(jobId: string): ScheduleVisit[] {
+    return board?.visits.filter((visit) => visit.job_id === jobId) || [];
+  }
+
+  function openAssignment(job: ScheduleJob, visit: ScheduleVisit, resource = selectedResource) {
     setSelectedResource(resource);
-    setAssignmentTarget({ job, date });
+    setAssignmentTarget({ job, visit });
+  }
+
+  function openVisitEditor(job: ScheduleJob, date: string, visit: ScheduleVisit | null = null) {
+    setVisitTarget({ job, visit, date });
   }
 
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
@@ -349,15 +558,25 @@ export function SchedulingManagerBoard() {
       ]}
       onDragStart={(event) => {
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
+        if (resource) setSelectedResource(resource);
         setDraggedResource(resource || null);
       }}
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
-        const targetData = event.operation.target?.data as { jobId?: string; workDate?: string } | undefined;
+        const targetData = event.operation.target?.data as { jobId?: string; visitId?: string } | undefined;
         setDraggedResource(null);
-        if (event.canceled || !sourceResource || !targetData?.jobId || !targetData.workDate) return;
+        if (event.canceled || !sourceResource) return;
+        if (!targetData?.jobId || !targetData.visitId) {
+          toast.info('Drop onto a timed visit.');
+          return;
+        }
         const job = board.jobs.find((item) => item.id === targetData.jobId);
-        if (job) openAssignment(job, targetData.workDate, sourceResource);
+        const visit = board.visits.find((item) => item.id === targetData.visitId);
+        if (job && visit) {
+          openAssignment(job, visit, sourceResource);
+        } else {
+          toast.error('That job is no longer available. Refresh the board and try again.');
+        }
       }}
     >
       <div className="space-y-4">
@@ -419,7 +638,7 @@ export function SchedulingManagerBoard() {
                   </Button>
                 </div>
               ) : null}
-              <ScrollArea className="h-[420px] pr-3">
+              <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
                 <div className="space-y-2">
                   {resourceType === 'employee'
                     ? filteredEmployees.map((employee) => {
@@ -430,6 +649,7 @@ export function SchedulingManagerBoard() {
                             resource={resource}
                             subtitle={employee.team_name || employee.employee_id || 'No team'}
                             selected={selectedResource?.type === 'employee' && selectedResource.id === employee.id}
+                            dragEnabled={wideDragEnabled}
                             onSelect={() => setSelectedResource(resource)}
                           />
                         );
@@ -443,10 +663,16 @@ export function SchedulingManagerBoard() {
                             subtitle={[plant.make, plant.model, plant.status].filter(Boolean).join(' · ')}
                             warning={plant.status !== 'active' ? `Status: ${plant.status}` : undefined}
                             selected={selectedResource?.type === 'plant' && selectedResource.id === plant.id}
+                            dragEnabled={wideDragEnabled}
                             onSelect={() => setSelectedResource(resource)}
                           />
                         );
                       })}
+                  {(resourceType === 'employee' ? filteredEmployees : filteredPlant).length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+                      No {resourceType === 'employee' ? 'employees' : 'plant'} match these filters.
+                    </div>
+                  ) : null}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -461,8 +687,11 @@ export function SchedulingManagerBoard() {
                   <Input value={jobSearch} onChange={(event) => setJobSearch(event.target.value)} placeholder="Search jobs" className="pl-9" />
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Drag a resource onto a day, or select a resource and activate a day cell.
+              <p className="text-sm text-muted-foreground xl:hidden">
+                Select a resource, then tap or click <span className="font-medium text-foreground">Assign</span> on a timed visit.
+              </p>
+              <p className="hidden text-sm text-muted-foreground xl:block">
+                Select a resource and click <span className="font-medium text-foreground">Assign</span>, or drag the whole resource card onto a timed visit.
               </p>
             </CardHeader>
             <CardContent>
@@ -487,22 +716,41 @@ export function SchedulingManagerBoard() {
                             <div className="flex flex-wrap items-center gap-1">
                               <span className="font-semibold text-foreground">{job.job_reference}</span>
                               {job.source_type === 'sample' ? <Badge variant="outline">Sample</Badge> : null}
+                              {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
                             </div>
-                            <p className="truncate text-sm text-muted-foreground">{job.title}</p>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
+                            </p>
                             <p className="truncate text-xs text-muted-foreground">{job.site_address || 'No site'}</p>
+                            {job.estimated_duration_minutes ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Estimated {Math.round(job.estimated_duration_minutes / 60 * 10) / 10} hours
+                              </p>
+                            ) : null}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={() => {
-                              setEditingJob(job);
-                              setJobDialogOpen(true);
-                            }}
-                            aria-label={`Edit ${job.job_reference}`}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          {job.source_type === 'quote' && job.quote_id ? (
+                            <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0">
+                              <Link
+                                href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
+                                aria-label={`Open Quote ${job.job_reference}`}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => {
+                                setEditingJob(job);
+                                setJobDialogOpen(true);
+                              }}
+                              aria-label={`Edit ${job.job_reference}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                       {weekDates.map((date) => (
@@ -510,8 +758,11 @@ export function SchedulingManagerBoard() {
                           key={`${job.id}-${date}`}
                           job={job}
                           date={date}
+                          visits={visitsFor(job.id)}
                           assignments={assignmentsFor(job.id, date)}
-                          onActivate={() => openAssignment(job, date)}
+                          onAddVisit={() => openVisitEditor(job, date)}
+                          onAssignVisit={(visit) => openAssignment(job, visit)}
+                          onEditVisit={(visit) => openVisitEditor(job, date, visit)}
                           onDeleteAssignment={setPendingDeleteAssignment}
                         />
                       ))}
@@ -520,36 +771,76 @@ export function SchedulingManagerBoard() {
                 </div>
               </div>
 
-              <div className="space-y-3 md:hidden">
+              <div className="space-y-3 md:hidden" data-mobile-scroll-lock="true">
                 {filteredJobs.map((job) => (
                   <div key={job.id} className="rounded-lg border border-border bg-muted/20 p-3">
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div>
-                        <p className="font-semibold text-foreground">{job.job_reference}</p>
-                        <p className="text-sm text-muted-foreground">{job.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground">{job.job_reference}</p>
+                          {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
+                        </p>
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      {job.source_type === 'quote' ? (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}>
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                     <div className="space-y-2">
                       {weekDates
                         .filter((date) => date >= job.start_date && date <= job.end_date)
                         .map((date) => (
-                          <button
+                          <div
                             key={date}
-                            type="button"
-                            onClick={() => openAssignment(job, date)}
-                            className="w-full rounded-md border border-border p-3 text-left hover:bg-scheduling-soft"
+                            className="rounded-md border border-border p-3"
                           >
-                            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{format(parseISO(date), 'EEEE d MMM')}</p>
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                {format(parseISO(date), 'EEEE d MMM')}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openVisitEditor(job, date)}
+                                className="flex items-center gap-1 text-xs font-medium text-scheduling"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                Add visit
+                              </button>
+                            </div>
                             <div className="space-y-1">
-                              {assignmentsFor(job.id, date).map((assignment) => (
+                              {assignmentsFor(job.id, date).filter((assignment) => !assignment.visit_id).map((assignment) => (
                                 <AssignmentChip key={`${assignment.resource_type}-${assignment.id}`} assignment={assignment} onDelete={setPendingDeleteAssignment} />
                               ))}
-                              {assignmentsFor(job.id, date).length === 0 ? <span className="text-xs text-muted-foreground">Tap to assign</span> : null}
+                              {visitsFor(job.id)
+                                .filter((visit) => getScheduleVisitDate(visit.starts_at) === date)
+                                .map((visit) => (
+                                  <VisitCard
+                                    key={visit.id}
+                                    job={job}
+                                    visit={visit}
+                                    assignments={assignmentsFor(job.id, date).filter((assignment) => assignment.visit_id === visit.id)}
+                                    isDropEnabled={false}
+                                    onAssign={() => openAssignment(job, visit)}
+                                    onEdit={() => openVisitEditor(job, date, visit)}
+                                    onDeleteAssignment={setPendingDeleteAssignment}
+                                  />
+                                ))}
+                              {assignmentsFor(job.id, date).length === 0
+                                && visitsFor(job.id).every((visit) => getScheduleVisitDate(visit.starts_at) !== date) ? (
+                                <span className="text-xs text-muted-foreground">No visits yet</span>
+                              ) : null}
                             </div>
-                          </button>
+                          </div>
                         ))}
                     </div>
                   </div>
@@ -557,7 +848,30 @@ export function SchedulingManagerBoard() {
               </div>
 
               {filteredJobs.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">No jobs match this week and filter.</div>
+                <div className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {board.jobs.length === 0 ? 'No jobs scheduled for this week' : 'No jobs match your search'}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      {board.jobs.length === 0
+                        ? 'Add a job that overlaps this week, or choose another week.'
+                        : 'Clear or change the job search to see more results.'}
+                    </p>
+                  </div>
+                  {board.jobs.length === 0 ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingJob(null);
+                        setJobDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add this week&apos;s first job
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
             </CardContent>
           </Card>
@@ -576,10 +890,20 @@ export function SchedulingManagerBoard() {
         open={assignmentTarget !== null}
         onOpenChange={(open) => !open && setAssignmentTarget(null)}
         job={assignmentTarget?.job || null}
-        initialDate={assignmentTarget?.date || null}
+        visit={assignmentTarget?.visit || null}
+        initialDate={assignmentTarget ? getScheduleVisitDate(assignmentTarget.visit.starts_at) : null}
         initialResource={selectedResource}
+        availableDates={weekDates}
         employees={board.resources.employees}
         plant={board.resources.plant}
+        onSaved={() => void refresh()}
+      />
+      <ScheduleVisitDialog
+        open={visitTarget !== null}
+        onOpenChange={(open) => !open && setVisitTarget(null)}
+        job={visitTarget?.job || null}
+        visit={visitTarget?.visit || null}
+        defaultDate={visitTarget?.date || board.week.start}
         onSaved={() => void refresh()}
       />
       <ScheduleJobDialog

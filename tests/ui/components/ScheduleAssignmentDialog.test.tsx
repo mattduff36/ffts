@@ -31,6 +31,7 @@ const job: ScheduleJob = {
   source_type: 'manual',
   start_date: '2026-07-13',
   end_date: '2026-07-15',
+  estimated_duration_minutes: null,
   quote_id: null,
   quote_project_number_id: null,
   customer_id: null,

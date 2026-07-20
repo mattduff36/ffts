@@ -16,6 +16,7 @@ const updateSchema = z
     status: z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']).optional(),
     start_date: z.iso.date().optional(),
     end_date: z.iso.date().optional(),
+    estimated_duration_minutes: z.number().int().min(15).max(100800).nullable().optional(),
   })
   .refine(
     (value) => !value.start_date || !value.end_date || value.end_date >= value.start_date,
@@ -74,11 +75,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const admin = createAdminClient();
     const existingResult = await admin
       .from('schedule_jobs')
-      .select('start_date, end_date')
+      .select('start_date, end_date, source_type')
       .eq('id', id)
       .maybeSingle();
     if (existingResult.error) throw existingResult.error;
     if (!existingResult.data) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
+    if (existingResult.data.source_type === 'quote') {
+      return NextResponse.json(
+        { error: 'Edit Quote planning details from the Quotes module.' },
+        { status: 409 }
+      );
+    }
 
     const startDate = parsed.data.start_date || existingResult.data.start_date;
     const endDate = parsed.data.end_date || existingResult.data.end_date;
@@ -132,7 +139,21 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
     const { id } = await params;
-    const { error } = await createAdminClient().from('schedule_jobs').delete().eq('id', id);
+    const admin = createAdminClient();
+    const existing = await admin
+      .from('schedule_jobs')
+      .select('source_type')
+      .eq('id', id)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (!existing.data) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
+    if (existing.data.source_type === 'quote') {
+      return NextResponse.json(
+        { error: 'Quote jobs are removed by changing the Quote status.' },
+        { status: 409 }
+      );
+    }
+    const { error } = await admin.from('schedule_jobs').delete().eq('id', id);
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {

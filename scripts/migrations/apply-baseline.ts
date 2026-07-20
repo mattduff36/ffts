@@ -116,7 +116,15 @@ async function ensureMigrationTable(client: Client): Promise<void> {
       id BIGSERIAL PRIMARY KEY,
       migration_key TEXT NOT NULL UNIQUE,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
+    );
+    ALTER TABLE ${migrationTable} ENABLE ROW LEVEL SECURITY;
+    REVOKE ALL ON TABLE ${migrationTable} FROM anon, authenticated;
+    DROP POLICY IF EXISTS template_migration_runs_deny_client_access ON ${migrationTable};
+    CREATE POLICY template_migration_runs_deny_client_access
+      ON ${migrationTable}
+      FOR ALL TO anon, authenticated
+      USING (FALSE)
+      WITH CHECK (FALSE)
   `);
 }
 

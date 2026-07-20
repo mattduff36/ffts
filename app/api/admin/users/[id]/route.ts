@@ -140,12 +140,57 @@ export async function PUT(
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    const canAssignRequestedRole = await canEffectiveRoleAssignRole(role_id);
-    if (!canAssignRequestedRole) {
+    const { data: requestedRole, error: requestedRoleError } = await supabaseAdmin
+      .from('roles')
+      .select('id, is_super_admin')
+      .eq('id', role_id)
+      .maybeSingle();
+
+    if (requestedRoleError || !requestedRole) {
+      return NextResponse.json({ error: 'Invalid role selected.' }, { status: 400 });
+    }
+
+    // Fetch existing user data before validating the role transition. Existing
+    // Super Admin accounts may retain their protected role while other profile
+    // fields are edited, but the role cannot be assigned or removed here.
+    const { data: existingUser, error: fetchError } = await supabaseAdmin
+      .from('profiles')
+      .select('*, assigned_role:roles!profiles_role_id_fkey(is_super_admin)')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !existingUser) {
+      console.error('Error fetching existing user:', fetchError);
       return NextResponse.json(
-        { error: 'Forbidden: you cannot assign this role' },
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    const existingAssignedRole = existingUser.assigned_role as { is_super_admin?: boolean | null } | null;
+    const isExistingSuperAdmin =
+      existingUser.super_admin === true || existingAssignedRole?.is_super_admin === true;
+    const isProtectedRoleUnchanged =
+      isExistingSuperAdmin && requestedRole.is_super_admin === true && existingUser.role_id === role_id;
+
+    if (
+      (requestedRole.is_super_admin === true && !isProtectedRoleUnchanged) ||
+      (isExistingSuperAdmin && existingUser.role_id !== role_id)
+    ) {
+      return NextResponse.json(
+        { error: 'Super Admin roles cannot be assigned or changed in the application.' },
         { status: 403 }
       );
+    }
+
+    if (!isProtectedRoleUnchanged) {
+      const canAssignRequestedRole = await canEffectiveRoleAssignRole(role_id);
+      if (!canAssignRequestedRole) {
+        return NextResponse.json(
+          { error: 'Forbidden: you cannot assign this role' },
+          { status: 403 }
+        );
+      }
     }
 
     const hierarchyValidation = await validateHierarchyReferences(supabaseAdmin, {
@@ -160,21 +205,6 @@ export async function PUT(
           code: 'INVALID_HIERARCHY_ASSIGNMENT',
         },
         { status: 400 }
-      );
-    }
-
-    // Fetch existing user data for change tracking and email notification
-    const { data: existingUser, error: fetchError } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (fetchError || !existingUser) {
-      console.error('Error fetching existing user:', fetchError);
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 

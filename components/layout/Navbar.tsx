@@ -592,7 +592,7 @@ export function Navbar() {
               >
                 <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
                 <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                  {templateConfig.branding.shortAppName.toUpperCase()}
+                  FFTSApp
                 </div>
               </Link>
               <div className="ml-auto flex items-center gap-2">
@@ -611,7 +611,7 @@ export function Navbar() {
             >
               <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                {templateConfig.branding.shortAppName.toUpperCase()}
+                FFTSApp
               </div>
             </Link>
 
@@ -622,7 +622,7 @@ export function Navbar() {
             >
               <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                {templateConfig.branding.shortAppName.toUpperCase()}
+                FFTSApp
               </div>
             </Link>
 

@@ -51,6 +51,17 @@ export async function canEffectiveRoleAssignRole(targetRoleId: string): Promise<
     return false;
   }
 
+  const admin = createAdminClient();
+  const { data: targetRole } = await admin
+    .from('roles')
+    .select('role_class, is_super_admin')
+    .eq('id', targetRoleId)
+    .maybeSingle();
+
+  if (!targetRole || targetRole.is_super_admin === true) {
+    return false;
+  }
+
   if (hasEffectiveRoleFullAccess(effectiveRole)) {
     return true;
   }
@@ -58,13 +69,6 @@ export async function canEffectiveRoleAssignRole(targetRoleId: string): Promise<
   if (!effectiveRole.is_manager_admin) {
     return false;
   }
-
-  const admin = createAdminClient();
-  const { data: targetRole } = await admin
-    .from('roles')
-    .select('role_class, is_super_admin')
-    .eq('id', targetRoleId)
-    .maybeSingle();
 
   return targetRole?.role_class === 'employee' && targetRole?.is_super_admin !== true;
 }
@@ -99,6 +103,7 @@ export async function getAssignableRolesForEffectiveActor(): Promise<RoleRecord[
   let query = admin
     .from('roles')
     .select('id, name, role_class, is_super_admin')
+    .eq('is_super_admin', false)
     .order('is_super_admin', { ascending: false })
     .order('is_manager_admin', { ascending: false })
     .order('display_name', { ascending: true });

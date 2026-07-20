@@ -98,6 +98,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.summary !== undefined) updateData.summary = body.summary?.trim() || null;
     if (body.content_md !== undefined) updateData.content_md = body.content_md.trim();
     if (body.is_published !== undefined) updateData.is_published = body.is_published;
+    if (body.admin_only !== undefined) updateData.admin_only = body.admin_only;
     if (body.sort_order !== undefined) updateData.sort_order = body.sort_order;
 
     // Note: faq_articles table added by migration - types will update after migration runs

@@ -8,15 +8,23 @@ import {
   detectPlantConflicts,
   isDateWithinRange,
 } from '@/lib/server/scheduling-conflicts';
+import { getScheduleVisitDate } from '@/lib/utils/scheduling';
+import type { ScheduleVisit } from '@/types/scheduling';
 
-const assignmentSchema = z.object({
-  job_id: z.uuid(),
-  resource_type: z.enum(['employee', 'plant']),
-  resource_id: z.uuid(),
-  work_dates: z.array(z.iso.date()).min(1).max(31),
-  notes: z.string().trim().max(2000).nullish(),
-  override_conflicts: z.boolean().default(false),
-});
+const assignmentSchema = z
+  .object({
+    job_id: z.uuid(),
+    visit_id: z.uuid().optional(),
+    resource_type: z.enum(['employee', 'plant']),
+    resource_id: z.uuid(),
+    work_dates: z.array(z.iso.date()).max(31).default([]),
+    notes: z.string().trim().max(2000).nullish(),
+    override_conflicts: z.boolean().default(false),
+  })
+  .refine((value) => Boolean(value.visit_id) || value.work_dates.length > 0, {
+    message: 'Choose a visit or at least one work date.',
+    path: ['work_dates'],
+  });
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +52,21 @@ export async function POST(request: NextRequest) {
     const job = jobResult.data;
     if (!job) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
 
+    let visit: ScheduleVisit | null = null;
+    if (input.visit_id) {
+      const visitResult = await admin
+        .from('schedule_visits')
+        .select('*')
+        .eq('id', input.visit_id)
+        .maybeSingle();
+      if (visitResult.error) throw visitResult.error;
+      visit = visitResult.data as ScheduleVisit | null;
+      if (!visit || visit.job_id !== input.job_id || visit.status === 'cancelled') {
+        return NextResponse.json({ error: 'Scheduling visit not found.' }, { status: 404 });
+      }
+      input.work_dates = [getScheduleVisitDate(visit.starts_at)];
+    }
+
     if (
       input.work_dates.some(
         (workDate) => !isDateWithinRange(workDate, job.start_date, job.end_date)
@@ -63,11 +86,13 @@ export async function POST(request: NextRequest) {
                 jobId: input.job_id,
                 workDate,
                 profileId: input.resource_id,
+                visit: visit || undefined,
               })
             : await detectPlantConflicts(admin, {
                 jobId: input.job_id,
                 workDate,
                 plantId: input.resource_id,
+                visit: visit || undefined,
               });
         return [workDate, conflicts] as const;
       })
@@ -99,6 +124,7 @@ export async function POST(request: NextRequest) {
         conflict_override_by: isOverridden ? access.userId : null,
         conflict_override_at: isOverridden ? now : null,
         assigned_by: access.userId,
+        visit_id: visit?.id || null,
         ...(input.resource_type === 'employee'
           ? { profile_id: input.resource_id }
           : { plant_id: input.resource_id }),

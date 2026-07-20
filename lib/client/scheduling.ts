@@ -1,5 +1,6 @@
 import type {
   ScheduleJob,
+  ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingContext,
   SchedulingSelfPayload,
@@ -63,11 +64,40 @@ export async function deleteScheduleJob(id: string): Promise<void> {
 
 export interface CreateAssignmentInput {
   job_id: string;
+  visit_id?: string;
   resource_type: 'employee' | 'plant';
   resource_id: string;
-  work_dates: string[];
+  work_dates?: string[];
   notes?: string | null;
   override_conflicts?: boolean;
+}
+
+export interface SaveScheduleVisitInput {
+  job_id: string;
+  title?: string | null;
+  starts_at: string;
+  ends_at: string;
+  status?: 'planned' | 'completed' | 'cancelled';
+  notes?: string | null;
+}
+
+export async function saveScheduleVisit(
+  input: SaveScheduleVisitInput,
+  id?: string
+): Promise<ScheduleVisit> {
+  const response = await fetch(
+    id ? `/api/scheduling/visits/${id}` : '/api/scheduling/visits',
+    {
+      method: id ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }
+  );
+  return (await readResponse<{ visit: ScheduleVisit }>(response)).visit;
+}
+
+export async function deleteScheduleVisit(id: string): Promise<void> {
+  await readResponse(await fetch(`/api/scheduling/visits/${id}`, { method: 'DELETE' }));
 }
 
 export async function createScheduleAssignment(input: CreateAssignmentInput): Promise<void> {

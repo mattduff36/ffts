@@ -43,7 +43,11 @@ vi.mock('@/lib/utils/server-error-logger', () => ({
   logServerError: vi.fn(),
 }));
 
-function createMockSupabaseAdmin() {
+function createMockSupabaseAdmin(role = {
+  id: 'role-employee',
+  name: 'employee',
+  is_super_admin: false,
+}) {
   return {
     auth: {
       admin: {
@@ -62,7 +66,7 @@ function createMockSupabaseAdmin() {
               eq() {
                 return {
                   async single() {
-                    return { data: { id: 'role-employee', name: 'employee' }, error: null };
+                    return { data: role, error: null };
                   },
                 };
               },
@@ -232,6 +236,39 @@ describe('POST /api/admin/users', () => {
 
     expect(response.status).toBe(428);
     expect(payload.code).toBe('SENSITIVE_PIN_REQUIRED');
+  });
+
+  it('rejects creating a user with the Super Admin role', async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const adminClient = createMockSupabaseAdmin({
+      id: 'role-superadmin',
+      name: 'superadmin',
+      is_super_admin: true,
+    });
+    vi.mocked(createClient).mockReturnValue(adminClient as never);
+
+    const request = new Request('http://localhost/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'blocked.superadmin@example.com',
+        full_name: 'Blocked Super Admin',
+        role_id: 'role-superadmin',
+        team_id: 'team-civils',
+        work_shift_template_id: 'template-standard',
+        annual_allowance_days: 28,
+        remaining_leave_days: 10,
+        auto_book_bank_holidays: true,
+        auto_apply_bulk_bookings: false,
+        selected_bulk_batch_ids: [],
+      }),
+    });
+
+    const response = await POST(request as NextRequest);
+    const payload = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(payload.error).toContain('cannot be created or assigned');
+    expect(adminClient.auth.admin.createUser).not.toHaveBeenCalled();
   });
 
   it('creates a user when all mandatory onboarding fields are provided', async () => {

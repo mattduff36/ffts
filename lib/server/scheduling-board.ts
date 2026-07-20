@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
+import { scheduleVisitIntervalsOverlap } from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
   ScheduleEmployeeAssignment,
@@ -7,6 +8,7 @@ import type {
   ScheduleJob,
   SchedulePlantAssignment,
   SchedulePlantResource,
+  ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingConflict,
   SchedulingSelfPayload,
@@ -39,6 +41,15 @@ function mapPlant(row: Record<string, unknown>): SchedulePlantResource {
   };
 }
 
+function mapJob(row: Record<string, unknown>): ScheduleJob {
+  const customer = pickRelation(row.customer as { company_name?: string | null } | Array<{ company_name?: string | null }> | null);
+  const { customer: _customer, ...job } = row;
+  return {
+    ...job,
+    customer_name: customer?.company_name || null,
+  } as unknown as ScheduleJob;
+}
+
 function hasAbsence(
   profileId: string,
   workDate: string,
@@ -52,22 +63,39 @@ function hasAbsence(
   );
 }
 
+function assignmentRowsOverlap(
+  first: Record<string, unknown>,
+  second: Record<string, unknown>,
+  visits: Map<string, ScheduleVisit>
+): boolean {
+  const firstVisitId = typeof first.visit_id === 'string' ? first.visit_id : null;
+  const secondVisitId = typeof second.visit_id === 'string' ? second.visit_id : null;
+  if (!firstVisitId || !secondVisitId) return true;
+  const firstVisit = visits.get(firstVisitId);
+  const secondVisit = visits.get(secondVisitId);
+  if (!firstVisit || !secondVisit) return true;
+  if (firstVisit.status === 'cancelled' || secondVisit.status === 'cancelled') return false;
+  return scheduleVisitIntervalsOverlap(firstVisit, secondVisit);
+}
+
 export function buildEmployeeAssignmentConflicts(
   row: Record<string, unknown>,
   allRows: Array<Record<string, unknown>>,
   jobs: Map<string, ScheduleJob>,
   absences: Array<{ profile_id: string; date: string; end_date: string | null }>,
-  shifts: Map<string, Record<string, boolean>>
+  shifts: Map<string, Record<string, boolean>>,
+  visits: Map<string, ScheduleVisit> = new Map()
 ): SchedulingConflict[] {
   const profileId = String(row.profile_id);
-  const jobId = String(row.job_id);
   const workDate = String(row.work_date);
   const conflicts: SchedulingConflict[] = allRows
     .filter(
       (candidate) =>
         String(candidate.profile_id) === profileId &&
         String(candidate.work_date) === workDate &&
-        String(candidate.job_id) !== jobId
+        candidate !== row &&
+        (!candidate.id || !row.id || String(candidate.id) !== String(row.id)) &&
+        assignmentRowsOverlap(row, candidate, visits)
     )
     .map((candidate) => {
       const conflictingJob = jobs.get(String(candidate.job_id));
@@ -102,17 +130,19 @@ export function buildPlantAssignmentConflicts(
   allRows: Array<Record<string, unknown>>,
   jobs: Map<string, ScheduleJob>,
   plants: Map<string, SchedulePlantResource>,
-  blocks: Array<{ plant_id: string; start_date: string; end_date: string; reason: string }>
+  blocks: Array<{ plant_id: string; start_date: string; end_date: string; reason: string }>,
+  visits: Map<string, ScheduleVisit> = new Map()
 ): SchedulingConflict[] {
   const plantId = String(row.plant_id);
-  const jobId = String(row.job_id);
   const workDate = String(row.work_date);
   const conflicts: SchedulingConflict[] = allRows
     .filter(
       (candidate) =>
         String(candidate.plant_id) === plantId &&
         String(candidate.work_date) === workDate &&
-        String(candidate.job_id) !== jobId
+        candidate !== row &&
+        (!candidate.id || !row.id || String(candidate.id) !== String(row.id)) &&
+        assignmentRowsOverlap(row, candidate, visits)
     )
     .map((candidate) => {
       const conflictingJob = jobs.get(String(candidate.job_id));
@@ -150,6 +180,7 @@ function normalizeBaseAssignment(row: Record<string, unknown>) {
     id: String(row.id),
     job_id: String(row.job_id),
     work_date: String(row.work_date),
+    visit_id: typeof row.visit_id === 'string' ? row.visit_id : null,
     notes: typeof row.notes === 'string' ? row.notes : null,
     conflict_override: row.conflict_override === true,
     conflict_codes: Array.isArray(row.conflict_codes) ? row.conflict_codes : [],
@@ -166,15 +197,21 @@ export async function loadSchedulingBoard(
   weekStart: string,
   weekEnd: string
 ): Promise<SchedulingBoardPayload> {
-  const [jobsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
+  const [jobsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
     await Promise.all([
       admin
         .from('schedule_jobs')
-        .select('*')
+        .select('*, customer:customers(company_name)')
         .lte('start_date', weekEnd)
         .gte('end_date', weekStart)
         .order('start_date')
         .order('job_reference'),
+      admin
+        .from('schedule_visits')
+        .select('*')
+        .gte('starts_at', `${weekStart}T00:00:00.000Z`)
+        .lte('starts_at', `${weekEnd}T23:59:59.999Z`)
+        .order('starts_at'),
       admin
         .from('schedule_employee_assignments')
         .select('*')
@@ -212,6 +249,7 @@ export async function loadSchedulingBoard(
 
   const results = [
     jobsResult,
+    visitsResult,
     employeeAssignmentsResult,
     plantAssignmentsResult,
     employeesResult,
@@ -223,7 +261,8 @@ export async function loadSchedulingBoard(
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
 
-  const jobs = (jobsResult.data || []) as ScheduleJob[];
+  const jobs = ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob);
+  const visits = (visitsResult.data || []) as ScheduleVisit[];
   const employeeRows = (employeeAssignmentsResult.data || []) as Array<Record<string, unknown>>;
   const plantRows = (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>;
   const employees = ((employeesResult.data || []) as Array<Record<string, unknown>>).map(mapEmployee);
@@ -248,25 +287,29 @@ export async function loadSchedulingBoard(
   const jobsById = new Map(jobs.map((job) => [job.id, job]));
   const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
   const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
+  const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
 
   const employeeAssignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
     ...normalizeBaseAssignment(row),
     resource_type: 'employee',
     profile_id: String(row.profile_id),
     employee: employeesById.get(String(row.profile_id)) || null,
-    conflicts: buildEmployeeAssignmentConflicts(row, employeeRows, jobsById, absences, shifts),
+    visit: visitsById.get(String(row.visit_id)) || null,
+    conflicts: buildEmployeeAssignmentConflicts(row, employeeRows, jobsById, absences, shifts, visitsById),
   }));
   const plantAssignments: SchedulePlantAssignment[] = plantRows.map((row) => ({
     ...normalizeBaseAssignment(row),
     resource_type: 'plant',
     plant_id: String(row.plant_id),
     plant: plantsById.get(String(row.plant_id)) || null,
-    conflicts: buildPlantAssignmentConflicts(row, plantRows, jobsById, plantsById, blocks),
+    visit: visitsById.get(String(row.visit_id)) || null,
+    conflicts: buildPlantAssignmentConflicts(row, plantRows, jobsById, plantsById, blocks, visitsById),
   }));
 
   return {
     week: { start: weekStart, end: weekEnd },
     jobs,
+    visits,
     assignments: [...employeeAssignments, ...plantAssignments],
     resources: { employees, plant: plants },
     plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
@@ -291,12 +334,18 @@ export async function loadSchedulingSelf(
   const employeeRows = (employeeResult.data || []) as Array<Record<string, unknown>>;
   const jobIds = Array.from(new Set(employeeRows.map((row) => String(row.job_id))));
   if (jobIds.length === 0) {
-    return { week: { start: weekStart, end: weekEnd }, assignments: [], jobs: [], plant_assignments: [] };
+    return { week: { start: weekStart, end: weekEnd }, assignments: [], jobs: [], visits: [], plant_assignments: [] };
   }
 
   const dates = Array.from(new Set(employeeRows.map((row) => String(row.work_date))));
-  const [jobsResult, plantAssignmentsResult] = await Promise.all([
-    admin.from('schedule_jobs').select('*').in('id', jobIds),
+  const [jobsResult, visitsResult, plantAssignmentsResult] = await Promise.all([
+    admin.from('schedule_jobs').select('*, customer:customers(company_name)').in('id', jobIds),
+    admin
+      .from('schedule_visits')
+      .select('*')
+      .in('job_id', jobIds)
+      .gte('starts_at', `${weekStart}T00:00:00.000Z`)
+      .lte('starts_at', `${weekEnd}T23:59:59.999Z`),
     admin
       .from('schedule_plant_assignments')
       .select('*, plant:plant(id, plant_id, nickname, make, model, status)')
@@ -304,32 +353,42 @@ export async function loadSchedulingSelf(
       .in('work_date', dates),
   ]);
   if (jobsResult.error) throw jobsResult.error;
+  if (visitsResult.error) throw visitsResult.error;
   if (plantAssignmentsResult.error) throw plantAssignmentsResult.error;
 
-  const assignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
-    ...normalizeBaseAssignment(row),
-    resource_type: 'employee',
-    profile_id: userId,
-    employee: null,
-    conflicts: [],
-  }));
+  const visits = (visitsResult.data || []) as ScheduleVisit[];
+  const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
+  const assignments: ScheduleEmployeeAssignment[] = employeeRows
+    .filter((row) => !row.visit_id || visitsById.get(String(row.visit_id))?.status !== 'cancelled')
+    .map((row) => ({
+      ...normalizeBaseAssignment(row),
+      resource_type: 'employee',
+      profile_id: userId,
+      employee: null,
+      visit: visitsById.get(String(row.visit_id)) || null,
+      conflicts: [],
+    }));
   const plantAssignments: SchedulePlantAssignment[] = (
     (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>
-  ).map((row) => {
-    const plant = pickRelation(row.plant as Record<string, unknown> | Array<Record<string, unknown>> | null);
-    return {
-      ...normalizeBaseAssignment(row),
-      resource_type: 'plant',
-      plant_id: String(row.plant_id),
-      plant: plant ? mapPlant(plant) : null,
-      conflicts: [],
-    };
-  });
+  )
+    .filter((row) => !row.visit_id || visitsById.get(String(row.visit_id))?.status !== 'cancelled')
+    .map((row) => {
+      const plant = pickRelation(row.plant as Record<string, unknown> | Array<Record<string, unknown>> | null);
+      return {
+        ...normalizeBaseAssignment(row),
+        resource_type: 'plant',
+        plant_id: String(row.plant_id),
+        plant: plant ? mapPlant(plant) : null,
+        visit: visitsById.get(String(row.visit_id)) || null,
+        conflicts: [],
+      };
+    });
 
   return {
     week: { start: weekStart, end: weekEnd },
     assignments,
-    jobs: (jobsResult.data || []) as ScheduleJob[],
+    jobs: ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob),
+    visits,
     plant_assignments: plantAssignments,
   };
 }

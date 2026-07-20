@@ -78,7 +78,7 @@ const TEST_USERS = [
     email: 'testsuite-admin@ffts.test',
     fullName: 'Testsuite Admin',
     employeeId: 'TS-ADM',
-    superAdmin: true,
+    superAdmin: false,
     roleMatcher: { is_manager_admin: true, is_super_admin: false, name: 'admin' },
     roleFallback: { is_manager_admin: true },
   },

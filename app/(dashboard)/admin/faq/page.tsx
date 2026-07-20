@@ -42,7 +42,8 @@ import {
   FolderOpen,
   FileText,
   Eye,
-  EyeOff
+  EyeOff,
+  LockKeyhole,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FAQCategory, FAQArticleWithCategory } from '@/types/faq';
@@ -116,6 +117,7 @@ export default function FAQEditorPage() {
     summary: '',
     content_md: '',
     is_published: true,
+    admin_only: false,
     sort_order: 0,
   });
   const [savingArticle, setSavingArticle] = useState(false);
@@ -290,6 +292,7 @@ export default function FAQEditorPage() {
       summary: '',
       content_md: '',
       is_published: true,
+      admin_only: false,
       sort_order: 0,
     });
     setArticleDialogOpen(true);
@@ -304,6 +307,7 @@ export default function FAQEditorPage() {
       summary: article.summary || '',
       content_md: article.content_md,
       is_published: article.is_published,
+      admin_only: article.admin_only,
       sort_order: article.sort_order,
     });
     setArticleDialogOpen(true);
@@ -569,6 +573,12 @@ export default function FAQEditorPage() {
                           ) : (
                             <EyeOff className="h-4 w-4 text-muted-foreground" />
                           )}
+                          {article.admin_only ? (
+                            <Badge variant="outline" className="border-amber-500/40 text-xs text-amber-600 dark:text-amber-300">
+                              <LockKeyhole className="mr-1 h-3 w-3" />
+                              Admin only
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Badge variant="outline" className="text-xs">
@@ -801,12 +811,23 @@ export default function FAQEditorPage() {
               />
             </div>
             
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={articleForm.is_published}
-                onCheckedChange={(checked) => setArticleForm({ ...articleForm, is_published: checked })}
-              />
-              <Label className="text-slate-700 dark:text-muted-foreground">Published</Label>
+            <div className="flex flex-wrap gap-5">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={articleForm.is_published}
+                  onCheckedChange={(checked) => setArticleForm({ ...articleForm, is_published: checked })}
+                />
+                <Label className="text-slate-700 dark:text-muted-foreground">Published</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={articleForm.admin_only}
+                  onCheckedChange={(checked) => setArticleForm({ ...articleForm, admin_only: checked })}
+                />
+                <Label className="text-slate-700 dark:text-muted-foreground">
+                  Admin and Super Admin only
+                </Label>
+              </div>
             </div>
           </div>
 

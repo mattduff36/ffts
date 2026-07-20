@@ -22,6 +22,7 @@ export interface FAQArticle {
   summary: string | null;
   content_md: string;
   is_published: boolean;
+  admin_only: boolean;
   sort_order: number;
   view_count: number;
   created_at: string;
@@ -114,6 +115,7 @@ export interface CreateFAQArticleRequest {
   summary?: string;
   content_md: string;
   is_published?: boolean;
+  admin_only?: boolean;
   sort_order?: number;
 }
 
@@ -124,6 +126,7 @@ export interface UpdateFAQArticleRequest {
   summary?: string;
   content_md?: string;
   is_published?: boolean;
+  admin_only?: boolean;
   sort_order?: number;
 }
 

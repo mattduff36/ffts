@@ -65,4 +65,20 @@ describe('GET /api/scheduling/board', () => {
     expect(response.status).toBe(403);
     expect(mockLoadBoard).not.toHaveBeenCalled();
   });
+
+  it('returns an actionable setup error when scheduling tables are missing', async () => {
+    mockLoadBoard.mockRejectedValue({
+      code: '42P01',
+      message: 'relation "schedule_jobs" does not exist',
+    });
+    const { GET } = await import('@/app/api/scheduling/board/route');
+    const response = await GET(new NextRequest('http://localhost/api/scheduling/board'));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      error: 'Scheduling setup is incomplete. Run the scheduling module migration and try again.',
+      code: 'SCHEDULING_NOT_READY',
+    });
+  });
 });

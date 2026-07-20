@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -51,8 +52,10 @@ export function ScheduleJobDialog({
   const [status, setStatus] = useState<ScheduleJobStatus>('draft');
   const [startDate, setStartDate] = useState(defaultDate);
   const [endDate, setEndDate] = useState(defaultDate);
+  const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const isQuoteJob = job?.source_type === 'quote';
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +66,7 @@ export function ScheduleJobDialog({
     setStatus(job?.status || 'draft');
     setStartDate(job?.start_date || defaultDate);
     setEndDate(job?.end_date || defaultDate);
+    setEstimatedMinutes(job?.estimated_duration_minutes?.toString() || '');
   }, [defaultDate, job, open]);
 
   async function handleSave() {
@@ -77,6 +81,7 @@ export function ScheduleJobDialog({
           status,
           start_date: startDate,
           end_date: endDate,
+          estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
         },
         job?.id
       );
@@ -113,11 +118,13 @@ export function ScheduleJobDialog({
           <DialogHeader>
             <DialogTitle>{job ? 'Edit scheduled job' : 'Add scheduled job'}</DialogTitle>
             <DialogDescription>
-              Set the inclusive job dates. Employees and plant can then be allocated by day.
+              {isQuoteJob
+                ? 'Quote details are read-only here. Edit planning dates and duration from the Quotes module.'
+                : 'Set the planning dates, then add timed visits for employees and plant.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-2">
+          <fieldset disabled={isQuoteJob} className="grid gap-4 py-2 disabled:opacity-70">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="schedule-job-reference">Job reference</Label>
@@ -175,10 +182,22 @@ export function ScheduleJobDialog({
                 <Input id="schedule-job-end" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
               </div>
             </div>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="schedule-job-duration">Estimated minutes</Label>
+              <Input
+                id="schedule-job-duration"
+                type="number"
+                min="15"
+                step="15"
+                value={estimatedMinutes}
+                onChange={(event) => setEstimatedMinutes(event.target.value)}
+                placeholder="e.g. 240"
+              />
+            </div>
+          </fieldset>
 
           <DialogFooter className="gap-2 sm:justify-between">
-            {job ? (
+            {job && !isQuoteJob ? (
               <Button
                 type="button"
                 variant="outline"
@@ -191,15 +210,24 @@ export function ScheduleJobDialog({
             ) : <span />}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={saving}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save job
-              </Button>
+              {isQuoteJob && job ? (
+                <Button asChild>
+                  <Link href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}>
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Open Quote
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save job
+                </Button>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>

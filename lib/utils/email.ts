@@ -5,6 +5,18 @@
 
 import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
+import {
+  emailButton,
+  emailCallout,
+  emailChangeTable,
+  emailCodeBlock,
+  emailCredential,
+  emailDetailTable,
+  emailParagraph,
+  emailSteps,
+  escapeEmailHtml,
+  renderOperationalEmail,
+} from '@/lib/email/operational-email-shell';
 import { sendResendEmail, type ResendEmailPayload } from '@/lib/server/resend';
 
 function getPrimaryEmailSettings() {
@@ -32,162 +44,111 @@ export async function sendPasswordEmail(params: SendPasswordEmailParams): Promis
   error?: string;
 }> {
   const { to, userName, temporaryPassword, isReset = false } = params;
-  
+
   try {
-    // Check if Resend API key is configured
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
-    
-    const subject = isReset 
+
+    const subject = isReset
       ? `Your Password Has Been Reset - ${templateConfig.branding.appName}`
       : `Welcome to ${templateConfig.branding.appName} - Your Login Details`;
-    
-    const htmlContent = isReset ? `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #252525; margin-top: 0;">Password Reset</h2>
-            
-            <p>Hello ${userName},</p>
-            
-            <p>Your password has been reset by an administrator. You can now log in using the temporary password below:</p>
-            
-            <div style="background-color: #fff; border: 2px solid #F1D64A; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Temporary Password</p>
-              <p style="margin: 0; font-size: 24px; font-weight: bold; color: #252525; letter-spacing: 1px;">${temporaryPassword}</p>
-            </div>
-            
-            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
-              <p style="margin: 0; font-weight: bold; color: #92400e;">Important</p>
-              <p style="margin: 5px 0 0 0; color: #92400e;">You will be required to change this password when you first log in.</p>
-            </div>
-            
-            <p><strong>Next Steps:</strong></p>
-            <ol style="color: #4b5563;">
-              <li>Go to ${templateConfig.branding.publicUrl} or open the app</li>
-              <li>Enter your email address and the temporary password above</li>
-              <li>Create a new password when prompted</li>
-            </ol>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              If you did not request this password reset, please contact your administrator immediately.
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    ` : `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">Welcome to ${templateConfig.branding.appName}</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #252525; margin-top: 0;">Your Account Has Been Created</h2>
-            
-            <p>Hello ${userName},</p>
-            
-            <p>Welcome to ${templateConfig.branding.appName}! Your account has been created and you can now log in using the credentials below:</p>
-            
-            <div style="background-color: #fff; border: 2px solid #F1D64A; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Email Address</p>
-              <p style="margin: 0 0 20px 0; font-size: 16px; color: #252525;">${to}</p>
-              
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Temporary Password</p>
-              <p style="margin: 0; font-size: 24px; font-weight: bold; color: #252525; letter-spacing: 1px;">${temporaryPassword}</p>
-            </div>
-            
-            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
-              <p style="margin: 0; font-weight: bold; color: #92400e;">Important</p>
-              <p style="margin: 5px 0 0 0; color: #92400e;">You will be required to change this password when you first log in.</p>
-            </div>
-            
-            <p><strong>Getting Started:</strong></p>
-            <ol style="color: #4b5563;">
-              <li>Go to ${templateConfig.branding.publicUrl} or open the app</li>
-              <li>Enter your email address and the temporary password above</li>
-              <li>Create a new password when prompted</li>
-            </ol>
-            
-            <p style="background-color: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0;">
-              <strong style="color: #1e40af;">Tip:</strong><br>
-              <span style="color: #1e3a8a;">Choose a password that's secure but easy for you to remember. We recommend using a combination of words and numbers.</span>
-            </p>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              If you have any questions, please contact your administrator.
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
-    // Send email using Resend API
+
+    const htmlContent = isReset
+      ? renderOperationalEmail({
+          title: 'Password reset',
+          preheader: 'Your temporary password is ready',
+          tone: 'neutral',
+          bodyHtml: [
+            emailParagraph(`Hello ${userName},`),
+            emailParagraph(
+              'Your password has been reset by an administrator. Use the temporary password below to sign in.'
+            ),
+            emailCredential([{ label: 'Temporary password', value: temporaryPassword, emphasize: true }]),
+            emailCallout({
+              title: 'Password change required',
+              body: 'You will be asked to choose a new password when you first log in.',
+              tone: 'notice',
+            }),
+            emailSteps('Next steps', [
+              `Go to ${templateConfig.branding.publicUrl} or open the app`,
+              'Enter your email address and the temporary password above',
+              'Create a new password when prompted',
+            ]),
+            emailParagraph(
+              'If you did not expect this reset, contact your administrator immediately.',
+              { muted: true }
+            ),
+          ].join(''),
+        })
+      : renderOperationalEmail({
+          title: 'Your account has been created',
+          preheader: 'Your login details for ' + templateConfig.branding.shortAppName,
+          tone: 'neutral',
+          bodyHtml: [
+            emailParagraph(`Hello ${userName},`),
+            emailParagraph(
+              `Welcome to ${templateConfig.branding.appName}. Your account is ready — use the details below to sign in.`
+            ),
+            emailCredential([
+              { label: 'Email address', value: to },
+              { label: 'Temporary password', value: temporaryPassword, emphasize: true },
+            ]),
+            emailCallout({
+              title: 'Password change required',
+              body: 'You will be asked to choose a new password when you first log in.',
+              tone: 'notice',
+            }),
+            emailSteps('Getting started', [
+              `Go to ${templateConfig.branding.publicUrl} or open the app`,
+              'Enter your email address and the temporary password above',
+              'Create a new password when prompted',
+            ]),
+            emailParagraph('If you have any questions, contact your administrator.', { muted: true }),
+          ].join(''),
+        });
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
-        html: htmlContent
-      })
+        html: htmlContent,
+      }),
     });
-    
+
     if (!response.ok) {
       const error = (await response.json()) as { message?: string };
       console.error('Resend API error:', error);
       return {
         success: false,
-        error: `Failed to send email: ${error.message ?? 'Unknown error'}`
+        error: `Failed to send email: ${error.message ?? 'Unknown error'}`,
       };
     }
 
     const data = await response.json();
     console.log('Email sent successfully:', data);
-    
+
     return {
-      success: true
+      success: true,
     };
-    
   } catch (error: unknown) {
     console.error('Error sending password email:', error);
     const message = error instanceof Error ? error.message : 'Failed to send email';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -203,24 +164,24 @@ export async function testEmailConfiguration(): Promise<{
   const emailConfig = getPrimaryEmailSettings();
   const apiKey = emailConfig.primaryApiKey;
   const fromEmail = emailConfig.primaryFromEmail;
-  
+
   if (!apiKey) {
     return {
       configured: false,
-      message: 'RESEND_API_KEY environment variable is not set'
+      message: 'RESEND_API_KEY environment variable is not set',
     };
   }
-  
+
   if (!fromEmail) {
     return {
       configured: true,
-      message: 'Resend configured (using default from address)'
+      message: 'Resend configured (using default from address)',
     };
   }
-  
+
   return {
     configured: true,
-    message: `Resend configured with from address: ${fromEmail}`
+    message: `Resend configured with from address: ${fromEmail}`,
   };
 }
 
@@ -248,123 +209,81 @@ export async function sendProfileUpdateEmail(params: SendProfileUpdateEmailParam
   error?: string;
 }> {
   const { to, userName, changes } = params;
-  
+
   try {
-    // Check if Resend API key is configured
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
-    
-    // Build changes list HTML
-    const changesHtml = Object.entries(changes)
-      .map(([field, change]) => {
-        const fieldName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        return `
-          <tr>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">${fieldName}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">${change.old || '-'}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; color: #059669; font-weight: 500;">${change.new || '-'}</td>
-          </tr>
-        `;
-      })
-      .join('');
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #252525; margin-top: 0;">Your Profile Has Been Updated</h2>
-            
-            <p>Hello ${userName},</p>
-            
-            <p>An administrator has updated your profile information. Here are the changes:</p>
-            
-            <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin: 20px 0; overflow: hidden;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                  <tr style="background-color: #f3f4f6;">
-                    <th style="padding: 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Field</th>
-                    <th style="padding: 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Previous Value</th>
-                    <th style="padding: 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">New Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${changesHtml}
-                </tbody>
-              </table>
-            </div>
-            
-            ${changes.email ? `
-              <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; font-weight: bold; color: #1e40af;">Email Address Changed</p>
-                <p style="margin: 5px 0 0 0; color: #1e40af;">Your email address has been updated. Please use <strong>${changes.email.new}</strong> to log in from now on.</p>
-              </div>
-            ` : ''}
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              If you did not expect these changes or have any questions, please contact your administrator.
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
-    // Send email using Resend API
+
+    const changeRows = Object.entries(changes).map(([field, change]) => ({
+      field: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      previous: change.old || '-',
+      next: change.new || '-',
+    }));
+
+    const htmlContent = renderOperationalEmail({
+      title: 'Your profile has been updated',
+      preheader: 'An administrator updated your profile',
+      tone: 'neutral',
+      bodyHtml: [
+        emailParagraph(`Hello ${userName},`),
+        emailParagraph('An administrator has updated your profile. The changes are listed below.'),
+        emailChangeTable(changeRows),
+        changes.email
+          ? emailCallout({
+              title: 'Email address changed',
+              body: `Use ${changes.email.new} to log in from now on.`,
+              tone: 'notice',
+            })
+          : '',
+        emailParagraph(
+          'If you did not expect these changes, contact your administrator.',
+          { muted: true }
+        ),
+      ].join(''),
+    });
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: emailConfig.primaryFromEmail,
         to: [to],
         subject: `Your ${templateConfig.branding.appName} Profile Has Been Updated`,
-        html: htmlContent
-      })
+        html: htmlContent,
+      }),
     });
-    
+
     if (!response.ok) {
       const error = (await response.json()) as { message?: string };
       console.error('Resend API error:', error);
       return {
         success: false,
-        error: `Failed to send email: ${error.message ?? 'Unknown error'}`
+        error: `Failed to send email: ${error.message ?? 'Unknown error'}`,
       };
     }
 
     const data = await response.json();
     console.log('Profile update email sent successfully:', data);
-    
+
     return {
-      success: true
+      success: true,
     };
-    
   } catch (error: unknown) {
     console.error('Error sending profile update email:', error);
     const message = error instanceof Error ? error.message : 'Failed to send email';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -388,88 +307,56 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
   error?: string;
 }> {
   const { to, senderName, subject } = params;
-  
+
   try {
-    // Check if Resend API key is configured
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
 
-    // Convert single email to array for consistent handling
     const recipients = Array.isArray(to) ? to : [to];
-    
-    // Resend allows up to 100 recipients per call, but we'll batch conservatively
-    // to avoid rate limits: 10 emails per batch with delays
     const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 1000; // 1 second between batches
-    
+    const BATCH_DELAY_MS = 1000;
+
     let sent = 0;
     let failed = 0;
 
-    // Process in batches
+    const htmlContent = renderOperationalEmail({
+      title: 'Toolbox talk — action required',
+      preheader: `New toolbox talk: ${subject}`,
+      tone: 'critical',
+      bodyHtml: [
+        emailParagraph('Hello,'),
+        emailParagraph(
+          `<strong>${escapeEmailHtml(senderName)}</strong> has sent a toolbox talk that needs your attention before you continue using the app.`,
+          { html: true }
+        ),
+        emailDetailTable([{ label: 'Subject', value: subject }]),
+        emailCallout({
+          title: 'Read and sign in the app',
+          body: 'Open the app to read the full message and sign electronically. The message body is not included in this email.',
+          tone: 'critical',
+        }),
+        emailSteps('Next steps', [
+          `Open ${templateConfig.branding.appName} or log in at ${templateConfig.branding.publicUrl}`,
+          'Read the full toolbox talk message',
+          'Sign electronically to confirm you have read and understood it',
+        ]),
+        emailParagraph('This is an automated notification. Please do not reply to this email.', {
+          muted: true,
+        }),
+      ].join(''),
+    });
+
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
       const batch = recipients.slice(i, i + BATCH_SIZE);
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          </head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #DC2626; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-              <h1 style="margin: 0; color: white;">New Toolbox Talk</h1>
-            </div>
-            
-            <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-              <h2 style="color: #252525; margin-top: 0;">Action Required</h2>
-              
-              <p>Hello,</p>
-              
-              <p><strong>${senderName}</strong> has sent you an important Toolbox Talk message that requires your immediate attention.</p>
-              
-              <div style="background-color: #fff; border: 2px solid #DC2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Subject:</p>
-                <p style="margin: 0; font-size: 18px; font-weight: bold; color: #DC2626;">${subject}</p>
-              </div>
-              
-              <div style="background-color: #fef2f2; border-left: 4px solid #DC2626; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; font-weight: bold; color: #991b1b;">Important Safety Information</p>
-                <p style="margin: 5px 0 0 0; color: #991b1b;">You must read and sign this Toolbox Talk before continuing to use the app. The full message is available when you log in.</p>
-              </div>
-              
-              <p><strong>Next Steps:</strong></p>
-              <ol style="color: #4b5563;">
-                <li>Open ${templateConfig.branding.appName} or log in at ${templateConfig.branding.publicUrl}</li>
-                <li>Read the full Toolbox Talk message</li>
-                <li>Sign electronically to confirm you've read and understood it</li>
-              </ol>
-              
-              <div style="background-color: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; color: #1e40af;"><strong>Note:</strong> For security and privacy reasons, the full message content is only available in the app, not in this email.</p>
-              </div>
-              
-              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-                This is an automated notification. Please do not reply to this email.
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-              <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-            </div>
-          </body>
-        </html>
-      `;
 
       try {
-        // Send emails for this batch
         const promises = batch.map(email =>
           sendProductionResendEmail(apiKey, {
             from: emailConfig.primaryFromEmail,
@@ -480,23 +367,22 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
         );
 
         const results = await Promise.allSettled(promises);
-        
-        // Count successes and failures
+
         results.forEach((result, index) => {
           if (result.status === 'fulfilled' && result.value.ok) {
             sent++;
           } else {
             failed++;
-            console.error(`Failed to send to ${batch[index]}:`, 
-              result.status === 'rejected' ? result.reason : 'API error');
+            console.error(
+              `Failed to send to ${batch[index]}:`,
+              result.status === 'rejected' ? result.reason : 'API error'
+            );
           }
         });
 
-        // Wait before next batch (unless this is the last batch)
         if (i + BATCH_SIZE < recipients.length) {
           await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
         }
-
       } catch (batchError) {
         console.error('Batch sending error:', batchError);
         failed += batch.length;
@@ -508,15 +394,14 @@ export async function sendToolboxTalkEmail(params: SendToolboxTalkEmailParams): 
     return {
       success: sent > 0,
       sent,
-      failed
+      failed,
     };
-    
   } catch (error: unknown) {
     console.error('Error sending Toolbox Talk emails:', error);
     const message = error instanceof Error ? error.message : 'Failed to send emails';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -542,102 +427,63 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
   error?: string;
 }> {
   const { to, senderName, subject, vehicleReg, categoryName, dueInfo } = params;
-  
+
   try {
-    // Check if Resend API key is configured
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
 
-    // Convert single email to array for consistent handling
     const recipients = Array.isArray(to) ? to : [to];
-    
-    // Resend allows up to 100 recipients per call, but we'll batch conservatively
     const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 1000; // 1 second between batches
-    
+    const BATCH_DELAY_MS = 1000;
+
     let sent = 0;
     let failed = 0;
 
-    // Process in batches
+    const isOverdue = dueInfo.toLowerCase().includes('overdue');
+    const tone = isOverdue ? 'warning' : 'notice';
+
+    const htmlContent = renderOperationalEmail({
+      title: subject || 'Maintenance reminder',
+      preheader: `${vehicleReg} — ${categoryName}`,
+      tone,
+      bodyHtml: [
+        emailParagraph('Hello,'),
+        emailParagraph(
+          `<strong>${escapeEmailHtml(senderName)}</strong> has flagged a maintenance item that needs attention.`,
+          { html: true }
+        ),
+        emailDetailTable([
+          { label: 'Vehicle', value: vehicleReg },
+          { label: 'Category', value: categoryName },
+          { label: 'Status', value: dueInfo },
+        ]),
+        emailCallout({
+          title: isOverdue ? 'Action required' : 'Reminder',
+          body: 'Please address this maintenance item promptly. Full details are available in the app.',
+          tone,
+        }),
+        emailSteps('Next steps', [
+          `Log in to ${templateConfig.branding.appName} to view full details`,
+          'Take the necessary action (renew, service, etc.)',
+          'Update the due date once completed',
+        ]),
+        emailParagraph('This is an automated notification. Please do not reply to this email.', {
+          muted: true,
+        }),
+      ].join(''),
+    });
+
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
       const batch = recipients.slice(i, i + BATCH_SIZE);
-      
-      const isOverdue = dueInfo.toLowerCase().includes('overdue');
-      const statusColor = isOverdue ? '#DC2626' : '#F59E0B'; // Red for overdue, amber for due soon
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          </head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: ${statusColor}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-              <h1 style="margin: 0; color: white;">Maintenance Reminder</h1>
-            </div>
-            
-            <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-              <h2 style="color: #252525; margin-top: 0;">${subject}</h2>
-              
-              <p>Hello,</p>
-              
-              <p><strong>${senderName}</strong> has flagged a maintenance item that requires your attention.</p>
-              
-              <div style="background-color: #fff; border: 2px solid ${statusColor}; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                <table style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Vehicle:</td>
-                    <td style="padding: 8px 0; font-weight: bold; color: #252525;">${vehicleReg}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Category:</td>
-                    <td style="padding: 8px 0; font-weight: bold; color: #252525;">${categoryName}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Status:</td>
-                    <td style="padding: 8px 0; font-weight: bold; color: ${statusColor};">${dueInfo}</td>
-                  </tr>
-                </table>
-              </div>
-              
-              <div style="background-color: ${isOverdue ? '#fef2f2' : '#fffbeb'}; border-left: 4px solid ${statusColor}; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; font-weight: bold; color: ${isOverdue ? '#991b1b' : '#92400e'};">${isOverdue ? 'Action Required' : 'Reminder'}</p>
-                <p style="margin: 5px 0 0 0; color: ${isOverdue ? '#991b1b' : '#92400e'};">Please address this maintenance item promptly.</p>
-              </div>
-              
-              <p><strong>Next Steps:</strong></p>
-              <ol style="color: #4b5563;">
-                <li>Log in to ${templateConfig.branding.appName} to view full details</li>
-                <li>Take the necessary action (renew, service, etc.)</li>
-                <li>Update the due date once completed</li>
-              </ol>
-              
-              <div style="background-color: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; color: #1e40af;"><strong>Note:</strong> For security and privacy reasons, full details are only available in the app.</p>
-              </div>
-              
-              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-                This is an automated notification. Please do not reply to this email.
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-              <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-            </div>
-          </body>
-        </html>
-      `;
 
       try {
-        // Send emails for this batch
         const promises = batch.map(email =>
           sendProductionResendEmail(apiKey, {
             from: emailConfig.primaryFromEmail,
@@ -648,23 +494,22 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
         );
 
         const results = await Promise.allSettled(promises);
-        
-        // Count successes and failures
+
         results.forEach((result, index) => {
           if (result.status === 'fulfilled' && result.value.ok) {
             sent++;
           } else {
             failed++;
-            console.error(`Failed to send to ${batch[index]}:`, 
-              result.status === 'rejected' ? result.reason : 'API error');
+            console.error(
+              `Failed to send to ${batch[index]}:`,
+              result.status === 'rejected' ? result.reason : 'API error'
+            );
           }
         });
 
-        // Wait before next batch (unless this is the last batch)
         if (i + BATCH_SIZE < recipients.length) {
           await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
         }
-
       } catch (batchError) {
         console.error('Batch sending error:', batchError);
         failed += batch.length;
@@ -676,15 +521,14 @@ export async function sendMaintenanceReminderEmail(params: SendMaintenanceRemind
     return {
       success: sent > 0,
       sent,
-      failed
+      failed,
     };
-    
   } catch (error: unknown) {
     console.error('Error sending maintenance reminder emails:', error);
     const message = error instanceof Error ? error.message : 'Failed to send emails';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -710,7 +554,7 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
   error?: string;
 }> {
   const { to, employeeName, weekEnding, managerComments } = params;
-  
+
   try {
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
@@ -718,92 +562,75 @@ export async function sendTimesheetRejectionEmail(params: SendTimesheetRejection
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
-    
+
     const subject = 'Timesheet Rejected - Action Required';
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #dc2626; margin-top: 0;">Timesheet Rejected</h2>
-            
-            <p>Hello ${employeeName},</p>
-            
-            <p>Your timesheet for <strong>week ending ${weekEnding}</strong> has been rejected by your manager.</p>
-            
-            ${managerComments ? `
-            <div style="background-color: #fff; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0; font-weight: bold; color: #dc2626;">Manager's Comments:</p>
-              <p style="margin: 0; color: #4b5563;">${managerComments}</p>
-            </div>
-            ` : ''}
-            
-            <p><strong>What You Need to Do:</strong></p>
-            <ol style="color: #4b5563;">
-              <li>Log in to ${templateConfig.branding.appName}</li>
-              <li>Review the manager's comments</li>
-              <li>Make the necessary corrections to your timesheet</li>
-              <li>Resubmit for approval</li>
-            </ol>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              Please log in to ${templateConfig.branding.appName} to make the necessary corrections. If you have questions about the rejection, please contact your manager.
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
+
+    const htmlContent = renderOperationalEmail({
+      title: 'Timesheet rejected',
+      preheader: `Week ending ${weekEnding}`,
+      tone: 'warning',
+      bodyHtml: [
+        emailParagraph(`Hello ${employeeName},`),
+        emailParagraph(
+          `Your timesheet for week ending <strong>${escapeEmailHtml(weekEnding)}</strong> has been rejected by your manager.`,
+          { html: true }
+        ),
+        managerComments
+          ? emailCallout({
+              title: "Manager's comments",
+              body: managerComments,
+              tone: 'warning',
+            })
+          : '',
+        emailSteps('What you need to do', [
+          `Log in to ${templateConfig.branding.appName}`,
+          "Review the manager's comments",
+          'Correct your timesheet',
+          'Resubmit for approval',
+        ]),
+        emailParagraph(
+          'If you have questions about the rejection, contact your manager.',
+          { muted: true }
+        ),
+      ].join(''),
+    });
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
-        html: htmlContent
-      })
+        html: htmlContent,
+      }),
     });
-    
+
     if (!response.ok) {
       const error = (await response.json()) as { message?: string };
       console.error('Resend API error:', error);
       return {
         success: false,
-        error: `Failed to send email: ${error.message ?? 'Unknown error'}`
+        error: `Failed to send email: ${error.message ?? 'Unknown error'}`,
       };
     }
 
     const data = await response.json();
     console.log('Timesheet rejection email sent successfully:', data);
-    
+
     return { success: true };
-    
   } catch (error: unknown) {
     console.error('Error sending timesheet rejection email:', error);
     const message = error instanceof Error ? error.message : 'Failed to send email';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -827,7 +654,7 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
   error?: string;
 }> {
   const { to, recipientName, employeeName, weekEnding, adjustmentComments, adjustedBy } = params;
-  
+
   try {
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
@@ -835,99 +662,69 @@ export async function sendTimesheetAdjustmentEmail(params: SendTimesheetAdjustme
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
-    
+
     const subject = 'Timesheet Adjusted - Please Review';
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #f59e0b; margin-top: 0;">Timesheet Adjusted</h2>
-            
-            <p>Hello ${recipientName},</p>
-            
-            <p>A timesheet has been adjusted and may require your attention.</p>
-            
-            <div style="background-color: #fff; border: 2px solid #F1D64A; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Employee:</td>
-                  <td style="padding: 8px 0; font-weight: bold; color: #252525;">${employeeName}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Week Ending:</td>
-                  <td style="padding: 8px 0; font-weight: bold; color: #252525;">${weekEnding}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Adjusted By:</td>
-                  <td style="padding: 8px 0; font-weight: bold; color: #252525;">${adjustedBy}</td>
-                </tr>
-              </table>
-            </div>
-            
-            <div style="background-color: #fff; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0; font-weight: bold; color: #f59e0b;">Adjustment Details:</p>
-              <p style="margin: 0; color: #4b5563; white-space: pre-wrap;">${adjustmentComments}</p>
-            </div>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              This is an automated notification. If you have questions about this adjustment, please contact the person who made the adjustment.
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
+
+    const htmlContent = renderOperationalEmail({
+      title: 'Timesheet adjusted',
+      preheader: `${employeeName} — week ending ${weekEnding}`,
+      tone: 'neutral',
+      bodyHtml: [
+        emailParagraph(`Hello ${recipientName},`),
+        emailParagraph('A timesheet has been adjusted and may need your review.'),
+        emailDetailTable([
+          { label: 'Employee', value: employeeName },
+          { label: 'Week ending', value: weekEnding },
+          { label: 'Adjusted by', value: adjustedBy },
+        ]),
+        emailCallout({
+          title: 'Adjustment details',
+          body: adjustmentComments,
+          tone: 'notice',
+        }),
+        emailParagraph(
+          'If you have questions about this adjustment, contact the person who made it.',
+          { muted: true }
+        ),
+      ].join(''),
+    });
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: emailConfig.primaryFromEmail,
         to: [to],
         subject,
-        html: htmlContent
-      })
+        html: htmlContent,
+      }),
     });
-    
+
     if (!response.ok) {
       const error = (await response.json()) as { message?: string };
       console.error('Resend API error:', error);
       return {
         success: false,
-        error: `Failed to send email: ${error.message ?? 'Unknown error'}`
+        error: `Failed to send email: ${error.message ?? 'Unknown error'}`,
       };
     }
 
     const data = await response.json();
     console.log('Timesheet adjustment email sent successfully:', data);
-    
+
     return { success: true };
-    
   } catch (error: unknown) {
     console.error('Error sending timesheet adjustment email:', error);
     const message = error instanceof Error ? error.message : 'Failed to send email';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -961,46 +758,26 @@ export async function sendTrainingBookingDeclinedEmail(
 
     const subject = 'Training Booking Removed From Timesheet';
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #F1D64A; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #252525;">${templateConfig.branding.appName}</h1>
-          </div>
-
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #b45309; margin-top: 0;">Training Booking Removed</h2>
-
-            <p>Hello ${recipientName},</p>
-
-            <p>
-              The training booking for <strong>${employeeName}</strong> on
-              <strong>${trainingDate}</strong> was removed from their timesheet.
-            </p>
-
-            <div style="background-color: #fff; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0; font-weight: bold; color: #b45309;">Reason</p>
-              <p style="margin: 0; color: #4b5563;">
-                ${employeeName} confirmed they did not attend the booked training. The booking was deleted automatically from the timesheet flow by ${declinedBy}.
-              </p>
-            </div>
-
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              This is an automated notification from ${templateConfig.branding.appName}.
-            </p>
-          </div>
-
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
+    const htmlContent = renderOperationalEmail({
+      title: 'Training booking removed',
+      preheader: `${employeeName} — ${trainingDate}`,
+      tone: 'neutral',
+      bodyHtml: [
+        emailParagraph(`Hello ${recipientName},`),
+        emailParagraph(
+          `The training booking for <strong>${escapeEmailHtml(employeeName)}</strong> on <strong>${escapeEmailHtml(trainingDate)}</strong> was removed from their timesheet.`,
+          { html: true }
+        ),
+        emailCallout({
+          title: 'Reason',
+          body: `${employeeName} confirmed they did not attend the booked training. The booking was deleted automatically from the timesheet flow by ${declinedBy}.`,
+          tone: 'notice',
+        }),
+        emailParagraph(`This is an automated notification from ${templateConfig.branding.appName}.`, {
+          muted: true,
+        }),
+      ].join(''),
+    });
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -1060,100 +837,95 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
   failed?: number;
   error?: string;
 }> {
-  const { to, reportId, title, description, errorCode, userName, userEmail, pageUrl, userAgent, additionalContext } = params;
-  
+  const {
+    to,
+    reportId,
+    title,
+    description,
+    errorCode,
+    userName,
+    userEmail,
+    pageUrl,
+    userAgent,
+    additionalContext,
+  } = params;
+
   try {
-    // Check if Resend API key is configured
     const emailConfig = getPrimaryEmailSettings();
     const apiKey = emailConfig.primaryApiKey;
     if (!apiKey) {
       console.error('RESEND_API_KEY not configured');
       return {
         success: false,
-        error: 'Email service not configured'
+        error: 'Email service not configured',
       };
     }
-    
+
     if (to.length === 0) {
       return {
         success: false,
-        error: 'No recipient email addresses provided'
+        error: 'No recipient email addresses provided',
       };
     }
-    
-    const subject = `🐛 Error Report: ${title.substring(0, 50)}${title.length > 50 ? '...' : ''}`;
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #dc2626; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; color: #ffffff;">🐛 Error Report</h1>
-          </div>
-          
-          <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #dc2626; margin-top: 0;">User-Reported Error</h2>
-            
-            <p>A user has reported an error in the application that requires your attention.</p>
-            
-            <div style="background-color: #fff; border: 2px solid #dc2626; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <h3 style="margin: 0 0 15px 0; color: #252525;">Error Details</h3>
-              
-              <p style="margin: 10px 0;"><strong>Reported By:</strong> ${userName} (${userEmail})</p>
-              
-              <p style="margin: 10px 0;"><strong>Title:</strong></p>
-              <p style="margin: 5px 0 10px 0; color: #252525; font-weight: bold;">${title}</p>
-              
-              <p style="margin: 10px 0;"><strong>Description:</strong></p>
-              <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 10px 0;">
-                <p style="margin: 0; color: #991b1b; white-space: pre-wrap;">${description}</p>
-              </div>
-              
-              ${errorCode ? `<p style="margin: 10px 0;"><strong>Error Code:</strong> <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${errorCode}</code></p>` : ''}
-              
-              <p style="margin: 10px 0;"><strong>Page URL:</strong> <a href="${pageUrl || 'Unknown'}" style="color: #3b82f6; text-decoration: none;">${pageUrl || 'Unknown'}</a></p>
-              
-              ${userAgent ? `<p style="margin: 10px 0;"><strong>User Agent:</strong> <span style="font-size: 12px; color: #6b7280;">${userAgent}</span></p>` : ''}
-              
-              ${additionalContext ? `
-                <p style="margin: 15px 0 5px 0;"><strong>Additional Context:</strong></p>
-                <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; color: #374151;">${JSON.stringify(additionalContext, null, 2)}</pre>
-              ` : ''}
-            </div>
-            
-            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
-              <p style="margin: 0; font-weight: bold; color: #92400e;">⚠️ Action Required</p>
-              <p style="margin: 5px 0 0 0; color: #92400e;">Please log in to ${templateConfig.branding.appName} to review and manage this error report. You can update the status and add notes for tracking.</p>
-            </div>
-            
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${templateConfig.branding.publicUrl}/admin/errors/manage" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Manage Error Reports</a>
-    </div>
-            
-            <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-              <strong>Report ID:</strong> ${reportId}
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-            <p>© ${new Date().getFullYear()} ${templateConfig.branding.companyName} All rights reserved.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    
-    // Send emails (batch if needed)
+
+    const subject = `Error report: ${title.substring(0, 50)}${title.length > 50 ? '...' : ''}`;
+
+    const detailRows: Array<{ label: string; value: string; valueHtml?: boolean }> = [
+      { label: 'Reported by', value: `${userName} (${userEmail})` },
+      { label: 'Title', value: title },
+      {
+        label: 'Page',
+        value: pageUrl
+          ? `<a href="${escapeEmailHtml(pageUrl)}" style="color: #2563eb; text-decoration: underline;">${escapeEmailHtml(pageUrl)}</a>`
+          : 'Unknown',
+        valueHtml: true,
+      },
+    ];
+
+    if (errorCode) {
+      detailRows.push({
+        label: 'Error code',
+        value: `<code style="font-family: Consolas, 'Courier New', monospace; font-size: 13px;">${escapeEmailHtml(errorCode)}</code>`,
+        valueHtml: true,
+      });
+    }
+
+    if (userAgent) {
+      detailRows.push({ label: 'User agent', value: userAgent });
+    }
+
+    const htmlContent = renderOperationalEmail({
+      title: 'User-reported error',
+      preheader: title,
+      tone: 'critical',
+      bodyHtml: [
+        emailParagraph('A user reported an error that needs review.'),
+        emailDetailTable(detailRows),
+        emailParagraph('Description', { muted: true }),
+        `<p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.55; color: #27272a; white-space: pre-wrap;">${escapeEmailHtml(description)}</p>`,
+        additionalContext
+          ? [
+              emailParagraph('Additional context', { muted: true }),
+              emailCodeBlock(JSON.stringify(additionalContext, null, 2)),
+            ].join('')
+          : '',
+        emailCallout({
+          title: 'Action required',
+          body: `Log in to ${templateConfig.branding.appName} to review this report, update its status, and add notes.`,
+          tone: 'notice',
+        }),
+        emailButton('Manage error reports', `${templateConfig.branding.publicUrl}/admin/errors/manage`),
+        emailParagraph(`Report ID: ${reportId}`, { muted: true }),
+      ].join(''),
+    });
+
     const BATCH_SIZE = 10;
     let sent = 0;
     let failed = 0;
 
     for (let i = 0; i < to.length; i += BATCH_SIZE) {
       const batch = to.slice(i, i + BATCH_SIZE);
-      
+
       try {
         const promises = batch.map(email =>
           sendProductionResendEmail(apiKey, {
@@ -1165,18 +937,19 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
         );
 
         const results = await Promise.allSettled(promises);
-        
+
         results.forEach((result, index) => {
           if (result.status === 'fulfilled' && result.value.ok) {
             sent++;
           } else {
             failed++;
-            console.error(`Failed to send to ${batch[index]}:`,
-              result.status === 'rejected' ? result.reason : 'API error');
+            console.error(
+              `Failed to send to ${batch[index]}:`,
+              result.status === 'rejected' ? result.reason : 'API error'
+            );
           }
         });
 
-        // Wait before next batch (unless this is the last batch)
         if (i + BATCH_SIZE < to.length) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -1191,15 +964,14 @@ export async function sendErrorReportEmailToAdmins(params: SendErrorReportEmailT
     return {
       success: sent > 0,
       sent,
-      failed
+      failed,
     };
-    
   } catch (error: unknown) {
     console.error('Error sending error report emails:', error);
     const message = error instanceof Error ? error.message : 'Failed to send emails';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
@@ -1212,40 +984,37 @@ export async function sendTestTimesheetEmails(adminEmail: string): Promise<{
   error?: string;
 }> {
   try {
-    // Test rejection email
     const rejectionResult = await sendTimesheetRejectionEmail({
       to: adminEmail,
       employeeName: 'John Smith',
       weekEnding: 'Sunday, 1st December 2024',
-      managerComments: 'Please correct the hours for Wednesday - they do not match the job sheet records. Also, the Friday entry is missing break times.'
+      managerComments:
+        'Please correct the hours for Wednesday - they do not match the job sheet records. Also, the Friday entry is missing break times.',
     });
 
     if (!rejectionResult.success) {
       return rejectionResult;
     }
 
-    // Wait a moment between emails
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Test adjustment email
     const adjustmentResult = await sendTimesheetAdjustmentEmail({
       to: adminEmail,
       recipientName: 'Admin',
       employeeName: 'Jane Doe',
       weekEnding: 'Sunday, 1st December 2024',
-      adjustmentComments: 'Adjusted Thursday hours from 9.5 to 8.0 hours to match the confirmed job completion time with the client. Break time was not properly recorded, so this has been corrected.',
-      adjustedBy: 'Example Manager'
+      adjustmentComments:
+        'Adjusted Thursday hours from 9.5 to 8.0 hours to match the confirmed job completion time with the client. Break time was not properly recorded, so this has been corrected.',
+      adjustedBy: 'Example Manager',
     });
 
     return adjustmentResult;
-    
   } catch (error: unknown) {
     console.error('Error sending test emails:', error);
     const message = error instanceof Error ? error.message : 'Failed to send test emails';
     return {
       success: false,
-      error: message
+      error: message,
     };
   }
 }
-

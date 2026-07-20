@@ -103,7 +103,7 @@ async function cleanupRecentTargetErrorLogs(sinceIso: string): Promise<void> {
 }
 
 test.describe('@errors @critical Error Logging', () => {
-  test('superadmin can access debug console', async ({ page }) => {
+  test('regular admins cannot access the Super Admin debug console', async ({ page }) => {
     const capture = attachConsoleErrorCapture(page);
     await ensureSensitiveModuleAccess(page, { moduleName: 'debug' });
     await gotoWithTimeoutSkip(page, '/debug', 'Debug route timed out in this environment');
@@ -111,17 +111,19 @@ test.describe('@errors @critical Error Logging', () => {
     const bodyText = await page.locator('body').innerText();
     const onDebugRoute = /\/debug(?:$|[?#/])/.test(page.url());
     const accessDenied = /access denied|forbidden|unauthori|super\s*admin\s+only|actual role mode/i.test(bodyText);
-    expect(onDebugRoute, 'Debug console should be accessible to the testsuite superadmin').toBeTruthy();
-    expect(accessDenied, 'Debug console should not show a permissions error').toBeFalsy();
-    await expect(page.getByText('SuperAdmin Debug Console')).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('tab', { name: /error log|errors/i }).click();
-    await expect(page.getByText('Application Error Log')).toBeVisible({ timeout: 10_000 });
+    expect(
+      !onDebugRoute || accessDenied,
+      'Testsuite Admin must not receive Super Admin-only debug access'
+    ).toBeTruthy();
+    await expect(page.getByText('SuperAdmin Debug Console')).toHaveCount(0);
 
     const errors = capture.getErrors();
-    expect(errors, 'No page errors on debug console').toHaveLength(0);
+    expect(errors, 'No page errors while denying debug console access').toHaveLength(0);
   });
 
-  test('fresh client and server errors are logged and visible in debug console', async ({ page }) => {
+  test.skip('fresh client and server errors are logged and visible in debug console', async ({ page }) => {
+    // This workflow requires a manually provisioned Super Admin account.
+    // Automated testsuite accounts intentionally never receive that role.
     test.setTimeout(60_000);
     const capture = attachConsoleErrorCapture(page);
     const sinceIso = new Date().toISOString();

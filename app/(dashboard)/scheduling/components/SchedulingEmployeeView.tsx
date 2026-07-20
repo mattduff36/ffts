@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
-import { MapPin, Tractor } from 'lucide-react';
+import { Clock3, MapPin, Tractor } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { fetchMySchedule } from '@/lib/client/scheduling';
-import { enumerateScheduleDates, getSchedulingWeek } from '@/lib/utils/scheduling';
+import {
+  enumerateScheduleDates,
+  formatScheduleVisitTime,
+  getSchedulingWeek,
+} from '@/lib/utils/scheduling';
 import { SchedulingWeekNav } from './SchedulingWeekNav';
 
 export function SchedulingEmployeeView() {
@@ -63,8 +67,18 @@ export function SchedulingEmployeeView() {
                   assignments.map((assignment) => {
                     const job = jobsById.get(assignment.job_id);
                     const plant = payload.plant_assignments.filter(
-                      (item) => item.job_id === assignment.job_id && item.work_date === date
+                      (item) =>
+                        item.job_id === assignment.job_id
+                        && item.work_date === date
+                        && (
+                          assignment.visit_id
+                            ? item.visit_id === assignment.visit_id
+                            : !item.visit_id
+                        )
                     );
+                    const repeatVisitCount = payload.visits.filter(
+                      (visit) => visit.job_id === assignment.job_id && visit.status !== 'cancelled'
+                    ).length;
                     return (
                       <div key={assignment.id} className="rounded-lg border border-border bg-muted/20 p-4">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -74,6 +88,16 @@ export function SchedulingEmployeeView() {
                           </div>
                           {job?.source_type === 'sample' ? <Badge variant="outline">Sample</Badge> : null}
                         </div>
+                        {assignment.visit ? (
+                          <p className="mt-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                            <Clock3 className="h-4 w-4 text-scheduling" />
+                            {formatScheduleVisitTime(assignment.visit.starts_at)}–
+                            {formatScheduleVisitTime(assignment.visit.ends_at)}
+                            {repeatVisitCount > 1
+                              ? ` · Visit ${assignment.visit.sequence_number} of ${repeatVisitCount}`
+                              : ''}
+                          </p>
+                        ) : null}
                         {job?.site_address ? (
                           <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
                             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-scheduling" />

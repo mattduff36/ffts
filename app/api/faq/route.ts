@@ -18,22 +18,30 @@ function getArticleCategory(article: FAQArticleWithCategory): FAQCategory {
   return Array.isArray(article.category) ? article.category[0] : article.category;
 }
 
-async function getAllowedFAQModules(): Promise<Set<ModuleName> | null> {
+interface FAQAccess {
+  allowedModules: Set<ModuleName> | null;
+  canViewAdminOnly: boolean;
+}
+
+async function getFAQAccess(): Promise<FAQAccess> {
   const effectiveRole = await getEffectiveRole();
   if (!effectiveRole.user_id || !effectiveRole.role_id) {
-    return new Set();
+    return { allowedModules: new Set(), canViewAdminOnly: false };
   }
 
   if (hasEffectiveRoleFullAccess(effectiveRole)) {
-    return null;
+    return { allowedModules: null, canViewAdminOnly: true };
   }
 
-  return getPermissionSetForUser(
-    effectiveRole.user_id,
-    effectiveRole.role_id,
-    createAdminClient(),
-    effectiveRole.team_id
-  );
+  return {
+    allowedModules: await getPermissionSetForUser(
+      effectiveRole.user_id,
+      effectiveRole.role_id,
+      createAdminClient(),
+      effectiveRole.team_id
+    ),
+    canViewAdminOnly: false,
+  };
 }
 
 /**
@@ -58,7 +66,7 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('query')?.trim() || '';
     const categorySlug = searchParams.get('category');
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
-    const allowedModules = await getAllowedFAQModules();
+    const { allowedModules, canViewAdminOnly } = await getFAQAccess();
 
     // Fetch categories first so the article query is constrained before the limit is applied.
     const { data: categories, error: categoriesError } = await supabase
@@ -98,6 +106,10 @@ export async function GET(request: NextRequest) {
       .eq('is_published', true)
       .in('category_id', requestedCategoryIds);
 
+    if (!canViewAdminOnly) {
+      articlesQuery = articlesQuery.eq('admin_only', false);
+    }
+
     // Apply search filter using full-text search
     if (query) {
       // Use PostgreSQL full-text search
@@ -122,6 +134,7 @@ export async function GET(request: NextRequest) {
     const filteredArticles = ((articles || []) as FAQArticleWithCategory[])
       .filter((article) => {
         if (!accessibleCategoryIds.has(article.category_id)) return false;
+        if (article.admin_only && !canViewAdminOnly) return false;
         return canAccessFAQCategory(getArticleCategory(article), allowedModules);
       });
 

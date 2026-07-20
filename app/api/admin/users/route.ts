@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = getSupabaseAdmin();
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('roles')
-      .select('id, name')
+      .select('id, name, is_super_admin')
       .eq('id', role_id)
       .single();
 
@@ -210,6 +210,13 @@ export async function POST(request: NextRequest) {
         error: 'Invalid role selected. Please select a valid role.',
         details: roleError?.message || 'Role not found'
       }, { status: 400 });
+    }
+
+    if (roleData.is_super_admin === true) {
+      return NextResponse.json(
+        { error: 'Super Admin accounts cannot be created or assigned in the application.' },
+        { status: 403 }
+      );
     }
 
     const canAssignRequestedRole = await canEffectiveRoleAssignRole(role_id);

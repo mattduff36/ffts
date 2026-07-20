@@ -30,11 +30,12 @@ import {
   SchedulingApiError,
   type CreateAssignmentInput,
 } from '@/lib/client/scheduling';
-import { enumerateScheduleDates } from '@/lib/utils/scheduling';
+import { enumerateScheduleDates, formatScheduleVisitTime, getScheduleVisitDate } from '@/lib/utils/scheduling';
 import type {
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
+  ScheduleVisit,
   SchedulingConflict,
 } from '@/types/scheduling';
 
@@ -48,8 +49,10 @@ interface ScheduleAssignmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   job: ScheduleJob | null;
+  visit?: ScheduleVisit | null;
   initialDate: string | null;
   initialResource: SelectedScheduleResource | null;
+  availableDates?: string[];
   employees: ScheduleEmployeeResource[];
   plant: SchedulePlantResource[];
   onSaved: () => void;
@@ -65,8 +68,10 @@ export function ScheduleAssignmentDialog({
   open,
   onOpenChange,
   job,
+  visit,
   initialDate,
   initialResource,
+  availableDates,
   employees,
   plant,
   onSaved,
@@ -79,8 +84,14 @@ export function ScheduleAssignmentDialog({
   const [conflicts, setConflicts] = useState<SchedulingConflict[]>([]);
 
   const jobDates = useMemo(
-    () => (job ? enumerateScheduleDates(job.start_date, job.end_date) : []),
-    [job]
+    () => {
+      if (!job) return [];
+      const dates = enumerateScheduleDates(job.start_date, job.end_date);
+      if (!availableDates) return dates;
+      const available = new Set(availableDates);
+      return dates.filter((date) => available.has(date));
+    },
+    [availableDates, job]
   );
   const resources = resourceType === 'employee' ? employees : plant;
 
@@ -88,10 +99,10 @@ export function ScheduleAssignmentDialog({
     if (!open) return;
     setResourceType(initialResource?.type || 'employee');
     setResourceId(initialResource?.id || '');
-    setSelectedDates(initialDate ? [initialDate] : []);
+    setSelectedDates(visit ? [getScheduleVisitDate(visit.starts_at)] : initialDate ? [initialDate] : []);
     setPendingInput(null);
     setConflicts([]);
-  }, [initialDate, initialResource, open]);
+  }, [initialDate, initialResource, open, visit]);
 
   function toggleDate(date: string, checked: boolean) {
     setSelectedDates((current) =>
@@ -120,12 +131,13 @@ export function ScheduleAssignmentDialog({
   }
 
   function handleSubmit() {
-    if (!job || !resourceId || selectedDates.length === 0) {
-      toast.error('Choose a resource and at least one job date');
+    if (!job || !resourceId || (!visit && selectedDates.length === 0)) {
+      toast.error(visit ? 'Choose a resource' : 'Choose a resource and at least one job date');
       return;
     }
     void submit({
       job_id: job.id,
+      ...(visit ? { visit_id: visit.id } : {}),
       resource_type: resourceType,
       resource_id: resourceId,
       work_dates: selectedDates,
@@ -178,15 +190,32 @@ export function ScheduleAssignmentDialog({
               </div>
             </div>
 
+            {visit ? (
+              <div className="rounded-md border border-scheduling/30 bg-scheduling-soft p-3 text-sm">
+                <p className="font-medium text-foreground">
+                  Visit {visit.sequence_number}{visit.title ? ` — ${visit.title}` : ''}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {new Intl.DateTimeFormat('en-GB', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'short',
+                    timeZone: 'Europe/London',
+                  }).format(new Date(visit.starts_at))}
+                  {' · '}
+                  {formatScheduleVisitTime(visit.starts_at)}–{formatScheduleVisitTime(visit.ends_at)}
+                </p>
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label>Assignment days</Label>
+                <Label>{availableDates ? 'Assignment days this week' : 'Assignment days'}</Label>
                 <div className="flex gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={() => setSelectedDates([])}>
                     Clear
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => setSelectedDates(jobDates)}>
-                    All job days
+                    {availableDates ? 'All this week' : 'All job days'}
                   </Button>
                 </div>
               </div>
@@ -209,6 +238,7 @@ export function ScheduleAssignmentDialog({
                 ))}
               </div>
             </div>
+            )}
           </div>
 
           <DialogFooter>

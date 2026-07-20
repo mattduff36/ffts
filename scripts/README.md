@@ -33,6 +33,16 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 5. Do not add demo seeds, customer exports, employee records, fleet records, or one-off client repair scripts.
 6. Test helpers must use deterministic fictional fixtures and must not alter production data unless a runbook explicitly authorizes it.
 
+### Scheduling sample-data exception
+
+The only approved production sample fixture is `scripts/testing/scheduling-sample.ts`. It is limited to
+fictional `example.test` data marked `scheduling-sample-v1`, requires the configured production project
+reference, validates the timed scheduling schema, creates no resource assignments, and has a matching
+ownership-checked cleanup command.
+
+Follow `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`. Never run the apply or destructive cleanup
+commands without the exact confirmation token and an operator review of the generated manifest.
+
 ## Automation Artifacts
 
 `fixerrors` creates `docs_private/` when needed and writes the ignored analysis, fix-log, and structured automation-run files there. Use `--no-clear` to generate and validate those artifacts without deleting production error rows.

@@ -1894,6 +1894,7 @@ export type Database = {
           summary: string | null
           content_md: string
           is_published: boolean | null
+          admin_only: boolean
           sort_order: number | null
           view_count: number | null
           created_at: string | null
@@ -1909,6 +1910,7 @@ export type Database = {
           summary?: string | null
           content_md: string
           is_published?: boolean | null
+          admin_only?: boolean
           sort_order?: number | null
           view_count?: number | null
           created_at?: string | null
@@ -1924,6 +1926,7 @@ export type Database = {
           summary?: string | null
           content_md?: string
           is_published?: boolean | null
+          admin_only?: boolean
           sort_order?: number | null
           view_count?: number | null
           created_at?: string | null
@@ -5354,6 +5357,7 @@ export type Database = {
           last_invoice_at: string | null
           scope: string | null
           estimated_duration_days: number | null
+          estimated_duration_minutes: number | null
           pricing_mode: 'itemized' | 'attachments_only'
           sage_posted_at: string | null
           sage_posted_by: string | null
@@ -5421,6 +5425,7 @@ export type Database = {
           last_invoice_at?: string | null
           scope?: string | null
           estimated_duration_days?: number | null
+          estimated_duration_minutes?: number | null
           pricing_mode?: 'itemized' | 'attachments_only'
           sage_posted_at?: string | null
           sage_posted_by?: string | null
@@ -5488,6 +5493,7 @@ export type Database = {
           last_invoice_at?: string | null
           scope?: string | null
           estimated_duration_days?: number | null
+          estimated_duration_minutes?: number | null
           pricing_mode?: 'itemized' | 'attachments_only'
           sage_posted_at?: string | null
           sage_posted_by?: string | null
@@ -5995,6 +6001,7 @@ export type Database = {
           id: string
           job_id: string
           work_date: string
+          visit_id: string | null
           profile_id: string
           notes: string | null
           conflict_override: boolean
@@ -6009,6 +6016,7 @@ export type Database = {
           id?: string
           job_id: string
           work_date: string
+          visit_id?: string | null
           profile_id: string
           notes?: string | null
           conflict_override?: boolean
@@ -6023,6 +6031,7 @@ export type Database = {
           id?: string
           job_id?: string
           work_date?: string
+          visit_id?: string | null
           profile_id?: string
           notes?: string | null
           conflict_override?: boolean
@@ -6048,6 +6057,13 @@ export type Database = {
             referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'schedule_employee_assignments_visit_id_fkey'
+            columns: ['visit_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_visits'
+            referencedColumns: ['id']
+          },
         ]
       }
       schedule_jobs: {
@@ -6061,6 +6077,7 @@ export type Database = {
           source_type: 'sample' | 'manual' | 'quote'
           start_date: string
           end_date: string
+          estimated_duration_minutes: number | null
           quote_id: string | null
           quote_project_number_id: string | null
           customer_id: string | null
@@ -6079,6 +6096,7 @@ export type Database = {
           source_type?: 'sample' | 'manual' | 'quote'
           start_date: string
           end_date: string
+          estimated_duration_minutes?: number | null
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null
@@ -6097,6 +6115,7 @@ export type Database = {
           source_type?: 'sample' | 'manual' | 'quote'
           start_date?: string
           end_date?: string
+          estimated_duration_minutes?: number | null
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null
@@ -6134,6 +6153,7 @@ export type Database = {
           id: string
           job_id: string
           work_date: string
+          visit_id: string | null
           plant_id: string
           notes: string | null
           conflict_override: boolean
@@ -6148,6 +6168,7 @@ export type Database = {
           id?: string
           job_id: string
           work_date: string
+          visit_id?: string | null
           plant_id: string
           notes?: string | null
           conflict_override?: boolean
@@ -6162,6 +6183,7 @@ export type Database = {
           id?: string
           job_id?: string
           work_date?: string
+          visit_id?: string | null
           plant_id?: string
           notes?: string | null
           conflict_override?: boolean
@@ -6185,6 +6207,66 @@ export type Database = {
             columns: ['plant_id']
             isOneToOne: false
             referencedRelation: 'plant'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_plant_assignments_visit_id_fkey'
+            columns: ['visit_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_visits'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      schedule_visits: {
+        Row: {
+          id: string
+          job_id: string
+          sequence_number: number
+          title: string | null
+          starts_at: string
+          ends_at: string
+          status: 'planned' | 'completed' | 'cancelled'
+          notes: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          sequence_number?: number
+          title?: string | null
+          starts_at: string
+          ends_at: string
+          status?: 'planned' | 'completed' | 'cancelled'
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          sequence_number?: number
+          title?: string | null
+          starts_at?: string
+          ends_at?: string
+          status?: 'planned' | 'completed' | 'cancelled'
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_visits_job_id_fkey'
+            columns: ['job_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_jobs'
             referencedColumns: ['id']
           },
         ]

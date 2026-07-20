@@ -1,6 +1,9 @@
+import type { PermissionAccessLevel } from './roles';
+
 export type ScheduleJobStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type ScheduleJobSource = 'sample' | 'manual' | 'quote';
 export type ScheduleResourceType = 'employee' | 'plant';
+export type ScheduleVisitStatus = 'planned' | 'completed' | 'cancelled';
 
 export type SchedulingConflictCode =
   | 'employee_double_booked'
@@ -28,9 +31,26 @@ export interface ScheduleJob {
   source_type: ScheduleJobSource;
   start_date: string;
   end_date: string;
+  estimated_duration_minutes: number | null;
   quote_id: string | null;
   quote_project_number_id: string | null;
   customer_id: string | null;
+  customer_name?: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleVisit {
+  id: string;
+  job_id: string;
+  sequence_number: number;
+  title: string | null;
+  starts_at: string;
+  ends_at: string;
+  status: ScheduleVisitStatus;
+  notes: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -58,6 +78,7 @@ export interface ScheduleAssignmentBase {
   id: string;
   job_id: string;
   work_date: string;
+  visit_id: string | null;
   notes: string | null;
   conflict_override: boolean;
   conflict_codes: SchedulingConflictCode[];
@@ -67,6 +88,7 @@ export interface ScheduleAssignmentBase {
   created_at: string;
   updated_at: string;
   conflicts: SchedulingConflict[];
+  visit: ScheduleVisit | null;
 }
 
 export interface ScheduleEmployeeAssignment extends ScheduleAssignmentBase {
@@ -99,6 +121,7 @@ export interface SchedulePlantUnavailability {
 
 export interface SchedulingContext {
   user_id: string;
+  access_level: PermissionAccessLevel;
   is_manager_or_admin: boolean;
   role_name: string | null;
   role_class: 'admin' | 'manager' | 'employee' | null;
@@ -112,6 +135,7 @@ export interface SchedulingBoardPayload {
     end: string;
   };
   jobs: ScheduleJob[];
+  visits: ScheduleVisit[];
   assignments: ScheduleAssignment[];
   resources: {
     employees: ScheduleEmployeeResource[];
@@ -127,5 +151,6 @@ export interface SchedulingSelfPayload {
   };
   assignments: ScheduleEmployeeAssignment[];
   jobs: ScheduleJob[];
+  visits: ScheduleVisit[];
   plant_assignments: SchedulePlantAssignment[];
 }

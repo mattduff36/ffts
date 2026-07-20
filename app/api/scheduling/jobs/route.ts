@@ -12,6 +12,7 @@ const jobSchema = z
     status: z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']).default('draft'),
     start_date: z.iso.date(),
     end_date: z.iso.date(),
+    estimated_duration_minutes: z.number().int().min(15).max(100800).nullish(),
   })
   .refine((value) => value.end_date >= value.start_date, {
     message: 'End date must be on or after the start date.',

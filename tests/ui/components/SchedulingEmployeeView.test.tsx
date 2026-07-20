@@ -39,6 +39,7 @@ describe('SchedulingEmployeeView', () => {
         source_type: 'manual',
         start_date: '2026-07-15',
         end_date: '2026-07-15',
+        estimated_duration_minutes: 240,
         quote_id: null,
         quote_project_number_id: null,
         customer_id: null,
@@ -47,10 +48,25 @@ describe('SchedulingEmployeeView', () => {
         created_at: '2026-07-01T00:00:00Z',
         updated_at: '2026-07-01T00:00:00Z',
       }],
+      visits: [{
+        id: 'visit-1',
+        job_id: 'job-1',
+        sequence_number: 1,
+        title: null,
+        starts_at: '2026-07-15T08:00:00Z',
+        ends_at: '2026-07-15T12:00:00Z',
+        status: 'planned',
+        notes: null,
+        created_by: 'manager-1',
+        updated_by: 'manager-1',
+        created_at: '2026-07-01T00:00:00Z',
+        updated_at: '2026-07-01T00:00:00Z',
+      }],
       assignments: [{
         id: 'assignment-1',
         job_id: 'job-1',
         work_date: '2026-07-15',
+        visit_id: 'visit-1',
         profile_id: 'employee-1',
         resource_type: 'employee',
         employee: null,
@@ -63,11 +79,26 @@ describe('SchedulingEmployeeView', () => {
         created_at: '2026-07-01T00:00:00Z',
         updated_at: '2026-07-01T00:00:00Z',
         conflicts: [],
+        visit: {
+          id: 'visit-1',
+          job_id: 'job-1',
+          sequence_number: 1,
+          title: null,
+          starts_at: '2026-07-15T08:00:00Z',
+          ends_at: '2026-07-15T12:00:00Z',
+          status: 'planned',
+          notes: null,
+          created_by: 'manager-1',
+          updated_by: 'manager-1',
+          created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-01T00:00:00Z',
+        },
       }],
       plant_assignments: [{
         id: 'plant-assignment-1',
         job_id: 'job-1',
         work_date: '2026-07-15',
+        visit_id: 'visit-1',
         plant_id: 'plant-1',
         resource_type: 'plant',
         plant: {
@@ -87,6 +118,20 @@ describe('SchedulingEmployeeView', () => {
         created_at: '2026-07-01T00:00:00Z',
         updated_at: '2026-07-01T00:00:00Z',
         conflicts: [],
+        visit: {
+          id: 'visit-1',
+          job_id: 'job-1',
+          sequence_number: 1,
+          title: null,
+          starts_at: '2026-07-15T08:00:00Z',
+          ends_at: '2026-07-15T12:00:00Z',
+          status: 'planned',
+          notes: null,
+          created_by: 'manager-1',
+          updated_by: 'manager-1',
+          created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-01T00:00:00Z',
+        },
       }],
     });
 
@@ -95,6 +140,7 @@ describe('SchedulingEmployeeView', () => {
     expect(await screen.findByText('JOB-101')).toBeInTheDocument();
     expect(screen.getByText('Riverside Estate')).toBeInTheDocument();
     expect(screen.getByText('Loader')).toBeInTheDocument();
+    expect(screen.getByText(/09:00–13:00/)).toBeInTheDocument();
     expect(screen.getByText('1 assignment')).toBeInTheDocument();
   });
 });

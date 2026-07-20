@@ -656,16 +656,19 @@ export default function UsersAdminPage() {
       try {
         const { data, error } = await supabase
           .from('roles')
-          .select('id, name, display_name, role_class')
+          .select('id, name, display_name, role_class, is_super_admin')
           .order('is_super_admin', { ascending: false })
           .order('is_manager_admin', { ascending: false })
           .order('display_name');
 
         if (error) throw error;
 
+        const nonSuperAdminRoles = (data || []).filter(
+          (role: { is_super_admin: boolean | null }) => role.is_super_admin !== true
+        );
         const filteredRoles = isManagerActor
-          ? (data || []).filter((role: { role_class: string }) => role.role_class === 'employee')
-          : (data || []);
+          ? nonSuperAdminRoles.filter((role: { role_class: string }) => role.role_class === 'employee')
+          : nonSuperAdminRoles;
 
         const rolesForAssignment = filteredRoles
           .sort((a: { name: string; display_name: string }, b: { name: string; display_name: string }) => {

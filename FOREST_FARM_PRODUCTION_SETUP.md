@@ -15,8 +15,8 @@ Vercel production must use:
 ```env
 APP_MODE=production
 NEXT_PUBLIC_APP_MODE=production
-NEXT_PUBLIC_APP_URL=https://<forest-farm-domain>
-NEXT_PUBLIC_SITE_URL=https://<forest-farm-domain>
+NEXT_PUBLIC_APP_URL=https://www.fftsapp.com
+NEXT_PUBLIC_SITE_URL=https://www.fftsapp.com
 ```
 
 Redeploy Vercel after changing any `NEXT_PUBLIC_*` value.

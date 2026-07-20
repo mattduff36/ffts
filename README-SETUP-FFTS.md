@@ -233,8 +233,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_JWT_SECRET=
 APP_SESSION_SECRET=
 APP_SESSION_HASH_SECRET=
-NEXT_PUBLIC_APP_URL=https://<forest-farm-domain>
-NEXT_PUBLIC_SITE_URL=https://<forest-farm-domain>
+NEXT_PUBLIC_APP_URL=https://www.fftsapp.com
+NEXT_PUBLIC_SITE_URL=https://www.fftsapp.com
 ```
 
 Also set Resend and provider keys if enabled.

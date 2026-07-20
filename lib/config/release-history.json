@@ -1,5 +1,20 @@
 [
   {
+    "version": "0726.4.1",
+    "updateKind": "minor",
+    "title": "Readme Md maintenance update",
+    "description": "Updated general app maintenance.",
+    "summary": "Updated general app maintenance.",
+    "details": [
+      "Updated general app maintenance."
+    ],
+    "areas": [
+      "General app maintenance"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-07-20T15:48:57.737Z"
+  },
+  {
     "version": "0726.4.0",
     "updateKind": "major",
     "title": "Dashboard update",

@@ -1,5 +1,25 @@
 [
   {
+    "version": "0726.3.1",
+    "updateKind": "minor",
+    "title": "Help and FAQ guidance update",
+    "description": "Updated Help and FAQ and Sign in.",
+    "summary": "Updated Help and FAQ and Sign in.",
+    "details": [
+      "Updated Help and FAQ and Sign in, with changes to automated tests and documentation.",
+      "Updated sign in, with changes to automated tests."
+    ],
+    "areas": [
+      "Help and FAQ",
+      "Sign in"
+    ],
+    "areaKeys": [
+      "help",
+      "sign-in"
+    ],
+    "pushedAt": "2026-07-20T14:52:07.286Z"
+  },
+  {
     "version": "0726.3.0",
     "updateKind": "major",
     "title": "Error reporting update",

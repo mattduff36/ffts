@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0726.3.1
+
+**GIT COMMIT MESSAGE**
+`docs(help): update Help and FAQ and Sign in`
+
+**PUSHED AT**
+2026-07-20T14:52:07.286Z
+
+**WHAT CHANGED**
+Update Help and FAQ and Sign in.
+
+**VERSION HISTORY DETAILS**
+- Updated Help and FAQ and Sign in, with changes to automated tests and documentation.
+- Updated sign in, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `docs(help): update Help and FAQ and Sign in`
+
 ## 0726.3.0
 
 **GIT COMMIT MESSAGE**

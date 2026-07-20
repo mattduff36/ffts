@@ -60,6 +60,7 @@ Then fill in:
 - Vercel/public URLs
 - Resend/email values if email should send from this app
 - `FOREST_FARM_SUPERADMIN_PASSWORD` only for the one-time bootstrap run
+- `TESTSUITE_SETUP_PASSWORD` only in local `.env.local` when the production testsuite identities are used
 
 Generate unique strong values for the session secrets. Do not reuse demo secrets from another project.
 
@@ -167,7 +168,8 @@ Standard finalise:
 - Runs DB validation when schema-risk migrations are detected.
 - Removes `.next`.
 - Runs a clean production build.
-- Commits current workspace changes with `chore(finalise): repo finalisation`.
+- Commits current workspace changes with an automatically summarized conventional commit message.
+- Validates and commits release version JSON, history JSON, and the tracked private release log as one release unit.
 - Does not push.
 - Skips the full automated test suite.
 
@@ -196,6 +198,8 @@ Important:
 - Do not set `NODE_ENV` manually in Vercel.
 - Do not commit `.env.local`.
 - If `finalise` changes files through hooks or formatters, review the diff before pushing.
+- If a release step fails after the local product commit, no push occurs. Keep the commit and follow the exact recovery commands printed by finalise.
+- Generated finalise summaries are under ignored `docs_private/automation/runs/finalise/`.
 
 ## `fixerrors`
 
@@ -205,10 +209,17 @@ Run:
 npm run fixerrors
 ```
 
+To write and validate the same local artifacts without clearing remote error rows:
+
+```bash
+npm run fixerrors -- --no-clear
+```
+
 This script reads recent production error logs from Supabase, groups them by pattern, parses stack traces, and writes reports to:
 
 - `docs_private/error-analysis.md`
 - `docs_private/error-fix-log.md`
+- `docs_private/automation/runs/fixerrors/`
 
 Requirements:
 
@@ -217,6 +228,16 @@ Requirements:
 - The `error_logs` table must exist from the database baseline/migrations.
 
 Use `fixerrors` to understand recurring production problems before making fixes. It does not replace normal debugging, tests, or code review.
+
+## Production Testsuite
+
+Set a strong, uncommitted `TESTSUITE_SETUP_PASSWORD`, review the configured Supabase host, then explicitly provision or refresh the three hidden fictional accounts:
+
+```bash
+npm run testsuite:setup:production
+```
+
+Credentials and browser storage are written only under ignored `testsuite/.state/`. The command is idempotent; normal test commands never provision users. Run `npm run testsuite:api`, `npm run testsuite:ui`, or `npm run testsuite`. Each command performs read-only state and database preflight checks, and cleanup residue fails the run.
 
 ## Vercel Setup
 

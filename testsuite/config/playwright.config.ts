@@ -6,6 +6,7 @@ const STATE_DIR = path.resolve(__dirname, '../.state');
 
 export default defineConfig({
   testDir: path.resolve(__dirname, '../ui'),
+  globalSetup: path.resolve(__dirname, '../helpers/preflight.global-setup.ts'),
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

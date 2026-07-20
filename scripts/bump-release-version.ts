@@ -22,6 +22,7 @@ import {
   type FinaliseChangedFile,
   type FinaliseReleaseSummaryEvidence,
 } from './finalise-summary';
+import { assertReleaseMetadataConsistency } from './finalise-release';
 
 const REPO_ROOT = process.cwd();
 const VERSION_JSON_PATH = path.join(REPO_ROOT, 'lib/config/release-version.json');
@@ -319,6 +320,10 @@ async function main(): Promise<void> {
   writeVersionState(nextState);
   writeReleaseLog(releaseLogContent);
   writeReleaseHistory(releaseLogContent);
+  const verifiedVersion = assertReleaseMetadataConsistency(REPO_ROOT);
+  if (verifiedVersion !== versionLabel) {
+    throw new Error(`Release metadata verification returned ${verifiedVersion}, expected ${versionLabel}.`);
+  }
 
   console.log(`Release version bumped: ${formatReleaseVersion(current)} -> ${versionLabel} (${bumpKind})`);
 }

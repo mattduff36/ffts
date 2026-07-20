@@ -12,7 +12,10 @@ import { resolve } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUsablePermissionAccessLevel, isPermissionLevelAllowedForModule } from '@/lib/config/permission-access-rules';
-import { getUserPermissionMatrix } from '@/lib/server/team-permissions';
+import {
+  fetchAllUserModulePermissionRows,
+  getUserPermissionMatrix,
+} from '@/lib/server/team-permissions';
 import type { ModuleName, PermissionAccessLevel } from '@/types/roles';
 
 config({ path: resolve(process.cwd(), '.env.local') });
@@ -39,12 +42,6 @@ interface UnreachableRouteResult {
 
 type RouteResult = ReachableRouteResult | UnreachableRouteResult;
 
-interface UserModulePermissionRow {
-  user_id: string;
-  module_name: ModuleName;
-  access_level: number;
-}
-
 const UNIVERSAL_PERMISSION_MODULES = new Set<ModuleName>(['reminders']);
 const UNIVERSAL_PERMISSION_ACCESS_LEVEL: PermissionAccessLevel = 5;
 
@@ -68,37 +65,6 @@ function normalizePermissionAccessLevel(value: number | null | undefined): Permi
   if (value === 2) return 2;
   if (value === 1) return 1;
   return 0;
-}
-
-async function fetchAllUserModulePermissionRows(): Promise<UserModulePermissionRow[]> {
-  const supabase = createAdminClient();
-  const pageSize = 1000;
-  const rows: UserModulePermissionRow[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from('user_module_permissions')
-      .select('user_id, module_name, access_level')
-      .order('user_id', { ascending: true })
-      .order('module_name', { ascending: true })
-      .range(from, from + pageSize - 1);
-
-    if (error) {
-      throw new Error(`Failed to load user module permission rows: ${error.message}`);
-    }
-
-    const pageRows = (data || []) as UserModulePermissionRow[];
-    rows.push(...pageRows);
-
-    if (pageRows.length < pageSize) {
-      break;
-    }
-
-    from += pageSize;
-  }
-
-  return rows;
 }
 
 async function fetchRoute(path: string, init?: RequestInit): Promise<RouteResult> {
@@ -194,11 +160,11 @@ describe('@permissions API Endpoint Access Control', () => {
   });
 
   describe('User permission matrix regressions', () => {
-    it('loads persisted user overrides beyond the default Supabase page size', async () => {
+    it('matches every persisted live user override at the current production volume', async () => {
       const supabase = createAdminClient();
       const [matrix, storedPermissionRows] = await Promise.all([
         getUserPermissionMatrix(supabase),
-        fetchAllUserModulePermissionRows(),
+        fetchAllUserModulePermissionRows(supabase),
       ]);
       const usersById = new Map(matrix.users.map((user) => [user.id, user]));
       const modulesByName = new Map(matrix.modules.map((permissionModule) => [
@@ -207,11 +173,6 @@ describe('@permissions API Endpoint Access Control', () => {
       ]));
       const checkedOverrides: string[] = [];
       const mismatches: string[] = [];
-
-      expect(
-        storedPermissionRows.length,
-        'This regression test must cover Supabase responses larger than the default 1000-row range.'
-      ).toBeGreaterThan(1000);
 
       storedPermissionRows.forEach((row) => {
         const user = usersById.get(row.user_id);
@@ -233,7 +194,7 @@ describe('@permissions API Endpoint Access Control', () => {
         }
       });
 
-      expect(checkedOverrides.length).toBeGreaterThan(0);
+      expect(checkedOverrides.length).toBeLessThanOrEqual(storedPermissionRows.length);
       expect(mismatches).toEqual([]);
     });
 

@@ -13,6 +13,7 @@ import {
   clearAuthLifecycleIssueLog,
   enforceAuthLifecycleIssueGate,
 } from './auth-lifecycle-audit';
+import { runTestsuitePreflight } from '../helpers/preflight';
 
 const args = process.argv.slice(2);
 const ROOT = process.cwd();
@@ -45,6 +46,7 @@ function exec(cmd: string, label: string): boolean {
 }
 
 async function main(): Promise<void> {
+  await runTestsuitePreflight();
   clearAuthLifecycleIssueLog();
 
   let apiPassed = true;

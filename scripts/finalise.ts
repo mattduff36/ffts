@@ -14,6 +14,12 @@ import {
   summarizeFinaliseChanges,
   type FinaliseTimingEntry,
 } from './finalise-summary';
+import {
+  assertReleaseMetadataConsistency,
+  assertReleaseMetadataTracking,
+  formatReleaseRecoveryMessage,
+  RELEASE_VERSION_FILES,
+} from './finalise-release';
 
 config({ path: path.resolve(process.cwd(), '.env.local') });
 
@@ -22,11 +28,6 @@ const REPO_ROOT = process.cwd();
 const NEXT_BUILD_DIR = path.join(REPO_ROOT, '.next');
 const NEXT_BUILD_ARTIFACT_PATH = path.join(NEXT_BUILD_DIR, 'BUILD_ID');
 const RELEASE_VERSION_JSON_PATH = path.join(REPO_ROOT, 'lib/config/release-version.json');
-const RELEASE_VERSION_FILES = [
-  'lib/config/release-version.json',
-  'lib/config/release-history.json',
-  'docs_private/release-log.md',
-] as const;
 const DEV_SERVER_PORT = 4000;
 let automationRun: AutomationRun | null = null;
 
@@ -881,6 +882,11 @@ async function main(): Promise<void> {
       throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
     }
 
+    await run.step('Validate release metadata tracking', () => {
+      assertReleaseMetadataTracking(REPO_ROOT);
+      assertReleaseMetadataConsistency(REPO_ROOT);
+    });
+
     const changedFileStats = getChangedFileStats();
     const changedFiles = changedFileStats.map((entry) => entry.path);
     const pendingMigrationFiles = getPendingMigrationFiles(changedFiles);
@@ -1098,8 +1104,11 @@ async function main(): Promise<void> {
     console.log('\n==> Commit workspace changes');
     printProgress('Committing workspace changes if needed...', 90);
     const committed = await timeFinaliseStep(timingEntries, 'Commit workspace changes', () =>
-      commitAllChanges(changeSummary.commitMessage)
+      run.step('Commit workspace changes', () => commitAllChanges(changeSummary.commitMessage), {
+        plannedCommitMessage: changeSummary.commitMessage,
+      })
     );
+    const productCommitSha = getHeadSha();
     printProgress(
       committed ? `Created commit: ${changeSummary.commitMessage}` : 'No uncommitted changes, so no commit was created.',
       92
@@ -1112,10 +1121,30 @@ async function main(): Promise<void> {
     const releasePrimaryCommitMessage =
       getReleaseCommitPrimaryMessage(releaseBeforeSha, releaseAfterSha) ??
       (committed ? changeSummary.commitMessage : null);
-    const releaseVersion = await timeFinaliseStep(timingEntries, 'Bump release version locally', () => {
-      runCommand('npm', ['run', 'version:bump', '--', releaseBeforeSha, releaseAfterSha]);
-      return commitReleaseVersionChanges(releasePrimaryCommitMessage);
-    });
+    let releaseVersion: string | null;
+    try {
+      releaseVersion = await timeFinaliseStep(timingEntries, 'Bump release version locally', () =>
+        run.step('Create release version commit', () => {
+          runCommand('npm', ['run', 'version:bump', '--', releaseBeforeSha, releaseAfterSha]);
+          const version = commitReleaseVersionChanges(releasePrimaryCommitMessage);
+          assertReleaseMetadataConsistency(REPO_ROOT);
+          return version;
+        }, {
+          releaseBeforeSha,
+          releaseAfterSha,
+        })
+      );
+    } catch (error) {
+      if (committed) {
+        throw new Error(formatReleaseRecoveryMessage({
+          productCommitSha,
+          releaseBeforeSha,
+          releaseAfterSha,
+          cause: error,
+        }));
+      }
+      throw error;
+    }
     printProgress(
       releaseVersion
         ? `Created release version commit: ${formatReleaseVersionCommitMessage(releasePrimaryCommitMessage, releaseVersion).split(/\r?\n/u)[0]}`
@@ -1127,7 +1156,11 @@ async function main(): Promise<void> {
     if (options.push) {
       console.log('\n==> Push current branch');
       printProgress(`Pushing branch ${branch || '(detached HEAD)'}...`, 97);
-      pushedBranch = await timeFinaliseStep(timingEntries, 'Push current branch', () => pushCurrentBranch());
+      pushedBranch = await timeFinaliseStep(timingEntries, 'Push current branch', () =>
+        run.step('Push current branch', () => pushCurrentBranch(), {
+          branch: branch || null,
+        })
+      );
       printProgress(`Pushed ${pushedBranch}.`, 99);
     } else {
       console.log('\n==> Push current branch');
@@ -1150,6 +1183,21 @@ async function main(): Promise<void> {
     console.log(`- Commit: ${committed ? 'created' : 'skipped'}`);
     console.log(`- Release version: ${releaseVersion ? `bumped to ${releaseVersion}` : 'unchanged'}`);
     console.log(`- Push: ${pushedBranch ? `pushed ${pushedBranch}` : 'skipped'}`);
+    run.recordStep({
+      name: 'Record finalise outcomes',
+      status: 'passed',
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 0,
+      metadata: {
+        productCommit: committed ? 'created' : 'skipped',
+        productCommitSha,
+        releaseCommit: releaseVersion ? 'created' : 'skipped',
+        releaseVersion,
+        push: pushedBranch ? 'completed' : options.push ? 'failed' : 'skipped',
+        pushedBranch,
+      },
+    });
     console.log('\n==> Timing summary');
     getFinaliseTimingSummaryLines(timingEntries).forEach((line) => console.log(line));
     printProgress('Finalise workflow complete.', 100);

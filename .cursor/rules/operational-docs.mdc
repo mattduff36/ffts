@@ -1,0 +1,14 @@
+---
+description: Keep FFTS operational documentation aligned with automation changes
+globs: "{scripts/**,testsuite/**,.cursor/rules/**,package.json,.gitignore}"
+alwaysApply: false
+---
+
+# Operational Documentation
+
+- Update the nearest operational README when testsuite, finalise, fixerrors, release metadata, or command behavior changes.
+- Document safety confirmations, destructive behavior, recovery commands, and generated artifact paths.
+- Never place passwords, service keys, auth state, production payloads, or private report content in tracked documentation.
+- Keep `docs_private/release-log.md` as the only tracked file under `docs_private/`.
+- Use FFTS repository-relative paths and commands.
+

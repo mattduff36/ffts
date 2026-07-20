@@ -11,7 +11,9 @@
  * 7. Clears the production error_logs table after successful analysis
  * 8. Prints a concise terminal summary
  *
- * Usage: npm run fixerrors
+ * Usage:
+ *   npm run fixerrors
+ *   npm run fixerrors -- --no-clear
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -100,7 +102,12 @@ export type ErrorPattern = {
 
 type ErrorLogClearResult = {
   clearedCount: number | null;
+  skipped?: boolean;
 };
+
+export function ensurePrivateDocsDirectory(root = process.cwd()): void {
+  fs.mkdirSync(resolve(root, 'docs_private'), { recursive: true });
+}
 
 function getPatternReviewMetadata(patterns: ErrorPattern[]) {
   return {
@@ -878,9 +885,11 @@ async function clearProductionErrorLogs(supabase: SupabaseClient): Promise<Error
 // ─── Main ────────────────────────────────────────────────────────────
 
 async function main() {
+  const noClear = process.argv.slice(2).includes('--no-clear');
+  ensurePrivateDocsDirectory();
   const run = new AutomationRun({
     scriptName: 'fixerrors',
-    mode: 'analysis',
+    mode: noClear ? 'analysis-no-clear' : 'analysis',
     args: process.argv.slice(2),
     expectedArtifacts: [
       { path: 'docs_private/error-analysis.md' },
@@ -904,6 +913,19 @@ async function main() {
     );
 
     const clearErrorLogsAfterSuccessfulAnalysis = async (): Promise<ErrorLogClearResult> => {
+      if (noClear) {
+        console.log('Preserving production error log (--no-clear).');
+        run.recordStep({
+          name: 'Skip production error log clear',
+          status: 'passed',
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: 0,
+          metadata: { reason: '--no-clear' },
+        });
+        return { clearedCount: null, skipped: true };
+      }
+
       console.log('Clearing production error log...');
       const clearResult = await run.step('Clear production error log', () => clearProductionErrorLogs(supabase));
       const clearedLabel = clearResult.clearedCount === null ? 'all' : clearResult.clearedCount;
@@ -1006,7 +1028,11 @@ async function main() {
     console.log(`  Errors fetched:      ${rawErrors.length}`);
     console.log(`  After filtering:     ${errors.length}`);
     console.log(`  Patterns found:      ${patterns.length}`);
-    console.log(`  Error logs cleared:  ${clearResult.clearedCount === null ? 'all' : clearResult.clearedCount}`);
+    console.log(
+      `  Error logs cleared:  ${
+        clearResult.skipped ? 'skipped (--no-clear)' : clearResult.clearedCount === null ? 'all' : clearResult.clearedCount
+      }`
+    );
     console.log('');
 
     // Top 5 patterns

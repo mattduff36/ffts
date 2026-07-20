@@ -1,0 +1,16 @@
+---
+description: Run FFTS finalise commands safely and report their automation artifacts
+alwaysApply: true
+---
+
+# Finalise Commands
+
+- Map `finalise` to `npm run finalise`.
+- Map `finalise full` to `npm run finalise:full`.
+- Use `npm run finalise:push` or `npm run finalise:full:push` only when the user's active global push rule authorizes the exact wording they used.
+- Before any push, report the branch, commits, and changed files that will be pushed.
+- Check for an existing finalise process before starting another.
+- Never push after a failed build, test, cleanup, commit, or release-metadata step.
+- Read the generated `docs_private/automation/runs/finalise/*.md` summary and report its local path.
+- Treat a post-product-commit release failure as fail-closed: preserve local work, do not push, and follow the printed recovery command.
+

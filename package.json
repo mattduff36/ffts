@@ -52,6 +52,7 @@
     "lint:theme": "tsx scripts/lint-high-risk-patterns.ts",
     "test:contrast:workshop": "playwright test tests/ui/contrast.spec.ts",
     "testsuite:setup": "tsx scripts/setup-test-users.ts",
+    "testsuite:setup:production": "tsx scripts/setup-test-users.ts --confirm-production=FFTS_TESTSUITE",
     "testsuite:ui": "npx playwright test --config=testsuite/config/playwright.config.ts",
     "testsuite:api": "vitest run --config=testsuite/config/vitest.config.ts",
     "testsuite:run": "tsx testsuite/runner/run.ts --all",

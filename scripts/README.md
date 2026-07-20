@@ -10,6 +10,7 @@ npm run db:baseline
 npm run db:validate
 npm run setup:storage
 npm run fixerrors
+npm run fixerrors -- --no-clear
 npm run finalise
 ```
 
@@ -31,3 +32,17 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 4. Run `npm run db:validate` after schema changes.
 5. Do not add demo seeds, customer exports, employee records, fleet records, or one-off client repair scripts.
 6. Test helpers must use deterministic fictional fixtures and must not alter production data unless a runbook explicitly authorizes it.
+
+## Automation Artifacts
+
+`fixerrors` creates `docs_private/` when needed and writes the ignored analysis, fix-log, and structured automation-run files there. Use `--no-clear` to generate and validate those artifacts without deleting production error rows.
+
+`finalise` preflights the three release artifacts before making a product commit:
+
+- `lib/config/release-version.json`
+- `lib/config/release-history.json`
+- `docs_private/release-log.md`
+
+The Markdown release log is the only tracked file under `docs_private/`. If release generation unexpectedly fails after the product commit, finalise blocks the push, preserves the local commit and generated files, and prints exact recovery commands.
+
+Project rules under `.cursor/rules/` map finalise/fixerrors requests, require push-content reporting, and keep all workflows self-contained in FFTS.

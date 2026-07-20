@@ -65,7 +65,8 @@ agent-tools/
 /backups
 
 # private documentation and sensitive materials
-/docs_private/
+/docs_private/*
+!/docs_private/release-log.md
 
 # Playwright
 node_modules/

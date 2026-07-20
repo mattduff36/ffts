@@ -15,7 +15,7 @@ import { TEST_ASSET_PREFIX } from '../../tests/integration/helpers/test-assets';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
-const RUN_TAG = `TESTSUITE-${Date.now()}`;
+const RUN_TAG = process.env.TESTSUITE_RUN_TAG || `TESTSUITE-${Date.now()}`;
 
 interface CreatedRecord {
   table: string;
@@ -23,6 +23,18 @@ interface CreatedRecord {
 }
 
 const createdRecords: CreatedRecord[] = [];
+
+export function registerCreatedRecord(table: string, id: string): void {
+  createdRecords.push({ table, id });
+}
+
+function getCleanupErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String(error.message);
+  }
+  return String(error);
+}
 
 export function getTestsuiteAdminClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -68,7 +80,7 @@ export async function createTestVehicle(overrides?: Record<string, unknown>): Pr
     throw new Error(`Failed to create test vehicle: ${error?.message || 'no data'}`);
   }
 
-  createdRecords.push({ table: 'vans', id: data.id });
+  registerCreatedRecord('vans', data.id);
   return data;
 }
 
@@ -105,7 +117,7 @@ export async function createTestWorkshopTask(
     throw new Error(`Failed to create test workshop task: ${error?.message || 'no data'}`);
   }
 
-  createdRecords.push({ table: 'actions', id: data.id });
+  registerCreatedRecord('actions', data.id);
   return data;
 }
 
@@ -146,7 +158,7 @@ export async function createTestReminderAction({
     throw new Error(`Failed to create test reminder action: ${error?.message || 'no data'}`);
   }
 
-  createdRecords.push({ table: 'reminder_actions', id: data.id });
+  registerCreatedRecord('reminder_actions', data.id);
   return data;
 }
 
@@ -179,31 +191,41 @@ export async function createTestReminderAssignment({
     throw new Error(`Failed to create test reminder assignment: ${error?.message || 'no data'}`);
   }
 
-  createdRecords.push({ table: 'reminders', id: data.id });
+  registerCreatedRecord('reminders', data.id);
   return data;
 }
 
 export async function cleanupTestData(): Promise<void> {
   const supabase = getTestsuiteAdminClient();
+  const failures: string[] = [];
 
   // Reverse order to respect FK dependencies
   for (const record of [...createdRecords].reverse()) {
     try {
-      if (record.table === 'vehicles') {
-        // Soft-delete test vehicles
-        await supabase
+      if (record.table === 'vans') {
+        // Test vehicles are isolated and may be hard-deleted after their dependent fixtures.
+        const { error } = await supabase
           .from('vans')
-          .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+          .delete()
           .eq('id', record.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from(record.table)
           .delete()
           .eq('id', record.id);
+        if (error) throw error;
       }
     } catch (err) {
-      console.warn(`Cleanup warning: failed to remove ${record.table}/${record.id}:`, err);
+      failures.push(
+        `${record.table}/${record.id}: ${getCleanupErrorMessage(err)}`
+      );
     }
   }
+
+  if (failures.length > 0) {
+    throw new Error(`Testsuite cleanup left production fixtures:\n- ${failures.join('\n- ')}`);
+  }
+
   createdRecords.length = 0;
 }

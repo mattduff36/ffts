@@ -1,0 +1,13 @@
+---
+description: Keep FFTS self-contained and independent of sibling repositories
+alwaysApply: true
+---
+
+# Workspace Independence
+
+- Do not add runtime, test, script, rule, task, or configuration dependencies on sibling repositories.
+- Do not copy credentials, generated auth state, production records, private logs, deployment identifiers, or customer branding from another project.
+- Use only repository-relative FFTS paths in executable and configuration files.
+- Keep `ffts.code-workspace` limited to the current repository.
+- Historical comparison text may remain in documentation, but it must never become an operational dependency.
+

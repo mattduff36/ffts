@@ -1,0 +1,15 @@
+---
+description: Review FFTS production error artifacts safely after running fixerrors
+alwaysApply: false
+---
+
+# Fixerrors Workflow
+
+- Run `npm run fixerrors` for the normal analyze-and-clear workflow.
+- Use `npm run fixerrors -- --no-clear` when reviewing or validating without deleting remote error rows.
+- Read `docs_private/error-analysis.md` after a successful run.
+- Read `docs_private/error-fix-log.md` when it exists, plus generated automation review/follow-up files.
+- Summarize actionable error groups without reproducing sensitive payloads, tokens, user data, or full stack traces.
+- Claim remote errors were cleared only when the automation run log explicitly records a successful clear step.
+- Keep every generated error and automation artifact local and ignored.
+

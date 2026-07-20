@@ -58,7 +58,7 @@ type TeamRow = {
   active: boolean;
 };
 
-type UserModulePermissionRow = {
+export type UserModulePermissionRow = {
   user_id: string;
   module_name: ModuleName;
   access_level: number;
@@ -432,7 +432,7 @@ function buildUserOverrideMap(permissionRows: UserModulePermissionRow[]): Map<st
   return levelsByUser;
 }
 
-async function fetchUserModulePermissionRows(
+export async function fetchAllUserModulePermissionRows(
   supabaseAdmin: SupabaseAdminClient,
   params: {
     userIds?: string[];
@@ -583,7 +583,7 @@ export async function getUserPermissionMatrix(
   const visibleProfiles = typedProfiles.filter(
     (profile) => !hiddenIds.has(profile.id) && !isHiddenSystemTestAccountProfile(profile) && !isDeletedProfile(profile)
   );
-  const userPermissionRows = await fetchUserModulePermissionRows(supabaseAdmin, {
+  const userPermissionRows = await fetchAllUserModulePermissionRows(supabaseAdmin, {
     userIds: visibleProfiles.map((profile) => profile.id),
   });
   const levelsByUser = buildUserOverrideMap(userPermissionRows);
@@ -738,7 +738,7 @@ export async function updateTeamModulePermissionDefaults(
   });
   const candidateUserIds = candidateProfiles.map((profile) => profile.id);
 
-  const userPermissionRows = await fetchUserModulePermissionRows(supabaseAdmin, {
+  const userPermissionRows = await fetchAllUserModulePermissionRows(supabaseAdmin, {
     userIds: candidateUserIds,
     moduleNames,
   });

@@ -52,6 +52,7 @@ This directory contains the public developer, feature, setup, and verification d
 
 ## Verification
 
+- [`guides/TESTSUITE_AND_AUTOMATION_PARITY.md`](guides/TESTSUITE_AND_AUTOMATION_PARITY.md)
 - [`testing/inspections-verification.md`](testing/inspections-verification.md)
 - [`../tests/README.md`](../tests/README.md)
 - [`../testsuite/README.md`](../testsuite/README.md)

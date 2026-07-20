@@ -43,3 +43,5 @@ npm run db:validate
 ```
 
 The release label is maintained by the local finalisation workflow and begins at `0726.1.0` for the July 2026 Forest release.
+
+Production deployments are built by Vercel from the `main` branch.

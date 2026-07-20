@@ -92,6 +92,16 @@ export const FORM_TYPES: FormType[] = [
     enabled: true,
   },
   {
+    id: 'schedule',
+    title: 'My Schedule',
+    description: 'View your assigned work',
+    icon: CalendarDays,
+    href: '/scheduling/my',
+    listHref: '/scheduling/my',
+    color: 'scheduling',
+    enabled: true,
+  },
+  {
     id: 'absence',
     title: 'Absence & Leave',
     description: 'Request and manage annual leave',
@@ -169,6 +179,24 @@ export const FORM_TYPES: FormType[] = [
  */
 export function getEnabledForms(): FormType[] {
   return FORM_TYPES.filter(form => form.enabled);
+}
+
+/**
+ * Get enabled dashboard forms in the same order as a navigation list.
+ * Navigation controls module visibility and ordering; form config supplies
+ * dashboard-specific presentation such as color and description.
+ */
+export function getEnabledFormsForNavigation(
+  navigationItems: readonly { href: string }[]
+): FormType[] {
+  const enabledFormsByHref = new Map(
+    getEnabledForms().map(form => [form.href, form])
+  );
+
+  return navigationItems.flatMap(item => {
+    const form = enabledFormsByHref.get(item.href);
+    return form ? [form] : [];
+  });
 }
 
 /**

@@ -5,7 +5,13 @@ import {
   adminNavItems,
   dashboardNavItem,
 } from '@/lib/config/navigation';
-import { FORM_TYPES, getEnabledForms, getFormType, getFormTypeByPath } from '@/lib/config/forms';
+import {
+  FORM_TYPES,
+  getEnabledForms,
+  getEnabledFormsForNavigation,
+  getFormType,
+  getFormTypeByPath,
+} from '@/lib/config/forms';
 import { MODULE_PAGES, getAllPageOptions, getPageUrl } from '@/lib/config/module-pages';
 import { getParentHref } from '@/lib/config/backNavigation';
 import { getAccentFromRoute } from '@/lib/theme/getAccentFromRoute';
@@ -100,6 +106,15 @@ describe('Forms Config — Inspection Rename Verification', () => {
     const ids = enabled.map(f => f.id);
     expect(ids).toContain('inspection');
     expect(ids).toContain('plant-inspection');
+  });
+
+  it('keeps primary dashboard forms in employee navigation order', () => {
+    const dashboardForms = getEnabledFormsForNavigation(employeeNavItems);
+
+    expect(dashboardForms.map(form => form.href)).toEqual(
+      employeeNavItems.map(item => item.href)
+    );
+    expect(dashboardForms.find(form => form.href === '/scheduling/my')?.title).toBe('My Schedule');
   });
 });
 

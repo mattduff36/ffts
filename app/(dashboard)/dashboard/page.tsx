@@ -24,9 +24,14 @@ import {
   LockKeyhole,
   Loader2
 } from 'lucide-react';
-import { getEnabledForms } from '@/lib/config/forms';
+import { getEnabledForms, getEnabledFormsForNavigation } from '@/lib/config/forms';
 import type { ModuleName } from '@/types/roles';
-import { managerNavItems, adminNavItems, getFilteredNavByPermissions } from '@/lib/config/navigation';
+import {
+  managerNavItems,
+  adminNavItems,
+  getFilteredEmployeeNav,
+  getFilteredNavByPermissions,
+} from '@/lib/config/navigation';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { useRamsAssignmentSummary } from '@/lib/hooks/useNavMetrics';
 import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError, createStatusError } from '@/lib/utils/http-error';
@@ -398,46 +403,17 @@ export default function DashboardPage() {
   const visibleAdminTiles = getFilteredNavByPermissions(adminNavItems, userPermissions, effectiveIsAdmin);
   const renderedManagerTiles = visibleManagerTiles.filter(link => link.href !== '/absence/manage');
   const renderedManagementTiles = [...renderedManagerTiles, ...visibleAdminTiles];
-  const renderedQuickActionTiles = formTypes
-    .filter(formType => {
-      // Map form IDs to module names for permission checking
-      const moduleMap: Record<string, ModuleName> = {
-        'timesheet': 'timesheets',
-        'inspection': 'inspections',
-        'plant-inspection': 'plant-inspections',
-        'hgv-inspection': 'hgv-inspections',
-        'rams': 'rams',
-        'absence': 'absence',
-        'maintenance': 'maintenance',
-        'fleet': 'maintenance',
-        'workshop': 'workshop-tasks',
-        'inventory': 'inventory',
-        'reminders': 'reminders',
-      };
-
-      const moduleName = moduleMap[formType.id];
-
-      // Check module permission (admin permissions are expanded to full set above).
-      if (moduleName && !userPermissions.has(moduleName)) {
-        return false;
-      }
-
-      // Hide RAMS for employees with no assignments
-      if (formType.id === 'rams' && !effectiveIsManager && !effectiveIsAdmin && !hasRAMSAssignments) {
-        return false;
-      }
-
-      if (formType.id === 'reminders' && remindersPendingCount === 0) {
-        return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      if (a.id === 'reminders') return -1;
-      if (b.id === 'reminders') return 1;
-      return 0;
-    });
+  const visibleEmployeeNavigation = getFilteredEmployeeNav(
+    userPermissions,
+    effectiveIsManager,
+    effectiveIsAdmin,
+    hasRAMSAssignments
+  );
+  const navigationQuickActionTiles = getEnabledFormsForNavigation(visibleEmployeeNavigation);
+  const remindersTile = formTypes.find(formType => formType.id === 'reminders');
+  const renderedQuickActionTiles = userPermissions.has('reminders') && remindersPendingCount > 0 && remindersTile
+    ? [remindersTile, ...navigationQuickActionTiles]
+    : navigationQuickActionTiles;
   const managementTileBadgeCountByHref: Record<string, number> = {
     '/approvals': approvalsTileBadgeCount,
     '/actions': actionsUnassignedCount,

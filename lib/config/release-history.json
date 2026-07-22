@@ -1,5 +1,43 @@
 [
   {
+    "version": "0726.7.0",
+    "updateKind": "major",
+    "title": "Customers update",
+    "description": "Updated Customers, Suggestions, Quotes, Data storage, Help and FAQ, Reminders, Notifications, and Projects.",
+    "summary": "Updated Customers, Suggestions, Quotes, Data storage, Help and FAQ, Reminders, Notifications, and Projects.",
+    "details": [
+      "Updated Customers, Suggestions, Quotes, Data storage, Help and FAQ, Reminders, Notifications, and Projects, with changes to background routes, app screens, shared logic, automated tests, and data storage.",
+      "Updated suggestions, with changes to background routes, app screens, interface components, shared logic, automation scripts, automated tests, and data storage.",
+      "Updated data storage, with changes to shared typing, automation scripts, automated tests, and data storage.",
+      "Updated quotes, with changes to background routes, app screens, shared logic, and automated tests.",
+      "Updated help and FAQ, with changes to app screens, shared typing, automation scripts, and data storage.",
+      "Updated projects, with changes to shared logic.",
+      "Updated reminders, with changes to interface components.",
+      "Updated notifications, with changes to interface components."
+    ],
+    "areas": [
+      "Customers",
+      "Suggestions",
+      "Quotes",
+      "Data storage",
+      "Help",
+      "FAQ",
+      "Reminders",
+      "Notifications",
+      "Projects"
+    ],
+    "areaKeys": [
+      "customers",
+      "suggestions",
+      "quotes",
+      "data-storage",
+      "reminders",
+      "notifications",
+      "projects"
+    ],
+    "pushedAt": "2026-07-22T00:06:36.660Z"
+  },
+  {
     "version": "0726.6.0",
     "updateKind": "major",
     "title": "Debug tools update",

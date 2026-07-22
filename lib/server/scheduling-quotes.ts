@@ -10,6 +10,7 @@ export interface SchedulingQuoteSource {
   quote_reference: string;
   base_quote_reference: string;
   customer_id: string;
+  customer_site_id: string | null;
   subject_line: string | null;
   project_description: string | null;
   site_address: string | null;
@@ -52,6 +53,7 @@ export function mapOperationalQuoteToScheduleJob(
     estimated_duration_minutes: quote.estimated_duration_minutes,
     quote_id: quote.id,
     customer_id: quote.customer_id,
+    customer_site_id: quote.customer_site_id,
     created_by: quote.created_by,
     updated_by: quote.updated_by || quote.created_by,
   };

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ReviewDetailDialog } from '@/components/management/ReviewDetailDialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { SuggestionCreateDialog } from '@/components/suggestions/suggestion-create-dialog';
 import { 
   Lightbulb, 
   Loader2, 
@@ -24,7 +25,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  User
+  User,
+  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateTime } from '@/lib/utils/date';
@@ -42,6 +44,7 @@ export default function SuggestionsManagePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [countsLoaded, setCountsLoaded] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   
   // Detail dialog
   const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestionWithUser | null>(null);
@@ -192,18 +195,27 @@ export default function SuggestionsManagePage() {
     <AppPageShell>
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 p-3 bg-yellow-100 dark:bg-yellow-950 rounded-lg">
-            <Lightbulb className="h-6 w-6 text-yellow-600" />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 p-3 bg-yellow-100 dark:bg-yellow-950 rounded-lg">
+              <Lightbulb className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                Manage Suggestions
+              </h1>
+              <p className="text-muted-foreground">
+                Review and respond to user suggestions
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Manage Suggestions
-            </h1>
-            <p className="text-muted-foreground">
-              Review and respond to user suggestions
-            </p>
-          </div>
+          <Button
+            onClick={() => setCreateDialogOpen(true)}
+            className="w-full shrink-0 bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover sm:w-auto"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add suggestion
+          </Button>
         </div>
       </div>
 
@@ -496,6 +508,14 @@ export default function SuggestionsManagePage() {
           </section>
         )}
       </ReviewDetailDialog>
+
+      <SuggestionCreateDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreated={async () => {
+          await fetchSuggestions(statusFilter);
+        }}
+      />
     </AppPageShell>
   );
 }

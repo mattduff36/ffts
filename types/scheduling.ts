@@ -21,6 +21,14 @@ export interface SchedulingConflict {
   conflictingJobReference?: string;
 }
 
+export interface ScheduleJobTag {
+  id: string;
+  name: string;
+  color: string;
+  description: string | null;
+  is_active: boolean;
+}
+
 export interface ScheduleJob {
   id: string;
   job_reference: string;
@@ -35,7 +43,10 @@ export interface ScheduleJob {
   quote_id: string | null;
   quote_project_number_id: string | null;
   customer_id: string | null;
+  customer_site_id: string | null;
   customer_name?: string | null;
+  is_drop_on_ready: boolean;
+  tags: ScheduleJobTag[];
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -135,6 +146,7 @@ export interface SchedulingBoardPayload {
     end: string;
   };
   jobs: ScheduleJob[];
+  tags: ScheduleJobTag[];
   visits: ScheduleVisit[];
   assignments: ScheduleAssignment[];
   resources: {

@@ -7,6 +7,7 @@ import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
+import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
 import { fetchSchedulingContext } from '@/lib/client/scheduling';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { SchedulingManagerBoard } from './components/SchedulingManagerBoard';
@@ -101,7 +102,9 @@ export default function SchedulingPage() {
         icon={<CalendarDays className="h-5 w-5" />}
       />
       {contextQuery.data?.is_manager_or_admin ? (
-        <SchedulingManagerBoard userId={contextQuery.data.user_id} />
+        <NuqsClientAdapter>
+          <SchedulingManagerBoard userId={contextQuery.data.user_id} />
+        </NuqsClientAdapter>
       ) : (
         <Card className="border-border">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">

@@ -41,7 +41,7 @@ import {
 import { toast } from 'sonner';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
-import type { FAQArticleWithCategory, FAQCategory, Suggestion } from '@/types/faq';
+import type { FAQArticleWithCategory, FAQCategory, SubmitterSuggestion } from '@/types/faq';
 import type { ErrorReport } from '@/types/error-reports';
 import type { ModuleName } from '@/types/roles';
 import Link from 'next/link';
@@ -49,6 +49,7 @@ import { MODULE_PAGES, getPageLabel, getPageUrl } from '@/lib/config/module-page
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { forceAppRefresh } from '@/lib/client/force-app-refresh';
 import { ReleaseVersionLink } from '@/components/layout/ReleaseVersionLink';
+import { SuggestionSubmissionForm } from '@/components/suggestions/suggestion-submission-form';
 import {
   MAX_ERROR_REPORT_SCREENSHOT_SIZE_BYTES,
   MAX_ERROR_REPORT_SCREENSHOTS,
@@ -145,12 +146,7 @@ export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
-  // Suggestion state
-  const [suggestionTitle, setSuggestionTitle] = useState('');
-  const [suggestionBody, setSuggestionBody] = useState('');
-  const [suggestionPageHint, setSuggestionPageHint] = useState('');
-  const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
-  const [mySuggestions, setMySuggestions] = useState<Suggestion[]>([]);
+  const [mySuggestions, setMySuggestions] = useState<SubmitterSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Error report state
@@ -308,7 +304,7 @@ export default function HelpPage() {
   const fetchMySuggestions = useCallback(async () => {
     try {
       setLoadingSuggestions(true);
-      const { items } = await fetchAllPaginatedItems<Suggestion>('/api/suggestions', 'suggestions', {
+      const { items } = await fetchAllPaginatedItems<SubmitterSuggestion>('/api/suggestions', 'suggestions', {
         limit: 200,
         errorMessage: 'Failed to load suggestions',
       });
@@ -410,48 +406,6 @@ export default function HelpPage() {
     });
     return grouped;
   }, [filteredArticles]);
-
-  // Handle suggestion submission
-  const handleSubmitSuggestion = async () => {
-    if (!suggestionTitle.trim() || !suggestionBody.trim()) {
-      toast.error('Please fill in both title and description', { id: 'help-suggestion-validation-missing-fields' });
-      return;
-    }
-
-    try {
-      setSubmittingSuggestion(true);
-      const response = await fetch('/api/suggestions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: suggestionTitle.trim(),
-          body: suggestionBody.trim(),
-          page_hint: suggestionPageHint.trim() || undefined,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('Suggestion submitted successfully!');
-        setSuggestionTitle('');
-        setSuggestionBody('');
-        setSuggestionPageHint('');
-        // Refresh the list below the form when the submitted item is saved.
-        if (activeTab === 'suggest') {
-          fetchMySuggestions();
-        }
-      } else {
-        throw new Error(data.error || 'Failed to submit suggestion');
-      }
-    } catch (error) {
-      const errorContextId = 'help-submit-suggestion-error';
-      console.error('Error submitting suggestion:', error, { errorContextId });
-      toast.error('Failed to submit suggestion', { id: errorContextId });
-    } finally {
-      setSubmittingSuggestion(false);
-    }
-  };
 
   function handleErrorScreenshotChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files || []);
@@ -1232,61 +1186,11 @@ export default function HelpPage() {
                 Have an idea to improve the app? We&apos;d love to hear it!
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="suggestion-title">
-                  Title <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="suggestion-title"
-                  placeholder="Brief title for your suggestion"
-                  value={suggestionTitle}
-                  onChange={(e) => setSuggestionTitle(e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="suggestion-body">
-                  Description <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  id="suggestion-body"
-                  placeholder="Describe your suggestion in detail..."
-                  value={suggestionBody}
-                  onChange={(e) => setSuggestionBody(e.target.value)}
-                  rows={5}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="suggestion-page">
-                  Related Page/Feature (optional)
-                </Label>
-                <Input
-                  id="suggestion-page"
-                  placeholder="e.g., Timesheets, Inspections, Dashboard"
-                  value={suggestionPageHint}
-                  onChange={(e) => setSuggestionPageHint(e.target.value)}
-                />
-              </div>
-
-              <Button
-                onClick={handleSubmitSuggestion}
-                disabled={submittingSuggestion || !suggestionTitle.trim() || !suggestionBody.trim()}
-                className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
-              >
-                {submittingSuggestion ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Submit Suggestion
-                  </>
-                )}
-              </Button>
+            <CardContent>
+              <SuggestionSubmissionForm
+                idPrefix="help-suggestion"
+                onSubmitted={fetchMySuggestions}
+              />
             </CardContent>
           </Card>
 

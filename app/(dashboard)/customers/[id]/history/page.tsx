@@ -280,6 +280,55 @@ export default function CustomerHistoryPage({ params }: PageProps) {
         </Card>
       </div>
 
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <MapPin className="h-4 w-4" />
+            Customer Sites
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {customer.sites?.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {customer.sites.map(site => (
+                <div key={site.id} className="rounded-lg border border-slate-700 bg-slate-950/30 p-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-white">{site.site_name}</p>
+                    <Badge
+                      variant="outline"
+                      className={site.is_active
+                        ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                        : 'border-slate-500/30 bg-slate-500/10 text-slate-400'
+                      }
+                    >
+                      {site.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                    {site.is_default ? (
+                      <Badge variant="outline" className="border-brand-yellow/40 text-brand-yellow">
+                        Default
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="space-y-0.5 text-sm text-slate-300">
+                    {site.address_line_1 && <p>{site.address_line_1}</p>}
+                    {site.address_line_2 && <p>{site.address_line_2}</p>}
+                    {(site.city || site.county) && (
+                      <p>{[site.city, site.county].filter(Boolean).join(', ')}</p>
+                    )}
+                    {site.postcode && <p>{site.postcode}</p>}
+                  </div>
+                  {site.notes ? (
+                    <p className="mt-2 whitespace-pre-wrap text-xs text-slate-400">{site.notes}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No saved customer sites.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Quote History */}
       <Card className="bg-slate-800/50 border-slate-700">
         <CardHeader>

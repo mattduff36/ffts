@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { toSubmitterSuggestion } from '@/lib/utils/suggestion-projections';
 import type { Suggestion, SuggestionUpdateWithUser } from '@/types/faq';
 
 interface RouteParams {
@@ -18,9 +20,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: suggestion, error: suggestionError } = await supabase
+    const admin = createAdminClient();
+    const { data: suggestion, error: suggestionError } = await admin
       .from('suggestions')
-      .select('id, created_by, title, body, page_hint, status, admin_notes, created_at, updated_at')
+      .select('id, created_by, title, body, page_hint, status, created_at, updated_at')
       .eq('id', id)
       .single();
 
@@ -40,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const { data: updates, error: updatesError } = await supabase
+    const { data: updates, error: updatesError } = await admin
       .from('suggestion_updates')
       .select('id, suggestion_id, created_by, old_status, new_status, note, created_at')
       .eq('suggestion_id', id)
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     let profileMap = new Map<string, { full_name: string | null }>();
     if (profileIds.length > 0) {
-      const { data: profiles, error: profilesError } = await supabase
+      const { data: profiles, error: profilesError } = await admin
         .from('profiles')
         .select('id, full_name')
         .in('id', profileIds);
@@ -78,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       suggestion: {
-        ...rawSuggestion,
+        ...toSubmitterSuggestion(rawSuggestion),
         user: profileMap.get(rawSuggestion.created_by) || null,
       },
       updates: rawUpdates.map((update) => ({

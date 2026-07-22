@@ -29,6 +29,7 @@ import {
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
 import { canManageQuoteSage } from '@/lib/server/quote-sage-access';
 import { syncQuoteSiteLocation } from '@/lib/server/inventory-site-location-sync';
+import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
 
 type QuoteFieldErrors = Record<string, string>;
 
@@ -779,6 +780,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         : null;
       const customerId = typeof quoteUpdates.customer_id === 'string' ? quoteUpdates.customer_id.trim() : '';
       const recipientCustomerId = customerId || current.quote.customer_id;
+      const selectedSiteId = 'customer_site_id' in quoteUpdates
+        ? normalizeOptionalString(quoteUpdates.customer_site_id)
+        : current.quote.customer_site_id;
+      const shouldResolveSite = (
+        'customer_id' in quoteUpdates
+        || 'customer_site_id' in quoteUpdates
+        || 'site_address' in quoteUpdates
+      );
+      const resolvedSite = shouldResolveSite
+        ? await resolveCustomerSiteSelection(admin, {
+          customerId: recipientCustomerId,
+          customerSiteId: selectedSiteId,
+          siteAddress: 'site_address' in quoteUpdates
+            ? quoteUpdates.site_address
+            : current.quote.site_address,
+          allowInactive: selectedSiteId === current.quote.customer_site_id,
+        })
+        : null;
+      if (resolvedSite) Object.assign(fieldErrors, resolvedSite.fieldErrors);
 
       if ('customer_id' in quoteUpdates && !customerId) {
         fieldErrors.customer_id = 'Select a customer.';
@@ -815,7 +835,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
       }
 
-      if ('site_address' in quoteUpdates && !normalizeOptionalString(quoteUpdates.site_address)) {
+      if ('site_address' in quoteUpdates && !resolvedSite?.siteAddress) {
         fieldErrors.site_address = 'Enter the site address for this quote.';
       }
 
@@ -875,6 +895,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         updates.customer_id = customerId;
       }
 
+      if (resolvedSite) {
+        updates.customer_site_id = resolvedSite.customerSiteId;
+        updates.site_address = resolvedSite.siteAddress;
+      }
+
       if ('quote_date' in quoteUpdates) {
         updates.quote_date = normalizeOptionalString(quoteUpdates.quote_date) || undefined;
       }
@@ -885,10 +910,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       if ('attention_email' in quoteUpdates) {
         updates.attention_email = normalizeOptionalString(quoteUpdates.attention_email);
-      }
-
-      if ('site_address' in quoteUpdates) {
-        updates.site_address = normalizeOptionalString(quoteUpdates.site_address);
       }
 
       if ('subject_line' in quoteUpdates) {

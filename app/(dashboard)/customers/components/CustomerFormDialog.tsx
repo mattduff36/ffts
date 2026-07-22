@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,9 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, MapPin, Plus, Power, Trash2 } from 'lucide-react';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
-import type { Customer, CustomerContactFormData, CustomerFormData } from '../types';
+import type {
+  Customer,
+  CustomerContactFormData,
+  CustomerFormData,
+  CustomerSiteFormData,
+} from '../types';
 import { EMPTY_CUSTOMER_FORM } from '../types';
 
 interface CustomerFormDialogProps {
@@ -82,11 +88,23 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
           email: contact.email || '',
           phone: contact.phone || '',
         })),
+        sites: (customer.sites || []).map(site => ({
+          id: site.id,
+          site_name: site.site_name,
+          address_line_1: site.address_line_1 || '',
+          address_line_2: site.address_line_2 || '',
+          city: site.city || '',
+          county: site.county || '',
+          postcode: site.postcode || '',
+          is_active: site.is_active,
+          is_default: site.is_default,
+          notes: site.notes || '',
+        })),
       };
       setForm(nextForm);
       setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     } else {
-      const nextForm = { ...EMPTY_CUSTOMER_FORM, secondary_contacts: [] };
+      const nextForm = { ...EMPTY_CUSTOMER_FORM, secondary_contacts: [], sites: [] };
       setForm(nextForm);
       setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     }
@@ -123,6 +141,47 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
     setForm(prev => ({
       ...prev,
       secondary_contacts: prev.secondary_contacts.filter((_, idx) => idx !== index),
+    }));
+  }
+
+  function updateSite<K extends keyof CustomerSiteFormData>(
+    index: number,
+    key: K,
+    value: CustomerSiteFormData[K]
+  ) {
+    setForm(prev => ({
+      ...prev,
+      sites: prev.sites.map((site, siteIndex) => {
+        if (siteIndex !== index) {
+          if (key === 'is_default' && value === true) return { ...site, is_default: false };
+          return site;
+        }
+
+        if (key === 'is_active' && value === false) {
+          return { ...site, is_active: false, is_default: false };
+        }
+        return { ...site, [key]: value };
+      }),
+    }));
+  }
+
+  function addSite() {
+    setForm(prev => ({
+      ...prev,
+      sites: [
+        ...prev.sites,
+        {
+          site_name: '',
+          address_line_1: '',
+          address_line_2: '',
+          city: '',
+          county: '',
+          postcode: '',
+          is_active: true,
+          is_default: prev.sites.every(site => !site.is_active),
+          notes: '',
+        },
+      ],
     }));
   }
 
@@ -305,9 +364,9 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
             {/* Address */}
             <div className="border-t border-slate-700 pt-4">
               <div className="mb-3 space-y-1">
-                <h4 className="text-sm font-semibold text-muted-foreground">Address</h4>
+                <h4 className="text-sm font-semibold text-muted-foreground">Customer Address</h4>
                 <p className="text-xs text-slate-400">
-                  Only add an address here if customer only has a single address / site.
+                  Use this for the customer&apos;s correspondence address. Save work locations separately below.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -357,6 +416,161 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Sites */}
+            <div className="border-t border-slate-700 pt-4">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-muted-foreground">Customer Sites</h4>
+                  <p className="text-xs text-slate-400">
+                    Saved sites can be selected on quotes and manually scheduled jobs.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addSite}
+                  className="border-slate-600 text-muted-foreground"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Site
+                </Button>
+              </div>
+
+              {form.sites.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                  No saved sites. Existing customer addresses remain available as correspondence details.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {form.sites.map((site, index) => (
+                    <div
+                      key={site.id || index}
+                      className="rounded-lg border border-slate-700 bg-slate-950/30 p-4"
+                    >
+                      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-brand-yellow" />
+                          <span className="font-medium text-white">
+                            {site.site_name.trim() || `Site ${index + 1}`}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={site.is_active
+                              ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                              : 'border-slate-500/30 bg-slate-500/10 text-slate-400'
+                            }
+                          >
+                            {site.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                          {site.is_default ? (
+                            <Badge variant="outline" className="border-brand-yellow/40 text-brand-yellow">
+                              Default
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {site.is_active && !site.is_default ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateSite(index, 'is_default', true)}
+                              className="border-slate-600 text-muted-foreground"
+                            >
+                              Make Default
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateSite(index, 'is_active', !site.is_active)}
+                            className={site.is_active
+                              ? 'border-red-500/40 text-red-300 hover:bg-red-500/10'
+                              : 'border-green-500/40 text-green-300 hover:bg-green-500/10'
+                            }
+                          >
+                            <Power className="mr-2 h-4 w-4" />
+                            {site.is_active ? 'Deactivate' : 'Reactivate'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor={`site_name_${index}`}>Site Name *</Label>
+                          <Input
+                            id={`site_name_${index}`}
+                            required
+                            value={site.site_name}
+                            onChange={event => updateSite(index, 'site_name', event.target.value)}
+                            placeholder="e.g. Main site"
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor={`site_address_line_1_${index}`}>Address Line 1 *</Label>
+                          <Input
+                            id={`site_address_line_1_${index}`}
+                            value={site.address_line_1}
+                            onChange={event => updateSite(index, 'address_line_1', event.target.value)}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor={`site_address_line_2_${index}`}>Address Line 2</Label>
+                          <Input
+                            id={`site_address_line_2_${index}`}
+                            value={site.address_line_2}
+                            onChange={event => updateSite(index, 'address_line_2', event.target.value)}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`site_city_${index}`}>City</Label>
+                          <Input
+                            id={`site_city_${index}`}
+                            value={site.city}
+                            onChange={event => updateSite(index, 'city', event.target.value)}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`site_county_${index}`}>County</Label>
+                          <Input
+                            id={`site_county_${index}`}
+                            value={site.county}
+                            onChange={event => updateSite(index, 'county', event.target.value)}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`site_postcode_${index}`}>Postcode</Label>
+                          <Input
+                            id={`site_postcode_${index}`}
+                            value={site.postcode}
+                            onChange={event => updateSite(index, 'postcode', event.target.value)}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor={`site_notes_${index}`}>Site Notes</Label>
+                          <Textarea
+                            id={`site_notes_${index}`}
+                            value={site.notes}
+                            onChange={event => updateSite(index, 'notes', event.target.value)}
+                            rows={2}
+                            className="bg-slate-800 border-slate-600"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Terms & Status */}

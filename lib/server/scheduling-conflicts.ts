@@ -57,12 +57,13 @@ export async function detectEmployeeConflicts(
     workDate: string;
     profileId: string;
     visit?: Pick<ScheduleVisit, 'id' | 'starts_at' | 'ends_at'>;
+    excludeAssignmentId?: string;
   }
 ): Promise<SchedulingConflict[]> {
   const [assignmentResult, absenceResult, shiftResult] = await Promise.all([
     admin
       .from('schedule_employee_assignments')
-      .select('job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
+      .select('id, job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
       .eq('profile_id', input.profileId)
       .eq('work_date', input.workDate),
     admin
@@ -90,6 +91,7 @@ export async function detectEmployeeConflicts(
 
   const conflicts: SchedulingConflict[] = [];
   for (const row of assignmentResult.data || []) {
+    if (input.excludeAssignmentId && row.id === input.excludeAssignmentId) continue;
     const visit = pickRelation(row.visit as VisitRelation | VisitRelation[] | null);
     if (input.visit && row.visit_id === input.visit.id) continue;
     if (visit?.status === 'cancelled') continue;
@@ -142,12 +144,13 @@ export async function detectPlantConflicts(
     workDate: string;
     plantId: string;
     visit?: Pick<ScheduleVisit, 'id' | 'starts_at' | 'ends_at'>;
+    excludeAssignmentId?: string;
   }
 ): Promise<SchedulingConflict[]> {
   const [assignmentResult, plantResult, unavailabilityResult] = await Promise.all([
     admin
       .from('schedule_plant_assignments')
-      .select('job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
+      .select('id, job_id, visit_id, job:schedule_jobs(job_reference), visit:schedule_visits(id, starts_at, ends_at, status)')
       .eq('plant_id', input.plantId)
       .eq('work_date', input.workDate),
     admin
@@ -169,6 +172,7 @@ export async function detectPlantConflicts(
 
   const conflicts: SchedulingConflict[] = [];
   for (const row of assignmentResult.data || []) {
+    if (input.excludeAssignmentId && row.id === input.excludeAssignmentId) continue;
     const visit = pickRelation(row.visit as VisitRelation | VisitRelation[] | null);
     if (input.visit && row.visit_id === input.visit.id) continue;
     if (visit?.status === 'cancelled') continue;

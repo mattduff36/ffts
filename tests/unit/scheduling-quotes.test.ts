@@ -14,6 +14,7 @@ function quote(overrides: Partial<SchedulingQuoteSource> = {}): SchedulingQuoteS
     quote_reference: '99000-SD',
     base_quote_reference: '99000-SD',
     customer_id: 'customer-1',
+    customer_site_id: 'site-1',
     subject_line: 'Crown reduction',
     project_description: 'Reduce the crown.',
     site_address: '1 Sample Lane',
@@ -52,6 +53,9 @@ describe('Quote-driven scheduling mapping', () => {
         end_date: '2026-07-24',
         estimated_duration_minutes: 2400,
         quote_id: 'quote-1',
+        customer_id: 'customer-1',
+        customer_site_id: 'site-1',
+        site_address: '1 Sample Lane',
       })
     );
   });

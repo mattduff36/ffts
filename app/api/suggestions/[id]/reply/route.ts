@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
 import { logServerError } from '@/lib/utils/server-error-logger';
 
 interface RouteParams {
@@ -26,11 +28,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Reply text is required' }, { status: 400 });
     }
 
-    const { data: suggestion, error: suggestionError } = await supabase
+    const adminSupabase = createAdminClient();
+    const { data: suggestion, error: suggestionError } = await adminSupabase
       .from('suggestions')
       .select('id, created_by, status')
       .eq('id', id)
-      .eq('created_by', user.id)
       .single();
 
     if (suggestionError) {
@@ -40,18 +42,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       throw suggestionError;
     }
 
+    const isOwner = suggestion.created_by === user.id;
+    if (!isOwner) {
+      const canManageSuggestions = await canEffectiveRoleAccessModule('suggestions');
+      if (!canManageSuggestions) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const now = new Date().toISOString();
-    const { error: suggestionTouchError } = await supabase
+    const { error: suggestionTouchError } = await adminSupabase
       .from('suggestions')
       .update({ updated_at: now })
-      .eq('id', id)
-      .eq('created_by', user.id);
+      .eq('id', id);
 
     if (suggestionTouchError) {
       throw suggestionTouchError;
     }
 
-    const { data: update, error: updateError } = await supabase
+    const { data: update, error: updateError } = await adminSupabase
       .from('suggestion_updates')
       .insert({
         suggestion_id: id,

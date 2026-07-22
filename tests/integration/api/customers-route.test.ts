@@ -90,6 +90,21 @@ describe('GET /api/customers', () => {
       error: null,
     });
     const contactsIn = vi.fn().mockReturnValue({ order: contactsOrder });
+    const sitesSecondOrder = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'site-1',
+          customer_id: 'customer-1',
+          site_name: 'Main site',
+          address_line_1: '1 Sample Lane',
+          is_active: true,
+          is_default: true,
+        },
+      ],
+      error: null,
+    });
+    const sitesFirstOrder = vi.fn().mockReturnValue({ order: sitesSecondOrder });
+    const sitesIn = vi.fn().mockReturnValue({ order: sitesFirstOrder });
 
     mockCreateAdminClient.mockReturnValue({
       from: vi.fn((table: string) => {
@@ -101,6 +116,14 @@ describe('GET /api/customers', () => {
           return {
             select: vi.fn(() => ({
               in: contactsIn,
+            })),
+          };
+        }
+
+        if (table === 'customer_sites') {
+          return {
+            select: vi.fn(() => ({
+              in: sitesIn,
             })),
           };
         }
@@ -135,8 +158,23 @@ describe('GET /api/customers', () => {
             phone: null,
           },
         ],
+        sites: [
+          {
+            id: 'site-1',
+            customer_id: 'customer-1',
+            site_name: 'Main site',
+            address_line_1: '1 Sample Lane',
+            is_active: true,
+            is_default: true,
+          },
+        ],
       },
-      { id: 'customer-2', company_name: 'Bravo Ltd', secondary_contacts: [] },
+      {
+        id: 'customer-2',
+        company_name: 'Bravo Ltd',
+        secondary_contacts: [],
+        sites: [],
+      },
     ]);
   });
 

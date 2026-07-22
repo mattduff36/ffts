@@ -43,6 +43,19 @@ interface CustomerOption {
     email: string | null;
     phone: string | null;
   }>;
+  sites?: Array<{
+    id: string;
+    customer_id: string;
+    site_name: string;
+    address_line_1: string | null;
+    address_line_2: string | null;
+    city: string | null;
+    county: string | null;
+    postcode: string | null;
+    is_active: boolean;
+    is_default: boolean;
+    notes: string | null;
+  }>;
 }
 
 interface ApproverOption {

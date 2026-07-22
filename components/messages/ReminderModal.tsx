@@ -10,7 +10,7 @@ import { PanelLoader } from '@/components/ui/panel-loader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { extractSuggestionTitleFromNotificationBody, parseSuggestionIdFromCreatedVia } from '@/lib/utils/suggestion-notifications';
-import { SUGGESTION_STATUS_COLORS, SUGGESTION_STATUS_LABELS, type Suggestion, type SuggestionUpdateWithUser } from '@/types/faq';
+import { SUGGESTION_STATUS_COLORS, SUGGESTION_STATUS_LABELS, type SubmitterSuggestion, type SuggestionUpdateWithUser } from '@/types/faq';
 import { Bell, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { templateConfig } from '@/lib/config/template-config';
@@ -32,7 +32,7 @@ interface ReminderModalProps {
 
 interface SuggestionThreadResponse {
   success?: boolean;
-  suggestion?: Suggestion & {
+  suggestion?: SubmitterSuggestion & {
     user?: {
       full_name: string | null;
     } | null;
@@ -43,7 +43,7 @@ interface SuggestionThreadResponse {
 
 interface SuggestionListResponse {
   success?: boolean;
-  suggestions?: Array<Pick<Suggestion, 'id' | 'title'>>;
+  suggestions?: Array<Pick<SubmitterSuggestion, 'id' | 'title'>>;
 }
 
 export function ReminderModal({

@@ -1,5 +1,7 @@
 import type {
+  ScheduleAssignment,
   ScheduleJob,
+  ScheduleJobTag,
   ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingContext,
@@ -47,7 +49,8 @@ export async function fetchMySchedule(weekStart: string): Promise<SchedulingSelf
 }
 
 export async function saveScheduleJob(
-  input: Partial<ScheduleJob> & Pick<ScheduleJob, 'job_reference' | 'title' | 'start_date' | 'end_date'>,
+  input: Partial<ScheduleJob>
+    & { tag_ids?: string[] },
   id?: string
 ): Promise<ScheduleJob> {
   const response = await fetch(id ? `/api/scheduling/jobs/${id}` : '/api/scheduling/jobs', {
@@ -56,6 +59,19 @@ export async function saveScheduleJob(
     body: JSON.stringify(input),
   });
   return (await readResponse<{ job: ScheduleJob }>(response)).job;
+}
+
+export async function createScheduleJobTag(input: {
+  name: string;
+  color?: string;
+  description?: string | null;
+}): Promise<ScheduleJobTag> {
+  const response = await fetch('/api/scheduling/tags', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return (await readResponse<{ tag: ScheduleJobTag }>(response)).tag;
 }
 
 export async function deleteScheduleJob(id: string): Promise<void> {
@@ -106,6 +122,24 @@ export async function createScheduleAssignment(input: CreateAssignmentInput): Pr
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    })
+  );
+}
+
+export async function moveScheduleAssignment(
+  assignment: Pick<ScheduleAssignment, 'id' | 'resource_type'>,
+  visitId: string,
+  overrideConflicts = false
+): Promise<void> {
+  await readResponse(
+    await fetch(`/api/scheduling/assignments/${assignment.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resource_type: assignment.resource_type,
+        visit_id: visitId,
+        override_conflicts: overrideConflicts,
+      }),
     })
   );
 }

@@ -34,6 +34,7 @@ function buildQuote(overrides: Partial<Quote>): Quote {
     quote_thread_id: overrides.quote_thread_id || quoteReference,
     parent_quote_id: null,
     customer_id: 'customer-1',
+    customer_site_id: null,
     requester_id: overrides.requester_id ?? 'manager-1',
     requester_initials: overrides.requester_initials ?? 'LC',
     quote_date: overrides.quote_date || '2026-06-12',

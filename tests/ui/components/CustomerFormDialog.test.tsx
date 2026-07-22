@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CustomerFormDialog } from '@/app/(dashboard)/customers/components/CustomerFormDialog';
 
 describe('CustomerFormDialog', () => {
-  it('shows address guidance for single-site customers', () => {
+  it('distinguishes the correspondence address from saved work sites', () => {
     render(
       <CustomerFormDialog
         open
@@ -15,8 +15,9 @@ describe('CustomerFormDialog', () => {
     );
 
     expect(
-      screen.getByText('Only add an address here if customer only has a single address / site.')
+      screen.getByText(/Use this for the customer's correspondence address/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/Saved sites can be selected on quotes/i)).toBeInTheDocument();
   });
 
   it('submits secondary contact rows with the customer payload', async () => {
@@ -55,5 +56,43 @@ describe('CustomerFormDialog', () => {
       }));
     });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('adds and deactivates a structured customer site', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(
+      <CustomerFormDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Company Name *'), {
+      target: { value: 'Acme Ltd' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Site' }));
+    fireEvent.change(screen.getByLabelText('Site Name *'), {
+      target: { value: 'North depot' },
+    });
+    fireEvent.change(screen.getByLabelText('Address Line 1 *'), {
+      target: { value: '10 North Road' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    fireEvent.click(screen.getByRole('button', { name: /add customer/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        sites: [
+          expect.objectContaining({
+            site_name: 'North depot',
+            address_line_1: '10 North Road',
+            is_active: false,
+            is_default: false,
+          }),
+        ],
+      }));
+    });
   });
 });

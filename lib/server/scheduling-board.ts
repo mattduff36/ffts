@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
+import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import { scheduleVisitIntervalsOverlap } from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
@@ -43,10 +44,21 @@ function mapPlant(row: Record<string, unknown>): SchedulePlantResource {
 
 function mapJob(row: Record<string, unknown>): ScheduleJob {
   const customer = pickRelation(row.customer as { company_name?: string | null } | Array<{ company_name?: string | null }> | null);
-  const { customer: _customer, ...job } = row;
+  const tagLinks = Array.isArray(row.tag_links)
+    ? row.tag_links as Array<Record<string, unknown>>
+    : [];
+  const tags = tagLinks.flatMap((link) => {
+    const tag = pickRelation(
+      link.tag as Record<string, unknown> | Array<Record<string, unknown>> | null
+    );
+    return tag && tag.is_active !== false ? [normalizeScheduleJobTag(tag)] : [];
+  });
+  const { customer: _customer, tag_links: _tagLinks, ...job } = row;
   return {
     ...job,
     customer_name: customer?.company_name || null,
+    is_drop_on_ready: row.is_drop_on_ready === true,
+    tags,
   } as unknown as ScheduleJob;
 }
 
@@ -197,15 +209,20 @@ export async function loadSchedulingBoard(
   weekStart: string,
   weekEnd: string
 ): Promise<SchedulingBoardPayload> {
-  const [jobsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
+  const [jobsResult, tagsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
     await Promise.all([
       admin
         .from('schedule_jobs')
-        .select('*, customer:customers(company_name)')
+        .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
         .lte('start_date', weekEnd)
         .gte('end_date', weekStart)
         .order('start_date')
         .order('job_reference'),
+      admin
+        .from('schedule_job_tags')
+        .select('id, name, color, description, is_active')
+        .eq('is_active', true)
+        .order('name'),
       admin
         .from('schedule_visits')
         .select('*')
@@ -249,6 +266,7 @@ export async function loadSchedulingBoard(
 
   const results = [
     jobsResult,
+    tagsResult,
     visitsResult,
     employeeAssignmentsResult,
     plantAssignmentsResult,
@@ -309,6 +327,7 @@ export async function loadSchedulingBoard(
   return {
     week: { start: weekStart, end: weekEnd },
     jobs,
+    tags: ((tagsResult.data || []) as Array<Record<string, unknown>>).map(normalizeScheduleJobTag),
     visits,
     assignments: [...employeeAssignments, ...plantAssignments],
     resources: { employees, plant: plants },
@@ -339,7 +358,10 @@ export async function loadSchedulingSelf(
 
   const dates = Array.from(new Set(employeeRows.map((row) => String(row.work_date))));
   const [jobsResult, visitsResult, plantAssignmentsResult] = await Promise.all([
-    admin.from('schedule_jobs').select('*, customer:customers(company_name)').in('id', jobIds),
+    admin
+      .from('schedule_jobs')
+      .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
+      .in('id', jobIds),
     admin
       .from('schedule_visits')
       .select('*')

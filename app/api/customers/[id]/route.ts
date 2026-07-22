@@ -6,6 +6,11 @@ import {
   normalizeCustomerPayload,
   replaceCustomerSecondaryContacts,
 } from '@/lib/server/customer-contacts';
+import {
+  fetchCustomerSitesByCustomerId,
+  normalizeCustomerSitesPayload,
+  replaceCustomerSites,
+} from '@/lib/server/customer-sites';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,12 +40,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
       throw error;
     }
-    const contactsByCustomerId = await fetchSecondaryContactsByCustomerId(supabase, [id]);
+    const [contactsByCustomerId, sitesByCustomerId] = await Promise.all([
+      fetchSecondaryContactsByCustomerId(supabase, [id]),
+      fetchCustomerSitesByCustomerId(supabase, [id]),
+    ]);
 
     return NextResponse.json({
       customer: {
         ...data,
         secondary_contacts: contactsByCustomerId.get(id) || [],
+        sites: sitesByCustomerId.get(id) || [],
       },
     });
   } catch (error) {
@@ -63,12 +72,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json();
     const normalized = normalizeCustomerPayload(body);
+    const normalizedSites = normalizeCustomerSitesPayload(body);
+    const fieldErrors = {
+      ...normalized.fieldErrors,
+      ...normalizedSites.fieldErrors,
+    };
 
-    if (Object.keys(normalized.fieldErrors).length > 0) {
+    if (Object.keys(fieldErrors).length > 0) {
       return NextResponse.json(
         {
           error: 'Please correct the highlighted fields and try again.',
-          field_errors: normalized.fieldErrors,
+          field_errors: fieldErrors,
         },
         { status: 400 }
       );
@@ -82,13 +96,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (error) throw error;
-    await replaceCustomerSecondaryContacts(supabase, id, normalized.secondaryContacts, user.id);
-    const contactsByCustomerId = await fetchSecondaryContactsByCustomerId(supabase, [id]);
+    await Promise.all([
+      replaceCustomerSecondaryContacts(supabase, id, normalized.secondaryContacts, user.id),
+      replaceCustomerSites(supabase, id, normalizedSites.sites, user.id),
+    ]);
+    const [contactsByCustomerId, sitesByCustomerId] = await Promise.all([
+      fetchSecondaryContactsByCustomerId(supabase, [id]),
+      fetchCustomerSitesByCustomerId(supabase, [id]),
+    ]);
 
     return NextResponse.json({
       customer: {
         ...data,
         secondary_contacts: contactsByCustomerId.get(id) || [],
+        sites: sitesByCustomerId.get(id) || [],
       },
     });
   } catch (error) {

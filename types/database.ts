@@ -1247,6 +1247,82 @@ export type Database = {
           },
         ]
       }
+      customer_sites: {
+        Row: {
+          id: string
+          customer_id: string
+          site_name: string
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          county: string | null
+          postcode: string | null
+          is_active: boolean
+          is_default: boolean
+          notes: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          customer_id: string
+          site_name: string
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          county?: string | null
+          postcode?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          customer_id?: string
+          site_name?: string
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          county?: string | null
+          postcode?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          notes?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'customer_sites_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'customer_sites_customer_id_fkey'
+            columns: ['customer_id']
+            isOneToOne: false
+            referencedRelation: 'customers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'customer_sites_updated_by_fkey'
+            columns: ['updated_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       customers: {
         Row: {
           id: string
@@ -5298,6 +5374,7 @@ export type Database = {
           id: string
           quote_reference: string
           customer_id: string
+          customer_site_id: string | null
           requester_id: string | null
           requester_initials: string | null
           quote_date: string
@@ -5366,6 +5443,7 @@ export type Database = {
           id?: string
           quote_reference: string
           customer_id: string
+          customer_site_id?: string | null
           requester_id?: string | null
           requester_initials?: string | null
           quote_date?: string
@@ -5434,6 +5512,7 @@ export type Database = {
           id?: string
           quote_reference?: string
           customer_id?: string
+          customer_site_id?: string | null
           requester_id?: string | null
           requester_initials?: string | null
           quote_date?: string
@@ -5525,6 +5604,13 @@ export type Database = {
             columns: ['customer_id']
             isOneToOne: false
             referencedRelation: 'customers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'quotes_customer_site_id_fkey'
+            columns: ['customer_site_id']
+            isOneToOne: false
+            referencedRelation: 'customer_sites'
             referencedColumns: ['id']
           },
           {
@@ -6066,6 +6152,100 @@ export type Database = {
           },
         ]
       }
+      schedule_job_tag_links: {
+        Row: {
+          job_id: string
+          tag_id: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          job_id: string
+          tag_id: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          job_id?: string
+          tag_id?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_job_tag_links_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_job_tag_links_job_id_fkey'
+            columns: ['job_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_job_tag_links_tag_id_fkey'
+            columns: ['tag_id']
+            isOneToOne: false
+            referencedRelation: 'schedule_job_tags'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      schedule_job_tags: {
+        Row: {
+          id: string
+          name: string
+          color: string
+          description: string | null
+          is_active: boolean
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          color?: string
+          description?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          color?: string
+          description?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'schedule_job_tags_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_job_tags_updated_by_fkey'
+            columns: ['updated_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       schedule_jobs: {
         Row: {
           id: string
@@ -6081,6 +6261,8 @@ export type Database = {
           quote_id: string | null
           quote_project_number_id: string | null
           customer_id: string | null
+          customer_site_id: string | null
+          is_drop_on_ready: boolean
           created_by: string | null
           updated_by: string | null
           created_at: string
@@ -6100,6 +6282,8 @@ export type Database = {
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null
+          customer_site_id?: string | null
+          is_drop_on_ready?: boolean
           created_by?: string | null
           updated_by?: string | null
           created_at?: string
@@ -6119,6 +6303,8 @@ export type Database = {
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null
+          customer_site_id?: string | null
+          is_drop_on_ready?: boolean
           created_by?: string | null
           updated_by?: string | null
           created_at?: string
@@ -6130,6 +6316,13 @@ export type Database = {
             columns: ['customer_id']
             isOneToOne: false
             referencedRelation: 'customers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'schedule_jobs_customer_site_id_fkey'
+            columns: ['customer_site_id']
+            isOneToOne: false
+            referencedRelation: 'customer_sites'
             referencedColumns: ['id']
           },
           {

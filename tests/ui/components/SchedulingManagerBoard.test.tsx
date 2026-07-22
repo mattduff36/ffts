@@ -2,14 +2,16 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 
 import type { ReactNode } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SchedulingManagerBoard } from '@/app/(dashboard)/scheduling/components/SchedulingManagerBoard';
 import {
   getSchedulingViewStorageKey,
   SCHEDULING_BOARD_VIEWS,
 } from '@/lib/config/scheduling-view-preference';
+import { SchedulingApiError } from '@/lib/client/scheduling';
 import {
   formatScheduleDate,
   getSchedulingWeek,
@@ -33,15 +35,18 @@ const {
   dndState,
   mockCreateAssignment,
   mockFetchBoard,
+  mockMoveAssignment,
   mockSaveVisit,
   mockToastInfo,
 } = vi.hoisted(() => ({
   dndState: {
     onDragEnd: undefined as ((event: DragEndEvent) => void) | undefined,
     draggableOptions: [] as DraggableOptions[],
+    sensors: [] as unknown[],
   },
   mockCreateAssignment: vi.fn(),
   mockFetchBoard: vi.fn(),
+  mockMoveAssignment: vi.fn(),
   mockSaveVisit: vi.fn(),
   mockToastInfo: vi.fn(),
 }));
@@ -50,23 +55,34 @@ vi.mock('@dnd-kit/dom', () => ({
   Accessibility: {
     configure: vi.fn(() => ({})),
   },
+  KeyboardSensor: {},
+  PointerActivationConstraints: {
+    Delay: class MockDelayConstraint {},
+    Distance: class MockDistanceConstraint {},
+  },
+  PointerSensor: {
+    configure: vi.fn(() => ({})),
+  },
 }));
 
 vi.mock('@dnd-kit/react', () => ({
   DragDropProvider: ({
     children,
     onDragEnd,
+    sensors,
   }: {
     children: ReactNode;
     onDragEnd?: (event: DragEndEvent) => void;
+    sensors?: unknown[];
   }) => {
     dndState.onDragEnd = onDragEnd;
+    dndState.sensors = sensors || [];
     return children;
   },
   DragOverlay: ({ children }: { children: ReactNode }) => children,
   useDraggable: (options: DraggableOptions) => {
     dndState.draggableOptions.push(options);
-    return { ref: vi.fn(), isDragging: false };
+    return { ref: vi.fn(), handleRef: vi.fn(), isDragging: false };
   },
   useDroppable: () => ({ ref: vi.fn(), isDropTarget: false }),
 }));
@@ -90,6 +106,7 @@ vi.mock('@/lib/client/scheduling', async () => {
     deleteScheduleAssignment: vi.fn(),
     deleteScheduleJob: vi.fn(),
     fetchSchedulingBoard: mockFetchBoard,
+    moveScheduleAssignment: mockMoveAssignment,
     deleteScheduleVisit: vi.fn(),
     savePlantUnavailability: vi.fn(),
     saveScheduleJob: vi.fn(),
@@ -113,11 +130,15 @@ const board: SchedulingBoardPayload = {
     quote_id: null,
     quote_project_number_id: null,
     customer_id: null,
+    customer_site_id: null,
+    is_drop_on_ready: false,
+    tags: [],
     created_by: null,
     updated_by: null,
     created_at: '2026-07-01T00:00:00Z',
     updated_at: '2026-07-01T00:00:00Z',
   }],
+  tags: [],
   visits: [{
     id: 'visit-1',
     job_id: 'job-1',
@@ -177,6 +198,12 @@ const board: SchedulingBoardPayload = {
       employee_id: 'E001',
       team_id: 'team-1',
       team_name: 'Arborists',
+    }, {
+      id: 'employee-2',
+      full_name: 'Bob Jones',
+      employee_id: 'E002',
+      team_id: 'team-1',
+      team_name: 'Arborists',
     }],
     plant: [],
   },
@@ -199,14 +226,16 @@ function mockWideViewport(matches: boolean) {
   });
 }
 
-function renderBoard() {
+function renderBoard(searchParams = '') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <SchedulingManagerBoard userId="manager-1" />
-    </QueryClientProvider>
+    <NuqsTestingAdapter searchParams={searchParams}>
+      <QueryClientProvider client={queryClient}>
+        <SchedulingManagerBoard userId="manager-1" />
+      </QueryClientProvider>
+    </NuqsTestingAdapter>
   );
 }
 
@@ -215,10 +244,12 @@ describe('SchedulingManagerBoard', () => {
     vi.clearAllMocks();
     dndState.onDragEnd = undefined;
     dndState.draggableOptions.length = 0;
+    dndState.sensors.length = 0;
     localStorage.clear();
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
     mockCreateAssignment.mockResolvedValue(undefined);
+    mockMoveAssignment.mockResolvedValue(undefined);
     mockSaveVisit.mockResolvedValue(undefined);
   });
 
@@ -228,6 +259,19 @@ describe('SchedulingManagerBoard', () => {
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
+  });
+
+  it('provides keyboard-operable dedicated drag handles', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    expect(dndState.sensors).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: 'Drag Bob Jones to a visit' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: 'Move Alex Smith to another visit' })[0]
+    ).toBeInTheDocument();
   });
 
   it('switches to daily and persists the user-scoped preference', async () => {
@@ -272,33 +316,113 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getAllByTestId(/^schedule-cell-/)).toHaveLength(1);
   });
 
-  it('uses select and Assign as the reliable narrow-screen workflow', async () => {
-    const { container } = renderBoard();
+  it('renders the daily board as a horizontally scrollable time line from 5am to 8pm', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+
+    renderBoard();
+
+    const dailyTimeline = await screen.findByTestId('schedule-daily-timeline');
+    expect(dailyTimeline).toHaveAttribute(
+      'aria-label',
+      'Daily schedule timeline'
+    );
+    expect(dailyTimeline).toHaveClass('scrollbar-hidden');
+    expect(screen.getByTestId('schedule-timeline-hour-5')).toHaveTextContent('05:00');
+    expect(screen.getByTestId('schedule-timeline-hour-20')).toHaveTextContent('20:00');
+    expect(screen.getByTestId(`schedule-cell-job-1-${today}`)).toHaveAttribute(
+      'data-timeline-start',
+      '05:00'
+    );
+    expect(screen.getByTestId(`schedule-cell-job-1-${today}`)).toHaveAttribute(
+      'data-timeline-end',
+      '20:00'
+    );
+    expect(screen.getByTestId('schedule-timeline-visit-visit-1')).toBeInTheDocument();
+    const timelineVisit = within(dailyTimeline).getByTestId('schedule-visit-visit-1');
+    expect(timelineVisit).toHaveClass('border-slate-500');
+    expect(timelineVisit).toHaveStyle({ backgroundColor: '#334155' });
+  });
+
+  it('clears the selected visit when clicking outside visit cards', async () => {
+    renderBoard();
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-    expect(dndState.draggableOptions).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('schedule-resource-employee-employee-1'));
     fireEvent.click(
       screen.getAllByRole('button', {
-        name: 'Assign resource to visit 1 for JOB-101',
+        name: 'Select visit 1 for JOB-101',
       })[0]
     );
 
-    expect(await screen.findByRole('dialog', { name: 'Assign resource' })).toHaveTextContent(
-      'JOB-101 — Crown reduction'
+    expect(screen.getByRole('button', { name: 'Clear selected visit' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Available (1)' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Weekly job board'));
+
+    expect(screen.queryByRole('button', { name: 'Clear selected visit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Available (2)' })).toBeInTheDocument();
+  });
+
+  it('selects a visit, removes overlapping resources, and assigns with one tap', async () => {
+    const { container } = renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Available (2)' })).toHaveClass(
+      'whitespace-nowrap',
+      'text-[10px]'
     );
-    expect(screen.getByText(/Visit 1/)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: 'Select visit 1 for JOB-101',
+      })[0]
+    );
+
+    expect(screen.queryByTestId('schedule-resource-employee-employee-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-employee-employee-2')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Assign(?: selected)?$/ })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Select Bob Jones' }));
+
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        job_id: 'job-1',
+        visit_id: 'visit-1',
+        resource_type: 'employee',
+        resource_id: 'employee-2',
+      })
+    );
+    expect(screen.queryByRole('button', { name: 'Clear selected visit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
     expect(container.querySelector('button button')).toBeNull();
   });
 
-  it('opens the assignment dialog after a valid wide-screen drop', async () => {
+  it('assigns directly after a valid drag', async () => {
     mockWideViewport(true);
     renderBoard();
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     await waitFor(() =>
-      expect(dndState.draggableOptions.some((options) => options.id.includes('employee-1'))).toBe(true)
+      expect(dndState.draggableOptions.some((options) => options.id.includes('employee-2'))).toBe(true)
     );
 
     act(() => {
@@ -307,7 +431,7 @@ describe('SchedulingManagerBoard', () => {
         operation: {
           source: {
             data: {
-              resource: { type: 'employee', id: 'employee-1', label: 'Alex Smith' },
+              resource: { type: 'employee', id: 'employee-2', label: 'Bob Jones' },
             },
           },
           target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
@@ -315,8 +439,92 @@ describe('SchedulingManagerBoard', () => {
       });
     });
 
-    expect(await screen.findByRole('dialog', { name: 'Assign resource' })).toBeInTheDocument();
-    expect(screen.getByText('Alex Smith (E001)')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        job_id: 'job-1',
+        visit_id: 'visit-1',
+        resource_type: 'employee',
+        resource_id: 'employee-2',
+      })
+    );
+    expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
+  });
+
+  it('rolls back optimistic availability and opens override review on conflict', async () => {
+    mockCreateAssignment.mockRejectedValueOnce(
+      new SchedulingApiError(
+        'This assignment has scheduling conflicts.',
+        409,
+        {
+          conflicts_by_date: {
+            '2026-07-14': [{
+              code: 'employee_absent',
+              severity: 'warning',
+              message: 'Employee has an approved absence.',
+            }],
+          },
+        }
+      )
+    );
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Select Bob Jones' }));
+
+    expect(
+      await screen.findByRole('alertdialog', { name: 'Review scheduling conflict' })
+    ).toHaveTextContent('Employee has an approved absence.');
+    expect(screen.getByTestId('schedule-resource-employee-employee-2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Assign anyway' }));
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          resource_id: 'employee-2',
+          override_conflicts: true,
+        })
+      )
+    );
+  });
+
+  it('moves an existing assignment directly between visits', async () => {
+    const secondVisit = {
+      ...board.visits[0],
+      id: 'visit-2',
+      sequence_number: 2,
+      title: 'Afternoon visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T17:00:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, secondVisit],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { assignment: board.assignments[0] } },
+          target: {
+            data: {
+              jobId: 'job-1',
+              visitId: 'visit-2',
+              workDate: '2026-07-14',
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockMoveAssignment).toHaveBeenCalledWith(board.assignments[0], 'visit-2')
+    );
   });
 
   it('opens a timed visit editor from an active job day', async () => {
@@ -365,5 +573,47 @@ describe('SchedulingManagerBoard', () => {
     expect(
       screen.getByRole('button', { name: "Add this week's first job" })
     ).toBeInTheDocument();
+  });
+
+  it('restores tag and drop-on filters from the URL', async () => {
+    const hospitalTag = {
+      id: 'tag-hospital',
+      name: 'Hospital',
+      color: 'slate',
+      description: null,
+      is_active: true,
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      tags: [hospitalTag],
+      jobs: [
+        {
+          ...board.jobs[0],
+          is_drop_on_ready: true,
+          tags: [hospitalTag],
+        },
+        {
+          ...board.jobs[0],
+          id: 'job-2',
+          job_reference: 'JOB-202',
+          title: 'Routine pruning',
+          is_drop_on_ready: false,
+          tags: [],
+        },
+      ],
+    });
+
+    renderBoard('?tags=tag-hospital&ready=true');
+
+    expect(await screen.findAllByText('JOB-101')).not.toHaveLength(0);
+    expect(screen.queryByText('JOB-202')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hospital' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Ready for drop-on' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
   });
 });

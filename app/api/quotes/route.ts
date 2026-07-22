@@ -18,6 +18,7 @@ import {
   replaceQuoteCustomerContactRecipients,
   validateSecondaryContactIdsForCustomer,
 } from '@/lib/server/quote-recipient-contacts';
+import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
 
 type QuoteFieldErrors = Record<string, string>;
@@ -311,6 +312,13 @@ export async function POST(request: NextRequest) {
     const normalizedValidityDays = Number(quoteData.validity_days);
     const pricingMode = quoteData.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
     const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
+    const customerSiteId = normalizeOptionalString(quoteData.customer_site_id);
+    const resolvedSite = await resolveCustomerSiteSelection(admin, {
+      customerId: customerId || null,
+      customerSiteId,
+      siteAddress: quoteData.site_address,
+    });
+    Object.assign(fieldErrors, resolvedSite.fieldErrors);
 
     if (!customerId) {
       fieldErrors.customer_id = 'Select a customer.';
@@ -332,7 +340,7 @@ export async function POST(request: NextRequest) {
       fieldErrors.attention_email = 'Enter the contact email.';
     }
 
-    if (!normalizeOptionalString(quoteData.site_address)) {
+    if (!resolvedSite.siteAddress) {
       fieldErrors.site_address = 'Enter the site address for this quote.';
     }
 
@@ -426,6 +434,7 @@ export async function POST(request: NextRequest) {
     const insertPayload = {
       ...quoteData,
       customer_id: customerId,
+      customer_site_id: resolvedSite.customerSiteId,
       id: quoteId,
       quote_reference: quoteReference,
       base_quote_reference: quoteReference,
@@ -439,7 +448,7 @@ export async function POST(request: NextRequest) {
       quote_date: normalizeOptionalString(quoteData.quote_date) || undefined,
       attention_name: normalizeOptionalString(quoteData.attention_name),
       attention_email: normalizeOptionalString(quoteData.attention_email),
-      site_address: normalizeOptionalString(quoteData.site_address),
+      site_address: resolvedSite.siteAddress,
       subject_line: normalizeOptionalString(quoteData.subject_line),
       project_description: normalizeOptionalString(quoteData.project_description),
       scope: normalizeOptionalString(quoteData.scope),

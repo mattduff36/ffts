@@ -21,6 +21,20 @@ export interface CustomerContact {
   updated_by?: string | null;
 }
 
+export interface CustomerSite {
+  id: string;
+  customer_id: string;
+  site_name: string;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  county: string | null;
+  postcode: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  notes: string | null;
+}
+
 export interface QuoteAttachment {
   id: string;
   quote_id: string;
@@ -241,6 +255,7 @@ export interface Quote {
   quote_thread_id: string;
   parent_quote_id: string | null;
   customer_id: string;
+  customer_site_id: string | null;
   requester_id: string | null;
   requester_initials: string | null;
   quote_date: string;
@@ -315,6 +330,7 @@ export interface Quote {
     county?: string | null;
     postcode?: string | null;
     secondary_contacts?: CustomerContact[];
+    sites?: CustomerSite[];
   };
   selected_secondary_contact_ids?: string[];
   selected_secondary_contacts?: CustomerContact[];
@@ -437,6 +453,7 @@ export function getQuoteStatusConfig(status: string) {
 
 export interface QuoteFormData {
   customer_id: string;
+  customer_site_id: string;
   manager_profile_id: string;
   requester_initials: string;
   quote_date: string;

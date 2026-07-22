@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
           county,
           postcode,
           default_validity_days,
-          secondary_contacts:customer_contacts(*)
+          secondary_contacts:customer_contacts(*),
+          sites:customer_sites(*)
         `)
         .order('company_name', { ascending: true })
       : Promise.resolve({ data: [], error: null });

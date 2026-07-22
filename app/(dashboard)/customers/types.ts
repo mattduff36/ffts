@@ -11,6 +11,24 @@ export interface CustomerContact {
   updated_by: string | null;
 }
 
+export interface CustomerSite {
+  id: string;
+  customer_id: string;
+  site_name: string;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  county: string | null;
+  postcode: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
 export interface Customer {
   id: string;
   company_name: string;
@@ -33,6 +51,7 @@ export interface Customer {
   created_by: string | null;
   updated_by: string | null;
   secondary_contacts: CustomerContact[];
+  sites: CustomerSite[];
 }
 
 export interface CustomerContactFormData {
@@ -41,6 +60,19 @@ export interface CustomerContactFormData {
   job_title: string;
   email: string;
   phone: string;
+}
+
+export interface CustomerSiteFormData {
+  id?: string;
+  site_name: string;
+  address_line_1: string;
+  address_line_2: string;
+  city: string;
+  county: string;
+  postcode: string;
+  is_active: boolean;
+  is_default: boolean;
+  notes: string;
 }
 
 export interface CustomerFormData {
@@ -60,6 +92,7 @@ export interface CustomerFormData {
   status: 'active' | 'inactive';
   notes: string;
   secondary_contacts: CustomerContactFormData[];
+  sites: CustomerSiteFormData[];
 }
 
 export const EMPTY_CUSTOMER_FORM: CustomerFormData = {
@@ -79,4 +112,5 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormData = {
   status: 'active',
   notes: '',
   secondary_contacts: [],
+  sites: [],
 };

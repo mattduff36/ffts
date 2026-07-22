@@ -49,6 +49,8 @@ export interface Suggestion {
   updated_at: string;
 }
 
+export type SubmitterSuggestion = Omit<Suggestion, 'admin_notes'>;
+
 export interface SuggestionWithUser extends Suggestion {
   user?: {
     full_name: string | null;

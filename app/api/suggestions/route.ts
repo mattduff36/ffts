@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { toSubmitterSuggestion } from '@/lib/utils/suggestion-projections';
 import type { CreateSuggestionRequest, Suggestion } from '@/types/faq';
 
 /**
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     // Note: suggestions table added by migration - types will update after migration runs
     const { data: suggestions, error } = await supabase
       .from('suggestions')
-      .select('id, created_by, title, body, page_hint, status, admin_notes, created_at, updated_at')
+      .select('id, created_by, title, body, page_hint, status, created_at, updated_at')
       .eq('created_by', user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      suggestions: suggestions as Suggestion[],
+      suggestions: ((suggestions || []) as Suggestion[]).map(toSubmitterSuggestion),
       pagination: {
         offset,
         limit,
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
         page_hint: body.page_hint?.trim() || null,
         status: 'new',
       })
-      .select()
+      .select('id, created_by, title, body, page_hint, status, created_at, updated_at')
       .single();
 
     if (error) {
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      suggestion,
+      suggestion: toSubmitterSuggestion(suggestion as Suggestion),
     }, { status: 201 });
 
   } catch (error) {

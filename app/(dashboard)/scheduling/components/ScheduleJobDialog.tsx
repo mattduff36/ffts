@@ -1,19 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ExternalLink, Loader2, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,11 +19,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  createProjectScheduleJob,
   createScheduleJobTag,
-  deleteScheduleJob,
+  fetchScheduleProjectCandidates,
   saveScheduleJob,
 } from '@/lib/client/scheduling';
-import type { ScheduleJob, ScheduleJobStatus, ScheduleJobTag } from '@/types/scheduling';
+import type {
+  ScheduleJob,
+  ScheduleJobStatus,
+  ScheduleJobTag,
+  ScheduleProjectCandidate,
+} from '@/types/scheduling';
 
 interface ScheduleJobDialogProps {
   open: boolean;
@@ -62,6 +58,16 @@ interface CustomerOption {
   sites: CustomerSiteOption[];
 }
 
+interface QuoteManagerOption {
+  profile_id: string;
+  initials: string;
+  is_active: boolean;
+  profile?: {
+    full_name: string | null;
+  } | null;
+  signoff_name?: string | null;
+}
+
 function formatSiteAddress(site: CustomerSiteOption): string {
   return [
     site.address_line_1,
@@ -81,6 +87,13 @@ export function ScheduleJobDialog({
   const [reference, setReference] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [projectNotes, setProjectNotes] = useState('');
+  const [projectMode, setProjectMode] = useState<'new' | 'existing'>('new');
+  const [projectNumberId, setProjectNumberId] = useState('');
+  const [managerProfileId, setManagerProfileId] = useState('');
+  const [projectCandidates, setProjectCandidates] = useState<ScheduleProjectCandidate[]>([]);
+  const [managerOptions, setManagerOptions] = useState<QuoteManagerOption[]>([]);
+  const [projectOptionsError, setProjectOptionsError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState('');
   const [customerSiteId, setCustomerSiteId] = useState('');
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -96,14 +109,20 @@ export function ScheduleJobDialog({
   const [endDate, setEndDate] = useState(defaultDate);
   const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const isQuoteJob = job?.source_type === 'quote';
+  const isProjectJob = job?.source_type === 'manual' && Boolean(job.quote_project_number_id);
+  const isSampleJob = job?.source_type === 'sample';
 
   useEffect(() => {
     if (!open) return;
     setReference(job?.job_reference || '');
     setTitle(job?.title || '');
     setDescription(job?.description || '');
+    setProjectNotes('');
+    setProjectMode('new');
+    setProjectNumberId('');
+    setManagerProfileId('');
+    setProjectOptionsError(null);
     setCustomerId(job?.customer_id || '');
     setCustomerSiteId(job?.customer_site_id || '');
     setSiteAddress(job?.site_address || '');
@@ -148,6 +167,45 @@ export function ScheduleJobDialog({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || job) return;
+    let isCancelled = false;
+
+    void Promise.all([
+      fetch('/api/quotes/metadata').then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          managerOptions?: QuoteManagerOption[];
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(payload.error || 'Quotes access is required to create a Project Number.');
+        }
+        return payload.managerOptions || [];
+      }),
+      fetchScheduleProjectCandidates(),
+    ])
+      .then(([nextManagerOptions, projects]) => {
+        if (isCancelled) return;
+        setManagerOptions(nextManagerOptions.filter((option) => option.is_active));
+        setProjectCandidates(projects);
+        setManagerProfileId(
+          nextManagerOptions.find((option) => option.is_active)?.profile_id || ''
+        );
+      })
+      .catch((error) => {
+        if (isCancelled) return;
+        const message = error instanceof Error
+          ? error.message
+          : 'Quotes access and an unlocked sensitive PIN are required.';
+        setProjectOptionsError(message);
+        toast.error(message);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [job, open]);
+
   const selectedCustomer = customers.find(customer => customer.id === customerId);
   const selectableCustomers = customers.filter(customer => (
     customer.status !== 'inactive' || customer.id === customerId
@@ -191,29 +249,60 @@ export function ScheduleJobDialog({
   async function handleSave() {
     setSaving(true);
     try {
-      await saveScheduleJob(
+      if (!job) {
+        await createProjectScheduleJob({
+          project_number_id: projectMode === 'existing' ? projectNumberId : null,
+          manager_profile_id: projectMode === 'new' ? managerProfileId : null,
+          project_title: projectMode === 'new' ? title : null,
+          project_description: projectMode === 'new' ? description || null : null,
+          project_notes: projectMode === 'new' ? projectNotes || null : null,
+          customer_id: customerId,
+          customer_site_id: customerSiteId || null,
+          site_address: siteAddress || null,
+          status,
+          start_date: startDate,
+          end_date: endDate,
+          estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+          is_drop_on_ready: isDropOnReady,
+          tag_ids: selectedTagIds,
+        });
+      } else {
+        await saveScheduleJob(
+          isQuoteJob
+            ? {
+                is_drop_on_ready: isDropOnReady,
+                tag_ids: selectedTagIds,
+              }
+            : {
+                ...(isSampleJob
+                  ? {
+                    job_reference: reference,
+                    title,
+                    description: description || null,
+                  }
+                  : {}),
+                customer_id: customerId,
+                customer_site_id: customerSiteId || null,
+                site_address: siteAddress || null,
+                status,
+                start_date: startDate,
+                end_date: endDate,
+                estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+                is_drop_on_ready: isDropOnReady,
+                tag_ids: selectedTagIds,
+              },
+          job.id
+        );
+      }
+      toast.success(
         isQuoteJob
-          ? {
-              is_drop_on_ready: isDropOnReady,
-              tag_ids: selectedTagIds,
-            }
-          : {
-              job_reference: reference,
-              title,
-              description: description || null,
-              customer_id: customerId,
-              customer_site_id: customerSiteId || null,
-              site_address: siteAddress || null,
-              status,
-              start_date: startDate,
-              end_date: endDate,
-              estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
-              is_drop_on_ready: isDropOnReady,
-              tag_ids: selectedTagIds,
-            },
-        job?.id
+          ? 'Job metadata updated'
+          : job
+            ? 'Job updated'
+            : projectMode === 'new'
+              ? 'Project Number and schedule created'
+              : 'Project scheduled'
       );
-      toast.success(isQuoteJob ? 'Job metadata updated' : job ? 'Job updated' : 'Job created');
       onOpenChange(false);
       onSaved();
     } catch (error) {
@@ -223,46 +312,141 @@ export function ScheduleJobDialog({
     }
   }
 
-  async function handleDelete() {
-    if (!job) return;
-    setSaving(true);
-    try {
-      await deleteScheduleJob(job.id);
-      toast.success('Job deleted');
-      setDeleteOpen(false);
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to delete job');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border">
           <DialogHeader>
-            <DialogTitle>{job ? 'Edit scheduled job' : 'Add scheduled job'}</DialogTitle>
+            <DialogTitle>{job ? 'Edit scheduled job' : 'Add Project job'}</DialogTitle>
             <DialogDescription>
               {isQuoteJob
                 ? 'Quote details are read-only here. Use Reschedule on the board to change its planning dates.'
-                : 'Set the planning dates, then add timed visits for employees and plant.'}
+                : job
+                  ? 'Project identity is managed in Quotes. Scheduling owns the operational planning details.'
+                  : 'Create a Quote Project Number or reschedule an open Project, then set its operational planning details.'}
             </DialogDescription>
           </DialogHeader>
 
+          {!job ? (
+            <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="schedule-project-source">Project source</Label>
+                <Select
+                  value={projectMode}
+                  onValueChange={(value) => {
+                    setProjectMode(value as 'new' | 'existing');
+                    setProjectNumberId('');
+                  }}
+                >
+                  <SelectTrigger id="schedule-project-source">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Create new Project Number</SelectItem>
+                    <SelectItem value="existing">Schedule existing open Project</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {projectOptionsError ? (
+                <p role="alert" className="text-sm text-red-300">
+                  {projectOptionsError} Open Quotes and unlock its sensitive PIN before trying again.
+                </p>
+              ) : null}
+
+              {projectMode === 'new' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-project-manager">Manager *</Label>
+                    <Select value={managerProfileId} onValueChange={setManagerProfileId}>
+                      <SelectTrigger id="schedule-project-manager">
+                        <SelectValue placeholder="Select manager" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {managerOptions.map((option) => (
+                          <SelectItem key={option.profile_id} value={option.profile_id}>
+                            {option.profile?.full_name || option.signoff_name || option.initials}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-project-title">Project title *</Label>
+                    <Input
+                      id="schedule-project-title"
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-project-description">Project description</Label>
+                    <Textarea
+                      id="schedule-project-description"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-project-notes">Project notes</Label>
+                    <Textarea
+                      id="schedule-project-notes"
+                      value={projectNotes}
+                      onChange={(event) => setProjectNotes(event.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    The Project Number is allocated from the selected manager&apos;s Quote series.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-existing-project">Open Project Number *</Label>
+                  <Select value={projectNumberId} onValueChange={setProjectNumberId}>
+                    <SelectTrigger id="schedule-existing-project">
+                      <SelectValue placeholder="Select Project Number" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectCandidates.map((project) => (
+                        <SelectItem
+                          key={project.id}
+                          value={project.id}
+                          textValue={`${project.project_reference} ${project.title}`}
+                        >
+                          {project.project_reference} · {project.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {projectCandidates.length === 0 && !projectOptionsError ? (
+                    <p className="text-xs text-muted-foreground">
+                      No unscheduled open Project Numbers are available.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : !isSampleJob ? (
+            <div className="rounded-lg border border-border bg-muted/20 p-4">
+              <p className="font-mono text-sm font-semibold text-foreground">{reference}</p>
+              <p className="mt-1 font-medium text-foreground">{title}</p>
+              {description ? (
+                <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           <fieldset disabled={isQuoteJob} className="grid gap-4 py-2 disabled:opacity-70">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="schedule-job-reference">Job reference</Label>
-                <Input
-                  id="schedule-job-reference"
-                  value={reference}
-                  onChange={(event) => setReference(event.target.value)}
-                  placeholder="e.g. 12345-MD"
-                />
-              </div>
+              {isSampleJob ? (
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-job-reference">Job reference</Label>
+                  <Input
+                    id="schedule-job-reference"
+                    value={reference}
+                    onChange={(event) => setReference(event.target.value)}
+                  />
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="schedule-job-status">Status</Label>
                 <Select value={status} onValueChange={(value) => setStatus(value as ScheduleJobStatus)}>
@@ -279,10 +463,12 @@ export function ScheduleJobDialog({
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="schedule-job-title">Title</Label>
-              <Input id="schedule-job-title" value={title} onChange={(event) => setTitle(event.target.value)} />
-            </div>
+            {isSampleJob ? (
+              <div className="space-y-2">
+                <Label htmlFor="schedule-job-title">Title</Label>
+                <Input id="schedule-job-title" value={title} onChange={(event) => setTitle(event.target.value)} />
+              </div>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="schedule-job-customer">Customer</Label>
@@ -336,15 +522,17 @@ export function ScheduleJobDialog({
                 This snapshot is retained if the saved customer site changes later.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="schedule-job-description">Description</Label>
-              <Textarea
-                id="schedule-job-description"
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </div>
+            {isSampleJob ? (
+              <div className="space-y-2">
+                <Label htmlFor="schedule-job-description">Description</Label>
+                <Textarea
+                  id="schedule-job-description"
+                  rows={3}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </div>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="schedule-job-start">Start date</Label>
@@ -373,7 +561,7 @@ export function ScheduleJobDialog({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Operational classification</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tags and drop-on readiness can be updated here for both manual and Quote jobs.
+                Tags and drop-on readiness can be updated here for both Project and Quote jobs.
               </p>
             </div>
             <label
@@ -448,18 +636,7 @@ export function ScheduleJobDialog({
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:justify-between">
-            {job && !isQuoteJob ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDeleteOpen(true)}
-                className="border-red-500/40 text-red-300 hover:bg-red-500/10"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-            ) : <span />}
+          <DialogFooter className="gap-2">
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               {isQuoteJob && job ? (
@@ -470,39 +647,38 @@ export function ScheduleJobDialog({
                   </Link>
                 </Button>
               ) : null}
+              {isProjectJob ? (
+                <Button asChild variant="outline">
+                  <Link href="/quotes?tab=projects">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Open Projects
+                  </Link>
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={() => void handleSave()}
-                disabled={saving || (!isQuoteJob && !customerId)}
+                disabled={
+                  saving
+                  || (!isQuoteJob && !customerId)
+                  || (!job && Boolean(projectOptionsError))
+                  || (!job && projectMode === 'new' && (!managerProfileId || !title.trim()))
+                  || (!job && projectMode === 'existing' && !projectNumberId)
+                }
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isQuoteJob ? 'Save metadata' : 'Save job'}
+                {isQuoteJob
+                  ? 'Save metadata'
+                  : job
+                    ? 'Save job'
+                    : projectMode === 'new'
+                      ? 'Create Project job'
+                      : 'Schedule Project'}
               </Button>
             </div>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this job?</AlertDialogTitle>
-            <AlertDialogDescription>
-              All employee and plant assignments for {job?.job_reference} will also be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void handleDelete()}
-              className="bg-red-600 text-white hover:bg-red-500"
-            >
-              Delete job
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    </Dialog>
   );
 }

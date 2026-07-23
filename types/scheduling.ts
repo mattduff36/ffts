@@ -65,6 +65,16 @@ export interface ScheduleQuoteCandidate {
   estimated_duration_days: number | null;
 }
 
+export interface ScheduleProjectCandidate {
+  id: string;
+  project_reference: string;
+  manager_profile_id: string;
+  requester_initials: string;
+  title: string;
+  description: string | null;
+  status: 'open';
+}
+
 export interface ScheduleVisit {
   id: string;
   job_id: string;

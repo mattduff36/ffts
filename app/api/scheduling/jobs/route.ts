@@ -3,17 +3,21 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
 import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
+import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
+import { syncProjectNumberSiteLocation } from '@/lib/server/inventory-site-location-sync';
 import {
   loadScheduleJobTags,
   loadTagsForScheduleJob,
-  syncScheduleJobTags,
 } from '@/lib/server/scheduling-tags';
+import type { Database } from '@/types/database';
 
 const jobSchema = z
   .object({
-    job_reference: z.string().trim().min(1).max(60),
-    title: z.string().trim().min(1).max(255),
-    description: z.string().trim().max(5000).nullish(),
+    project_number_id: z.uuid().nullish(),
+    manager_profile_id: z.uuid().nullish(),
+    project_title: z.string().trim().max(500).nullish(),
+    project_description: z.string().trim().max(5000).nullish(),
+    project_notes: z.string().trim().max(5000).nullish(),
     site_address: z.string().trim().max(2000).nullish(),
     customer_id: z.uuid(),
     customer_site_id: z.uuid().nullish(),
@@ -27,7 +31,26 @@ const jobSchema = z
   .refine((value) => value.end_date >= value.start_date, {
     message: 'End date must be on or after the start date.',
     path: ['end_date'],
+  })
+  .superRefine((value, context) => {
+    if (value.project_number_id) return;
+    if (!value.manager_profile_id) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Select a manager.',
+        path: ['manager_profile_id'],
+      });
+    }
+    if (!value.project_title) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Enter a project title.',
+        path: ['project_title'],
+      });
+    }
   });
+
+type QuoteProjectNumberRow = Database['public']['Tables']['quote_project_numbers']['Row'];
 
 export async function GET() {
   try {
@@ -67,6 +90,8 @@ export async function POST(request: NextRequest) {
     if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     const parsed = jobSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -92,29 +117,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { tag_ids: tagIds, ...jobData } = parsed.data;
-    const { data, error } = await admin
-      .from('schedule_jobs')
-      .insert({
-        ...jobData,
-        description: parsed.data.description || null,
-        customer_site_id: resolvedSite.customerSiteId,
-        site_address: resolvedSite.siteAddress,
-        source_type: 'manual',
-        created_by: access.userId,
-        updated_by: access.userId,
-      })
-      .select()
-      .single();
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'That job reference already exists.' }, { status: 409 });
+    const { data: creationRows, error: creationError } = await admin.rpc(
+      'create_project_schedule_job',
+      {
+        p_project_number_id: parsed.data.project_number_id || null,
+        p_manager_profile_id: parsed.data.manager_profile_id || null,
+        p_project_title: parsed.data.project_title || null,
+        p_project_description: parsed.data.project_description || null,
+        p_project_notes: parsed.data.project_notes || null,
+        p_customer_id: parsed.data.customer_id,
+        p_customer_site_id: resolvedSite.customerSiteId,
+        p_site_address: resolvedSite.siteAddress,
+        p_job_status: parsed.data.status,
+        p_start_date: parsed.data.start_date,
+        p_end_date: parsed.data.end_date,
+        p_estimated_duration_minutes: parsed.data.estimated_duration_minutes || null,
+        p_is_drop_on_ready: parsed.data.is_drop_on_ready,
+        p_tag_ids: parsed.data.tag_ids,
+        p_actor_user_id: access.userId,
       }
-      throw error;
+    );
+    if (creationError) {
+      if (creationError.code === '23505') {
+        return NextResponse.json(
+          { error: 'That Project Number is already scheduled.' },
+          { status: 409 }
+        );
+      }
+      if (
+        creationError.message.includes('Only an open Project Number')
+        || creationError.message.includes('already scheduled')
+      ) {
+        return NextResponse.json({ error: creationError.message }, { status: 409 });
+      }
+      if (creationError.code === 'P0001') {
+        return NextResponse.json({ error: creationError.message }, { status: 400 });
+      }
+      throw creationError;
     }
-    await syncScheduleJobTags(admin, data.id, tagIds, access.userId);
-    const tags = await loadTagsForScheduleJob(admin, data.id);
-    return NextResponse.json({ job: { ...data, tags } }, { status: 201 });
+    const creation = creationRows?.[0];
+    if (!creation) {
+      throw new Error('Project scheduling creation returned no result.');
+    }
+
+    if (creation.was_project_created) {
+      const projectResult = await admin
+        .from('quote_project_numbers')
+        .select('*')
+        .eq('id', creation.project_number_id)
+        .single();
+      if (projectResult.error) throw projectResult.error;
+      try {
+        await syncProjectNumberSiteLocation(
+          admin,
+          projectResult.data as QuoteProjectNumberRow,
+          access.userId
+        );
+      } catch (syncError) {
+        console.error('Unable to sync Project Number inventory location:', syncError);
+      }
+    }
+
+    const jobResult = await admin
+      .from('schedule_jobs')
+      .select('*')
+      .eq('id', creation.schedule_job_id)
+      .single();
+    if (jobResult.error) throw jobResult.error;
+    const tags = await loadTagsForScheduleJob(admin, creation.schedule_job_id);
+    return NextResponse.json(
+      { job: { ...jobResult.data, tags }, project_reference: creation.project_reference },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating schedule job:', error);
     return NextResponse.json({ error: 'Unable to create this job.' }, { status: 500 });

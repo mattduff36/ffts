@@ -17,8 +17,10 @@ const SAMPLE_EMAIL = 'scheduling-sample-v1@example.test';
 const SAMPLE_INITIALS = 'SD';
 const SAMPLE_NUMBER_START = 99000;
 const QUOTE_COUNT = 22;
+const QUEUE_SAMPLE_NUMBER_START = SAMPLE_NUMBER_START + QUOTE_COUNT;
+const QUEUE_QUOTE_COUNT = 12;
 
-type Mode = 'plan' | 'apply' | 'cleanup';
+type Mode = 'plan' | 'apply' | 'cleanup' | 'queue-plan' | 'queue-apply';
 
 interface VisitDefinition {
   date: string;
@@ -40,6 +42,29 @@ interface QuoteDefinition {
   visits: VisitDefinition[];
 }
 
+type QueueQuoteStatus =
+  | 'draft'
+  | 'changes_requested'
+  | 'pending_internal_approval'
+  | 'approved'
+  | 'sent'
+  | 'won'
+  | 'po_received'
+  | 'in_progress';
+
+interface QueueQuoteDefinition {
+  id: string;
+  customerIndex: number;
+  reference: string;
+  title: string;
+  siteAddress: string;
+  startDate: string | null;
+  estimatedDays: number;
+  estimatedMinutes: number;
+  status: QueueQuoteStatus;
+  visits: VisitDefinition[];
+}
+
 interface SampleManifest {
   fixture_key: string;
   project_ref: string;
@@ -56,6 +81,33 @@ interface SampleManifest {
     start_date: string;
     estimated_days: number;
     estimated_minutes: number;
+    visit_count: number;
+  }>;
+}
+
+interface QueueSampleManifest {
+  fixture_key: string;
+  project_ref: string;
+  profile_email: string;
+  series: {
+    initials: string;
+    number_start: number;
+    next_number: number;
+  };
+  date_window: { start: string; end: string };
+  counts: {
+    customers: number;
+    quotes: number;
+    jobs: number;
+    visits: number;
+    assignments: number;
+  };
+  unscheduled_status_counts: { draft: number; pending: number; accepted: number };
+  quotes: Array<{
+    reference: string;
+    status: QueueQuoteStatus;
+    start_date: string | null;
+    estimated_days: number;
     visit_count: number;
   }>;
 }
@@ -217,6 +269,116 @@ export function createManifest(projectRef: string): SampleManifest {
   };
 }
 
+export function buildQueueFixtureDefinitions(today = new Date()): {
+  windowStart: string;
+  windowEnd: string;
+  quotes: QueueQuoteDefinition[];
+} {
+  const monday = startOfWeek(today, { weekStartsOn: 1 });
+  const windowStart = format(monday, 'yyyy-MM-dd');
+  const windowEnd = format(addDays(monday, 6), 'yyyy-MM-dd');
+  const statuses: QueueQuoteStatus[] = [
+    'draft',
+    'changes_requested',
+    'draft',
+    'pending_internal_approval',
+    'approved',
+    'sent',
+    'won',
+    'po_received',
+    'in_progress',
+    'po_received',
+    'in_progress',
+    'po_received',
+  ];
+  const titles = [
+    'Unpriced emergency call-out',
+    'Revised woodland clearance',
+    'Draft estate inspection',
+    'Awaiting internal tree survey approval',
+    'Approved roadside pruning proposal',
+    'Confirmed school grounds works',
+    'Won habitat improvement project',
+    'Accepted veteran oak inspection',
+    'Urgent ash dieback response',
+    'Scheduled avenue crown lifting',
+    'Scheduled storm damage clearance',
+    'Scheduled hedge reduction programme',
+  ];
+  const quotes = titles.map((title, index): QueueQuoteDefinition => {
+    const isScheduled = index >= 9;
+    const startDate = isScheduled
+      ? format(addDays(monday, index - 9), 'yyyy-MM-dd')
+      : null;
+    const estimatedDays = (index % 3) + 1;
+    const visits = startDate
+      ? [buildVisit(startDate, 8 + (index - 9), 4 + (index % 2), title)]
+      : [];
+    return {
+      id: randomUUID(),
+      customerIndex: index % 5,
+      reference: `${QUEUE_SAMPLE_NUMBER_START + index}-${SAMPLE_INITIALS}`,
+      title,
+      siteAddress: `${40 + index} Queue Test Road`,
+      startDate,
+      estimatedDays,
+      estimatedMinutes: visits.length > 0
+        ? visits.reduce(
+            (total, visit) =>
+              total
+              + (new Date(visit.endsAt).getTime() - new Date(visit.startsAt).getTime())
+                / 60_000,
+            0
+          )
+        : estimatedDays * 360,
+      status: statuses[index],
+      visits,
+    };
+  });
+  return { windowStart, windowEnd, quotes };
+}
+
+export function createQueueManifest(projectRef: string): QueueSampleManifest {
+  const fixture = buildQueueFixtureDefinitions();
+  return {
+    fixture_key: FIXTURE_KEY,
+    project_ref: projectRef,
+    profile_email: SAMPLE_EMAIL,
+    series: {
+      initials: SAMPLE_INITIALS,
+      number_start: QUEUE_SAMPLE_NUMBER_START,
+      next_number: QUEUE_SAMPLE_NUMBER_START + QUEUE_QUOTE_COUNT,
+    },
+    date_window: { start: fixture.windowStart, end: fixture.windowEnd },
+    counts: {
+      customers: 0,
+      quotes: fixture.quotes.length,
+      jobs: fixture.quotes.filter((quote) => quote.startDate).length,
+      visits: fixture.quotes.reduce((total, quote) => total + quote.visits.length, 0),
+      assignments: 0,
+    },
+    unscheduled_status_counts: {
+      draft: fixture.quotes.filter((quote) =>
+        !quote.startDate && ['draft', 'changes_requested'].includes(quote.status)
+      ).length,
+      pending: fixture.quotes.filter((quote) =>
+        !quote.startDate
+        && ['pending_internal_approval', 'approved', 'sent'].includes(quote.status)
+      ).length,
+      accepted: fixture.quotes.filter((quote) =>
+        !quote.startDate && ['won', 'po_received', 'in_progress'].includes(quote.status)
+      ).length,
+    },
+    quotes: fixture.quotes.map((quote) => ({
+      reference: quote.reference,
+      status: quote.status,
+      start_date: quote.startDate,
+      estimated_days: quote.estimatedDays,
+      visit_count: quote.visits.length,
+    })),
+  };
+}
+
 function createPgClient(connectionString: string): Client {
   const url = new URL(connectionString);
   return new PgClient({
@@ -304,6 +466,79 @@ async function collisionCounts(client: Client) {
   ) as Record<'profiles' | 'series' | 'series_range' | 'customers' | 'quotes', number>;
 }
 
+function queueSampleReferences(): string[] {
+  return Array.from(
+    { length: QUEUE_QUOTE_COUNT },
+    (_, index) => `${QUEUE_SAMPLE_NUMBER_START + index}-${SAMPLE_INITIALS}`
+  );
+}
+
+async function assertQueueExtensionReady(client: Client) {
+  const result = await client.query<{
+    profiles: string;
+    customers: string;
+    base_quotes: string;
+    base_jobs: string;
+    base_visits: string;
+    series: string;
+    queue_collisions: string;
+  }>(
+    `
+      WITH owned_quotes AS (
+        SELECT id FROM public.quotes WHERE version_notes = $1
+      ), owned_jobs AS (
+        SELECT id FROM public.schedule_jobs
+        WHERE quote_id IN (SELECT id FROM owned_quotes)
+      )
+      SELECT
+        (SELECT COUNT(*)::text FROM public.profiles
+          WHERE placeholder_key = $1 AND is_placeholder = TRUE) AS profiles,
+        (SELECT COUNT(*)::text FROM public.customers WHERE notes = $1) AS customers,
+        (SELECT COUNT(*)::text FROM owned_quotes) AS base_quotes,
+        (SELECT COUNT(*)::text FROM owned_jobs) AS base_jobs,
+        (SELECT COUNT(*)::text FROM public.schedule_visits
+          WHERE job_id IN (SELECT id FROM owned_jobs)) AS base_visits,
+        (
+          SELECT COUNT(*)::text
+          FROM public.quote_manager_series AS series
+          JOIN public.profiles AS profile ON profile.id = series.profile_id
+          WHERE profile.placeholder_key = $1
+            AND series.initials = $2
+            AND series.next_number = $3
+            AND series.is_active = FALSE
+        ) AS series,
+        (SELECT COUNT(*)::text FROM public.quotes
+          WHERE quote_reference = ANY($4::text[])) AS queue_collisions
+    `,
+    [
+      FIXTURE_KEY,
+      SAMPLE_INITIALS,
+      QUEUE_SAMPLE_NUMBER_START,
+      queueSampleReferences(),
+    ]
+  );
+  const counts = Object.fromEntries(
+    Object.entries(result.rows[0]).map(([key, value]) => [key, Number(value)])
+  );
+  const expected = {
+    profiles: 1,
+    customers: 5,
+    base_quotes: QUOTE_COUNT,
+    base_jobs: QUOTE_COUNT,
+    series: 1,
+    queue_collisions: 0,
+  };
+  if (
+    Object.entries(expected).some(([key, value]) => counts[key] !== value)
+    || Number(counts.base_visits) < 36
+  ) {
+    throw new Error(
+      `Existing fixture is not in the expected extension state: ${JSON.stringify(counts)}`
+    );
+  }
+  return counts;
+}
+
 async function findAuthUserByEmail(
   supabase: SupabaseClient,
   email: string
@@ -322,6 +557,14 @@ function writeManifest(manifest: SampleManifest) {
   const directory = resolve(process.cwd(), 'docs_private', 'automation', 'runs', 'scheduling-sample');
   mkdirSync(directory, { recursive: true });
   const path = resolve(directory, `plan-${manifest.date_window.start}.json`);
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  console.log(`Manifest: ${path}`);
+}
+
+function writeQueueManifest(manifest: QueueSampleManifest) {
+  const directory = resolve(process.cwd(), 'docs_private', 'automation', 'runs', 'scheduling-sample');
+  mkdirSync(directory, { recursive: true });
+  const path = resolve(directory, `queue-plan-${manifest.date_window.start}.json`);
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   console.log(`Manifest: ${path}`);
 }
@@ -515,6 +758,191 @@ async function applyFixture(
   }
 }
 
+async function applyQueueFixture(
+  client: Client,
+  manifest: QueueSampleManifest
+) {
+  await assertQueueExtensionReady(client);
+  const fixture = buildQueueFixtureDefinitions(
+    new Date(`${manifest.date_window.start}T12:00:00Z`)
+  );
+  const profileResult = await client.query<{ id: string }>(
+    `
+      SELECT id FROM public.profiles
+      WHERE placeholder_key = $1
+        AND is_placeholder = TRUE
+        AND employer_profile_notes = $1
+    `,
+    [FIXTURE_KEY]
+  );
+  const customerResult = await client.query<{ id: string }>(
+    `
+      SELECT id FROM public.customers
+      WHERE notes = $1
+      ORDER BY company_name
+    `,
+    [FIXTURE_KEY]
+  );
+  if (profileResult.rows.length !== 1 || customerResult.rows.length !== 5) {
+    throw new Error('The base SAMPLE identity or Customers are not uniquely available.');
+  }
+  const profileId = profileResult.rows[0].id;
+
+  await client.query('BEGIN');
+  try {
+    for (const quote of fixture.quotes) {
+      const isAccepted = ['won', 'po_received', 'in_progress'].includes(quote.status);
+      const hasPurchaseOrder = ['po_received', 'in_progress'].includes(quote.status);
+      const total = Math.max(quote.estimatedMinutes * 2.5, 350);
+      await client.query(
+        `
+          INSERT INTO public.quotes (
+            id, quote_reference, base_quote_reference, quote_thread_id,
+            customer_id, requester_id, requester_initials, quote_date,
+            subject_line, project_description, scope, site_address,
+            subtotal, total, status, accepted, started, po_number,
+            po_received_at, start_date, estimated_duration_days,
+            estimated_duration_minutes, completion_status, commercial_status,
+            revision_number, revision_type, version_label, version_notes,
+            is_latest_version, pricing_mode, manager_name, manager_email,
+            created_by, updated_by
+          ) VALUES (
+            $1, $2, $2, $1,
+            $3, $4, $5, CURRENT_DATE,
+            $6, $7, $7, $8,
+            $9, $9, $10, $11, $12, $13,
+            $14, $15, $16,
+            $17, 'not_completed', 'open',
+            0, 'original', 'Original', $18,
+            TRUE, 'itemized', $19, $20,
+            $4, $4
+          )
+        `,
+        [
+          quote.id,
+          quote.reference,
+          customerResult.rows[quote.customerIndex].id,
+          profileId,
+          SAMPLE_INITIALS,
+          quote.title,
+          `Fictional queue sample scope for ${quote.title.toLowerCase()}.`,
+          quote.siteAddress,
+          total,
+          quote.status,
+          isAccepted,
+          quote.status === 'in_progress',
+          hasPurchaseOrder ? `SAMPLE-${quote.reference}` : null,
+          hasPurchaseOrder ? new Date() : null,
+          quote.startDate,
+          quote.estimatedDays,
+          quote.estimatedMinutes,
+          FIXTURE_KEY,
+          'SAMPLE Scheduling Manager',
+          SAMPLE_EMAIL,
+        ]
+      );
+      await client.query(
+        `
+          INSERT INTO public.quote_line_items (
+            quote_id, description, quantity, unit, unit_rate, line_total, sort_order
+          ) VALUES ($1, $2, 1, 'job', $3, $3, 0)
+        `,
+        [quote.id, quote.title, total]
+      );
+
+      const jobResult = await client.query<{ id: string; job_reference: string }>(
+        `SELECT id, job_reference FROM public.schedule_jobs WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (!quote.startDate) {
+        if (jobResult.rows.length > 0) {
+          throw new Error(`Unscheduled Quote ${quote.reference} unexpectedly synchronized.`);
+        }
+        continue;
+      }
+      if (jobResult.rows[0]?.job_reference !== quote.reference) {
+        throw new Error(`Quote synchronization failed for ${quote.reference}.`);
+      }
+      for (const [visitIndex, visit] of quote.visits.entries()) {
+        await client.query(
+          `
+            INSERT INTO public.schedule_visits (
+              job_id, sequence_number, title, starts_at, ends_at,
+              status, notes, created_by, updated_by
+            ) VALUES ($1, $2, $3, $4, $5, 'planned', $6, $7, $7)
+          `,
+          [
+            jobResult.rows[0].id,
+            visitIndex + 1,
+            visit.title,
+            visit.startsAt,
+            visit.endsAt,
+            FIXTURE_KEY,
+            profileId,
+          ]
+        );
+      }
+    }
+    const seriesResult = await client.query(
+      `
+        UPDATE public.quote_manager_series AS series
+        SET next_number = $1
+        FROM public.profiles AS profile
+        WHERE profile.id = series.profile_id
+          AND profile.placeholder_key = $2
+          AND series.initials = $3
+          AND series.next_number = $4
+          AND series.is_active = FALSE
+      `,
+      [
+        QUEUE_SAMPLE_NUMBER_START + QUEUE_QUOTE_COUNT,
+        FIXTURE_KEY,
+        SAMPLE_INITIALS,
+        QUEUE_SAMPLE_NUMBER_START,
+      ]
+    );
+    if (seriesResult.rowCount !== 1) {
+      throw new Error('SAMPLE quote series changed while extending the fixture.');
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
+}
+
+async function inspectQueueFixture(client: Client) {
+  const result = await client.query<{
+    quotes: string;
+    jobs: string;
+    visits: string;
+    employee_assignments: string;
+    plant_assignments: string;
+  }>(
+    `
+      WITH queue_quotes AS (
+        SELECT id FROM public.quotes WHERE quote_reference = ANY($1::text[])
+      ), queue_jobs AS (
+        SELECT id FROM public.schedule_jobs WHERE quote_id IN (SELECT id FROM queue_quotes)
+      ), queue_visits AS (
+        SELECT id FROM public.schedule_visits WHERE job_id IN (SELECT id FROM queue_jobs)
+      )
+      SELECT
+        (SELECT COUNT(*)::text FROM queue_quotes) AS quotes,
+        (SELECT COUNT(*)::text FROM queue_jobs) AS jobs,
+        (SELECT COUNT(*)::text FROM queue_visits) AS visits,
+        (SELECT COUNT(*)::text FROM public.schedule_employee_assignments
+          WHERE visit_id IN (SELECT id FROM queue_visits)) AS employee_assignments,
+        (SELECT COUNT(*)::text FROM public.schedule_plant_assignments
+          WHERE visit_id IN (SELECT id FROM queue_visits)) AS plant_assignments
+    `,
+    [queueSampleReferences()]
+  );
+  return Object.fromEntries(
+    Object.entries(result.rows[0]).map(([key, value]) => [key, Number(value)])
+  );
+}
+
 async function inspectFixture(client: Client) {
   const result = await client.query<{
     profiles: string;
@@ -629,9 +1057,14 @@ async function cleanupFixture(
 
 async function main() {
   const mode = (process.argv.find((argument) => argument.startsWith('--mode='))?.split('=')[1] || 'plan') as Mode;
-  if (!['plan', 'apply', 'cleanup'].includes(mode)) throw new Error('Invalid mode.');
+  if (!['plan', 'apply', 'cleanup', 'queue-plan', 'queue-apply'].includes(mode)) {
+    throw new Error('Invalid mode.');
+  }
   const isDryRun = process.argv.includes('--dry-run');
-  if ((mode === 'apply' || (mode === 'cleanup' && !isDryRun)) && !process.argv.includes(CONFIRMATION)) {
+  if (
+    (mode === 'apply' || mode === 'queue-apply' || (mode === 'cleanup' && !isDryRun))
+    && !process.argv.includes(CONFIRMATION)
+  ) {
     throw new Error(`Production confirmation required: ${CONFIRMATION}`);
   }
 
@@ -643,6 +1076,37 @@ async function main() {
   await client.connect();
   try {
     await assertSchema(client);
+    if (mode === 'queue-plan') {
+      const manifest = createQueueManifest(environment.projectRef);
+      await assertQueueExtensionReady(client);
+      writeQueueManifest(manifest);
+      console.log(JSON.stringify(manifest, null, 2));
+      return;
+    }
+    if (mode === 'queue-apply') {
+      const manifest = createQueueManifest(environment.projectRef);
+      await applyQueueFixture(client, manifest);
+      const counts = await inspectQueueFixture(client);
+      const expectedCounts = {
+        quotes: manifest.counts.quotes,
+        jobs: manifest.counts.jobs,
+        visits: manifest.counts.visits,
+        employee_assignments: 0,
+        plant_assignments: 0,
+      };
+      if (
+        Object.entries(expectedCounts).some(
+          ([key, value]) => Number(counts[key]) !== value
+        )
+      ) {
+        throw new Error(
+          `Queue fixture verification failed: ${JSON.stringify(counts)}`
+        );
+      }
+      console.log('Applied queue fixture counts:', JSON.stringify(counts));
+      console.log(`Cleanup: npm run scheduling:sample:cleanup -- ${CONFIRMATION}`);
+      return;
+    }
     const manifest = createManifest(environment.projectRef);
     if (mode === 'plan') {
       const collisions = await collisionCounts(client);

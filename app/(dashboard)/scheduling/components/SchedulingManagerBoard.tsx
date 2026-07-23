@@ -35,6 +35,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Trash2,
   Tractor,
   Users,
   UserRound,
@@ -63,6 +64,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   createScheduleAssignment,
   deleteScheduleAssignment,
+  deleteScheduleJob,
   fetchScheduleQuoteCandidates,
   fetchSchedulingBoard,
   moveScheduleAssignment,
@@ -1216,6 +1218,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [schedulingQuoteJob, setSchedulingQuoteJob] = useState<ScheduleJob | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
+  const [pendingRemoveJob, setPendingRemoveJob] = useState<ScheduleJob | null>(null);
+  const [isRemovingJob, setIsRemovingJob] = useState(false);
   const [isSchedulingQuote, setIsSchedulingQuote] = useState(false);
 
   const weekStart = getSchedulingWeek(selectedDate).start;
@@ -1687,6 +1691,31 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
+  async function handleRemoveJob() {
+    if (!pendingRemoveJob || isRemovingJob) return;
+    const job = pendingRemoveJob;
+    setIsRemovingJob(true);
+    try {
+      await deleteScheduleJob(job.id);
+      setPendingRemoveJob(null);
+      setActiveVisitTarget((current) => current?.job.id === job.id ? null : current);
+      setVisitTarget((current) => current?.job.id === job.id ? null : current);
+      toast.success(
+        job.source_type === 'quote'
+          ? `${job.job_reference} returned to the Jobs queue`
+          : `${job.job_reference} schedule removed`
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
+        queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to remove job');
+    } finally {
+      setIsRemovingJob(false);
+    }
+  }
+
   function visitsFor(jobId: string): ScheduleVisit[] {
     return board?.visits.filter((visit) => visit.job_id === jobId) || [];
   }
@@ -1864,7 +1893,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               }}
             >
               <Plus className="mr-2 h-4 w-4" />
-              Add manual job
+              Add Project job
             </Button>
             <Button
               onClick={() => openQuoteScheduler()}
@@ -2268,6 +2297,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               <span className="font-semibold text-foreground">{job.job_reference}</span>
                               {job.source_type === 'sample' ? <Badge variant="outline">Sample</Badge> : null}
                               {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
+                              {job.source_type === 'manual' && job.quote_project_number_id ? (
+                                <Badge variant="outline">Project</Badge>
+                              ) : null}
                             </div>
                             <p className="truncate text-sm text-muted-foreground">
                               {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
@@ -2321,6 +2353,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                   </Link>
                                 </Button>
                               </>
+                            ) : null}
+                            {job.source_type !== 'sample' ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                                onClick={() => setPendingRemoveJob(job)}
+                                aria-label={`Remove ${job.job_reference}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             ) : null}
                             <Button
                               size="sm"
@@ -2405,6 +2448,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-foreground">{job.job_reference}</p>
                           {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
+                          {job.source_type === 'manual' && job.quote_project_number_id ? (
+                            <Badge variant="outline">Project</Badge>
+                          ) : null}
                           {job.is_drop_on_ready ? (
                             <Badge className="bg-emerald-500/15 text-emerald-300">Drop-on ready</Badge>
                           ) : null}
@@ -2437,7 +2483,23 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             </Button>
                           </>
                         ) : null}
-                        <Button size="sm" variant="ghost" onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}>
+                        {job.source_type !== 'sample' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                            onClick={() => setPendingRemoveJob(job)}
+                            aria-label={`Remove ${job.job_reference}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}
+                          aria-label={`Edit ${job.job_reference}`}
+                        >
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </div>
@@ -2539,7 +2601,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         }}
                       >
                         <Plus className="mr-2 h-4 w-4" />
-                        Add manual job
+                        Add Project job
                       </Button>
                     </div>
                   ) : null}
@@ -2640,6 +2702,37 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               className="bg-amber-600 text-white hover:bg-amber-500"
             >
               Assign anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={pendingRemoveJob !== null}
+        onOpenChange={(open) => {
+          if (!open && !isRemovingJob) setPendingRemoveJob(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingRemoveJob?.source_type === 'quote'
+                ? 'Remove Quote job from the schedule?'
+                : 'Remove Project job from the schedule?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRemoveJob?.source_type === 'quote'
+                ? `This clears the planning date on Quote ${pendingRemoveJob.job_reference} and permanently removes all timed visits, day assignments, employee assignments, and plant assignments. The Quote is not deleted and will return to the Jobs queue.`
+                : `This permanently removes only the schedule for ${pendingRemoveJob?.job_reference || 'this Project'}, including all timed visits, day assignments, employee assignments, and plant assignments. The Project Number and its costs remain open and can be scheduled again.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingJob}>Keep job</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-500"
+              onClick={() => void handleRemoveJob()}
+              disabled={isRemovingJob}
+            >
+              {isRemovingJob ? 'Removing...' : 'Remove job'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

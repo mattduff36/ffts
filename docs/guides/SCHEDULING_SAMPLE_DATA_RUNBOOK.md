@@ -41,6 +41,31 @@ The fixture creates a banned placeholder auth identity, five fictional Customers
 Quotes, their synchronized jobs, and unassigned visits. It verifies each job number matches its
 Quote base reference.
 
+## Queue extension
+
+When the base fixture already exists, a separately guarded extension can add Jobs-tab coverage
+without creating another auth identity or ownership marker:
+
+```bash
+npm run scheduling:sample:queue:plan
+```
+
+The extension requires the base fixture identity, Customers, Quote/job set, and inactive series to
+remain intact, while allowing extra visits created during testing. It refuses any `99022-SD` to
+`99033-SD` reference collision. It plans 12 additional Quotes under the existing
+`scheduling-sample-v1` owner: nine unscheduled Quotes split equally across the Draft, Pending, and
+Accepted scheduling groups, plus three dated Quotes with unassigned visits.
+
+Before applying, report the project reference, existing `SAMPLE Scheduling Manager` identity,
+`SD` extension range, date window, Quote/job/visit counts, status-group counts, and the shared
+cleanup command. Apply only after explicit approval:
+
+```bash
+npm run scheduling:sample:queue:apply -- --confirm-production=FFTS_SCHEDULING_SAMPLE
+```
+
+The normal ownership-checked cleanup command removes the base fixture and this extension together.
+
 ## Verify
 
 1. Confirm the apply command reports 5 Customers, 22 Quotes, 22 jobs, the manifest visit count, and

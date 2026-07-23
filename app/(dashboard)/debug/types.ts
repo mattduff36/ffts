@@ -142,19 +142,3 @@ export interface UsageAnalyticsPayload {
     metadata: Record<string, unknown>;
   }>;
 }
-
-export interface TestVehicle {
-  id: string;
-  reg_number: string;
-  nickname: string | null;
-  status: string;
-  fleet_type: 'van' | 'hgv' | 'plant';
-}
-
-export interface PurgeActions {
-  inspections: boolean;
-  workshop_tasks: boolean;
-  maintenance: boolean;
-  attachments: boolean;
-  archives: boolean;
-}

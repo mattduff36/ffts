@@ -36,13 +36,27 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 
 ### Scheduling sample-data exception
 
-The only approved production sample fixture is `scripts/testing/scheduling-sample.ts`. It is limited to
+The approved Scheduling production sample fixture is `scripts/testing/scheduling-sample.ts`. It is limited to
 fictional `example.test` data marked `scheduling-sample-v1`, requires the configured production project
 reference, validates the timed scheduling schema, creates no resource assignments, and has a matching
-ownership-checked cleanup command.
+ownership-checked cleanup command. Its guarded queue extension reuses that same owner and cleanup path,
+and adds unscheduled Quote workflow coverage only when the base fixture is still in its expected state.
 
 Follow `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`. Never run the apply or destructive cleanup
 commands without the exact confirmation token and an operator review of the generated manifest.
+
+### Fleet and Inventory sample-data exception
+
+The approved removable Fleet and Inventory production sample fixture is
+`scripts/testing/fleet-inventory-sample.ts`. It creates only deterministic fictional `ZZ99-` Plant
+and Inventory records marked `fleet-inventory-sample-v1`, requires an exact production-project
+allowlist, writes a reviewable manifest, preserves existing locations, creates no registrations or
+tracker identifiers, and enforces zero active Fleet Plant / Inventory Minor Plant overlap.
+
+Its cleanup command verifies exact ownership and aborts if any sample asset has acquired inspections,
+maintenance history, scheduling assignments, movements, checks, groups, or other operational
+dependencies. Follow `docs/guides/FLEET_INVENTORY_SAMPLE_DATA_RUNBOOK.md`. Never run apply or
+destructive cleanup without the exact confirmation token and explicit operator approval.
 
 ## Automation Artifacts
 

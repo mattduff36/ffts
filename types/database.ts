@@ -9396,6 +9396,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_project_schedule_job: {
+        Args: {
+          p_project_number_id: string | null
+          p_manager_profile_id: string | null
+          p_project_title: string | null
+          p_project_description: string | null
+          p_project_notes: string | null
+          p_customer_id: string
+          p_customer_site_id: string | null
+          p_site_address: string | null
+          p_job_status: string
+          p_start_date: string
+          p_end_date: string
+          p_estimated_duration_minutes: number | null
+          p_is_drop_on_ready: boolean
+          p_tag_ids: string[]
+          p_actor_user_id: string
+        }
+        Returns: {
+          project_number_id: string
+          schedule_job_id: string
+          project_reference: string
+          was_project_created: boolean
+        }[]
+      }
       inventory_move_items_with_batch: {
         Args: {
           p_item_ids: string[]
@@ -9429,6 +9454,17 @@ export type Database = {
         Returns: {
           user_id: string
           location_id: string
+        }[]
+      }
+      remove_schedule_job: {
+        Args: {
+          p_job_id: string
+          p_actor_user_id: string
+        }
+        Returns: {
+          removed_source_type: string
+          removed_quote_id: string | null
+          removed_project_number_id: string | null
         }[]
       }
     }

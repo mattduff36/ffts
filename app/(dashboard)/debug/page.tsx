@@ -11,7 +11,7 @@ import { PageLoader } from '@/components/ui/page-loader';
 import { PanelLoader } from '@/components/ui/panel-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
-import { BarChart3, Bug, Car, FlaskConical, History, KeyRound, RefreshCw, Send, type LucideIcon } from 'lucide-react';
+import { BarChart3, Bug, Database, FlaskConical, History, KeyRound, RefreshCw, Send, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { canAccessDebugConsole } from '@/lib/utils/debug-access';
 
@@ -41,8 +41,8 @@ const LegacyJobCodesDebugPanel = dynamic(
   () => import('./components/LegacyJobCodesDebugPanel').then((mod) => ({ default: mod.LegacyJobCodesDebugPanel })),
   { loading: debugTabLoading },
 );
-const TestFleetDebugPanel = dynamic(
-  () => import('./components/TestFleetDebugPanel').then((mod) => ({ default: mod.TestFleetDebugPanel })),
+const SampleDataDebugPanel = dynamic(
+  () => import('./components/SampleDataDebugPanel').then((mod) => ({ default: mod.SampleDataDebugPanel })),
   { loading: debugTabLoading },
 );
 const UserAnalyticsDebugPanel = dynamic(
@@ -55,7 +55,7 @@ type DebugTab =
   | 'audit-log'
   | 'usage-analytics'
   | 'dvla-sync'
-  | 'test-fleet'
+  | 'sample-data'
   | 'job-code-corrections'
   | 'notification-settings'
   | 'emulation-tests';
@@ -76,7 +76,9 @@ const DEBUG_TAB_ALIASES: Record<string, DebugTab> = {
   'usage-analytics': 'usage-analytics',
   dvla: 'dvla-sync',
   'dvla-sync': 'dvla-sync',
-  'test-fleet': 'test-fleet',
+  'test-fleet': 'sample-data',
+  samples: 'sample-data',
+  'sample-data': 'sample-data',
   legacy: 'job-code-corrections',
   'legacy-codes': 'job-code-corrections',
   'legacy-job-codes': 'job-code-corrections',
@@ -93,7 +95,7 @@ const DEBUG_TABS: DebugTabConfig[] = [
   { value: 'audit-log', label: 'Audit Log', icon: History },
   { value: 'usage-analytics', label: 'Usage Analytics', icon: BarChart3 },
   { value: 'dvla-sync', label: 'DVLA Sync', icon: RefreshCw },
-  { value: 'test-fleet', label: 'Test Fleet', icon: Car },
+  { value: 'sample-data', label: 'Sample Data', icon: Database },
   { value: 'job-code-corrections', label: 'Job Codes', icon: KeyRound },
   { value: 'notification-settings', label: 'Notification Settings', icon: Send },
   { value: 'emulation-tests', label: 'Emulation Tests', icon: FlaskConical },
@@ -225,8 +227,8 @@ export default function DebugPage() {
           <DVLASyncDebugPanel />
         </TabsContent>
 
-        <TabsContent value="test-fleet">
-          <TestFleetDebugPanel />
+        <TabsContent value="sample-data">
+          <SampleDataDebugPanel />
         </TabsContent>
 
         <TabsContent value="job-code-corrections">

@@ -34,7 +34,10 @@ interface DraggableOptions {
 const {
   dndState,
   mockCreateAssignment,
+  mockCreateProjectJob,
+  mockDeleteJob,
   mockFetchBoard,
+  mockFetchProjectCandidates,
   mockFetchQuoteCandidates,
   mockMoveAssignment,
   mockSaveQuoteSchedule,
@@ -47,7 +50,10 @@ const {
     sensors: [] as unknown[],
   },
   mockCreateAssignment: vi.fn(),
+  mockCreateProjectJob: vi.fn(),
+  mockDeleteJob: vi.fn(),
   mockFetchBoard: vi.fn(),
+  mockFetchProjectCandidates: vi.fn(),
   mockFetchQuoteCandidates: vi.fn(),
   mockMoveAssignment: vi.fn(),
   mockSaveQuoteSchedule: vi.fn(),
@@ -105,10 +111,12 @@ vi.mock('@/lib/client/scheduling', async () => {
   );
   return {
     ...actual,
+    createProjectScheduleJob: mockCreateProjectJob,
     createScheduleAssignment: mockCreateAssignment,
     deletePlantUnavailability: vi.fn(),
     deleteScheduleAssignment: vi.fn(),
-    deleteScheduleJob: vi.fn(),
+    deleteScheduleJob: mockDeleteJob,
+    fetchScheduleProjectCandidates: mockFetchProjectCandidates,
     fetchSchedulingBoard: mockFetchBoard,
     fetchScheduleQuoteCandidates: mockFetchQuoteCandidates,
     moveScheduleAssignment: mockMoveAssignment,
@@ -134,7 +142,7 @@ const board: SchedulingBoardPayload = {
     end_date: '2026-07-15',
     estimated_duration_minutes: 240,
     quote_id: null,
-    quote_project_number_id: null,
+    quote_project_number_id: 'project-1',
     customer_id: null,
     customer_site_id: null,
     is_drop_on_ready: false,
@@ -269,6 +277,9 @@ describe('SchedulingManagerBoard', () => {
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
     mockCreateAssignment.mockResolvedValue(undefined);
+    mockCreateProjectJob.mockResolvedValue(undefined);
+    mockDeleteJob.mockResolvedValue(undefined);
+    mockFetchProjectCandidates.mockResolvedValue([]);
     mockMoveAssignment.mockResolvedValue(undefined);
     mockFetchQuoteCandidates.mockResolvedValue([{
       id: '33333333-3333-4333-8333-333333333333',
@@ -283,6 +294,34 @@ describe('SchedulingManagerBoard', () => {
     }]);
     mockSaveQuoteSchedule.mockResolvedValue({});
     mockSaveVisit.mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/api/quotes/metadata')) {
+        return {
+          ok: true,
+          json: async () => ({
+            managerOptions: [{
+              profile_id: 'manager-1',
+              initials: 'MD',
+              is_active: true,
+              profile: { full_name: 'Manager One' },
+            }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          customers: [{
+            id: 'customer-1',
+            company_name: 'Example Customer',
+            status: 'active',
+            sites: [],
+          }],
+          tags: [],
+        }),
+      };
+    }));
   });
 
   it('uses the weekly board when no saved preference exists', async () => {
@@ -292,6 +331,59 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Jobs' })).toHaveAttribute('aria-selected', 'true');
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
+  });
+
+  it('replaces free-form manual creation with inline Project Number fields', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Project job' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Add Project job' });
+
+    expect(within(dialog).getByLabelText('Project source')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Manager *')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Project title *')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Project description')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Project notes')).toBeInTheDocument();
+    expect(screen.queryByText('Add manual job')).not.toBeInTheDocument();
+  });
+
+  it('removes a Project schedule only after destructive confirmation', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+    const confirmation = await screen.findByRole('alertdialog', {
+      name: 'Remove Project job from the schedule?',
+    });
+    expect(confirmation).toHaveTextContent('The Project Number and its costs remain open');
+
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
+    await waitFor(() => expect(mockDeleteJob).toHaveBeenCalledWith('job-1'));
+    await waitFor(() => expect(mockFetchQuoteCandidates.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mockFetchBoard.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('explains that removing a Quote job preserves and requeues its Quote', async () => {
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      jobs: [{
+        ...board.jobs[0],
+        source_type: 'quote',
+        quote_id: '33333333-3333-4333-8333-333333333333',
+        quote_project_number_id: null,
+      }],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+    const confirmation = await screen.findByRole('alertdialog', {
+      name: 'Remove Quote job from the schedule?',
+    });
+
+    expect(confirmation).toHaveTextContent('The Quote is not deleted');
+    expect(confirmation).toHaveTextContent('return to the Jobs queue');
   });
 
   it('groups only unscheduled Quotes into the three Jobs queue stages', async () => {
@@ -948,7 +1040,7 @@ describe('SchedulingManagerBoard', () => {
 
     expect(await screen.findByText('No jobs scheduled for this week')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Schedule a Quote' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Add manual job' }).length)
+    expect(screen.getAllByRole('button', { name: 'Add Project job' }).length)
       .toBeGreaterThan(0);
   });
 

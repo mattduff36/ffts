@@ -30,7 +30,7 @@ function schedulingFixture() {
       end_date: formatDate(end),
       estimated_duration_minutes: 360,
       quote_id: null,
-      quote_project_number_id: null,
+      quote_project_number_id: '77777777-7777-4777-8777-777777777777',
       customer_id: null,
       is_drop_on_ready: false,
       tags: [],
@@ -98,6 +98,7 @@ function schedulingFixture() {
 async function mockManagerBoard(page: Page) {
   const fixture = schedulingFixture();
   const assignmentRequests: Array<Record<string, unknown>> = [];
+  const removeJobRequests: string[] = [];
   const quoteScheduleRequests: Array<Record<string, unknown>> = [];
   const visitUpdateRequests: Array<Record<string, unknown>> = [];
   const quoteCandidates = [{
@@ -199,9 +200,29 @@ async function mockManagerBoard(page: Page) {
       body: JSON.stringify({ assignments: fixture.assignments }),
     });
   });
+  await page.route('**/api/scheduling/jobs/*', async (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    const jobId = route.request().url().split('/').pop() || '';
+    removeJobRequests.push(jobId);
+    fixture.jobs = fixture.jobs.filter((job) => job.id !== jobId);
+    fixture.visits = fixture.visits.filter((visit) => visit.job_id !== jobId);
+    fixture.assignments = fixture.assignments.filter(
+      (assignment) => assignment.job_id !== jobId
+    );
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        source_type: 'manual',
+        project_number_id: '77777777-7777-4777-8777-777777777777',
+      }),
+    });
+  });
   return {
     fixture,
     assignmentRequests,
+    removeJobRequests,
     quoteScheduleRequests,
     visitUpdateRequests,
   };
@@ -400,6 +421,23 @@ test.describe('@scheduling Scheduling', () => {
     await expect.poll(() => assignmentRequests).toHaveLength(1);
     await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);
     await expect(page.locator('button button')).toHaveCount(0);
+  });
+
+  test('mobile board confirms and removes a Project schedule', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const { removeJobRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+
+    await page.getByRole('button', { name: 'Remove TEST-JOB-101' }).click();
+    const confirmation = page.getByRole('alertdialog', {
+      name: 'Remove Project job from the schedule?',
+    });
+    await expect(confirmation).toContainText('Project Number and its costs remain open');
+    await confirmation.getByRole('button', { name: 'Remove job' }).click();
+
+    await expect.poll(() => removeJobRequests).toEqual([
+      '11111111-1111-4111-8111-111111111111',
+    ]);
   });
 
   test.describe('touchscreen laptop context', () => {

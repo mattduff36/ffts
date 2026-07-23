@@ -2,6 +2,7 @@ import type {
   ScheduleAssignment,
   ScheduleJob,
   ScheduleJobTag,
+  ScheduleProjectCandidate,
   ScheduleQuoteCandidate,
   ScheduleVisit,
   SchedulingBoardPayload,
@@ -62,6 +63,34 @@ export async function saveScheduleJob(
   return (await readResponse<{ job: ScheduleJob }>(response)).job;
 }
 
+export interface CreateProjectScheduleJobInput {
+  project_number_id?: string | null;
+  manager_profile_id?: string | null;
+  project_title?: string | null;
+  project_description?: string | null;
+  project_notes?: string | null;
+  customer_id: string;
+  customer_site_id?: string | null;
+  site_address?: string | null;
+  status: ScheduleJob['status'];
+  start_date: string;
+  end_date: string;
+  estimated_duration_minutes?: number | null;
+  is_drop_on_ready: boolean;
+  tag_ids: string[];
+}
+
+export async function createProjectScheduleJob(
+  input: CreateProjectScheduleJobInput
+): Promise<ScheduleJob> {
+  const response = await fetch('/api/scheduling/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return (await readResponse<{ job: ScheduleJob }>(response)).job;
+}
+
 export async function createScheduleJobTag(input: {
   name: string;
   color?: string;
@@ -84,6 +113,13 @@ export async function fetchScheduleQuoteCandidates(): Promise<ScheduleQuoteCandi
     await fetch('/api/scheduling/quotes')
   );
   return payload.quotes;
+}
+
+export async function fetchScheduleProjectCandidates(): Promise<ScheduleProjectCandidate[]> {
+  const payload = await readResponse<{ projects: ScheduleProjectCandidate[] }>(
+    await fetch('/api/scheduling/projects')
+  );
+  return payload.projects;
 }
 
 export async function saveQuoteSchedule(input: {

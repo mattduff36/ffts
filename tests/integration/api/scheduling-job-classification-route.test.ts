@@ -5,11 +5,13 @@ vi.mock('server-only', () => ({}));
 
 const {
   mockAccess,
+  mockExisting,
   mockLoadTags,
   mockSyncTags,
   mockUpdate,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
+  mockExisting: vi.fn(),
   mockLoadTags: vi.fn(),
   mockSyncTags: vi.fn(),
   mockUpdate: vi.fn(),
@@ -37,14 +39,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => ({
           eq: () => ({
             maybeSingle: async () => ({
-              data: {
-                start_date: '2026-07-13',
-                end_date: '2026-07-19',
-                source_type: 'quote',
-                customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                customer_site_id: null,
-                site_address: 'Saved snapshot',
-              },
+              data: mockExisting(),
               error: null,
             }),
           }),
@@ -78,6 +73,15 @@ describe('PATCH /api/scheduling/jobs/[id] classification', () => {
       status: 200,
       userId: 'manager-1',
       isManagerOrAdmin: true,
+    });
+    mockExisting.mockReturnValue({
+      start_date: '2026-07-13',
+      end_date: '2026-07-19',
+      source_type: 'quote',
+      quote_project_number_id: null,
+      customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      customer_site_id: null,
+      site_address: 'Saved snapshot',
     });
     mockLoadTags.mockResolvedValue([
       {
@@ -131,6 +135,20 @@ describe('PATCH /api/scheduling/jobs/[id] classification', () => {
   it('continues to reject Quote-owned planning field edits', async () => {
     const { PATCH } = await import('@/app/api/scheduling/jobs/[id]/route');
     const response = await PATCH(request({ title: 'Changed outside Quotes' }), params);
+
+    expect(response.status).toBe(409);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockSyncTags).not.toHaveBeenCalled();
+  });
+
+  it('rejects Project-owned identity edits from Scheduling', async () => {
+    mockExisting.mockReturnValue({
+      ...mockExisting(),
+      source_type: 'manual',
+      quote_project_number_id: '33333333-3333-4333-8333-333333333333',
+    });
+    const { PATCH } = await import('@/app/api/scheduling/jobs/[id]/route');
+    const response = await PATCH(request({ title: 'Changed outside Projects' }), params);
 
     expect(response.status).toBe(409);
     expect(mockUpdate).not.toHaveBeenCalled();

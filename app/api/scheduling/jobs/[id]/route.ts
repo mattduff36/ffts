@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const admin = createAdminClient();
     const existingResult = await admin
       .from('schedule_jobs')
-      .select('start_date, end_date, source_type, customer_id, customer_site_id, site_address')
+      .select('start_date, end_date, source_type, quote_project_number_id, customer_id, customer_site_id, site_address')
       .eq('id', id)
       .maybeSingle();
     if (existingResult.error) throw existingResult.error;
@@ -96,6 +96,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (existingResult.data.source_type === 'quote' && quoteOwnedFields.length > 0) {
       return NextResponse.json(
         { error: 'Edit Quote planning details from the Quotes module.' },
+        { status: 409 }
+      );
+    }
+    const projectOwnedFields = new Set(['job_reference', 'title', 'description']);
+    const editedProjectOwnedFields = Object.keys(parsed.data).filter(
+      (field) => projectOwnedFields.has(field)
+    );
+    if (
+      existingResult.data.source_type === 'manual'
+      && existingResult.data.quote_project_number_id
+      && editedProjectOwnedFields.length > 0
+    ) {
+      return NextResponse.json(
+        { error: 'Edit Project identity details from the Quotes Projects section.' },
         { status: 409 }
       );
     }
@@ -193,27 +207,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const access = await requireSchedulingManagerAccess();
-    if (!access.allowed) {
+    if (!access.allowed || !access.userId) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
     const { id } = await params;
     const admin = createAdminClient();
-    const existing = await admin
-      .from('schedule_jobs')
-      .select('source_type')
-      .eq('id', id)
-      .maybeSingle();
-    if (existing.error) throw existing.error;
-    if (!existing.data) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
-    if (existing.data.source_type === 'quote') {
-      return NextResponse.json(
-        { error: 'Quote jobs are removed by changing the Quote status.' },
-        { status: 409 }
-      );
+    const { data, error } = await admin.rpc('remove_schedule_job', {
+      p_job_id: id,
+      p_actor_user_id: access.userId,
+    });
+    if (error) {
+      if (error.message.includes('Sample scheduling jobs cannot be removed')) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      throw error;
     }
-    const { error } = await admin.from('schedule_jobs').delete().eq('id', id);
-    if (error) throw error;
-    return NextResponse.json({ success: true });
+    const removed = data?.[0];
+    if (!removed) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
+    return NextResponse.json({
+      success: true,
+      source_type: removed.removed_source_type,
+      quote_id: removed.removed_quote_id,
+      project_number_id: removed.removed_project_number_id,
+    });
   } catch (error) {
     console.error('Error deleting schedule job:', error);
     return NextResponse.json({ error: 'Unable to delete this job.' }, { status: 500 });

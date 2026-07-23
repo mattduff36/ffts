@@ -54,7 +54,7 @@ function getDownloadFilename(response: Response): string {
 }
 
 function VersionHistoryTable({ entries }: { entries: ReleaseHistoryEntry[] }) {
-  const [expandedVersion, setExpandedVersion] = useState<string | null>(entries[0]?.version ?? null);
+  const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
 
   if (entries.length === 0) {
     return (

@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0726.8.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes and Data storage`
+
+**PUSHED AT**
+2026-07-23T10:21:43.499Z
+
+**WHAT CHANGED**
+Update Quotes and Data storage.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes and Data storage, with changes to background routes, app screens, shared logic, automated tests, and data storage.
+- Updated data storage, with changes to automated tests and data storage.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes and Data storage`
+
 ## 0726.7.0
 
 **GIT COMMIT MESSAGE**

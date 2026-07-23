@@ -1,5 +1,25 @@
 [
   {
+    "version": "0726.8.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes and Data storage.",
+    "summary": "Updated Quotes and Data storage.",
+    "details": [
+      "Updated Quotes and Data storage, with changes to background routes, app screens, shared logic, automated tests, and data storage.",
+      "Updated data storage, with changes to automated tests and data storage."
+    ],
+    "areas": [
+      "Quotes",
+      "Data storage"
+    ],
+    "areaKeys": [
+      "quotes",
+      "data-storage"
+    ],
+    "pushedAt": "2026-07-23T10:21:43.499Z"
+  },
+  {
     "version": "0726.7.0",
     "updateKind": "major",
     "title": "Customers update",

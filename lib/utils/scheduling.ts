@@ -2,6 +2,54 @@ import { addDays, eachDayOfInterval, format, isValid, parseISO, startOfWeek } fr
 
 const SCHEDULING_TIME_ZONE = 'Europe/London';
 
+export const SCHEDULE_QUOTE_STAGES = {
+  draft: 'draft',
+  pending: 'pending',
+  accepted: 'accepted',
+} as const;
+
+export type ScheduleQuoteStage =
+  (typeof SCHEDULE_QUOTE_STAGES)[keyof typeof SCHEDULE_QUOTE_STAGES];
+
+const SCHEDULE_QUOTE_STAGE_BY_STATUS: Record<string, ScheduleQuoteStage> = {
+  draft: SCHEDULE_QUOTE_STAGES.draft,
+  changes_requested: SCHEDULE_QUOTE_STAGES.draft,
+  pending_internal_approval: SCHEDULE_QUOTE_STAGES.pending,
+  approved: SCHEDULE_QUOTE_STAGES.pending,
+  sent: SCHEDULE_QUOTE_STAGES.pending,
+  won: SCHEDULE_QUOTE_STAGES.accepted,
+  ready_to_invoice: SCHEDULE_QUOTE_STAGES.accepted,
+  po_received: SCHEDULE_QUOTE_STAGES.accepted,
+  in_progress: SCHEDULE_QUOTE_STAGES.accepted,
+  completed_part: SCHEDULE_QUOTE_STAGES.accepted,
+  completed_full: SCHEDULE_QUOTE_STAGES.accepted,
+  partially_invoiced: SCHEDULE_QUOTE_STAGES.accepted,
+  invoiced: SCHEDULE_QUOTE_STAGES.accepted,
+};
+
+export function getScheduleQuoteStage(status: string | null): ScheduleQuoteStage | null {
+  if (!status) return null;
+  return SCHEDULE_QUOTE_STAGE_BY_STATUS[status] || null;
+}
+
+export function getScheduleQuoteEndDate(
+  startDate: string,
+  estimatedDurationDays: number | null
+): string {
+  const parsedStartDate = parseISO(startDate);
+  if (!isValid(parsedStartDate)) return startDate;
+  const durationDays = estimatedDurationDays && Number.isFinite(estimatedDurationDays)
+    ? Math.max(Math.ceil(estimatedDurationDays), 1)
+    : 1;
+  return format(addDays(parsedStartDate, durationDays - 1), 'yyyy-MM-dd');
+}
+
+export function formatScheduleEmployeeCompactName(fullName: string): string {
+  const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length < 2) return nameParts[0] || 'Employee';
+  return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0).toUpperCase()}`;
+}
+
 export function formatScheduleDate(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }

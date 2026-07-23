@@ -1,6 +1,14 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import {
   Accessibility,
   KeyboardSensor,
@@ -9,7 +17,7 @@ import {
 } from '@dnd-kit/dom';
 import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, parseISO } from 'date-fns';
+import { addMinutes, format, parseISO } from 'date-fns';
 import {
   parseAsArrayOf,
   parseAsBoolean,
@@ -55,8 +63,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   createScheduleAssignment,
   deleteScheduleAssignment,
+  fetchScheduleQuoteCandidates,
   fetchSchedulingBoard,
   moveScheduleAssignment,
+  saveQuoteSchedule,
+  saveScheduleVisit,
   SchedulingApiError,
   type CreateAssignmentInput,
 } from '@/lib/client/scheduling';
@@ -70,10 +81,15 @@ import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
 import {
   enumerateScheduleDates,
+  formatScheduleEmployeeCompactName,
   formatScheduleDate,
   formatScheduleVisitTime,
+  getScheduleQuoteEndDate,
+  getScheduleQuoteStage,
   getScheduleVisitDate,
   getSchedulingWeek,
+  SCHEDULE_QUOTE_STAGES,
+  type ScheduleQuoteStage,
 } from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
@@ -81,6 +97,7 @@ import type {
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
+  ScheduleQuoteCandidate,
   ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingConflict,
@@ -105,7 +122,11 @@ interface WeeklyDayHeaderProps {
   date: string;
   capacity: ScheduleDayCapacity | null;
   compact?: boolean;
+  dropScope: 'desktop' | 'mobile';
+  selectedQuote: ScheduleQuoteCandidate | null;
+  isSchedulingQuote: boolean;
   onOpenDaily: (date: string) => void;
+  onScheduleQuote: (quote: ScheduleQuoteCandidate, date: string) => void;
 }
 
 function formatCapacityHours(minutes: number): string {
@@ -123,10 +144,29 @@ function WeeklyDayHeader({
   date,
   capacity,
   compact = false,
+  dropScope,
+  selectedQuote,
+  isSchedulingQuote,
   onOpenDaily,
+  onScheduleQuote,
 }: WeeklyDayHeaderProps) {
+  const { ref, isDropTarget } = useDroppable({
+    id: `${dropScope}:schedule-date:${date}`,
+    type: 'schedule-date',
+    accept: ['schedule-quote'],
+    data: { workDate: date },
+  });
+
   return (
-    <div className={cn('border-l border-border text-center', compact ? 'p-2' : 'p-3')}>
+    <div
+      ref={ref}
+      data-testid={`schedule-date-drop-${dropScope}-${date}`}
+      className={cn(
+        'border-l border-border text-center transition',
+        compact ? 'p-2' : 'p-3',
+        isDropTarget && 'bg-scheduling-soft ring-2 ring-inset ring-scheduling'
+      )}
+    >
       <button
         type="button"
         onClick={() => onOpenDaily(date)}
@@ -186,6 +226,17 @@ function WeeklyDayHeader({
             </div>
           </PopoverContent>
         </Popover>
+      ) : null}
+      {selectedQuote ? (
+        <button
+          type="button"
+          onClick={() => onScheduleQuote(selectedQuote, date)}
+          disabled={isSchedulingQuote}
+          className="mt-2 w-full rounded border border-dashed border-scheduling/50 px-1.5 py-1 text-[10px] font-semibold text-scheduling hover:bg-scheduling-soft disabled:opacity-50"
+          aria-label={`Schedule ${selectedQuote.base_quote_reference} from ${date}`}
+        >
+          Place job here
+        </button>
       ) : null}
     </div>
   );
@@ -297,6 +348,77 @@ function DraggableResourceCard({
   );
 }
 
+interface DraggableQuoteCardProps {
+  quote: ScheduleQuoteCandidate;
+  selected: boolean;
+  onSelect: () => void;
+}
+
+function formatQuoteStatusLabel(status: string | null): string {
+  if (!status) return 'No status';
+  return status
+    .split('_')
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
+}
+
+function DraggableQuoteCard({
+  quote,
+  selected,
+  onSelect,
+}: DraggableQuoteCardProps) {
+  const { ref, handleRef, isDragging } = useDraggable({
+    id: `schedule-quote:${quote.id}`,
+    type: 'schedule-quote',
+    data: { quote },
+  });
+  const durationDays = quote.estimated_duration_days || 1;
+
+  return (
+    <div
+      ref={ref}
+      data-testid={`schedule-quote-${quote.id}`}
+      className={cn(
+        'flex items-start gap-1 rounded-lg border p-2 transition',
+        selected
+          ? 'border-scheduling bg-scheduling-soft'
+          : 'border-border bg-muted/20 hover:border-muted-foreground',
+        isDragging && 'opacity-40'
+      )}
+    >
+      <button
+        ref={handleRef}
+        type="button"
+        className="touch-none rounded p-2 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+        aria-label={`Drag ${quote.base_quote_reference} to a calendar date`}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        className="min-w-0 flex-1 text-left"
+      >
+        <span className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {quote.base_quote_reference}
+          </span>
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {formatQuoteStatusLabel(quote.status)}
+          </Badge>
+        </span>
+        <span className="mt-1 block truncate text-xs text-muted-foreground">
+          {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
+        </span>
+        <span className="mt-1 block text-[11px] text-muted-foreground">
+          {durationDays} {durationDays === 1 ? 'day' : 'days'}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 interface AssignmentChipProps {
   assignment: ScheduleAssignment;
   onDelete: (assignment: ScheduleAssignment) => void;
@@ -313,10 +435,13 @@ function AssignmentChip({
     type: 'schedule-assignment',
     data: { assignment },
   });
-  const label =
+  const fullLabel =
     assignment.resource_type === 'employee'
       ? assignment.employee?.full_name || 'Employee'
       : assignment.plant?.nickname || assignment.plant?.plant_id || 'Plant';
+  const label = assignment.resource_type === 'employee'
+    ? formatScheduleEmployeeCompactName(fullLabel)
+    : fullLabel;
   const hasConflict = assignment.conflicts.length > 0;
 
   return (
@@ -330,13 +455,13 @@ function AssignmentChip({
         hasConflict && 'border-amber-400/70 bg-amber-500/10',
         isDragging && 'opacity-40'
       )}
-      title={hasConflict ? assignment.conflicts.map((conflict) => conflict.message).join('\n') : label}
+      title={hasConflict ? assignment.conflicts.map((conflict) => conflict.message).join('\n') : fullLabel}
     >
       <button
         ref={handleRef}
         type="button"
         className="touch-none rounded p-1 opacity-70 hover:bg-black/20 hover:opacity-100"
-        aria-label={`Move ${label} to another visit`}
+        aria-label={`Move ${fullLabel} to another visit`}
       >
         <GripVertical className="h-3 w-3" />
       </button>
@@ -357,7 +482,7 @@ function AssignmentChip({
           onDelete(assignment);
         }}
         className="rounded p-0.5 opacity-70 hover:bg-black/20 hover:opacity-100 focus-visible:opacity-100"
-        aria-label={`Remove ${label}`}
+        aria-label={`Remove ${fullLabel}`}
       >
         <X className="h-3 w-3" />
       </button>
@@ -552,6 +677,11 @@ interface DailyTimelineRange {
 
 interface DailyTimelineCellProps extends DayCellProps {
   range: DailyTimelineRange;
+  onResizeVisit: (
+    visit: ScheduleVisit,
+    startsAt: string,
+    endsAt: string
+  ) => Promise<void>;
 }
 
 function getScheduleTimeMinutes(value: string): number {
@@ -585,10 +715,22 @@ function getDailyTimelineRange(
 function DailyTimelineHeader({
   date,
   range,
+  selectedQuote,
+  isSchedulingQuote,
+  onScheduleQuote,
 }: {
   date: string;
   range: DailyTimelineRange;
+  selectedQuote: ScheduleQuoteCandidate | null;
+  isSchedulingQuote: boolean;
+  onScheduleQuote: (quote: ScheduleQuoteCandidate, date: string) => void;
 }) {
+  const { ref, isDropTarget } = useDroppable({
+    id: `desktop:schedule-date:${date}`,
+    type: 'schedule-date',
+    accept: ['schedule-quote'],
+    data: { workDate: date },
+  });
   const hours = Array.from(
     { length: range.endHour - range.startHour + 1 },
     (_, index) => range.startHour + index
@@ -596,13 +738,28 @@ function DailyTimelineHeader({
 
   return (
     <div
-      className="relative h-16 border-l border-border bg-muted/60"
+      ref={ref}
+      className={cn(
+        'relative h-16 border-l border-border bg-muted/60 transition',
+        isDropTarget && 'bg-scheduling-soft ring-2 ring-inset ring-scheduling'
+      )}
       style={{ width: range.width }}
       data-testid="schedule-daily-timeline-header"
     >
       <p className="absolute left-3 top-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {format(parseISO(date), 'EEEE d MMMM')}
       </p>
+      {selectedQuote ? (
+        <button
+          type="button"
+          onClick={() => onScheduleQuote(selectedQuote, date)}
+          disabled={isSchedulingQuote}
+          className="absolute right-3 top-2 rounded border border-dashed border-scheduling/50 px-2 py-1 text-[10px] font-semibold text-scheduling hover:bg-scheduling-soft disabled:opacity-50"
+          aria-label={`Schedule ${selectedQuote.base_quote_reference} from ${date}`}
+        >
+          Place selected job here
+        </button>
+      ) : null}
       {hours.map((hour, index) => (
         <div
           key={hour}
@@ -625,6 +782,257 @@ function DailyTimelineHeader({
   );
 }
 
+type VisitResizeEdge = 'start' | 'end';
+
+interface VisitResizeTimes {
+  startsAt: string;
+  endsAt: string;
+}
+
+interface VisitResizeOperation extends VisitResizeTimes {
+  edge: VisitResizeEdge;
+  pointerId: number;
+  originClientX: number;
+  nextStartsAt: string;
+  nextEndsAt: string;
+}
+
+interface ResizableDailyVisitProps {
+  job: ScheduleJob;
+  visit: ScheduleVisit;
+  assignments: ScheduleAssignment[];
+  range: DailyTimelineRange;
+  top: number;
+  height: number;
+  isActiveTarget: boolean;
+  onActivate: () => void;
+  onEdit: () => void;
+  onDeleteAssignment: (assignment: ScheduleAssignment) => void;
+  onResizeVisit: DailyTimelineCellProps['onResizeVisit'];
+}
+
+function getResizedVisitTimes(
+  visit: VisitResizeTimes,
+  edge: VisitResizeEdge,
+  deltaMinutes: number,
+  range: DailyTimelineRange
+): VisitResizeTimes {
+  const rangeStartMinutes = range.startHour * 60;
+  const rangeEndMinutes = range.endHour * 60;
+  const startsAtMinutes = getScheduleTimeMinutes(visit.startsAt);
+  const endsAtMinutes = getScheduleTimeMinutes(visit.endsAt);
+
+  if (edge === 'start') {
+    const nextStartMinutes = Math.min(
+      Math.max(startsAtMinutes + deltaMinutes, rangeStartMinutes),
+      endsAtMinutes - 30
+    );
+    return {
+      startsAt: addMinutes(
+        parseISO(visit.startsAt),
+        nextStartMinutes - startsAtMinutes
+      ).toISOString(),
+      endsAt: visit.endsAt,
+    };
+  }
+
+  const nextEndMinutes = Math.max(
+    Math.min(endsAtMinutes + deltaMinutes, rangeEndMinutes),
+    startsAtMinutes + 30
+  );
+  return {
+    startsAt: visit.startsAt,
+    endsAt: addMinutes(
+      parseISO(visit.endsAt),
+      nextEndMinutes - endsAtMinutes
+    ).toISOString(),
+  };
+}
+
+function ResizableDailyVisit({
+  job,
+  visit,
+  assignments,
+  range,
+  top,
+  height,
+  isActiveTarget,
+  onActivate,
+  onEdit,
+  onDeleteAssignment,
+  onResizeVisit,
+}: ResizableDailyVisitProps) {
+  const [draftTimes, setDraftTimes] = useState<VisitResizeTimes | null>(null);
+  const resizeOperation = useRef<VisitResizeOperation | null>(null);
+  const displayedVisit = draftTimes
+    ? { ...visit, starts_at: draftTimes.startsAt, ends_at: draftTimes.endsAt }
+    : visit;
+  const rangeStartMinutes = range.startHour * 60;
+  const startsAt = Math.max(
+    rangeStartMinutes,
+    getScheduleTimeMinutes(displayedVisit.starts_at)
+  );
+  const endsAt = Math.min(
+    range.endHour * 60,
+    getScheduleTimeMinutes(displayedVisit.ends_at)
+  );
+  const left =
+    ((startsAt - rangeStartMinutes) / 60) * DAILY_TIMELINE_HOUR_WIDTH + 4;
+  const availableWidth = range.width - left - 4;
+  const width = Math.min(
+    availableWidth,
+    Math.max(
+      48,
+      ((Math.max(endsAt, startsAt + 30) - startsAt) / 60)
+        * DAILY_TIMELINE_HOUR_WIDTH
+        - 8
+    )
+  );
+
+  function handleResizePointerDown(
+    event: PointerEvent<HTMLButtonElement>,
+    edge: VisitResizeEdge
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    resizeOperation.current = {
+      edge,
+      pointerId: event.pointerId,
+      originClientX: event.clientX,
+      startsAt: visit.starts_at,
+      endsAt: visit.ends_at,
+      nextStartsAt: visit.starts_at,
+      nextEndsAt: visit.ends_at,
+    };
+  }
+
+  function handleResizePointerMove(event: PointerEvent<HTMLButtonElement>) {
+    const operation = resizeOperation.current;
+    if (!operation || operation.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const rawDeltaMinutes =
+      ((event.clientX - operation.originClientX) / DAILY_TIMELINE_HOUR_WIDTH) * 60;
+    const snappedDeltaMinutes = Math.round(rawDeltaMinutes / 30) * 30;
+    const nextTimes = getResizedVisitTimes(
+      { startsAt: operation.startsAt, endsAt: operation.endsAt },
+      operation.edge,
+      snappedDeltaMinutes,
+      range
+    );
+    operation.nextStartsAt = nextTimes.startsAt;
+    operation.nextEndsAt = nextTimes.endsAt;
+    setDraftTimes(nextTimes);
+  }
+
+  function finishResize(event: PointerEvent<HTMLButtonElement>) {
+    const operation = resizeOperation.current;
+    if (!operation || operation.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    resizeOperation.current = null;
+    if (
+      operation.nextStartsAt === operation.startsAt
+      && operation.nextEndsAt === operation.endsAt
+    ) {
+      setDraftTimes(null);
+      return;
+    }
+    void onResizeVisit(
+      visit,
+      operation.nextStartsAt,
+      operation.nextEndsAt
+    ).finally(() => setDraftTimes(null));
+  }
+
+  function cancelResize(event: PointerEvent<HTMLButtonElement>) {
+    if (resizeOperation.current?.pointerId !== event.pointerId) return;
+    resizeOperation.current = null;
+    setDraftTimes(null);
+  }
+
+  function handleResizeKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    edge: VisitResizeEdge
+  ) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const deltaMinutes = event.key === 'ArrowLeft' ? -30 : 30;
+    const nextTimes = getResizedVisitTimes(
+      { startsAt: visit.starts_at, endsAt: visit.ends_at },
+      edge,
+      deltaMinutes,
+      range
+    );
+    if (
+      nextTimes.startsAt === visit.starts_at
+      && nextTimes.endsAt === visit.ends_at
+    ) return;
+    void onResizeVisit(visit, nextTimes.startsAt, nextTimes.endsAt);
+  }
+
+  function renderResizeHandle(edge: VisitResizeEdge) {
+    const isStart = edge === 'start';
+    return (
+      <button
+        type="button"
+        className={cn(
+          'group/resize absolute inset-y-0 z-20 w-3 touch-none cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-scheduling',
+          isStart ? 'left-0' : 'right-0'
+        )}
+        onPointerDown={(event) => handleResizePointerDown(event, edge)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={finishResize}
+        onPointerCancel={cancelResize}
+        onKeyDown={(event) => handleResizeKeyDown(event, edge)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        aria-label={`${isStart ? 'Adjust start' : 'Adjust end'} of visit ${visit.sequence_number} for ${job.job_reference}`}
+      >
+        <span
+          className={cn(
+            'absolute inset-y-2 w-0.5 rounded-full bg-scheduling/70 opacity-70 transition group-hover/resize:opacity-100',
+            isStart ? 'left-1' : 'right-1'
+          )}
+        />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="absolute"
+      style={{ left, top, width, height }}
+      data-testid={`schedule-timeline-visit-${visit.id}`}
+    >
+      <VisitCard
+        job={job}
+        visit={displayedVisit}
+        assignments={assignments}
+        className="h-full overflow-hidden border-slate-500 shadow-lg shadow-black/40"
+        style={DAILY_TIMELINE_VISIT_STYLE}
+        isDropEnabled
+        isActiveTarget={isActiveTarget}
+        onActivate={onActivate}
+        onEdit={onEdit}
+        onDeleteAssignment={onDeleteAssignment}
+      />
+      {visit.status !== 'cancelled' ? (
+        <>
+          {renderResizeHandle('start')}
+          {renderResizeHandle('end')}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function DailyTimelineCell({
   job,
   date,
@@ -636,6 +1044,7 @@ function DailyTimelineCell({
   onAddVisit,
   onEditVisit,
   onDeleteAssignment,
+  onResizeVisit,
 }: DailyTimelineCellProps) {
   const dayVisits = visits
     .filter((visit) => getScheduleVisitDate(visit.starts_at) === date)
@@ -670,7 +1079,6 @@ function DailyTimelineCell({
     };
   }, { placements: [], nextTop: 8 + legacyHeight });
   const rowHeight = Math.max(112, timelineLayout.nextTop);
-  const rangeStartMinutes = range.startHour * 60;
 
   return (
     <div
@@ -701,50 +1109,22 @@ function DailyTimelineCell({
           ))}
         </div>
       ) : null}
-      {timelineLayout.placements.map(({ visit, assignments: visitAssignments, top, height }) => {
-        const startsAt = Math.max(
-          rangeStartMinutes,
-          getScheduleTimeMinutes(visit.starts_at)
-        );
-        const endsAt = Math.min(
-          range.endHour * 60,
-          getScheduleTimeMinutes(visit.ends_at)
-        );
-        const left =
-          ((startsAt - rangeStartMinutes) / 60) * DAILY_TIMELINE_HOUR_WIDTH + 4;
-        const availableWidth = range.width - left - 4;
-        const width = Math.min(
-          availableWidth,
-          Math.max(
-            120,
-            ((Math.max(endsAt, startsAt + 15) - startsAt) / 60)
-              * DAILY_TIMELINE_HOUR_WIDTH
-              - 8
-          )
-        );
-
-        return (
-          <div
-            key={visit.id}
-            className="absolute"
-            style={{ left, top, width, height }}
-            data-testid={`schedule-timeline-visit-${visit.id}`}
-          >
-            <VisitCard
-              job={job}
-              visit={visit}
-              assignments={visitAssignments}
-              className="h-full overflow-hidden border-slate-500 shadow-lg shadow-black/40"
-              style={DAILY_TIMELINE_VISIT_STYLE}
-              isDropEnabled
-              isActiveTarget={activeVisitId === visit.id}
-              onActivate={() => onActivateVisit(visit)}
-              onEdit={() => onEditVisit(visit)}
-              onDeleteAssignment={onDeleteAssignment}
-            />
-          </div>
-        );
-      })}
+      {timelineLayout.placements.map(({ visit, assignments: visitAssignments, top, height }) => (
+        <ResizableDailyVisit
+          key={visit.id}
+          job={job}
+          visit={visit}
+          assignments={visitAssignments}
+          range={range}
+          top={top}
+          height={height}
+          isActiveTarget={activeVisitId === visit.id}
+          onActivate={() => onActivateVisit(visit)}
+          onEdit={() => onEditVisit(visit)}
+          onDeleteAssignment={onDeleteAssignment}
+          onResizeVisit={onResizeVisit}
+        />
+      ))}
       {dayVisits.length === 0 ? (
         <button
           type="button"
@@ -799,7 +1179,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [view, setView] = useState<SchedulingBoardView>(() =>
     readSchedulingViewPreference(userId)
   );
-  const [resourceType, setResourceType] = useState<'employee' | 'plant'>('employee');
+  const [sidebarTab, setSidebarTab] = useState<'jobs' | 'employee' | 'plant'>('jobs');
+  const [quoteStage, setQuoteStage] = useState<ScheduleQuoteStage>(
+    SCHEDULE_QUOTE_STAGES.draft
+  );
+  const [quoteSearch, setQuoteSearch] = useState('');
   const [resourceSearch, setResourceSearch] = useState('');
   const [jobFilters, setJobFilters] = useQueryStates(
     {
@@ -812,8 +1196,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const jobSearch = jobFilters.q;
   const [teamFilter, setTeamFilter] = useState('all');
   const [selectedResource, setSelectedResource] = useState<SelectedScheduleResource | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<ScheduleQuoteCandidate | null>(null);
   const [draggedResource, setDraggedResource] = useState<SelectedScheduleResource | null>(null);
   const [draggedAssignment, setDraggedAssignment] = useState<ScheduleAssignment | null>(null);
+  const [draggedQuote, setDraggedQuote] = useState<ScheduleQuoteCandidate | null>(null);
   const [activeVisitTarget, setActiveVisitTarget] = useState<ActiveVisitTarget | null>(null);
   const [resourceAvailabilityView, setResourceAvailabilityView] =
     useState<'available' | 'unavailable' | 'all'>('available');
@@ -830,11 +1216,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [schedulingQuoteJob, setSchedulingQuoteJob] = useState<ScheduleJob | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
+  const [isSchedulingQuote, setIsSchedulingQuote] = useState(false);
 
   const weekStart = getSchedulingWeek(selectedDate).start;
   const boardQuery = useQuery({
     queryKey: ['scheduling-board', weekStart],
     queryFn: () => fetchSchedulingBoard(weekStart),
+  });
+  const quoteCandidatesQuery = useQuery({
+    queryKey: ['scheduling-quote-candidates'],
+    queryFn: fetchScheduleQuoteCandidates,
   });
   const board = boardQuery.data;
   const weekDates = useMemo(
@@ -863,6 +1254,38 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
     return Array.from(values.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [board]);
+  const unscheduledQuotes = useMemo(
+    () => (quoteCandidatesQuery.data || []).filter(
+      (quote) => !quote.start_date && getScheduleQuoteStage(quote.status) !== null
+    ),
+    [quoteCandidatesQuery.data]
+  );
+  const quoteStageCounts = useMemo(() => {
+    const counts: Record<ScheduleQuoteStage, number> = {
+      draft: 0,
+      pending: 0,
+      accepted: 0,
+    };
+    for (const quote of unscheduledQuotes) {
+      const stage = getScheduleQuoteStage(quote.status);
+      if (stage) counts[stage] += 1;
+    }
+    return counts;
+  }, [unscheduledQuotes]);
+  const filteredQuoteCandidates = useMemo(() => {
+    const search = quoteSearch.trim().toLowerCase();
+    return unscheduledQuotes.filter(
+      (quote) =>
+        getScheduleQuoteStage(quote.status) === quoteStage
+        && (
+          !search
+          || quote.quote_reference.toLowerCase().includes(search)
+          || quote.base_quote_reference.toLowerCase().includes(search)
+          || quote.title.toLowerCase().includes(search)
+          || (quote.customer_name || '').toLowerCase().includes(search)
+        )
+    );
+  }, [quoteSearch, quoteStage, unscheduledQuotes]);
 
   const matchingEmployees = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
@@ -964,6 +1387,37 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     await queryClient.invalidateQueries({ queryKey: ['scheduling-board'] });
   }
 
+  async function scheduleQuoteFromDate(
+    quote: ScheduleQuoteCandidate,
+    startDate: string
+  ) {
+    if (isSchedulingQuote) return;
+    const endDate = getScheduleQuoteEndDate(
+      startDate,
+      quote.estimated_duration_days
+    );
+    setIsSchedulingQuote(true);
+    try {
+      await saveQuoteSchedule({
+        quote_id: quote.id,
+        start_date: startDate,
+        end_date: endDate,
+      });
+      setSelectedQuote(null);
+      toast.success(
+        `${quote.base_quote_reference} scheduled ${startDate === endDate ? `for ${startDate}` : `from ${startDate} to ${endDate}`}`
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
+        queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to schedule this Quote');
+    } finally {
+      setIsSchedulingQuote(false);
+    }
+  }
+
   function setBoardData(
     updater: (current: SchedulingBoardPayload) => SchedulingBoardPayload
   ) {
@@ -971,6 +1425,55 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       ['scheduling-board', weekStart],
       (current) => current ? updater(current) : current
     );
+  }
+
+  async function resizeVisit(
+    visit: ScheduleVisit,
+    startsAt: string,
+    endsAt: string
+  ) {
+    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
+      'scheduling-board',
+      weekStart,
+    ]);
+    const resizedVisit = { ...visit, starts_at: startsAt, ends_at: endsAt };
+    setBoardData((current) => ({
+      ...current,
+      visits: current.visits.map((item) =>
+        item.id === visit.id ? resizedVisit : item
+      ),
+    }));
+    setActiveVisitTarget((current) =>
+      current?.visit.id === visit.id
+        ? { ...current, visit: resizedVisit }
+        : current
+    );
+
+    try {
+      await saveScheduleVisit({
+        job_id: visit.job_id,
+        title: visit.title,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        status: visit.status,
+        notes: visit.notes,
+      }, visit.id);
+      toast.success('Visit times updated');
+      await refresh();
+    } catch (error) {
+      if (previous) {
+        queryClient.setQueryData(['scheduling-board', weekStart], previous);
+        const previousVisit = previous.visits.find((item) => item.id === visit.id);
+        if (previousVisit) {
+          setActiveVisitTarget((current) =>
+            current?.visit.id === visit.id
+              ? { ...current, visit: previousVisit }
+              : current
+          );
+        }
+      }
+      toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
+    }
   }
 
   function createOptimisticAssignment(
@@ -1190,6 +1693,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   function activateVisit(job: ScheduleJob, visit: ScheduleVisit) {
     setActiveVisitTarget({ job, visit });
+    setSidebarTab('employee');
   }
 
   function handleResourceSelect(resource: SelectedScheduleResource) {
@@ -1261,13 +1765,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             dragstart({ operation: { source } }: DndAnnouncementEvent) {
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
+              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
+              if (quote) return `Picked up ${quote.base_quote_reference}.`;
               if (resource) return `Picked up ${resource.label}.`;
               if (assignment) return 'Picked up an existing assignment.';
               return 'Started dragging.';
             },
             dragover({ operation: { source, target } }: DndAnnouncementEvent) {
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
+              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
               const data = target?.data as { workDate?: string } | undefined;
+              if (quote && data?.workDate) {
+                return `${quote.base_quote_reference} is over ${format(parseISO(data.workDate), 'EEEE d MMMM')}.`;
+              }
               return resource && data?.workDate
                 ? `${resource.label} is over ${format(parseISO(data.workDate), 'EEEE d MMMM')}.`
                 : undefined;
@@ -1276,9 +1786,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               if (canceled) return 'Drag cancelled.';
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
+              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
+              if (quote && target) return `${quote.base_quote_reference} was scheduled.`;
               if (resource && target) return `${resource.label} was dropped on a visit.`;
               if (assignment && target) return 'Assignment was dropped on a visit.';
-              return 'Nothing was assigned.';
+              return quote ? 'The job was not scheduled.' : 'Nothing was assigned.';
             },
           },
         }),
@@ -1286,17 +1798,35 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       onDragStart={(event) => {
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const assignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
+        const quote = event.operation.source?.data?.quote as ScheduleQuoteCandidate | undefined;
+        if (quote) setSelectedQuote(quote);
         if (resource) setSelectedResource(resource);
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
+        setDraggedQuote(quote || null);
       }}
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const sourceAssignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
-        const targetData = event.operation.target?.data as { jobId?: string; visitId?: string } | undefined;
+        const sourceQuote = event.operation.source?.data?.quote as ScheduleQuoteCandidate | undefined;
+        const targetData = event.operation.target?.data as {
+          jobId?: string;
+          visitId?: string;
+          workDate?: string;
+        } | undefined;
         setDraggedResource(null);
         setDraggedAssignment(null);
-        if (event.canceled || (!sourceResource && !sourceAssignment)) return;
+        setDraggedQuote(null);
+        if (event.canceled) return;
+        if (sourceQuote) {
+          if (!targetData?.workDate) {
+            toast.info('Drop onto a calendar date.');
+            return;
+          }
+          void scheduleQuoteFromDate(sourceQuote, targetData.workDate);
+          return;
+        }
+        if (!sourceResource && !sourceAssignment) return;
         if (!targetData?.jobId || !targetData.visitId) {
           toast.info('Drop onto a timed visit.');
           return;
@@ -1352,147 +1882,244 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <CardTitle className="text-base">Resources</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Tabs value={resourceType} onValueChange={(value) => setResourceType(value as 'employee' | 'plant')}>
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs
+                value={sidebarTab}
+                onValueChange={(value) => {
+                  setSidebarTab(value as 'jobs' | 'employee' | 'plant');
+                  setSelectedQuote(null);
+                  setSelectedResource(null);
+                }}
+              >
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="jobs">Jobs</TabsTrigger>
                   <TabsTrigger value="employee">Employees</TabsTrigger>
                   <TabsTrigger value="plant">Plant</TabsTrigger>
                 </TabsList>
               </Tabs>
-              {activeVisitTarget ? (
-                <div className="rounded-md border border-scheduling/40 bg-scheduling-soft p-3 text-xs">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {activeVisitTarget.job.job_reference} · Visit {activeVisitTarget.visit.sequence_number}
-                      </p>
-                      <p className="mt-1 text-muted-foreground">
-                        {format(parseISO(activeVisitTarget.visit.starts_at), 'EEE d MMM')}
-                        {' · '}
-                        {formatScheduleVisitTime(activeVisitTarget.visit.starts_at)}–
-                        {formatScheduleVisitTime(activeVisitTarget.visit.ends_at)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setActiveVisitTarget(null)}
-                      className="h-7 px-2"
-                      aria-label="Clear selected visit"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+              {sidebarTab === 'jobs' ? (
+                <>
                   <p className="mt-2 text-muted-foreground">
-                    Tap a resource or drag its handle onto this or another visit.
+                    Drag an unscheduled job onto a date, or select it and use a date&apos;s placement button.
                   </p>
-                </div>
-              ) : (
-                <p className="rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground">
-                  Select a visit to show resources available for its exact time.
-                </p>
-              )}
-              <Tabs
-                value={resourceAvailabilityView}
-                onValueChange={(value) =>
-                  setResourceAvailabilityView(value as 'available' | 'unavailable' | 'all')
-                }
-              >
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="available" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
-                    Available ({resourceType === 'employee' ? availableEmployees.length : availablePlant.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="unavailable" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
-                    Unavailable ({resourceType === 'employee' ? unavailableEmployees.length : unavailablePlant.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="all" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
-                    All ({resourceType === 'employee' ? matchingEmployees.length : matchingPlant.length})
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              {resourceType === 'employee' ? (
-                <Select value={teamFilter} onValueChange={setTeamFilter}>
-                  <SelectTrigger><SelectValue placeholder="All teams" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All teams</SelectItem>
-                    {teams.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : null}
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={resourceSearch}
-                  onChange={(event) => setResourceSearch(event.target.value)}
-                  placeholder="Search resources"
-                  className="pl-9"
-                />
-              </div>
-              {selectedResource ? (
-                <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
-                  <span className="truncate">Selected: {selectedResource.label}</span>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedResource(null)} className="h-6 px-1">
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : null}
-              <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
-                <div className="space-y-2">
-                  {resourceType === 'employee'
-                    ? filteredEmployees.map((employee) => {
-                        const resource = resourceFromEmployee(employee);
-                        return (
-                          <ResourceCard
-                            key={employee.id}
-                            resource={resource}
-                            subtitle={employee.team_name || employee.employee_id || 'No team'}
-                            warning={
-                              activeVisitTarget
-                              && isResourceUnavailableForVisit(
-                                { type: 'employee', id: employee.id },
-                                board.assignments,
-                                activeVisitTarget.visit
-                              )
-                                ? 'Already assigned during this visit'
-                                : undefined
-                            }
-                            selected={selectedResource?.type === 'employee' && selectedResource.id === employee.id}
-                            dragEnabled
-                            onSelect={() => handleResourceSelect(resource)}
-                          />
-                        );
-                      })
-                    : filteredPlant.map((plant) => {
-                        const resource = resourceFromPlant(plant);
-                        return (
-                          <ResourceCard
-                            key={plant.id}
-                            resource={resource}
-                            subtitle={[plant.make, plant.model, plant.status].filter(Boolean).join(' · ')}
-                            warning={
-                              activeVisitTarget
-                              && isResourceUnavailableForVisit(
-                                { type: 'plant', id: plant.id },
-                                board.assignments,
-                                activeVisitTarget.visit
-                              )
-                                ? 'Already assigned during this visit'
-                                : plant.status !== 'active'
-                                  ? `Status: ${plant.status}`
-                                  : undefined
-                            }
-                            selected={selectedResource?.type === 'plant' && selectedResource.id === plant.id}
-                            dragEnabled
-                            onSelect={() => handleResourceSelect(resource)}
-                          />
-                        );
-                      })}
-                  {(resourceType === 'employee' ? filteredEmployees : filteredPlant).length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-                      No {resourceType === 'employee' ? 'employees' : 'plant'} match these filters.
+                  <Tabs
+                    value={quoteStage}
+                    onValueChange={(value) => setQuoteStage(value as ScheduleQuoteStage)}
+                  >
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className="px-1 text-[10px]">
+                        Draft ({quoteStageCounts.draft})
+                      </TabsTrigger>
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.pending} className="px-1 text-[10px]">
+                        Pending ({quoteStageCounts.pending})
+                      </TabsTrigger>
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.accepted} className="px-1 text-[10px]">
+                        Accepted ({quoteStageCounts.accepted})
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={quoteSearch}
+                      onChange={(event) => setQuoteSearch(event.target.value)}
+                      placeholder="Search unscheduled jobs"
+                      className="pl-9"
+                    />
+                  </div>
+                  {selectedQuote ? (
+                    <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
+                      <span className="truncate">Selected: {selectedQuote.base_quote_reference}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedQuote(null)}
+                        className="h-6 px-1"
+                        aria-label="Clear selected job"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ) : null}
-                </div>
-              </ScrollArea>
+                  {quoteCandidatesQuery.isError ? (
+                    <div className="rounded-lg border border-red-500/30 p-3 text-sm text-red-300">
+                      <p>Unable to load unscheduled jobs.</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1"
+                        onClick={() => void quoteCandidatesQuery.refetch()}
+                      >
+                        Try again
+                      </Button>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
+                      <div className="space-y-2">
+                        {quoteCandidatesQuery.isLoading ? (
+                          <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                            Loading unscheduled jobs…
+                          </p>
+                        ) : filteredQuoteCandidates.length > 0 ? (
+                          filteredQuoteCandidates.map((quote) => (
+                            <DraggableQuoteCard
+                              key={quote.id}
+                              quote={quote}
+                              selected={selectedQuote?.id === quote.id}
+                              onSelect={() =>
+                                setSelectedQuote((current) =>
+                                  current?.id === quote.id ? null : quote
+                                )
+                              }
+                            />
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+                            No unscheduled {quoteStage} jobs match this search.
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </>
+              ) : (
+                <>
+                  {activeVisitTarget ? (
+                    <div className="rounded-md border border-scheduling/40 bg-scheduling-soft p-3 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {activeVisitTarget.job.job_reference} · Visit {activeVisitTarget.visit.sequence_number}
+                          </p>
+                          <p className="mt-1 text-muted-foreground">
+                            {format(parseISO(activeVisitTarget.visit.starts_at), 'EEE d MMM')}
+                            {' · '}
+                            {formatScheduleVisitTime(activeVisitTarget.visit.starts_at)}–
+                            {formatScheduleVisitTime(activeVisitTarget.visit.ends_at)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setActiveVisitTarget(null)}
+                          className="h-7 px-2"
+                          aria-label="Clear selected visit"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-muted-foreground">
+                        Tap a resource or drag its handle onto this or another visit.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground">
+                      Select a visit to show resources available for its exact time.
+                    </p>
+                  )}
+                  <Tabs
+                    value={resourceAvailabilityView}
+                    onValueChange={(value) =>
+                      setResourceAvailabilityView(value as 'available' | 'unavailable' | 'all')
+                    }
+                  >
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="available" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                        Available ({sidebarTab === 'employee' ? availableEmployees.length : availablePlant.length})
+                      </TabsTrigger>
+                      <TabsTrigger value="unavailable" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                        Unavailable ({sidebarTab === 'employee' ? unavailableEmployees.length : unavailablePlant.length})
+                      </TabsTrigger>
+                      <TabsTrigger value="all" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                        All ({sidebarTab === 'employee' ? matchingEmployees.length : matchingPlant.length})
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  {sidebarTab === 'employee' ? (
+                    <Select value={teamFilter} onValueChange={setTeamFilter}>
+                      <SelectTrigger><SelectValue placeholder="All teams" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All teams</SelectItem>
+                        {teams.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={resourceSearch}
+                      onChange={(event) => setResourceSearch(event.target.value)}
+                      placeholder="Search resources"
+                      className="pl-9"
+                    />
+                  </div>
+                  {selectedResource ? (
+                    <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
+                      <span className="truncate">Selected: {selectedResource.label}</span>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedResource(null)} className="h-6 px-1">
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : null}
+                  <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
+                    <div className="space-y-2">
+                      {sidebarTab === 'employee'
+                        ? filteredEmployees.map((employee) => {
+                            const resource = resourceFromEmployee(employee);
+                            return (
+                              <ResourceCard
+                                key={employee.id}
+                                resource={resource}
+                                subtitle={employee.team_name || employee.employee_id || 'No team'}
+                                warning={
+                                  activeVisitTarget
+                                  && isResourceUnavailableForVisit(
+                                    { type: 'employee', id: employee.id },
+                                    board.assignments,
+                                    activeVisitTarget.visit
+                                  )
+                                    ? 'Already assigned during this visit'
+                                    : undefined
+                                }
+                                selected={selectedResource?.type === 'employee' && selectedResource.id === employee.id}
+                                dragEnabled
+                                onSelect={() => handleResourceSelect(resource)}
+                              />
+                            );
+                          })
+                        : filteredPlant.map((plant) => {
+                            const resource = resourceFromPlant(plant);
+                            return (
+                              <ResourceCard
+                                key={plant.id}
+                                resource={resource}
+                                subtitle={[plant.make, plant.model, plant.status].filter(Boolean).join(' · ')}
+                                warning={
+                                  activeVisitTarget
+                                  && isResourceUnavailableForVisit(
+                                    { type: 'plant', id: plant.id },
+                                    board.assignments,
+                                    activeVisitTarget.visit
+                                  )
+                                    ? 'Already assigned during this visit'
+                                    : plant.status !== 'active'
+                                      ? `Status: ${plant.status}`
+                                      : undefined
+                                }
+                                selected={selectedResource?.type === 'plant' && selectedResource.id === plant.id}
+                                dragEnabled
+                                onSelect={() => handleResourceSelect(resource)}
+                              />
+                            );
+                          })}
+                      {(sidebarTab === 'employee' ? filteredEmployees : filteredPlant).length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+                          No {sidebarTab === 'employee' ? 'employees' : 'plant'} match these filters.
+                        </div>
+                      ) : null}
+                    </div>
+                  </ScrollArea>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1599,6 +2226,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       <DailyTimelineHeader
                         date={selectedDate}
                         range={dailyTimelineRange}
+                        selectedQuote={selectedQuote}
+                        isSchedulingQuote={isSchedulingQuote}
+                        onScheduleQuote={(quote, date) => void scheduleQuoteFromDate(quote, date)}
                       />
                     ) : (
                       weekDates.map((date) => (
@@ -1606,7 +2236,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           key={date}
                           date={date}
                           capacity={capacityByDate.get(date) || null}
+                          dropScope="desktop"
+                          selectedQuote={selectedQuote}
+                          isSchedulingQuote={isSchedulingQuote}
                           onOpenDaily={openDailyForDate}
+                          onScheduleQuote={(quote, workDate) =>
+                            void scheduleQuoteFromDate(quote, workDate)
+                          }
                         />
                       ))
                     )}
@@ -1714,6 +2350,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           onAddVisit={() => openVisitEditor(job, selectedDate)}
                           onEditVisit={(visit) => openVisitEditor(job, selectedDate, visit)}
                           onDeleteAssignment={setPendingDeleteAssignment}
+                          onResizeVisit={resizeVisit}
                         />
                       ) : (
                         weekDates.map((date) => (
@@ -1737,19 +2374,30 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </div>
 
               <div className="space-y-3 md:hidden" data-mobile-scroll-lock="true">
-                {view === SCHEDULING_BOARD_VIEWS.weekly ? (
-                  <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border sm:grid-cols-4">
-                    {weekDates.map((date) => (
+                <div
+                  className={cn(
+                    'grid overflow-hidden rounded-lg border border-border',
+                    view === SCHEDULING_BOARD_VIEWS.weekly
+                      ? 'grid-cols-2 sm:grid-cols-4'
+                      : 'grid-cols-1'
+                  )}
+                >
+                    {(view === SCHEDULING_BOARD_VIEWS.weekly ? weekDates : [selectedDate]).map((date) => (
                       <WeeklyDayHeader
                         key={date}
                         date={date}
                         capacity={capacityByDate.get(date) || null}
                         compact
+                        dropScope="mobile"
+                        selectedQuote={selectedQuote}
+                        isSchedulingQuote={isSchedulingQuote}
                         onOpenDaily={openDailyForDate}
+                        onScheduleQuote={(quote, workDate) =>
+                          void scheduleQuoteFromDate(quote, workDate)
+                        }
                       />
                     ))}
                   </div>
-                ) : null}
                 {filteredJobs.map((job) => (
                   <div key={job.id} className="rounded-lg border border-border bg-muted/20 p-3">
                     <div className="mb-3 flex items-start justify-between gap-2">
@@ -1903,7 +2551,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       </div>
 
       <DragOverlay>
-        {draggedResource ? (
+        {draggedQuote ? (
+          <div className="max-w-72 rounded-lg border border-scheduling bg-popover px-3 py-2 shadow-2xl">
+            <p className="text-sm font-semibold text-foreground">
+              {draggedQuote.base_quote_reference}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {draggedQuote.title}
+            </p>
+          </div>
+        ) : draggedResource ? (
           <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">
             {draggedResource.label}
           </div>
@@ -1938,7 +2595,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         onOpenChange={setQuoteDialogOpen}
         job={schedulingQuoteJob}
         defaultDate={selectedDate}
-        onSaved={() => void refresh()}
+        onSaved={() => {
+          void Promise.all([
+            refresh(),
+            queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
+          ]);
+        }}
       />
       <PlantUnavailabilityDialog
         open={unavailabilityOpen}

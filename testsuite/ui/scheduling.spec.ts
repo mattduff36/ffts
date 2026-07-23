@@ -98,6 +98,19 @@ function schedulingFixture() {
 async function mockManagerBoard(page: Page) {
   const fixture = schedulingFixture();
   const assignmentRequests: Array<Record<string, unknown>> = [];
+  const quoteScheduleRequests: Array<Record<string, unknown>> = [];
+  const visitUpdateRequests: Array<Record<string, unknown>> = [];
+  const quoteCandidates = [{
+    id: '66666666-6666-4666-8666-666666666666',
+    quote_reference: 'TEST-QUOTE-101',
+    base_quote_reference: 'TEST-QUOTE-101',
+    title: 'Unscheduled test work',
+    customer_name: 'Test Customer',
+    status: 'draft',
+    start_date: null as string | null,
+    end_date: null as string | null,
+    estimated_duration_days: 2,
+  }];
   await page.route('**/api/scheduling/context', (route) =>
     route.fulfill({
       status: 200,
@@ -120,6 +133,42 @@ async function mockManagerBoard(page: Page) {
       body: JSON.stringify(fixture),
     })
   );
+  await page.route('**/api/scheduling/quotes**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ quotes: quoteCandidates }),
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    quoteScheduleRequests.push(body);
+    quoteCandidates[0].start_date = String(body.start_date);
+    quoteCandidates[0].end_date = String(body.end_date);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job: fixture.jobs[0] }),
+    });
+  });
+  await page.route('**/api/scheduling/visits/*', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    visitUpdateRequests.push(body);
+    const visit = fixture.visits.find((item) =>
+      route.request().url().endsWith(item.id)
+    );
+    if (visit) {
+      visit.starts_at = String(body.starts_at || visit.starts_at);
+      visit.ends_at = String(body.ends_at || visit.ends_at);
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ visit }),
+    });
+  });
   await page.route('**/api/scheduling/assignments', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
     const body = route.request().postDataJSON() as Record<string, unknown>;
@@ -150,7 +199,12 @@ async function mockManagerBoard(page: Page) {
       body: JSON.stringify({ assignments: fixture.assignments }),
     });
   });
-  return { fixture, assignmentRequests };
+  return {
+    fixture,
+    assignmentRequests,
+    quoteScheduleRequests,
+    visitUpdateRequests,
+  };
 }
 
 test.describe('@scheduling Scheduling', () => {
@@ -180,10 +234,50 @@ test.describe('@scheduling Scheduling', () => {
     );
   });
 
+  test('wide board schedules a queued job by dragging it onto a date', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, quoteScheduleRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+
+    const source = page.getByRole('button', {
+      name: 'Drag TEST-QUOTE-101 to a calendar date',
+    });
+    const target = page.getByTestId(
+      `schedule-date-drop-desktop-${fixture.week.start}`
+    );
+    await expect(source).toBeVisible();
+    await expect(target).toBeVisible();
+
+    const sourceBox = await source.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+    await page.mouse.move(
+      sourceBox!.x + sourceBox!.width / 2,
+      sourceBox!.y + sourceBox!.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      targetBox!.x + targetBox!.width / 2,
+      targetBox!.y + targetBox!.height / 2,
+      { steps: 20 }
+    );
+    await page.mouse.up();
+
+    await expect.poll(() => quoteScheduleRequests).toEqual([{
+      quote_id: '66666666-6666-4666-8666-666666666666',
+      start_date: fixture.week.start,
+      end_date: formatDate(
+        new Date(new Date(`${fixture.week.start}T12:00:00.000Z`).getTime() + 86_400_000)
+      ),
+    }]);
+  });
+
   test('wide board directly assigns a dragged resource to a timed visit', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
+    await page.getByRole('tab', { name: 'Employees' }).click();
 
     const source = page.getByTestId(
       'schedule-resource-employee-22222222-2222-4222-8222-222222222222'
@@ -224,7 +318,7 @@ test.describe('@scheduling Scheduling', () => {
 
   test('daily board presents a horizontally scrollable 5am to 8pm timeline', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await mockManagerBoard(page);
+    const { visitUpdateRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
 
     await page.getByRole('tab', { name: 'Daily' }).click();
@@ -255,6 +349,17 @@ test.describe('@scheduling Scheduling', () => {
     );
     await expect(timelineVisit).toBeVisible();
     await expect(timelineVisit).toHaveCSS('background-color', 'rgb(51, 65, 85)');
+
+    const resizeEnd = page.getByRole('button', {
+      name: 'Adjust end of visit 1 for TEST-JOB-101',
+    });
+    await resizeEnd.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => visitUpdateRequests).toHaveLength(1);
+    expect(visitUpdateRequests[0]).toMatchObject({
+      starts_at: expect.stringContaining('T08:00:00.000Z'),
+      ends_at: expect.stringContaining('T11:30:00.000Z'),
+    });
   });
 
   test('weekly capacity opens its breakdown and a date drills into daily view', async ({ page }) => {
@@ -306,6 +411,7 @@ test.describe('@scheduling Scheduling', () => {
     test('keeps tap assignment available without starting a drag', async ({ page }) => {
       const { assignmentRequests } = await mockManagerBoard(page);
       await page.goto('/scheduling');
+      await page.getByRole('tab', { name: 'Employees' }).click();
 
       expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
       const resourceCard = page.getByTestId(

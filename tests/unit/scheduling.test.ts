@@ -6,6 +6,9 @@ import {
 } from '@/lib/server/scheduling-conflicts';
 import {
   enumerateScheduleDates,
+  formatScheduleEmployeeCompactName,
+  getScheduleQuoteEndDate,
+  getScheduleQuoteStage,
   getSchedulingWeek,
   isScheduleDate,
 } from '@/lib/utils/scheduling';
@@ -60,6 +63,29 @@ describe('scheduling date utilities', () => {
     expect(enumerateScheduleDates('2026-07-15', '2026-07-13')).toEqual([]);
     expect(isScheduleDate('15/07/2026')).toBe(false);
     expect(isDateWithinRange('2026-07-14', '2026-07-13', '2026-07-15')).toBe(true);
+  });
+});
+
+describe('scheduling presentation utilities', () => {
+  it('groups Quote workflow statuses for the scheduling queue', () => {
+    expect(getScheduleQuoteStage('draft')).toBe('draft');
+    expect(getScheduleQuoteStage('changes_requested')).toBe('draft');
+    expect(getScheduleQuoteStage('sent')).toBe('pending');
+    expect(getScheduleQuoteStage('po_received')).toBe('accepted');
+    expect(getScheduleQuoteStage('invoiced')).toBe('accepted');
+    expect(getScheduleQuoteStage('lost')).toBeNull();
+  });
+
+  it('calculates an inclusive Quote planning range with a one-day fallback', () => {
+    expect(getScheduleQuoteEndDate('2026-07-13', 3)).toBe('2026-07-15');
+    expect(getScheduleQuoteEndDate('2026-07-13', null)).toBe('2026-07-13');
+  });
+
+  it('compacts employee names to a first name and surname initial', () => {
+    expect(formatScheduleEmployeeCompactName('Matt Doe')).toBe('Matt D');
+    expect(formatScheduleEmployeeCompactName('  Alice Mary van Pelt  ')).toBe('Alice P');
+    expect(formatScheduleEmployeeCompactName('Prince')).toBe('Prince');
+    expect(formatScheduleEmployeeCompactName('')).toBe('Employee');
   });
 });
 

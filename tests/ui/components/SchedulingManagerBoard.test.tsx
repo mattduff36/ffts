@@ -290,12 +290,142 @@ describe('SchedulingManagerBoard', () => {
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Jobs' })).toHaveAttribute('aria-selected', 'true');
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
+  });
+
+  it('groups only unscheduled Quotes into the three Jobs queue stages', async () => {
+    mockFetchQuoteCandidates.mockResolvedValue([
+      {
+        id: 'quote-draft',
+        quote_reference: 'Q-DRAFT',
+        base_quote_reference: 'Q-DRAFT',
+        title: 'Draft work',
+        customer_name: 'Draft Customer',
+        status: 'changes_requested',
+        start_date: null,
+        end_date: null,
+        estimated_duration_days: 2,
+      },
+      {
+        id: 'quote-pending',
+        quote_reference: 'Q-PENDING',
+        base_quote_reference: 'Q-PENDING',
+        title: 'Pending work',
+        customer_name: 'Pending Customer',
+        status: 'sent',
+        start_date: null,
+        end_date: null,
+        estimated_duration_days: 1,
+      },
+      {
+        id: 'quote-accepted',
+        quote_reference: 'Q-ACCEPTED',
+        base_quote_reference: 'Q-ACCEPTED',
+        title: 'Accepted work',
+        customer_name: 'Accepted Customer',
+        status: 'po_received',
+        start_date: null,
+        end_date: null,
+        estimated_duration_days: 4,
+      },
+      {
+        id: 'quote-scheduled',
+        quote_reference: 'Q-SCHEDULED',
+        base_quote_reference: 'Q-SCHEDULED',
+        title: 'Already scheduled',
+        customer_name: 'Scheduled Customer',
+        status: 'draft',
+        start_date: '2026-07-13',
+        end_date: '2026-07-13',
+        estimated_duration_days: 1,
+      },
+    ]);
+
+    renderBoard();
+
+    expect(await screen.findByRole('button', { name: 'Drag Q-DRAFT to a calendar date' }))
+      .toBeInTheDocument();
+    expect(screen.queryByText('Q-SCHEDULED')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Draft (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pending (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Accepted (1)' })).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Accepted (1)' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(await screen.findByRole('button', { name: 'Drag Q-ACCEPTED to a calendar date' }))
+      .toBeInTheDocument();
+    expect(screen.queryByText('Q-DRAFT')).not.toBeInTheDocument();
+  });
+
+  it('schedules a dragged queue job from the dropped date and estimated duration', async () => {
+    const quote = {
+      id: 'quote-draft',
+      quote_reference: 'Q-DRAFT',
+      base_quote_reference: 'Q-DRAFT',
+      title: 'Draft work',
+      customer_name: 'Draft Customer',
+      status: 'draft',
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: 3,
+    };
+    mockFetchQuoteCandidates.mockResolvedValue([quote]);
+    renderBoard();
+    expect(await screen.findByRole('button', { name: 'Drag Q-DRAFT to a calendar date' }))
+      .toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { quote } },
+          target: { data: { workDate: '2026-07-14' } },
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+        quote_id: 'quote-draft',
+        start_date: '2026-07-14',
+        end_date: '2026-07-16',
+      })
+    );
+  });
+
+  it('supports selecting a queue job and placing it with a date button', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Pending (1)' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await screen.findByText('Q-100'));
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: 'Schedule Q-100 from 2026-07-14',
+      })[0]
+    );
+
+    await waitFor(() =>
+      expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+        quote_id: '33333333-3333-4333-8333-333333333333',
+        start_date: '2026-07-14',
+        end_date: '2026-07-14',
+      })
+    );
   });
 
   it('provides keyboard-operable dedicated drag handles', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
 
     expect(dndState.sensors).toHaveLength(2);
     expect(
@@ -484,6 +614,124 @@ describe('SchedulingManagerBoard', () => {
     expect(timelineVisit).toHaveStyle({ backgroundColor: '#334155' });
   });
 
+  it('shows compact employee names on assignment chips without shortening accessible labels', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    const assignmentMoveButtons = screen.getAllByRole('button', {
+      name: 'Move Alex Smith to another visit',
+    });
+    const assignmentChip = assignmentMoveButtons[0].closest('div');
+    expect(assignmentChip).toHaveTextContent('Alex S');
+    expect(assignmentChip).not.toHaveTextContent('Alex Smith');
+  });
+
+  it('resizes daily visits in 30-minute keyboard increments', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    renderBoard();
+
+    const resizeEnd = await screen.findByRole('button', {
+      name: 'Adjust end of visit 1 for JOB-101',
+    });
+    fireEvent.keyDown(resizeEnd, { key: 'ArrowLeft' });
+
+    await waitFor(() =>
+      expect(mockSaveVisit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          starts_at: `${today}T10:00:00.000Z`,
+          ends_at: `${today}T11:30:00.000Z`,
+        }),
+        'visit-1'
+      )
+    );
+  });
+
+  it('snaps pointer resizing to 30 minutes and enforces the minimum duration', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    const firstRender = renderBoard();
+
+    const resizeEnd = await screen.findByRole('button', {
+      name: 'Adjust end of visit 1 for JOB-101',
+    });
+    fireEvent.pointerDown(resizeEnd, { pointerId: 7, clientX: 100 });
+    fireEvent.pointerMove(resizeEnd, { pointerId: 7, clientX: 140 });
+    fireEvent.pointerUp(resizeEnd, { pointerId: 7, clientX: 140 });
+
+    await waitFor(() =>
+      expect(mockSaveVisit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ends_at: `${today}T12:30:00.000Z`,
+        }),
+        'visit-1'
+      )
+    );
+
+    firstRender.unmount();
+    mockSaveVisit.mockClear();
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T10:30:00.000Z`,
+      }],
+      assignments: [],
+    });
+    const secondRender = renderBoard();
+    const resizeStart = await screen.findByRole('button', {
+      name: 'Adjust start of visit 1 for JOB-101',
+    });
+    fireEvent.keyDown(resizeStart, { key: 'ArrowRight' });
+    expect(mockSaveVisit).not.toHaveBeenCalled();
+    secondRender.unmount();
+  });
+
   it('clears the selected visit when clicking outside visit cards', async () => {
     renderBoard();
 
@@ -507,6 +755,10 @@ describe('SchedulingManagerBoard', () => {
     const { container } = renderBoard();
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
     expect(screen.getByRole('tab', { name: 'Available (2)' })).toHaveClass(
       'whitespace-nowrap',
       'text-[10px]'
@@ -542,6 +794,10 @@ describe('SchedulingManagerBoard', () => {
     renderBoard();
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
     await waitFor(() =>
       expect(dndState.draggableOptions.some((options) => options.id.includes('employee-2'))).toBe(true)
     );

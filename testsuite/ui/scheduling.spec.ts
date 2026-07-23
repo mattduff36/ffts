@@ -81,6 +81,16 @@ function schedulingFixture() {
       }],
       plant: [],
     },
+    employee_capacity: [{
+      date: formatDate(start),
+      available_employee_count: 1,
+      total_available_minutes: 450,
+      employees: [{
+        profile_id: '22222222-2222-4222-8222-222222222222',
+        full_name: 'Test Scheduler',
+        available_minutes: 450,
+      }],
+    }],
     plant_unavailability: [],
   };
 }
@@ -245,6 +255,31 @@ test.describe('@scheduling Scheduling', () => {
     );
     await expect(timelineVisit).toBeVisible();
     await expect(timelineVisit).toHaveCSS('background-color', 'rgb(51, 65, 85)');
+  });
+
+  test('weekly capacity opens its breakdown and a date drills into daily view', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+    const dateLabel = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'UTC',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(new Date(`${fixture.week.start}T12:00:00.000Z`));
+
+    await page.getByRole('button', {
+      name: `1 person with 7h 30m available on ${dateLabel}`,
+    }).click();
+    await expect(page.getByText('1 person · 7h 30m available')).toBeVisible();
+    await expect(page.getByText('Test Scheduler').last()).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', {
+      name: `Open daily schedule for ${dateLabel}`,
+    }).click();
+    await expect(page.getByText('Daily job board')).toBeVisible();
+    await expect(page.getByLabel('Daily schedule timeline')).toBeVisible();
   });
 
   test('mobile board assigns by selection and tap without drag', async ({ page }) => {

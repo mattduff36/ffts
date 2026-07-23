@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { buildEmployeeCapacity } from '@/lib/server/scheduling-capacity';
 import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
-import { scheduleVisitIntervalsOverlap } from '@/lib/utils/scheduling';
+import {
+  enumerateScheduleDates,
+  scheduleVisitIntervalsOverlap,
+} from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
   ScheduleEmployeeAssignment,
@@ -257,7 +261,7 @@ export async function loadSchedulingBoard(
         .order('start_date'),
       admin
         .from('absences')
-        .select('profile_id, date, end_date')
+        .select('profile_id, date, end_date, is_half_day, half_day_session')
         .in('status', ['approved', 'processed'])
         .lte('date', weekEnd)
         .or(`end_date.gte.${weekStart},end_date.is.null`),
@@ -295,6 +299,8 @@ export async function loadSchedulingBoard(
     profile_id: string;
     date: string;
     end_date: string | null;
+    is_half_day: boolean | null;
+    half_day_session: 'AM' | 'PM' | null;
   }>;
   const shifts = new Map(
     ((shiftsResult.data || []) as Array<Record<string, unknown>>).map((row) => [
@@ -331,6 +337,13 @@ export async function loadSchedulingBoard(
     visits,
     assignments: [...employeeAssignments, ...plantAssignments],
     resources: { employees, plant: plants },
+    employee_capacity: buildEmployeeCapacity({
+      dates: enumerateScheduleDates(weekStart, weekEnd),
+      employees,
+      assignments: employeeAssignments,
+      absences,
+      shifts,
+    }),
     plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
   };
 }

@@ -2,6 +2,7 @@ import type {
   ScheduleAssignment,
   ScheduleJob,
   ScheduleJobTag,
+  ScheduleQuoteCandidate,
   ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingContext,
@@ -76,6 +77,26 @@ export async function createScheduleJobTag(input: {
 
 export async function deleteScheduleJob(id: string): Promise<void> {
   await readResponse(await fetch(`/api/scheduling/jobs/${id}`, { method: 'DELETE' }));
+}
+
+export async function fetchScheduleQuoteCandidates(): Promise<ScheduleQuoteCandidate[]> {
+  const payload = await readResponse<{ quotes: ScheduleQuoteCandidate[] }>(
+    await fetch('/api/scheduling/quotes')
+  );
+  return payload.quotes;
+}
+
+export async function saveQuoteSchedule(input: {
+  quote_id: string;
+  start_date: string;
+  end_date: string;
+}): Promise<ScheduleJob> {
+  const response = await fetch('/api/scheduling/quotes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return (await readResponse<{ job: ScheduleJob }>(response)).job;
 }
 
 export interface CreateAssignmentInput {

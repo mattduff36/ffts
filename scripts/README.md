@@ -11,6 +11,7 @@ npm run db:validate
 npm run setup:storage
 npm run fixerrors
 npm run fixerrors -- --no-clear
+npm run createinvoice -- --from YYYY-MM-DD --to YYYY-MM-DD
 npm run finalise
 ```
 
@@ -56,3 +57,30 @@ commands without the exact confirmation token and an operator review of the gene
 The Markdown release log is the only tracked file under `docs_private/`. If release generation unexpectedly fails after the product commit, finalise blocks the push, preserves the local commit and generated files, and prints exact recovery commands.
 
 Project rules under `.cursor/rules/` map finalise/fixerrors requests, require push-content reporting, and keep all workflows self-contained in FFTS.
+
+## Invoice Evidence
+
+Generate a local FFTS invoice evidence report with:
+
+```bash
+npm run createinvoice -- --from "YYYY-MM-DD" --to "YYYY-MM-DD" --rate "28" --support-rate "5" --include-unpushed "true"
+```
+
+The command reads local release history, Git commits, and parent Cursor chats. It does not contact
+production services, alter application data, stage files, commit, or push. The default transcript
+directory is `~/.cursor/projects/d-Websites-ffts/agent-transcripts`. Override it with
+`CURSOR_AGENT_TRANSCRIPTS_DIR` or `--transcripts-dir`; the command-line option takes precedence.
+
+Evidence is written to:
+
+- `docs_private/invoices/invoice-<from>-to-<to>-evidence.json`
+- `docs_private/invoices/invoice-<from>-to-<to>-evidence.md`
+
+The agent saves the reconciled copy-ready result beside them as
+`docs_private/invoices/invoice-<from>-to-<to>-final.md`. These private artifacts remain ignored by
+Git. Use `--output-dir` only when a different local ignored destination is required.
+
+If transcript discovery fails, verify the FFTS Cursor project directory or rerun with
+`--transcripts-dir "<path>"`. Missing or incomplete release evidence should be corrected at its
+FFTS source and the command rerun; do not copy release records, transcripts, credentials, or
+generated auth state from another repository.

@@ -35,7 +35,9 @@ const {
   dndState,
   mockCreateAssignment,
   mockFetchBoard,
+  mockFetchQuoteCandidates,
   mockMoveAssignment,
+  mockSaveQuoteSchedule,
   mockSaveVisit,
   mockToastInfo,
 } = vi.hoisted(() => ({
@@ -46,7 +48,9 @@ const {
   },
   mockCreateAssignment: vi.fn(),
   mockFetchBoard: vi.fn(),
+  mockFetchQuoteCandidates: vi.fn(),
   mockMoveAssignment: vi.fn(),
+  mockSaveQuoteSchedule: vi.fn(),
   mockSaveVisit: vi.fn(),
   mockToastInfo: vi.fn(),
 }));
@@ -106,10 +110,12 @@ vi.mock('@/lib/client/scheduling', async () => {
     deleteScheduleAssignment: vi.fn(),
     deleteScheduleJob: vi.fn(),
     fetchSchedulingBoard: mockFetchBoard,
+    fetchScheduleQuoteCandidates: mockFetchQuoteCandidates,
     moveScheduleAssignment: mockMoveAssignment,
     deleteScheduleVisit: vi.fn(),
     savePlantUnavailability: vi.fn(),
     saveScheduleJob: vi.fn(),
+    saveQuoteSchedule: mockSaveQuoteSchedule,
     saveScheduleVisit: mockSaveVisit,
   };
 });
@@ -207,6 +213,20 @@ const board: SchedulingBoardPayload = {
     }],
     plant: [],
   },
+  employee_capacity: [{
+    date: '2026-07-14',
+    available_employee_count: 2,
+    total_available_minutes: 660,
+    employees: [{
+      profile_id: 'employee-1',
+      full_name: 'Alex Smith',
+      available_minutes: 210,
+    }, {
+      profile_id: 'employee-2',
+      full_name: 'Bob Jones',
+      available_minutes: 450,
+    }],
+  }],
   plant_unavailability: [],
 };
 
@@ -250,6 +270,18 @@ describe('SchedulingManagerBoard', () => {
     mockFetchBoard.mockResolvedValue(board);
     mockCreateAssignment.mockResolvedValue(undefined);
     mockMoveAssignment.mockResolvedValue(undefined);
+    mockFetchQuoteCandidates.mockResolvedValue([{
+      id: '33333333-3333-4333-8333-333333333333',
+      quote_reference: 'Q-100',
+      base_quote_reference: 'Q-100',
+      title: 'Oak reduction',
+      customer_name: 'Example Customer',
+      status: 'sent',
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: null,
+    }]);
+    mockSaveQuoteSchedule.mockResolvedValue({});
     mockSaveVisit.mockResolvedValue(undefined);
   });
 
@@ -286,6 +318,95 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByText('Daily job board')).toBeInTheDocument();
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBe(
       SCHEDULING_BOARD_VIEWS.daily
+    );
+  });
+
+  it('opens a clicked weekly date in daily view and persists the preference', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: 'Open daily schedule for Tuesday 14 July',
+      })[0]
+    );
+
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    expect(await screen.findByTestId('schedule-cell-job-1-2026-07-14')).toBeInTheDocument();
+    expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBe(
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+  });
+
+  it('shows weekly available people and hours with an employee breakdown', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: '2 people with 11h available on Tuesday 14 July',
+      })[0]
+    );
+
+    expect(screen.getByText('2 people · 11h available')).toBeInTheDocument();
+    expect(screen.getAllByText('Alex Smith').length).toBeGreaterThan(0);
+    expect(screen.getByText('3h 30m')).toBeInTheDocument();
+    expect(screen.getByText('7h 30m')).toBeInTheDocument();
+  });
+
+  it('schedules an open Quote directly from the board', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Quote' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Schedule a Quote' });
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Q-100/ }));
+    fireEvent.change(within(dialog).getByLabelText('Start date'), {
+      target: { value: '2026-07-27' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('End date'), {
+      target: { value: '2026-07-29' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Schedule Quote' }));
+
+    await waitFor(() =>
+      expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+        quote_id: '33333333-3333-4333-8333-333333333333',
+        start_date: '2026-07-27',
+        end_date: '2026-07-29',
+      })
+    );
+  });
+
+  it('reschedules an existing Quote job from the board', async () => {
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      jobs: [{
+        ...board.jobs[0],
+        source_type: 'quote',
+        quote_id: '33333333-3333-4333-8333-333333333333',
+      }],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Reschedule JOB-101' })[0]
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Reschedule Quote job' });
+    expect(within(dialog).getByLabelText('Start date')).toHaveValue('2026-07-13');
+    expect(within(dialog).getByLabelText('End date')).toHaveValue('2026-07-15');
+    fireEvent.change(within(dialog).getByLabelText('End date'), {
+      target: { value: '2026-07-16' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Update schedule' }));
+
+    await waitFor(() =>
+      expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+        quote_id: '33333333-3333-4333-8333-333333333333',
+        start_date: '2026-07-13',
+        end_date: '2026-07-16',
+      })
     );
   });
 
@@ -570,9 +691,9 @@ describe('SchedulingManagerBoard', () => {
     renderBoard();
 
     expect(await screen.findByText('No jobs scheduled for this week')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: "Add this week's first job" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schedule a Quote' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Add manual job' }).length)
+      .toBeGreaterThan(0);
   });
 
   it('restores tag and drop-on filters from the URL', async () => {

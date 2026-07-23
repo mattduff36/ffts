@@ -20,6 +20,7 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   CalendarOff,
+  CalendarPlus,
   Clock3,
   ExternalLink,
   GripVertical,
@@ -27,6 +28,7 @@ import {
   Plus,
   Search,
   Tractor,
+  Users,
   UserRound,
   X,
 } from 'lucide-react';
@@ -46,6 +48,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageLoader } from '@/components/ui/page-loader';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -74,6 +77,7 @@ import {
 } from '@/lib/utils/scheduling';
 import type {
   ScheduleAssignment,
+  ScheduleDayCapacity,
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
@@ -84,6 +88,7 @@ import type {
 import { PlantUnavailabilityDialog } from './PlantUnavailabilityDialog';
 import type { SelectedScheduleResource } from './ScheduleAssignmentDialog';
 import { ScheduleJobDialog } from './ScheduleJobDialog';
+import { ScheduleQuoteDialog } from './ScheduleQuoteDialog';
 import { ScheduleVisitDialog } from './ScheduleVisitDialog';
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 
@@ -94,6 +99,96 @@ interface ResourceCardProps {
   dragEnabled: boolean;
   warning?: string;
   onSelect: () => void;
+}
+
+interface WeeklyDayHeaderProps {
+  date: string;
+  capacity: ScheduleDayCapacity | null;
+  compact?: boolean;
+  onOpenDaily: (date: string) => void;
+}
+
+function formatCapacityHours(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+function formatPeople(count: number): string {
+  return `${count} ${count === 1 ? 'person' : 'people'}`;
+}
+
+function WeeklyDayHeader({
+  date,
+  capacity,
+  compact = false,
+  onOpenDaily,
+}: WeeklyDayHeaderProps) {
+  return (
+    <div className={cn('border-l border-border text-center', compact ? 'p-2' : 'p-3')}>
+      <button
+        type="button"
+        onClick={() => onOpenDaily(date)}
+        className="w-full rounded-sm hover:text-scheduling focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+        aria-label={`Open daily schedule for ${format(parseISO(date), 'EEEE d MMMM')}`}
+      >
+        <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {format(parseISO(date), compact ? 'EEE' : 'EEEE')}
+        </span>
+        <span className="block text-sm font-semibold text-foreground">
+          {format(parseISO(date), 'd MMM')}
+        </span>
+      </button>
+      {capacity ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'mt-2 inline-flex items-center justify-center gap-1 rounded-full border border-scheduling/35 bg-scheduling-soft px-2 py-1 font-medium text-scheduling hover:border-scheduling focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling',
+                compact ? 'text-[10px]' : 'text-xs'
+              )}
+              aria-label={`${formatPeople(capacity.available_employee_count)} with ${formatCapacityHours(capacity.total_available_minutes)} available on ${format(parseISO(date), 'EEEE d MMMM')}`}
+            >
+              <Users className="h-3 w-3" />
+              {capacity.available_employee_count} · {formatCapacityHours(capacity.total_available_minutes)}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="center" className="w-72 p-0">
+            <div className="border-b border-border p-3">
+              <p className="font-semibold text-foreground">
+                {format(parseISO(date), 'EEEE d MMMM')}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {formatPeople(capacity.available_employee_count)} ·{' '}
+                {formatCapacityHours(capacity.total_available_minutes)} available
+              </p>
+            </div>
+            <div className="max-h-64 space-y-1 overflow-y-auto p-2">
+              {capacity.employees.length > 0 ? (
+                capacity.employees.map((employee) => (
+                  <div
+                    key={employee.profile_id}
+                    className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <span className="truncate text-foreground">{employee.full_name}</span>
+                    <span className="shrink-0 font-medium tabular-nums text-scheduling">
+                      {formatCapacityHours(employee.available_minutes)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  No employee capacity remains.
+                </p>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : null}
+    </div>
+  );
 }
 
 interface DndAnnouncementEntity {
@@ -731,6 +826,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   } | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduleJob | null>(null);
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [schedulingQuoteJob, setSchedulingQuoteJob] = useState<ScheduleJob | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
 
@@ -751,6 +848,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const dailyTimelineRange = useMemo(
     () => getDailyTimelineRange(board?.visits || [], selectedDate),
     [board?.visits, selectedDate]
+  );
+  const capacityByDate = useMemo(
+    () => new Map(
+      (board?.employee_capacity || []).map((capacity) => [capacity.date, capacity])
+    ),
+    [board?.employee_capacity]
   );
 
   const teams = useMemo(() => {
@@ -1114,6 +1217,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     writeSchedulingViewPreference(userId, nextView);
   }
 
+  function openDailyForDate(date: string) {
+    setSelectedDate(date);
+    setActiveVisitTarget(null);
+    handleViewChange(SCHEDULING_BOARD_VIEWS.daily);
+  }
+
+  function openQuoteScheduler(job: ScheduleJob | null = null) {
+    setSchedulingQuoteJob(job);
+    setQuoteDialogOpen(true);
+  }
+
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
   if (boardQuery.isError || !board) {
     return (
@@ -1213,14 +1327,21 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               Plant availability
             </Button>
             <Button
+              variant="outline"
               onClick={() => {
                 setEditingJob(null);
                 setJobDialogOpen(true);
               }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <Plus className="mr-2 h-4 w-4" />
-              Add job
+              Add manual job
+            </Button>
+            <Button
+              onClick={() => openQuoteScheduler()}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Schedule Quote
             </Button>
           </div>
         </div>
@@ -1481,10 +1602,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       />
                     ) : (
                       weekDates.map((date) => (
-                        <div key={date} className="border-l border-border p-3 text-center">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{format(parseISO(date), 'EEE')}</p>
-                          <p className="text-sm font-semibold text-foreground">{format(parseISO(date), 'd MMM')}</p>
-                        </div>
+                        <WeeklyDayHeader
+                          key={date}
+                          date={date}
+                          capacity={capacityByDate.get(date) || null}
+                          onOpenDaily={openDailyForDate}
+                        />
                       ))
                     )}
                   </div>
@@ -1543,14 +1666,25 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           </div>
                           <div className="flex items-center">
                             {job.source_type === 'quote' && job.quote_id ? (
-                              <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                <Link
-                                  href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
-                                  aria-label={`Open Quote ${job.job_reference}`}
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => openQuoteScheduler(job)}
+                                  aria-label={`Reschedule ${job.job_reference}`}
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                </Link>
-                              </Button>
+                                  <CalendarPlus className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                  <Link
+                                    href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
+                                    aria-label={`Open Quote ${job.job_reference}`}
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </Link>
+                                </Button>
+                              </>
                             ) : null}
                             <Button
                               size="sm"
@@ -1603,6 +1737,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </div>
 
               <div className="space-y-3 md:hidden" data-mobile-scroll-lock="true">
+                {view === SCHEDULING_BOARD_VIEWS.weekly ? (
+                  <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border sm:grid-cols-4">
+                    {weekDates.map((date) => (
+                      <WeeklyDayHeader
+                        key={date}
+                        date={date}
+                        capacity={capacityByDate.get(date) || null}
+                        compact
+                        onOpenDaily={openDailyForDate}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 {filteredJobs.map((job) => (
                   <div key={job.id} className="rounded-lg border border-border bg-muted/20 p-3">
                     <div className="mb-3 flex items-start justify-between gap-2">
@@ -1622,12 +1769,25 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         </p>
                       </div>
                       <div className="flex items-center">
-                        {job.source_type === 'quote' ? (
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}>
-                              <ExternalLink className="h-4 w-4" />
-                            </Link>
-                          </Button>
+                        {job.source_type === 'quote' && job.quote_id ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openQuoteScheduler(job)}
+                              aria-label={`Reschedule ${job.job_reference}`}
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </Button>
+                            <Button asChild size="sm" variant="ghost">
+                              <Link
+                                href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
+                                aria-label={`Open Quote ${job.job_reference}`}
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </>
                         ) : null}
                         <Button size="sm" variant="ghost" onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}>
                           <Pencil className="h-4 w-4" />
@@ -1643,9 +1803,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             className="rounded-md border border-border p-3"
                           >
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold uppercase text-muted-foreground">
-                                {format(parseISO(date), 'EEEE d MMM')}
-                              </span>
+                              {view === SCHEDULING_BOARD_VIEWS.weekly ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openDailyForDate(date)}
+                                  className="rounded-sm text-xs font-semibold uppercase text-muted-foreground hover:text-scheduling focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+                                  aria-label={`Open daily schedule for ${format(parseISO(date), 'EEEE d MMMM')}`}
+                                >
+                                  {format(parseISO(date), 'EEEE d MMM')}
+                                </button>
+                              ) : (
+                                <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                  {format(parseISO(date), 'EEEE d MMM')}
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => openVisitEditor(job, date)}
@@ -1707,16 +1878,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     </p>
                   </div>
                   {!hasActiveJobFilters ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEditingJob(null);
-                        setJobDialogOpen(true);
-                      }}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add this {view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}&apos;s first job
-                    </Button>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Button onClick={() => openQuoteScheduler()}>
+                        <CalendarPlus className="mr-2 h-4 w-4" />
+                        Schedule a Quote
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingJob(null);
+                          setJobDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add manual job
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -1754,6 +1931,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         onOpenChange={setJobDialogOpen}
         job={editingJob}
         defaultDate={weekDates[0] || board.week.start}
+        onSaved={() => void refresh()}
+      />
+      <ScheduleQuoteDialog
+        open={quoteDialogOpen}
+        onOpenChange={setQuoteDialogOpen}
+        job={schedulingQuoteJob}
+        defaultDate={selectedDate}
         onSaved={() => void refresh()}
       />
       <PlantUnavailabilityDialog

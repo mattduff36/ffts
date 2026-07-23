@@ -3,8 +3,6 @@ import 'server-only';
 import { addDays, format, parseISO } from 'date-fns';
 import type { ScheduleJobStatus } from '@/types/scheduling';
 
-export const SCHEDULING_OPERATIONAL_QUOTE_STATUSES = ['po_received', 'in_progress'] as const;
-
 export interface SchedulingQuoteSource {
   id: string;
   quote_reference: string;
@@ -24,20 +22,17 @@ export interface SchedulingQuoteSource {
   updated_by: string | null;
 }
 
-export function isOperationalSchedulingQuote(
+export function isOpenSchedulingQuote(
   quote: SchedulingQuoteSource
 ): quote is SchedulingQuoteSource & { start_date: string } {
   return (
     quote.is_latest_version
     && quote.commercial_status === 'open'
-    && SCHEDULING_OPERATIONAL_QUOTE_STATUSES.includes(
-      quote.status as (typeof SCHEDULING_OPERATIONAL_QUOTE_STATUSES)[number]
-    )
     && Boolean(quote.start_date)
   );
 }
 
-export function mapOperationalQuoteToScheduleJob(
+export function mapOpenQuoteToScheduleJob(
   quote: SchedulingQuoteSource & { start_date: string }
 ) {
   const estimatedDays = Math.max(quote.estimated_duration_days || 1, 1);
@@ -58,3 +53,6 @@ export function mapOperationalQuoteToScheduleJob(
     updated_by: quote.updated_by || quote.created_by,
   };
 }
+
+export const isOperationalSchedulingQuote = isOpenSchedulingQuote;
+export const mapOperationalQuoteToScheduleJob = mapOpenQuoteToScheduleJob;

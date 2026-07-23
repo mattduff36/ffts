@@ -6,6 +6,7 @@
     "dev": "next dev -p 4000",
     "build": "next build",
     "start": "next start",
+    "createinvoice": "tsx scripts/create-invoice.ts",
     "finalise": "tsx scripts/finalise.ts",
     "finalise:push": "tsx scripts/finalise.ts --push",
     "finalise:full": "tsx scripts/finalise.ts --full",

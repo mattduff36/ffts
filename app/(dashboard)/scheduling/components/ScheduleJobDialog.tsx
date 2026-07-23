@@ -247,7 +247,7 @@ export function ScheduleJobDialog({
             <DialogTitle>{job ? 'Edit scheduled job' : 'Add scheduled job'}</DialogTitle>
             <DialogDescription>
               {isQuoteJob
-                ? 'Quote details are read-only here. Edit planning dates and duration from the Quotes module.'
+                ? 'Quote details are read-only here. Use Reschedule on the board to change its planning dates.'
                 : 'Set the planning dates, then add timed visits for employees and plant.'}
             </DialogDescription>
           </DialogHeader>

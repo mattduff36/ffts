@@ -31,9 +31,10 @@ function quote(overrides: Partial<SchedulingQuoteSource> = {}): SchedulingQuoteS
 }
 
 describe('Quote-driven scheduling mapping', () => {
-  it('activates only latest commercially open operational Quotes with a start date', () => {
+  it('activates any latest commercially open Quote with a start date', () => {
     expect(isOperationalSchedulingQuote(quote())).toBe(true);
-    expect(isOperationalSchedulingQuote(quote({ status: 'sent' }))).toBe(false);
+    expect(isOperationalSchedulingQuote(quote({ status: 'sent' }))).toBe(true);
+    expect(isOperationalSchedulingQuote(quote({ status: 'draft' }))).toBe(true);
     expect(isOperationalSchedulingQuote(quote({ commercial_status: 'closed' }))).toBe(false);
     expect(isOperationalSchedulingQuote(quote({ is_latest_version: false }))).toBe(false);
     expect(isOperationalSchedulingQuote(quote({ start_date: null }))).toBe(false);

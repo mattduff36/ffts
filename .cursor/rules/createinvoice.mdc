@@ -1,0 +1,37 @@
+---
+description: Generate invoice bullets when the user types createinvoice
+alwaysApply: true
+---
+
+# createinvoice Command
+
+When the user's message is exactly `createinvoice`, do not re-plan the workflow.
+
+1. Use `AskQuestion` to collect:
+   - invoice start and end dates;
+   - development rate, defaulting to £28/hour;
+   - whether completed local work not yet pushed should be included;
+   - support rate: nominal £5/hour, normal development rate, or a custom rate.
+2. Run:
+
+```bash
+npm run createinvoice -- --from "<YYYY-MM-DD>" --to "<YYYY-MM-DD>" --rate "<rate>" --support-rate "<support-rate>" --include-unpushed "<true|false>"
+```
+
+3. Read the generated evidence JSON and Markdown paths printed by the command.
+4. Reconcile and deduplicate releases, substantive Git commits, and completed parent chats.
+5. Exclude planning-only, cancelled, administrative, external, merge-only, version-only, and duplicate `[skip version]` work.
+   - Treat release-only `other-development` evidence without a substantive commit or completed chat as corroboration, not a separate billable line.
+6. Produce customer-facing invoice lines in the established style:
+   - `Development Session: <date range> (<plain-English outcomes>)`
+   - a separate `BUG FIXES / Production Support` line where appropriate.
+7. Sort development lines by completion/end date ascending, then start date ascending. For matching dates, put new modules before refinements. Keep the grouped support line last.
+8. Estimate hours conservatively using the report's calibrated recommendation:
+   - treat a cluster's recommended hours as the total budget across all lines from that cluster, not an allowance for every line;
+   - use roughly 5–6 hours for a major new module, 2–3 hours for refinements or AI-assisted schema/content work, and up to 6 grouped hours for production support;
+   - use raw change size and transcript breadth only to distinguish work inside these bands, not to inflate hours;
+   - never claim exact token usage.
+9. Show hours, line values, development/support subtotals, total, and coverage notes.
+10. Save the exact response as `docs_private/invoices/invoice-<from>-to-<to>-final.md`.
+
+Do not modify application code, commit, push, or run builds during invoice generation.

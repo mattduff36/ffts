@@ -53,6 +53,18 @@ export interface ScheduleJob {
   updated_at: string;
 }
 
+export interface ScheduleQuoteCandidate {
+  id: string;
+  quote_reference: string;
+  base_quote_reference: string;
+  title: string;
+  customer_name: string | null;
+  status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  estimated_duration_days: number | null;
+}
+
 export interface ScheduleVisit {
   id: string;
   job_id: string;
@@ -153,7 +165,21 @@ export interface SchedulingBoardPayload {
     employees: ScheduleEmployeeResource[];
     plant: SchedulePlantResource[];
   };
+  employee_capacity: ScheduleDayCapacity[];
   plant_unavailability: SchedulePlantUnavailability[];
+}
+
+export interface ScheduleEmployeeCapacity {
+  profile_id: string;
+  full_name: string;
+  available_minutes: number;
+}
+
+export interface ScheduleDayCapacity {
+  date: string;
+  available_employee_count: number;
+  total_available_minutes: number;
+  employees: ScheduleEmployeeCapacity[];
 }
 
 export interface SchedulingSelfPayload {

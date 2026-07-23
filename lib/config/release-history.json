@@ -1,5 +1,31 @@
 [
   {
+    "version": "0726.11.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Projects, Data storage, and Navigation.",
+    "summary": "Updated Quotes, Projects, Data storage, and Navigation.",
+    "details": [
+      "Updated Quotes, Projects, Data storage, and Navigation, with changes to background routes, app screens, shared logic, automated tests, and data storage.",
+      "Updated projects, with changes to app screens, automated tests, and data storage.",
+      "Updated data storage, with changes to automated tests and data storage.",
+      "Updated navigation across 1 changed file."
+    ],
+    "areas": [
+      "Quotes",
+      "Projects",
+      "Data storage",
+      "Navigation"
+    ],
+    "areaKeys": [
+      "quotes",
+      "projects",
+      "data-storage",
+      "navigation"
+    ],
+    "pushedAt": "2026-07-23T23:44:44.204Z"
+  },
+  {
     "version": "0726.10.0",
     "updateKind": "major",
     "title": "Debug tools update",

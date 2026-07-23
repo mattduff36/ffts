@@ -38,6 +38,7 @@ import type {
   ScheduleVisit,
   SchedulingConflict,
 } from '@/types/scheduling';
+import { schedulingControlStyles } from './scheduling-control-styles';
 
 export interface SelectedScheduleResource {
   type: 'employee' | 'plant';
@@ -211,10 +212,10 @@ export function ScheduleAssignmentDialog({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Label>{availableDates ? 'Assignment days this week' : 'Assignment days'}</Label>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => setSelectedDates([])}>
+                  <Button type="button" size="sm" variant="outline" className={schedulingControlStyles.outline} onClick={() => setSelectedDates([])}>
                     Clear
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setSelectedDates(jobDates)}>
+                  <Button type="button" size="sm" variant="outline" className={schedulingControlStyles.outline} onClick={() => setSelectedDates(jobDates)}>
                     {availableDates ? 'All this week' : 'All job days'}
                   </Button>
                 </div>
@@ -228,6 +229,7 @@ export function ScheduleAssignmentDialog({
                     <Checkbox
                       checked={selectedDates.includes(date)}
                       onCheckedChange={(checked) => toggleDate(date, checked === true)}
+                      className={schedulingControlStyles.checkbox}
                     />
                     {new Intl.DateTimeFormat('en-GB', {
                       weekday: 'short',
@@ -242,11 +244,11 @@ export function ScheduleAssignmentDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className={schedulingControlStyles.primary}
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Assign
@@ -274,14 +276,14 @@ export function ScheduleAssignmentDialog({
             ))}
           </ul>
           <AlertDialogFooter>
-            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogCancel className={schedulingControlStyles.outline}>Go back</AlertDialogCancel>
             <AlertDialogAction
               disabled={saving}
               onClick={(event) => {
                 event.preventDefault();
                 if (pendingInput) void submit({ ...pendingInput, override_conflicts: true });
               }}
-              className="bg-amber-500 text-amber-950 hover:bg-amber-400 dark:text-amber-950"
+              className={schedulingControlStyles.warning}
             >
               Assign anyway
             </AlertDialogAction>

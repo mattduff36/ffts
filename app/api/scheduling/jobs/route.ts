@@ -27,6 +27,10 @@ const jobSchema = z
     estimated_duration_minutes: z.number().int().min(15).max(100800).nullish(),
     is_drop_on_ready: z.boolean().default(false),
     tag_ids: z.array(z.uuid()).max(30).default([]),
+    initial_visit: z.object({
+      starts_at: z.iso.datetime(),
+      ends_at: z.iso.datetime(),
+    }).optional(),
   })
   .refine((value) => value.end_date >= value.start_date, {
     message: 'End date must be on or after the start date.',
@@ -117,24 +121,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const rpcName = parsed.data.initial_visit
+      ? 'schedule_project_with_initial_visit'
+      : 'create_project_schedule_job';
+    const rpcArguments = {
+      p_project_number_id: parsed.data.project_number_id || null,
+      p_manager_profile_id: parsed.data.manager_profile_id || null,
+      p_project_title: parsed.data.project_title || null,
+      p_project_description: parsed.data.project_description || null,
+      p_project_notes: parsed.data.project_notes || null,
+      p_customer_id: parsed.data.customer_id,
+      p_customer_site_id: resolvedSite.customerSiteId,
+      p_site_address: resolvedSite.siteAddress,
+      p_job_status: parsed.data.status,
+      p_start_date: parsed.data.start_date,
+      p_end_date: parsed.data.end_date,
+      p_estimated_duration_minutes: parsed.data.estimated_duration_minutes || null,
+      p_is_drop_on_ready: parsed.data.is_drop_on_ready,
+      p_tag_ids: parsed.data.tag_ids,
+      p_actor_user_id: access.userId,
+      ...(parsed.data.initial_visit
+        ? {
+            p_visit_starts_at: parsed.data.initial_visit.starts_at,
+            p_visit_ends_at: parsed.data.initial_visit.ends_at,
+          }
+        : {}),
+    };
     const { data: creationRows, error: creationError } = await admin.rpc(
-      'create_project_schedule_job',
+      rpcName,
       {
-        p_project_number_id: parsed.data.project_number_id || null,
-        p_manager_profile_id: parsed.data.manager_profile_id || null,
-        p_project_title: parsed.data.project_title || null,
-        p_project_description: parsed.data.project_description || null,
-        p_project_notes: parsed.data.project_notes || null,
-        p_customer_id: parsed.data.customer_id,
-        p_customer_site_id: resolvedSite.customerSiteId,
-        p_site_address: resolvedSite.siteAddress,
-        p_job_status: parsed.data.status,
-        p_start_date: parsed.data.start_date,
-        p_end_date: parsed.data.end_date,
-        p_estimated_duration_minutes: parsed.data.estimated_duration_minutes || null,
-        p_is_drop_on_ready: parsed.data.is_drop_on_ready,
-        p_tag_ids: parsed.data.tag_ids,
-        p_actor_user_id: access.userId,
+        ...rpcArguments,
       }
     );
     if (creationError) {

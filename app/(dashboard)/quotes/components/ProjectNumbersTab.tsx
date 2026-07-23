@@ -18,6 +18,7 @@ import type {
   QuoteProjectCostCategory,
   QuoteProjectNumber,
 } from '../types';
+import { ProjectNumberFormDialog } from './ProjectNumberFormDialog';
 
 interface CustomerOption {
   id: string;
@@ -557,7 +558,14 @@ export function ProjectNumbersTab({
         </div>
       )}
 
-      <Dialog open={projectFormOpen} onOpenChange={handleProjectDialogOpenChange}>
+      <ProjectNumberFormDialog
+        open={projectFormOpen}
+        managerOptions={managerOptions}
+        onClose={() => setProjectFormOpen(false)}
+        onCreated={async () => onRefresh()}
+      />
+
+      {false ? <Dialog open={projectFormOpen} onOpenChange={handleProjectDialogOpenChange}>
         <DialogContent
           ref={projectDialogContentRef}
           className="max-w-2xl"
@@ -631,7 +639,7 @@ export function ProjectNumbersTab({
             </div>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> : null}
 
       <Dialog open={costFormOpen} onOpenChange={handleCostDialogOpenChange}>
         <DialogContent

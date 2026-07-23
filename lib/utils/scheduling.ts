@@ -77,6 +77,51 @@ export function isScheduleDate(value: unknown): value is string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && isValid(parsed);
 }
 
+export interface DailyScheduleCoordinateInput {
+  clientX: number;
+  rangeLeft: number;
+  hourWidth: number;
+  startHour: number;
+  endHour: number;
+}
+
+export interface DailyInitialVisitWindow {
+  startMinutes: number;
+  endMinutes: number;
+  durationMinutes: number;
+}
+
+export function mapDailyScheduleClientXToMinutes(
+  input: DailyScheduleCoordinateInput
+): number {
+  const rawMinutes =
+    input.startHour * 60
+    + ((input.clientX - input.rangeLeft) / input.hourWidth) * 60;
+  const snappedMinutes = Math.round(rawMinutes / 30) * 30;
+  return Math.min(
+    Math.max(snappedMinutes, input.startHour * 60),
+    input.endHour * 60 - 30
+  );
+}
+
+export function getDailyInitialVisitWindow(
+  startMinutes: number,
+  estimatedMinutes: number | null,
+  endHour = 20
+): DailyInitialVisitWindow {
+  const requestedDuration =
+    estimatedMinutes && Number.isFinite(estimatedMinutes)
+      ? Math.min(Math.max(Math.round(estimatedMinutes), 30), 180)
+      : 180;
+  const endMinutes = Math.min(startMinutes + requestedDuration, endHour * 60);
+  const durationMinutes = Math.max(endMinutes - startMinutes, 30);
+  return {
+    startMinutes,
+    endMinutes: startMinutes + durationMinutes,
+    durationMinutes,
+  };
+}
+
 export function getScheduleVisitDate(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '';

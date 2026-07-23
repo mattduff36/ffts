@@ -1,3 +1,5 @@
+import type { ScheduleJobTag } from '@/types/scheduling';
+
 export type QuoteOverviewRecordKind = 'quote' | 'project';
 
 export interface QuoteOverviewSummary {
@@ -191,4 +193,9 @@ export interface QuoteOverviewDetailPayload {
   labour_rows: QuoteOverviewLabourRow[];
   labour_by_employee: QuoteOverviewEmployeeSummary[];
   summary: QuoteOverviewSummary;
+  schedule_job: {
+    id: string;
+    is_drop_on_ready: boolean;
+    tags: ScheduleJobTag[];
+  } | null;
 }

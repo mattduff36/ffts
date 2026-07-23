@@ -12,6 +12,7 @@ import {
   formatScheduleDate,
   getSchedulingWeek,
 } from '@/lib/utils/scheduling';
+import { schedulingControlStyles } from './scheduling-control-styles';
 
 interface SchedulingDateRangeControlsProps {
   selectedDate: string;
@@ -66,6 +67,7 @@ export function SchedulingDateRangeControls({
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
+          className={schedulingControlStyles.outline}
           size="sm"
           onClick={() => move(-1)}
           aria-label={`Previous ${periodName}`}
@@ -74,6 +76,7 @@ export function SchedulingDateRangeControls({
         </Button>
         <Button
           variant="outline"
+          className={schedulingControlStyles.outline}
           size="sm"
           onClick={() => onDateChange(formatScheduleDate(new Date()))}
         >
@@ -87,6 +90,7 @@ export function SchedulingDateRangeControls({
         </div>
         <Button
           variant="outline"
+          className={schedulingControlStyles.outline}
           size="sm"
           onClick={() => move(1)}
           aria-label={`Next ${periodName}`}

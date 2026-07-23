@@ -7,10 +7,12 @@ import {
 import {
   enumerateScheduleDates,
   formatScheduleEmployeeCompactName,
+  getDailyInitialVisitWindow,
   getScheduleQuoteEndDate,
   getScheduleQuoteStage,
   getSchedulingWeek,
   isScheduleDate,
+  mapDailyScheduleClientXToMinutes,
 } from '@/lib/utils/scheduling';
 import {
   buildEmployeeAssignmentConflicts,
@@ -63,6 +65,42 @@ describe('scheduling date utilities', () => {
     expect(enumerateScheduleDates('2026-07-15', '2026-07-13')).toEqual([]);
     expect(isScheduleDate('15/07/2026')).toBe(false);
     expect(isDateWithinRange('2026-07-14', '2026-07-13', '2026-07-15')).toBe(true);
+  });
+});
+
+describe('daily scheduling coordinate mapping', () => {
+  it('snaps pointer coordinates to half-hours without adding scroll twice', () => {
+    expect(mapDailyScheduleClientXToMinutes({
+      clientX: 392,
+      rangeLeft: 200,
+      hourWidth: 96,
+      startHour: 5,
+      endHour: 20,
+    })).toBe(420);
+  });
+
+  it('clamps starts and caps estimated visit duration at the visible day end', () => {
+    expect(mapDailyScheduleClientXToMinutes({
+      clientX: -100,
+      rangeLeft: 200,
+      hourWidth: 64,
+      startHour: 5,
+      endHour: 20,
+    })).toBe(300);
+    expect(mapDailyScheduleClientXToMinutes({
+      clientX: 9999,
+      rangeLeft: 200,
+      hourWidth: 96,
+      startHour: 5,
+      endHour: 20,
+    })).toBe(1170);
+    expect(getDailyInitialVisitWindow(1170, 400)).toEqual({
+      startMinutes: 1170,
+      endMinutes: 1200,
+      durationMinutes: 30,
+    });
+    expect(getDailyInitialVisitWindow(420, 400).durationMinutes).toBe(180);
+    expect(getDailyInitialVisitWindow(420, null).durationMinutes).toBe(180);
   });
 });
 

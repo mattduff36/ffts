@@ -31,6 +31,7 @@ import {
   savePlantUnavailability,
 } from '@/lib/client/scheduling';
 import type { SchedulePlantResource, SchedulePlantUnavailability } from '@/types/scheduling';
+import { schedulingControlStyles } from './scheduling-control-styles';
 
 interface PlantUnavailabilityDialogProps {
   open: boolean;
@@ -114,7 +115,7 @@ export function PlantUnavailabilityDialog({
             <Button
               type="button"
               onClick={() => setShowForm(true)}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className={schedulingControlStyles.primary}
             >
               <Plus className="mr-2 h-4 w-4" />
               Add block
@@ -139,7 +140,7 @@ export function PlantUnavailabilityDialog({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="text-red-300 hover:text-red-200"
+                      className={schedulingControlStyles.danger}
                       onClick={() => setDeleteBlock(block)}
                       aria-label={`Remove ${block.reason}`}
                     >
@@ -189,18 +190,18 @@ export function PlantUnavailabilityDialog({
         <DialogFooter>
           {showForm ? (
             <>
-              <Button variant="outline" onClick={() => setShowForm(false)}>Back</Button>
+              <Button variant="outline" className={schedulingControlStyles.outline} onClick={() => setShowForm(false)}>Back</Button>
               <Button
                 onClick={() => void handleSave()}
                 disabled={saving || !plantId || !reason.trim()}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                className={schedulingControlStyles.primary}
               >
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save block
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Close</Button>
           )}
         </DialogFooter>
       </DialogContent>
@@ -214,9 +215,9 @@ export function PlantUnavailabilityDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel className={schedulingControlStyles.outline}>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-red-600 text-white hover:bg-red-500"
+            className={schedulingControlStyles.danger}
             onClick={() => {
               if (!deleteBlock) return;
               void handleDelete(deleteBlock.id).finally(() => setDeleteBlock(null));

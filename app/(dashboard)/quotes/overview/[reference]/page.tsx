@@ -8,6 +8,7 @@ import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,9 +23,12 @@ import {
 } from '@/components/ui/table';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { createScheduleJobTag, saveScheduleJob } from '@/lib/client/scheduling';
 import { cn } from '@/lib/utils/cn';
 import { ArrowRight, Clock, Coins, FileText, HardHat, Receipt, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
+import { schedulingControlStyles } from '@/app/(dashboard)/scheduling/components/scheduling-control-styles';
+import type { ScheduleJobTag } from '@/types/scheduling';
 import type {
   QuoteOverviewDetailPayload,
   QuoteOverviewLabourRow,
@@ -260,10 +264,17 @@ export default function QuoteOverviewDetailPage() {
   const router = useRouter();
   const reference = params.reference;
   const { hasPermission: canViewQuotes, loading: permissionLoading } = usePermissionCheck('quotes', false);
+  const { hasPermission: canAccessScheduling, loading: schedulingPermissionLoading } =
+    usePermissionCheck('scheduling', false);
   const sensitiveAccess = useSensitiveModuleAccess('quotes');
   const [payload, setPayload] = useState<QuoteOverviewDetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [estimatedRateInput, setEstimatedRateInput] = useState('');
+  const [availableScheduleTags, setAvailableScheduleTags] = useState<ScheduleJobTag[]>([]);
+  const [selectedScheduleTagIds, setSelectedScheduleTagIds] = useState<string[]>([]);
+  const [newScheduleTagName, setNewScheduleTagName] = useState('');
+  const [canManageScheduling, setCanManageScheduling] = useState(false);
+  const [savingScheduleTags, setSavingScheduleTags] = useState(false);
   const estimatedRate = useMemo(() => Number(estimatedRateInput || 0), [estimatedRateInput]);
 
   const loadDetail = useCallback(async () => {
@@ -291,6 +302,67 @@ export default function QuoteOverviewDetailPage() {
     if (!sensitiveAccess.canAccess) return;
     loadDetail();
   }, [canViewQuotes, loadDetail, permissionLoading, router, sensitiveAccess.canAccess, sensitiveAccess.loading]);
+
+  useEffect(() => {
+    setSelectedScheduleTagIds(payload?.schedule_job?.tags.map((tag) => tag.id) || []);
+  }, [payload?.schedule_job]);
+
+  useEffect(() => {
+    if (schedulingPermissionLoading || !canAccessScheduling) {
+      setCanManageScheduling(false);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([
+      fetch('/api/scheduling/context').then((response) => response.json()),
+      fetch('/api/scheduling/tags').then((response) => response.json()),
+    ]).then(([context, tags]) => {
+      if (cancelled) return;
+      setCanManageScheduling(context.is_manager_or_admin === true);
+      setAvailableScheduleTags(tags.tags || []);
+    }).catch(() => {
+      if (!cancelled) setCanManageScheduling(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccessScheduling, schedulingPermissionLoading]);
+
+  async function saveSchedulingTags() {
+    if (!payload?.schedule_job || savingScheduleTags) return;
+    setSavingScheduleTags(true);
+    try {
+      const job = await saveScheduleJob(
+        { tag_ids: selectedScheduleTagIds },
+        payload.schedule_job.id
+      );
+      setPayload((current) => current?.schedule_job
+        ? { ...current, schedule_job: { ...current.schedule_job, tags: job.tags || [] } }
+        : current);
+      toast.success('Job tags updated');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update job tags');
+    } finally {
+      setSavingScheduleTags(false);
+    }
+  }
+
+  async function createSchedulingTag() {
+    const name = newScheduleTagName.trim();
+    if (!name || savingScheduleTags) return;
+    setSavingScheduleTags(true);
+    try {
+      const tag = await createScheduleJobTag({ name });
+      setAvailableScheduleTags((current) => [...current, tag]);
+      setSelectedScheduleTagIds((current) => [...new Set([...current, tag.id])]);
+      setNewScheduleTagName('');
+      toast.success('Job tag created');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create job tag');
+    } finally {
+      setSavingScheduleTags(false);
+    }
+  }
 
   if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
     return <PageLoader message="Loading quote overview..." />;
@@ -364,6 +436,74 @@ export default function QuoteOverviewDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="space-y-4">
+          {payload.schedule_job ? (
+            <Card className="border-slate-700 bg-slate-950">
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="text-base text-white">Scheduling tags</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-4 pt-0">
+                <div className="flex flex-wrap gap-1.5">
+                  {payload.schedule_job.tags.length > 0 ? payload.schedule_job.tags.map((tag) => (
+                    <Badge key={tag.id} variant="outline" className={schedulingControlStyles.sourceBadge}>
+                      {tag.name}
+                    </Badge>
+                  )) : (
+                    <span className="text-sm text-slate-400">No job tags assigned.</span>
+                  )}
+                </div>
+                {canManageScheduling ? (
+                  <>
+                    <div className="space-y-2">
+                      {availableScheduleTags.map((tag) => (
+                        <label key={tag.id} className="flex items-center gap-2 text-sm text-slate-200">
+                          <Checkbox
+                            checked={selectedScheduleTagIds.includes(tag.id)}
+                            onCheckedChange={(checked) =>
+                              setSelectedScheduleTagIds((current) =>
+                                checked === true
+                                  ? [...new Set([...current, tag.id])]
+                                  : current.filter((id) => id !== tag.id)
+                              )
+                            }
+                            className={schedulingControlStyles.checkbox}
+                          />
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newScheduleTagName}
+                        onChange={(event) => setNewScheduleTagName(event.target.value)}
+                        placeholder="New reusable tag"
+                      />
+                      <Button
+                        type="button"
+                        className={schedulingControlStyles.outline}
+                        disabled={!newScheduleTagName.trim() || savingScheduleTags}
+                        onClick={() => void createSchedulingTag()}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      className={schedulingControlStyles.primary}
+                      disabled={savingScheduleTags}
+                      onClick={() => void saveSchedulingTags()}
+                    >
+                      {savingScheduleTags ? 'Saving…' : 'Save job tags'}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    Scheduling managers can update these tags.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="border-slate-700 bg-slate-950">
             <CardHeader className="p-4 pb-3">
               <CardTitle className="flex items-center gap-2 text-base text-white">

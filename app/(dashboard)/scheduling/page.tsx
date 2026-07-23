@@ -11,6 +11,7 @@ import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
 import { fetchSchedulingContext } from '@/lib/client/scheduling';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { SchedulingManagerBoard } from './components/SchedulingManagerBoard';
+import { schedulingControlStyles } from './components/scheduling-control-styles';
 
 export default function SchedulingPage() {
   const {
@@ -51,12 +52,12 @@ export default function SchedulingPage() {
               </p>
             </div>
             {permissionServiceUnavailable ? (
-              <Button variant="outline" onClick={() => window.location.reload()}>
+              <Button variant="outline" className={schedulingControlStyles.outline} onClick={() => window.location.reload()}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Reload
               </Button>
             ) : (
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className={schedulingControlStyles.outline}>
                 <Link href="/dashboard">Return to dashboard</Link>
               </Button>
             )}
@@ -84,7 +85,11 @@ export default function SchedulingPage() {
                   : 'The scheduling service is temporarily unavailable.'}
               </p>
             </div>
-            <Button variant="outline" onClick={() => void contextQuery.refetch()}>
+            <Button
+              variant="outline"
+              className={schedulingControlStyles.outline}
+              onClick={() => void contextQuery.refetch()}
+            >
               <RefreshCw className="mr-2 h-4 w-4" />
               Try again
             </Button>
@@ -129,7 +134,7 @@ export default function SchedulingPage() {
                 </p>
               )}
             </div>
-            <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button asChild className={schedulingControlStyles.primary}>
               <Link href="/scheduling/my">View my schedule</Link>
             </Button>
           </CardContent>

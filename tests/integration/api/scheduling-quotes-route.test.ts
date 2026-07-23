@@ -9,6 +9,7 @@ const {
   mockQuote,
   mockQuoteList,
   mockScheduleJob,
+  mockRpc,
   mockUpdate,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
@@ -16,6 +17,7 @@ const {
   mockQuote: vi.fn(),
   mockQuoteList: vi.fn(),
   mockScheduleJob: vi.fn(),
+  mockRpc: vi.fn(),
   mockUpdate: vi.fn(),
 }));
 
@@ -29,6 +31,7 @@ vi.mock('@/lib/server/quote-workflow', () => ({
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
+    rpc: mockRpc,
     from: (table: string) => {
       let updateValues: Record<string, unknown> | null = null;
       const query = {
@@ -100,6 +103,10 @@ describe('/api/scheduling/quotes', () => {
       source_type: 'quote',
     });
     mockAppendTimeline.mockResolvedValue(undefined);
+    mockRpc.mockResolvedValue({
+      data: { job: mockScheduleJob(), visit: { id: 'visit-1' } },
+      error: null,
+    });
   });
 
   it('lists a minimal set of latest open Quote candidates for scheduling managers', async () => {
@@ -160,5 +167,32 @@ describe('/api/scheduling/quotes', () => {
     expect(response.status).toBe(409);
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockAppendTimeline).not.toHaveBeenCalled();
+  });
+
+  it('uses one atomic RPC when an initial visit is supplied', async () => {
+    mockQuote.mockReturnValue({
+      ...mockQuote(),
+      estimated_duration_minutes: 120,
+    });
+    const { POST } = await import('@/app/api/scheduling/quotes/route');
+    const response = await POST(postRequest({
+      quote_id: quoteId,
+      start_date: '2026-07-27',
+      end_date: '2026-07-27',
+      initial_visit: {
+        starts_at: '2026-07-27T07:00:00.000Z',
+        ends_at: '2026-07-27T09:00:00.000Z',
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'schedule_quote_with_initial_visit',
+      expect.objectContaining({
+        p_quote_id: quoteId,
+        p_actor_user_id: 'manager-1',
+      })
+    );
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -29,9 +30,12 @@ import {
   AlertTriangle,
   CalendarOff,
   CalendarPlus,
+  Check,
   Clock3,
   ExternalLink,
   GripVertical,
+  Minimize2,
+  MoveHorizontal,
   Pencil,
   Plus,
   Search,
@@ -62,13 +66,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   createScheduleAssignment,
   deleteScheduleAssignment,
   deleteScheduleJob,
   fetchScheduleQuoteCandidates,
+  fetchScheduleProjectCandidates,
   fetchSchedulingBoard,
   moveScheduleAssignment,
   saveQuoteSchedule,
+  saveScheduleJob,
   saveScheduleVisit,
   SchedulingApiError,
   type CreateAssignmentInput,
@@ -81,12 +93,20 @@ import {
 } from '@/lib/config/scheduling-view-preference';
 import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
+import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import {
+  SensitiveModuleGate,
+  SensitiveModuleSessionManager,
+  useSensitiveModuleAccess,
+} from '@/components/security/SensitiveModuleGate';
 import {
   enumerateScheduleDates,
   formatScheduleEmployeeCompactName,
   formatScheduleDate,
   formatScheduleVisitTime,
   getScheduleQuoteEndDate,
+  getDailyInitialVisitWindow,
+  mapDailyScheduleClientXToMinutes,
   getScheduleQuoteStage,
   getScheduleVisitDate,
   getSchedulingWeek,
@@ -99,7 +119,8 @@ import type {
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
-  ScheduleQuoteCandidate,
+  ScheduleProjectCandidate,
+  SchedulingQueueItem,
   ScheduleVisit,
   SchedulingBoardPayload,
   SchedulingConflict,
@@ -109,26 +130,35 @@ import type { SelectedScheduleResource } from './ScheduleAssignmentDialog';
 import { ScheduleJobDialog } from './ScheduleJobDialog';
 import { ScheduleQuoteDialog } from './ScheduleQuoteDialog';
 import { ScheduleVisitDialog } from './ScheduleVisitDialog';
+import { ScheduleProjectPlacementDialog } from './ScheduleProjectPlacementDialog';
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
+import { schedulingControlStyles } from './scheduling-control-styles';
+import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
+import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
+import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
 
 interface ResourceCardProps {
   resource: SelectedScheduleResource;
   subtitle: string;
+  metadata: string;
   selected: boolean;
   dragEnabled: boolean;
   warning?: string;
   onSelect: () => void;
 }
 
+const RESOURCE_GUIDANCE_CLASS =
+  'rounded-md border border-dashed border-slate-700 bg-slate-950/40 p-2 text-xs leading-relaxed text-slate-300';
+
 interface WeeklyDayHeaderProps {
   date: string;
   capacity: ScheduleDayCapacity | null;
   compact?: boolean;
   dropScope: 'desktop' | 'mobile';
-  selectedQuote: ScheduleQuoteCandidate | null;
+  selectedQuote: SchedulingQueueItem | null;
   isSchedulingQuote: boolean;
   onOpenDaily: (date: string) => void;
-  onScheduleQuote: (quote: ScheduleQuoteCandidate, date: string) => void;
+  onScheduleQuote: (quote: SchedulingQueueItem, date: string) => void;
 }
 
 function formatCapacityHours(minutes: number): string {
@@ -155,7 +185,7 @@ function WeeklyDayHeader({
   const { ref, isDropTarget } = useDroppable({
     id: `${dropScope}:schedule-date:${date}`,
     type: 'schedule-date',
-    accept: ['schedule-quote'],
+    accept: ['schedule-queue-item'],
     data: { workDate: date },
   });
 
@@ -172,7 +202,7 @@ function WeeklyDayHeader({
       <button
         type="button"
         onClick={() => onOpenDaily(date)}
-        className="w-full rounded-sm hover:text-scheduling focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+        className={cn('w-full rounded-sm', schedulingControlStyles.ghost)}
         aria-label={`Open daily schedule for ${format(parseISO(date), 'EEEE d MMMM')}`}
       >
         <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -188,7 +218,8 @@ function WeeklyDayHeader({
             <button
               type="button"
               className={cn(
-                'mt-2 inline-flex items-center justify-center gap-1 rounded-full border border-scheduling/35 bg-scheduling-soft px-2 py-1 font-medium text-scheduling hover:border-scheduling focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling',
+                'mt-2 inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 font-medium',
+                schedulingControlStyles.outline,
                 compact ? 'text-[10px]' : 'text-xs'
               )}
               aria-label={`${formatPeople(capacity.available_employee_count)} with ${formatCapacityHours(capacity.total_available_minutes)} available on ${format(parseISO(date), 'EEEE d MMMM')}`}
@@ -234,7 +265,7 @@ function WeeklyDayHeader({
           type="button"
           onClick={() => onScheduleQuote(selectedQuote, date)}
           disabled={isSchedulingQuote}
-          className="mt-2 w-full rounded border border-dashed border-scheduling/50 px-1.5 py-1 text-[10px] font-semibold text-scheduling hover:bg-scheduling-soft disabled:opacity-50"
+          className={cn('mt-2 w-full rounded px-1.5 py-1 text-[10px] font-semibold', schedulingControlStyles.primary)}
           aria-label={`Schedule ${selectedQuote.base_quote_reference} from ${date}`}
         >
           Place job here
@@ -257,9 +288,45 @@ interface DndAnnouncementEvent {
   canceled?: boolean;
 }
 
+function useDragSafeActivation(isDragging: boolean, onActivate: () => void) {
+  const didDrag = useRef(false);
+
+  useEffect(() => {
+    if (isDragging) didDrag.current = true;
+  }, [isDragging]);
+
+  function handleClick(event: MouseEvent<HTMLButtonElement>) {
+    if (didDrag.current) {
+      didDrag.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    onActivate();
+  }
+
+  function resetDragState() {
+    if (!isDragging) didDrag.current = false;
+  }
+
+  return { handleClick, resetDragState };
+}
+
+function ResourceDragCue({ testId }: { testId: string }) {
+  return (
+    <GripVertical
+      aria-hidden="true"
+      focusable="false"
+      data-testid={testId}
+      className="pointer-events-none mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+    />
+  );
+}
+
 function ResourceCard({
   resource,
   subtitle,
+  metadata,
   selected,
   dragEnabled,
   warning,
@@ -270,6 +337,7 @@ function ResourceCard({
       <DraggableResourceCard
         resource={resource}
         subtitle={subtitle}
+        metadata={metadata}
         selected={selected}
         warning={warning}
         onSelect={onSelect}
@@ -285,15 +353,23 @@ function ResourceCard({
       aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}`}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'flex w-full items-center gap-2 rounded-lg border p-2 text-left transition',
+        'flex w-full items-center gap-2 rounded-lg p-2 text-left transition',
         selected
-          ? 'border-scheduling bg-scheduling-soft'
-          : 'border-border bg-muted/20 hover:border-muted-foreground'
+          ? schedulingControlStyles.primary
+          : schedulingControlStyles.outline
       )}
     >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-foreground">{resource.label}</span>
-        <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+      <ResourceDragCue testId="schedule-resource-drag-cue" />
+      <span className="min-w-0 flex-1 space-y-0.5">
+        <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+          {resource.label}
+        </span>
+        <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+          {subtitle}
+        </span>
+        <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
+          {metadata}
+        </span>
       </span>
       {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
     </button>
@@ -303,6 +379,7 @@ function ResourceCard({
 function DraggableResourceCard({
   resource,
   subtitle,
+  metadata,
   selected,
   warning,
   onSelect,
@@ -312,37 +389,43 @@ function DraggableResourceCard({
     type: 'schedule-resource',
     data: { resource },
   });
+  const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
 
   return (
     <div
       ref={ref}
-      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
-      className={cn(
-        'flex w-full cursor-grab items-center gap-2 rounded-lg border p-2 text-left transition active:cursor-grabbing',
-        selected
-          ? 'border-scheduling bg-scheduling-soft'
-          : 'border-border bg-muted/20 hover:border-muted-foreground',
-        isDragging && 'opacity-40'
-      )}
     >
       <button
         ref={handleRef}
         type="button"
-        className="touch-none rounded p-2 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
-        aria-label={`Drag ${resource.label} to a visit`}
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={onSelect}
+        onClick={handleClick}
+        onPointerDown={resetDragState}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') resetDragState();
+        }}
         aria-pressed={selected}
-        aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}`}
-        className="min-w-0 flex flex-1 items-center gap-2 text-left"
+        aria-label={`${resource.label}: select resource or drag to a timed visit`}
+        title="Select resource, or drag to a timed visit"
+        data-testid={`schedule-resource-${resource.type}-${resource.id}`}
+        className={cn(
+          'flex w-full cursor-grab items-center gap-2 rounded-lg p-2 text-left transition active:cursor-grabbing',
+          selected
+            ? schedulingControlStyles.primary
+            : schedulingControlStyles.outline,
+          isDragging && 'cursor-grabbing opacity-40'
+        )}
       >
-        <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-foreground">{resource.label}</span>
-        <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+        <ResourceDragCue testId="schedule-resource-drag-cue" />
+        <span className="min-w-0 flex-1 space-y-0.5">
+          <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+            {resource.label}
+          </span>
+          <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+            {subtitle}
+          </span>
+          <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
+            {metadata}
+          </span>
         </span>
         {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
       </button>
@@ -351,7 +434,7 @@ function DraggableResourceCard({
 }
 
 interface DraggableQuoteCardProps {
-  quote: ScheduleQuoteCandidate;
+  quote: SchedulingQueueItem;
   selected: boolean;
   onSelect: () => void;
 }
@@ -370,53 +453,205 @@ function DraggableQuoteCard({
   onSelect,
 }: DraggableQuoteCardProps) {
   const { ref, handleRef, isDragging } = useDraggable({
-    id: `schedule-quote:${quote.id}`,
-    type: 'schedule-quote',
+    id: `schedule-queue:${quote.kind}:${quote.id}`,
+    type: 'schedule-queue-item',
     data: { quote },
   });
   const durationDays = quote.estimated_duration_days || 1;
+  const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
 
   return (
     <div
       ref={ref}
-      data-testid={`schedule-quote-${quote.id}`}
-      className={cn(
-        'flex items-start gap-1 rounded-lg border p-2 transition',
-        selected
-          ? 'border-scheduling bg-scheduling-soft'
-          : 'border-border bg-muted/20 hover:border-muted-foreground',
-        isDragging && 'opacity-40'
-      )}
     >
       <button
         ref={handleRef}
         type="button"
-        className="touch-none rounded p-2 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
-        aria-label={`Drag ${quote.base_quote_reference} to a calendar date`}
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={onSelect}
+        onClick={handleClick}
+        onPointerDown={resetDragState}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') resetDragState();
+        }}
         aria-pressed={selected}
-        className="min-w-0 flex-1 text-left"
+        aria-label={`${quote.base_quote_reference}: select job or drag to a calendar date`}
+        title={`${quote.base_quote_reference} — ${quote.customer_name ? `${quote.customer_name} · ` : ''}${quote.title}`}
+        data-testid={`schedule-quote-${quote.id}`}
+        className={cn(
+          'flex w-full cursor-grab items-start gap-1.5 rounded-lg p-2 text-left transition active:cursor-grabbing',
+          selected
+            ? schedulingControlStyles.primary
+            : schedulingControlStyles.outline,
+          isDragging && 'cursor-grabbing opacity-40'
+        )}
       >
-        <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-semibold text-foreground">
+        <ResourceDragCue testId="schedule-quote-drag-cue" />
+        <span className="min-w-0 flex-1">
+          <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')}>
             {quote.base_quote_reference}
           </span>
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            {formatQuoteStatusLabel(quote.status)}
-          </Badge>
-        </span>
-        <span className="mt-1 block truncate text-xs text-muted-foreground">
-          {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
-        </span>
-        <span className="mt-1 block text-[11px] text-muted-foreground">
-          {durationDays} {durationDays === 1 ? 'day' : 'days'}
+          <span className={cn('mt-1 block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')}>
+            {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
+          </span>
+          <span className={cn('mt-1.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
+            <span>{durationDays} {durationDays === 1 ? 'day' : 'days'}</span>
+            <span className={cn('truncate text-[9px]', selected ? 'text-slate-700' : 'text-slate-400')}>
+              {formatQuoteStatusLabel(quote.status)}
+            </span>
+          </span>
         </span>
       </button>
+    </div>
+  );
+}
+
+interface ScheduledJobActionsProps {
+  job: ScheduleJob;
+  visitDate?: string;
+  isMobile?: boolean;
+  isCrewOfferPending: boolean;
+  onAddVisit: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  onReschedule: () => void;
+  onToggleCrewOffer: () => void;
+}
+
+function ScheduledJobActions({
+  job,
+  visitDate,
+  isMobile = false,
+  isCrewOfferPending,
+  onAddVisit,
+  onEdit,
+  onRemove,
+  onReschedule,
+  onToggleCrewOffer,
+}: ScheduledJobActionsProps) {
+  const buttonClass = cn(
+    'p-0',
+    isMobile ? 'h-11 w-11' : 'h-6 w-6'
+  );
+  const iconClass = isMobile ? 'h-4 w-4' : 'h-3 w-3';
+
+  return (
+    <div
+      className="flex shrink-0 items-center gap-0.5"
+      data-testid={`schedule-job-actions-${isMobile ? 'mobile' : 'desktop'}-${job.id}`}
+    >
+      {visitDate ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={cn(
+            buttonClass,
+            schedulingControlStyles.ghost
+          )}
+          onClick={onAddVisit}
+          aria-label={`Add Additional Visit to ${job.job_reference} on ${visitDate}`}
+          title="Add Additional Visit"
+        >
+          <Plus className={iconClass} />
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className={cn(
+          buttonClass,
+          job.is_drop_on_ready
+            ? schedulingControlStyles.primary
+            : schedulingControlStyles.ghost
+        )}
+        onClick={onToggleCrewOffer}
+        aria-label="Offer if crew finishes early"
+        aria-pressed={job.is_drop_on_ready}
+        disabled={isCrewOfferPending}
+        title="Offer if crew finishes early"
+      >
+        <Check className={cn(iconClass, !job.is_drop_on_ready && 'opacity-40')} />
+      </Button>
+      {job.source_type === 'quote' && job.quote_id ? (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              buttonClass,
+              schedulingControlStyles.ghost
+            )}
+            onClick={onReschedule}
+            aria-label={`Reschedule ${job.job_reference}`}
+            title="Reschedule"
+          >
+            <CalendarPlus className={iconClass} />
+          </Button>
+          <Button
+            asChild
+            size="sm"
+            variant="ghost"
+            className={cn(
+              buttonClass,
+              schedulingControlStyles.ghost
+            )}
+          >
+            <Link
+              href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open Quote ${job.job_reference} in new tab`}
+              title="Open Quote in new tab"
+            >
+              <ExternalLink className={iconClass} />
+            </Link>
+          </Button>
+        </>
+      ) : null}
+      {job.source_type === 'manual' && job.quote_project_number_id ? (
+        <Button asChild size="sm" variant="ghost" className={cn(buttonClass, schedulingControlStyles.ghost)}>
+          <Link
+            href="/quotes?tab=projects"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open Project ${job.job_reference} in new tab`}
+            title="Open Projects in new tab"
+          >
+            <ExternalLink className={iconClass} />
+          </Link>
+        </Button>
+      ) : null}
+      {job.source_type !== 'sample' ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={cn(
+            buttonClass,
+            schedulingControlStyles.ghost
+          )}
+          onClick={onRemove}
+          aria-label={`Remove ${job.job_reference}`}
+          title="Remove from schedule"
+        >
+          <Trash2 className={iconClass} />
+        </Button>
+      ) : null}
+      {job.source_type !== 'quote' ? <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className={cn(
+          buttonClass,
+          schedulingControlStyles.ghost
+        )}
+        onClick={onEdit}
+        aria-label={`Edit ${job.job_reference}`}
+        title="Edit scheduled job"
+      >
+        <Pencil className={iconClass} />
+      </Button> : null}
     </div>
   );
 }
@@ -449,8 +684,9 @@ function AssignmentChip({
   return (
     <div
       ref={ref}
+      data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
-        'group flex items-center gap-1 rounded-md border px-2 py-1 text-xs',
+        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pl-1.5 pr-0.5 text-[11px]',
         assignment.resource_type === 'employee'
           ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
@@ -462,28 +698,27 @@ function AssignmentChip({
       <button
         ref={handleRef}
         type="button"
-        className="touch-none rounded p-1 opacity-70 hover:bg-black/20 hover:opacity-100"
+        className="flex min-w-0 cursor-grab items-center gap-1 overflow-hidden rounded-l-full py-0.5 text-left active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
         aria-label={`Move ${fullLabel} to another visit`}
       >
-        <GripVertical className="h-3 w-3" />
+        {assignment.resource_type === 'employee' ? (
+          <UserRound className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <Tractor className="h-3.5 w-3.5 shrink-0" />
+        )}
+        <span className="min-w-0 truncate">{label}</span>
+        {hasConflict ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" /> : null}
+        {assignment.conflict_override ? (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" aria-label="Conflict overridden" />
+        ) : null}
       </button>
-      {assignment.resource_type === 'employee' ? (
-        <UserRound className="h-3.5 w-3.5 shrink-0" />
-      ) : (
-        <Tractor className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {hasConflict ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" /> : null}
-      {assignment.conflict_override ? (
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" aria-label="Conflict overridden" />
-      ) : null}
       <button
         type="button"
         onClick={(event) => {
           event.stopPropagation();
           onDelete(assignment);
         }}
-        className="rounded p-0.5 opacity-70 hover:bg-black/20 hover:opacity-100 focus-visible:opacity-100"
+        className="ml-0.5 shrink-0 rounded-full p-0.5 opacity-70 hover:bg-black/20 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current focus-visible:opacity-100"
         aria-label={`Remove ${fullLabel}`}
       >
         <X className="h-3 w-3" />
@@ -516,6 +751,7 @@ interface VisitCardProps {
   onEdit: () => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
   assignmentDragScope?: 'desktop' | 'mobile';
+  cardWidth?: number;
 }
 
 function VisitCard({
@@ -530,6 +766,7 @@ function VisitCard({
   onEdit,
   onDeleteAssignment,
   assignmentDragScope = 'desktop',
+  cardWidth,
 }: VisitCardProps) {
   const workDate = getScheduleVisitDate(visit.starts_at);
   const { ref, isDropTarget } = useDroppable({
@@ -537,8 +774,48 @@ function VisitCard({
     type: 'schedule-visit',
     accept: ['schedule-resource', 'schedule-assignment'],
     disabled: !isDropEnabled || visit.status === 'cancelled',
-    data: { jobId: job.id, visitId: visit.id, workDate },
+    data: {
+      jobId: job.id,
+      jobReference: job.job_reference,
+      visitId: visit.id,
+      visitSequenceNumber: visit.sequence_number,
+      workDate,
+    },
   });
+  const assignmentsPerRow =
+    cardWidth === undefined || cardWidth >= 260 ? 3 : cardWidth >= 140 ? 2 : 1;
+  const isCountOnly = cardWidth !== undefined && cardWidth < 140;
+  const maximumSlots = assignmentsPerRow * 2;
+  const hasOverflow = isCountOnly || assignments.length > maximumSlots;
+  const visibleAssignmentCount = hasOverflow
+    ? Math.max(0, maximumSlots - 1)
+    : assignments.length;
+  const visibleAssignments = assignments.slice(0, visibleAssignmentCount);
+  const hiddenAssignments = assignments.slice(visibleAssignmentCount);
+  const hiddenLabels = hiddenAssignments.map((assignment) =>
+    assignment.resource_type === 'employee'
+      ? assignment.employee?.full_name || 'Employee'
+      : assignment.plant?.nickname || assignment.plant?.plant_id || 'Plant'
+  );
+  const assignmentItems = [
+    ...visibleAssignments.map((assignment) => ({
+      assignment,
+      key: assignment.id,
+    })),
+    ...(hiddenAssignments.length > 0
+      ? [{ assignment: null, key: 'overflow' }]
+      : []),
+  ];
+  const assignmentRows = Array.from(
+    { length: Math.ceil(assignmentItems.length / assignmentsPerRow) },
+    (_, rowIndex) =>
+      assignmentItems.slice(
+        rowIndex * assignmentsPerRow,
+        (rowIndex + 1) * assignmentsPerRow
+      )
+  );
+  const shouldShowStatus =
+    visit.status !== 'planned' && (cardWidth === undefined || cardWidth >= 220);
 
   return (
     <div
@@ -547,48 +824,92 @@ function VisitCard({
       data-testid={`schedule-visit-${visit.id}`}
       style={style}
       className={cn(
-        'rounded-md border border-border bg-card/80 p-1.5',
+        'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
         className,
         visit.status === 'cancelled' && 'opacity-60',
         isActiveTarget && 'border-scheduling ring-1 ring-scheduling',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
     >
-      <div className="mb-1 flex items-start justify-between gap-1">
+      <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
         <button
           type="button"
           onClick={visit.status === 'cancelled' ? onEdit : onActivate}
-          className="min-w-0 text-left text-xs font-semibold text-foreground hover:text-scheduling"
+          className="min-w-0 flex-1 overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
           aria-label={
             visit.status === 'cancelled'
               ? `Edit cancelled visit ${visit.sequence_number} for ${job.job_reference}`
               : `Select visit ${visit.sequence_number} for ${job.job_reference}`
           }
         >
-          <span className="flex items-center gap-1">
+          <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
             <Clock3 className="h-3 w-3 shrink-0" />
             {formatScheduleVisitTime(visit.starts_at)}–{formatScheduleVisitTime(visit.ends_at)}
-            {visit.status !== 'planned' ? ` · ${visit.status.replace('_', ' ')}` : ''}
+            {shouldShowStatus ? (
+              <span className="truncate font-normal text-muted-foreground">
+                · {visit.status.replace('_', ' ')}
+              </span>
+            ) : null}
           </span>
-          {visit.title ? <span className="mt-0.5 block truncate font-normal text-muted-foreground">{visit.title}</span> : null}
+          {visit.title ? (
+            <span
+              className="mt-0.5 block truncate font-normal text-muted-foreground"
+              title={visit.title}
+            >
+              {visit.title}
+            </span>
+          ) : null}
+          {cardWidth !== undefined && cardWidth >= 120 ? (
+            <span
+              className="mt-0.5 block truncate text-[10px] font-medium text-slate-300"
+              title={job.job_reference}
+            >
+              {job.job_reference}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
           onClick={onEdit}
-          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn('h-6 w-6 shrink-0 rounded p-0.5', schedulingControlStyles.ghost)}
           aria-label={`Edit visit ${visit.sequence_number}`}
         >
           <Pencil className="h-3 w-3" />
         </button>
       </div>
-      <div className="space-y-1">
-        {assignments.map((assignment) => (
-          <AssignmentChip
-            key={`${assignment.resource_type}-${assignment.id}`}
-            assignment={assignment}
-            onDelete={onDeleteAssignment}
-            dragScope={assignmentDragScope}
-          />
+      <div
+        className="mt-auto max-h-12 shrink-0 space-y-1 overflow-hidden"
+        data-testid={`schedule-assignment-layout-${visit.id}`}
+        data-assignment-row-count={assignmentRows.length}
+      >
+        {assignmentRows.map((row, rowIndex) => (
+          <div
+            key={rowIndex}
+            className="flex min-w-0 items-center gap-1 overflow-hidden"
+            data-testid={`schedule-assignment-row-${visit.id}-${rowIndex + 1}`}
+          >
+            {row.map((item) =>
+              item.assignment ? (
+                <AssignmentChip
+                  key={item.key}
+                  assignment={item.assignment}
+                  onDelete={onDeleteAssignment}
+                  dragScope={assignmentDragScope}
+                />
+              ) : (
+                <span
+                  key={item.key}
+                  tabIndex={0}
+                  className="inline-flex h-5 shrink-0 items-center rounded-full border border-border bg-muted px-1.5 text-[10px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-scheduling"
+                  aria-label={`${hiddenAssignments.length} more assignments: ${hiddenLabels.join(', ')}`}
+                  title={hiddenLabels.join(', ')}
+                  data-testid={`schedule-assignment-overflow-${visit.id}`}
+                >
+                  +{hiddenAssignments.length}
+                </span>
+              )
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -649,11 +970,11 @@ function DayCell({
         <button
           type="button"
           onClick={onAddVisit}
-          className="mt-auto flex w-full items-center justify-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-scheduling transition hover:bg-scheduling-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
-          aria-label={`Add visit to ${job.job_reference} on ${date}`}
+          className={cn('ml-auto mt-auto flex h-7 w-7 items-center justify-center rounded transition', schedulingControlStyles.ghost)}
+          aria-label={`Add Additional Visit to ${job.job_reference} on ${date}`}
+          title="Add Additional Visit"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add visit
         </button>
       ) : (
         <span className="m-auto px-2 text-center text-[11px] text-muted-foreground">
@@ -667,6 +988,13 @@ function DayCell({
 const DAILY_TIMELINE_DEFAULT_START_HOUR = 5;
 const DAILY_TIMELINE_DEFAULT_END_HOUR = 20;
 const DAILY_TIMELINE_HOUR_WIDTH = 96;
+const DAILY_TIMELINE_MIN_FIT_HOUR_WIDTH = 64;
+const DAILY_TIMELINE_JOB_COLUMN_WIDTH = 240;
+const DAILY_TIMELINE_PAN_THRESHOLD = 5;
+const DAILY_JOB_ROW_MIN_HEIGHT = 144;
+const DAILY_TIMELINE_EDGE_PADDING = 8;
+const DAILY_TIMELINE_LANE_GAP = 8;
+const DAILY_TIMELINE_LEGACY_HEIGHT = 48;
 const DAILY_TIMELINE_VISIT_STYLE = {
   backgroundColor: '#334155',
 } satisfies CSSProperties;
@@ -674,16 +1002,74 @@ const DAILY_TIMELINE_VISIT_STYLE = {
 interface DailyTimelineRange {
   startHour: number;
   endHour: number;
+  hourWidth: number;
   width: number;
 }
 
 interface DailyTimelineCellProps extends DayCellProps {
   range: DailyTimelineRange;
+  layout: DailyTimelineLayout;
+  isPannable: boolean;
   onResizeVisit: (
     visit: ScheduleVisit,
     startsAt: string,
     endsAt: string
   ) => Promise<void>;
+}
+
+interface DailyTimelinePlacement {
+  visit: ScheduleVisit;
+  assignments: ScheduleAssignment[];
+  top: number;
+  height: number;
+}
+
+interface DailyTimelineLayout {
+  placements: DailyTimelinePlacement[];
+  legacyAssignments: ScheduleAssignment[];
+  rowHeight: number;
+}
+
+function getDailyTimelineLayout(
+  visits: ScheduleVisit[],
+  assignments: ScheduleAssignment[],
+  date: string
+): DailyTimelineLayout {
+  const dayVisits = visits
+    .filter((visit) => getScheduleVisitDate(visit.starts_at) === date)
+    .sort((first, second) => first.starts_at.localeCompare(second.starts_at));
+  const legacyAssignments = assignments.filter((assignment) => !assignment.visit_id);
+  const firstLaneTop =
+    DAILY_TIMELINE_EDGE_PADDING
+    + (legacyAssignments.length > 0 ? DAILY_TIMELINE_LEGACY_HEIGHT : 0);
+  let nextTop = firstLaneTop;
+  const placements = dayVisits.map((visit, index) => {
+    const visitAssignments = assignments.filter(
+      (assignment) => assignment.visit_id === visit.id
+    );
+    const height = visitAssignments.length > 2 ? 104 : 82;
+    const placement = { visit, assignments: visitAssignments, top: nextTop, height };
+    nextTop += height;
+    if (index < dayVisits.length - 1) nextTop += DAILY_TIMELINE_LANE_GAP;
+    return placement;
+  });
+  const naturalRowHeight =
+    placements.length > 0
+      ? nextTop + DAILY_TIMELINE_EDGE_PADDING
+      : DAILY_JOB_ROW_MIN_HEIGHT;
+  const rowHeight = Math.max(DAILY_JOB_ROW_MIN_HEIGHT, naturalRowHeight);
+
+  if (placements.length === 1) {
+    placements[0] = {
+      ...placements[0],
+      height:
+        rowHeight
+        - placements[0].top
+        - DAILY_TIMELINE_EDGE_PADDING,
+    };
+  }
+
+  return { placements, legacyAssignments, rowHeight };
 }
 
 function getScheduleTimeMinutes(value: string): number {
@@ -710,27 +1096,43 @@ function getDailyTimelineRange(
   return {
     startHour,
     endHour,
+    hourWidth: DAILY_TIMELINE_HOUR_WIDTH,
     width: (endHour - startHour) * DAILY_TIMELINE_HOUR_WIDTH,
   };
+}
+
+function canFitDailyTimeline(
+  viewportWidth: number,
+  range: DailyTimelineRange
+): boolean {
+  const timelineWidth = getDailyTimelineAvailableWidth(viewportWidth);
+  const durationHours = range.endHour - range.startHour;
+  return timelineWidth / durationHours >= DAILY_TIMELINE_MIN_FIT_HOUR_WIDTH;
+}
+
+function getDailyTimelineAvailableWidth(viewportWidth: number): number {
+  return Math.max(0, viewportWidth - DAILY_TIMELINE_JOB_COLUMN_WIDTH);
 }
 
 function DailyTimelineHeader({
   date,
   range,
+  isPannable,
   selectedQuote,
   isSchedulingQuote,
   onScheduleQuote,
 }: {
   date: string;
   range: DailyTimelineRange;
-  selectedQuote: ScheduleQuoteCandidate | null;
+  isPannable: boolean;
+  selectedQuote: SchedulingQueueItem | null;
   isSchedulingQuote: boolean;
-  onScheduleQuote: (quote: ScheduleQuoteCandidate, date: string) => void;
+  onScheduleQuote: (quote: SchedulingQueueItem, date: string) => void;
 }) {
   const { ref, isDropTarget } = useDroppable({
     id: `desktop:schedule-date:${date}`,
     type: 'schedule-date',
-    accept: ['schedule-quote'],
+    accept: ['schedule-queue-item'],
     data: { workDate: date },
   });
   const hours = Array.from(
@@ -742,11 +1144,14 @@ function DailyTimelineHeader({
     <div
       ref={ref}
       className={cn(
-        'relative h-16 border-l border-border bg-muted/60 transition',
+        'relative z-0 h-16 border-l border-border bg-muted/60 transition',
+        isPannable && 'cursor-grab',
         isDropTarget && 'bg-scheduling-soft ring-2 ring-inset ring-scheduling'
       )}
       style={{ width: range.width }}
       data-testid="schedule-daily-timeline-header"
+      data-hour-width={range.hourWidth}
+      data-timeline-pan-surface="true"
     >
       <p className="absolute left-3 top-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {format(parseISO(date), 'EEEE d MMMM')}
@@ -756,30 +1161,40 @@ function DailyTimelineHeader({
           type="button"
           onClick={() => onScheduleQuote(selectedQuote, date)}
           disabled={isSchedulingQuote}
-          className="absolute right-3 top-2 rounded border border-dashed border-scheduling/50 px-2 py-1 text-[10px] font-semibold text-scheduling hover:bg-scheduling-soft disabled:opacity-50"
+          className={cn('absolute right-3 top-2 rounded px-2 py-1 text-[10px] font-semibold', schedulingControlStyles.primary)}
           aria-label={`Schedule ${selectedQuote.base_quote_reference} from ${date}`}
         >
           Place selected job here
         </button>
       ) : null}
-      {hours.map((hour, index) => (
-        <div
-          key={hour}
-          data-testid={`schedule-timeline-hour-${hour}`}
-          className={cn(
-            'absolute bottom-0 h-7 border-l border-border px-2 pt-1 text-xs font-medium tabular-nums text-foreground',
-            index === hours.length - 1 && 'border-r'
-          )}
-          style={{
-            left: index * DAILY_TIMELINE_HOUR_WIDTH,
-            width: index === hours.length - 1 ? 1 : DAILY_TIMELINE_HOUR_WIDTH,
-          }}
-        >
-          <span className={cn(index === hours.length - 1 && '-translate-x-full')}>
-            {String(hour).padStart(2, '0')}:00
-          </span>
-        </div>
-      ))}
+      {hours.map((hour, index) => {
+        const isEndMarker = index === hours.length - 1;
+        return (
+          <div
+            key={hour}
+            data-testid={`schedule-timeline-hour-${hour}`}
+            data-boundary={isEndMarker ? 'end' : undefined}
+            className={cn(
+              'absolute bottom-0 h-7 border-l border-border px-2 pt-1 text-xs font-medium tabular-nums text-foreground',
+              isEndMarker && 'border-r'
+            )}
+            style={
+              isEndMarker
+                ? { right: 0, width: 1 }
+                : { left: index * range.hourWidth, width: range.hourWidth }
+            }
+          >
+            <span
+              className={cn(
+                'inline-block',
+                isEndMarker && 'absolute right-0 top-1 whitespace-nowrap'
+              )}
+            >
+              {String(hour).padStart(2, '0')}:00
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -879,14 +1294,14 @@ function ResizableDailyVisit({
     getScheduleTimeMinutes(displayedVisit.ends_at)
   );
   const left =
-    ((startsAt - rangeStartMinutes) / 60) * DAILY_TIMELINE_HOUR_WIDTH + 4;
+    ((startsAt - rangeStartMinutes) / 60) * range.hourWidth + 4;
   const availableWidth = range.width - left - 4;
   const width = Math.min(
     availableWidth,
     Math.max(
       48,
       ((Math.max(endsAt, startsAt + 30) - startsAt) / 60)
-        * DAILY_TIMELINE_HOUR_WIDTH
+        * range.hourWidth
         - 8
     )
   );
@@ -914,7 +1329,7 @@ function ResizableDailyVisit({
     if (!operation || operation.pointerId !== event.pointerId) return;
     event.preventDefault();
     const rawDeltaMinutes =
-      ((event.clientX - operation.originClientX) / DAILY_TIMELINE_HOUR_WIDTH) * 60;
+      ((event.clientX - operation.originClientX) / range.hourWidth) * 60;
     const snappedDeltaMinutes = Math.round(rawDeltaMinutes / 30) * 30;
     const nextTimes = getResizedVisitTimes(
       { startsAt: operation.startsAt, endsAt: operation.endsAt },
@@ -983,7 +1398,7 @@ function ResizableDailyVisit({
       <button
         type="button"
         className={cn(
-          'group/resize absolute inset-y-0 z-20 w-3 touch-none cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-scheduling',
+          'group/resize absolute inset-y-0 z-10 w-3 touch-none cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300',
           isStart ? 'left-0' : 'right-0'
         )}
         onPointerDown={(event) => handleResizePointerDown(event, edge)}
@@ -1017,13 +1432,14 @@ function ResizableDailyVisit({
         job={job}
         visit={displayedVisit}
         assignments={assignments}
-        className="h-full overflow-hidden border-slate-500 shadow-lg shadow-black/40"
+        className="h-full cursor-default overflow-hidden border-slate-500 shadow-lg shadow-black/40"
         style={DAILY_TIMELINE_VISIT_STYLE}
         isDropEnabled
         isActiveTarget={isActiveTarget}
         onActivate={onActivate}
         onEdit={onEdit}
         onDeleteAssignment={onDeleteAssignment}
+        cardWidth={width}
       />
       {visit.status !== 'cancelled' ? (
         <>
@@ -1038,9 +1454,9 @@ function ResizableDailyVisit({
 function DailyTimelineCell({
   job,
   date,
-  visits,
-  assignments,
   range,
+  layout,
+  isPannable,
   activeVisitId,
   onActivateVisit,
   onAddVisit,
@@ -1048,60 +1464,30 @@ function DailyTimelineCell({
   onDeleteAssignment,
   onResizeVisit,
 }: DailyTimelineCellProps) {
-  const dayVisits = visits
-    .filter((visit) => getScheduleVisitDate(visit.starts_at) === date)
-    .sort((first, second) => first.starts_at.localeCompare(second.starts_at));
-  const legacyAssignments = assignments.filter((assignment) => !assignment.visit_id);
-  const legacyHeight = legacyAssignments.length > 0 ? 48 : 0;
-  const timelineLayout = dayVisits.reduce<{
-    placements: Array<{
-      visit: ScheduleVisit;
-      assignments: ScheduleAssignment[];
-      top: number;
-      height: number;
-    }>;
-    nextTop: number;
-  }>((layout, visit) => {
-    const visitAssignments = assignments.filter(
-      (assignment) => assignment.visit_id === visit.id
-    );
-    const height = Math.max(96, 64 + visitAssignments.length * 30);
-
-    return {
-      placements: [
-        ...layout.placements,
-        {
-          visit,
-          assignments: visitAssignments,
-          top: layout.nextTop,
-          height,
-        },
-      ],
-      nextTop: layout.nextTop + height + 8,
-    };
-  }, { placements: [], nextTop: 8 + legacyHeight });
-  const rowHeight = Math.max(112, timelineLayout.nextTop);
-
   return (
     <div
       data-testid={`schedule-cell-${job.id}-${date}`}
       data-timeline-start={`${String(range.startHour).padStart(2, '0')}:00`}
       data-timeline-end={`${String(range.endHour).padStart(2, '0')}:00`}
-      className="relative border-l border-border bg-muted/10"
+      className={cn(
+        'relative z-0 border-l border-border bg-muted/10',
+        isPannable && 'cursor-grab'
+      )}
+      data-timeline-pan-surface="true"
       style={{
         width: range.width,
-        minHeight: rowHeight,
+        height: layout.rowHeight,
         backgroundImage:
           'linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px)',
-        backgroundSize: `${DAILY_TIMELINE_HOUR_WIDTH}px 100%`,
+        backgroundSize: `${range.hourWidth}px 100%`,
       }}
     >
-      {legacyAssignments.length > 0 ? (
+      {layout.legacyAssignments.length > 0 ? (
         <div className="absolute inset-x-2 top-2 flex h-10 items-center gap-2 overflow-x-auto rounded-md border border-dashed border-border bg-card/90 px-2">
           <span className="shrink-0 text-[11px] font-semibold uppercase text-muted-foreground">
             Untimed
           </span>
-          {legacyAssignments.map((assignment) => (
+          {layout.legacyAssignments.map((assignment) => (
             <AssignmentChip
               key={`${assignment.resource_type}-${assignment.id}`}
               assignment={assignment}
@@ -1111,7 +1497,7 @@ function DailyTimelineCell({
           ))}
         </div>
       ) : null}
-      {timelineLayout.placements.map(({ visit, assignments: visitAssignments, top, height }) => (
+      {layout.placements.map(({ visit, assignments: visitAssignments, top, height }) => (
         <ResizableDailyVisit
           key={visit.id}
           job={job}
@@ -1127,11 +1513,11 @@ function DailyTimelineCell({
           onResizeVisit={onResizeVisit}
         />
       ))}
-      {dayVisits.length === 0 ? (
+      {layout.placements.length === 0 ? (
         <button
           type="button"
           onClick={onAddVisit}
-          className="absolute left-4 top-4 flex items-center gap-1 rounded-md border border-dashed border-border bg-card/80 px-3 py-2 text-xs font-medium text-scheduling hover:border-scheduling hover:bg-scheduling-soft"
+          className={cn('absolute left-4 top-4 flex items-center gap-1 rounded-md px-3 py-2 text-xs font-medium', schedulingControlStyles.outline)}
           aria-label={`Add visit to ${job.job_reference} on ${date}`}
         >
           <Plus className="h-3.5 w-3.5" />
@@ -1169,6 +1555,15 @@ interface PendingAssignmentConflict {
   assignment?: ScheduleAssignment;
 }
 
+type DailyTimelineMode = 'fit' | 'scroll';
+
+interface DailyTimelinePanOperation {
+  pointerId: number;
+  originClientX: number;
+  originScrollLeft: number;
+  hasDragged: boolean;
+}
+
 function flattenConflictMessages(payload: Record<string, unknown>): SchedulingConflict[] {
   const byDate = payload.conflicts_by_date;
   if (!byDate || typeof byDate !== 'object') return [];
@@ -1177,12 +1572,20 @@ function flattenConflictMessages(payload: Record<string, unknown>): SchedulingCo
 
 export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) {
   const queryClient = useQueryClient();
+  const { hasPermission: canCreateQuotes } = usePermissionCheck('quotes', false);
+  const { hasPermission: canViewCustomers } = usePermissionCheck('customers', false);
+  const quotesSensitiveAccess = useSensitiveModuleAccess('quotes', {
+    enabled: canCreateQuotes,
+  });
+  const dailyTimelineViewportRef = useRef<HTMLDivElement>(null);
+  const dailyTimelinePanOperation = useRef<DailyTimelinePanOperation | null>(null);
+  const latestPointerClientX = useRef<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => formatScheduleDate(new Date()));
   const [view, setView] = useState<SchedulingBoardView>(() =>
     readSchedulingViewPreference(userId)
   );
   const [sidebarTab, setSidebarTab] = useState<'jobs' | 'employee' | 'plant'>('jobs');
-  const [quoteStage, setQuoteStage] = useState<ScheduleQuoteStage>(
+  const [quoteStage, setQuoteStage] = useState<ScheduleQuoteStage | 'projects'>(
     SCHEDULE_QUOTE_STAGES.draft
   );
   const [quoteSearch, setQuoteSearch] = useState('');
@@ -1198,10 +1601,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const jobSearch = jobFilters.q;
   const [teamFilter, setTeamFilter] = useState('all');
   const [selectedResource, setSelectedResource] = useState<SelectedScheduleResource | null>(null);
-  const [selectedQuote, setSelectedQuote] = useState<ScheduleQuoteCandidate | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<SchedulingQueueItem | null>(null);
   const [draggedResource, setDraggedResource] = useState<SelectedScheduleResource | null>(null);
   const [draggedAssignment, setDraggedAssignment] = useState<ScheduleAssignment | null>(null);
-  const [draggedQuote, setDraggedQuote] = useState<ScheduleQuoteCandidate | null>(null);
+  const [draggedQuote, setDraggedQuote] = useState<SchedulingQueueItem | null>(null);
   const [activeVisitTarget, setActiveVisitTarget] = useState<ActiveVisitTarget | null>(null);
   const [resourceAvailabilityView, setResourceAvailabilityView] =
     useState<'available' | 'unavailable' | 'all'>('available');
@@ -1214,13 +1617,29 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   } | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduleJob | null>(null);
-  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [schedulingQuoteJob, setSchedulingQuoteJob] = useState<ScheduleJob | null>(null);
+  const [projectPlacement, setProjectPlacement] = useState<{
+    project: ScheduleProjectCandidate;
+    date: string;
+    initialVisit?: { starts_at: string; ends_at: string };
+  } | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
   const [pendingRemoveJob, setPendingRemoveJob] = useState<ScheduleJob | null>(null);
   const [isRemovingJob, setIsRemovingJob] = useState(false);
   const [isSchedulingQuote, setIsSchedulingQuote] = useState(false);
+  const [pendingCrewOfferJobIds, setPendingCrewOfferJobIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [dailyTimelineMode, setDailyTimelineMode] =
+    useState<DailyTimelineMode>('fit');
+  const [dailyTimelineViewportWidth, setDailyTimelineViewportWidth] =
+    useState<number | null>(null);
+  const [isDailyTimelinePanning, setIsDailyTimelinePanning] = useState(false);
+  const [quoteCreationOpen, setQuoteCreationOpen] = useState(false);
+  const [projectCreationOpen, setProjectCreationOpen] = useState(false);
+  const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
+  const [pendingCreationKind, setPendingCreationKind] = useState<'quote' | 'project' | null>(null);
 
   const weekStart = getSchedulingWeek(selectedDate).start;
   const boardQuery = useQuery({
@@ -1231,6 +1650,32 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     queryKey: ['scheduling-quote-candidates'],
     queryFn: fetchScheduleQuoteCandidates,
   });
+  const projectCandidatesQuery = useQuery({
+    queryKey: ['scheduling-project-candidates'],
+    queryFn: fetchScheduleProjectCandidates,
+  });
+  useEffect(() => {
+    if (!canCreateQuotes) return;
+    void fetch('/api/quotes/metadata')
+      .then((response) => response.json())
+      .then((payload) => setQuoteManagerOptions(payload.managerOptions || []))
+      .catch(() => setQuoteManagerOptions([]));
+  }, [canCreateQuotes]);
+  useEffect(() => {
+    if (!pendingCreationKind || !quotesSensitiveAccess.canAccess) return;
+    if (pendingCreationKind === 'quote') setQuoteCreationOpen(true);
+    else setProjectCreationOpen(true);
+    setPendingCreationKind(null);
+  }, [pendingCreationKind, quotesSensitiveAccess.canAccess]);
+
+  function requestCreation(kind: 'quote' | 'project') {
+    if (!quotesSensitiveAccess.canAccess) {
+      setPendingCreationKind(kind);
+      return;
+    }
+    if (kind === 'quote') setQuoteCreationOpen(true);
+    else setProjectCreationOpen(true);
+  }
   const board = boardQuery.data;
   const weekDates = useMemo(
     () => {
@@ -1240,10 +1685,84 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     },
     [board, selectedDate, view]
   );
-  const dailyTimelineRange = useMemo(
+  const dailyTimelineBaseRange = useMemo(
     () => getDailyTimelineRange(board?.visits || [], selectedDate),
     [board?.visits, selectedDate]
   );
+  const isDailyTimelineFitEligible =
+    dailyTimelineViewportWidth === null
+    || canFitDailyTimeline(dailyTimelineViewportWidth, dailyTimelineBaseRange);
+  const effectiveDailyTimelineMode =
+    dailyTimelineMode === 'fit' && isDailyTimelineFitEligible ? 'fit' : 'scroll';
+  const dailyTimelineRange = useMemo(() => {
+    if (
+      effectiveDailyTimelineMode !== 'fit'
+      || dailyTimelineViewportWidth === null
+    ) return dailyTimelineBaseRange;
+
+    const availableWidth = getDailyTimelineAvailableWidth(dailyTimelineViewportWidth);
+    const durationHours =
+      dailyTimelineBaseRange.endHour - dailyTimelineBaseRange.startHour;
+    const hourWidth = Math.floor(availableWidth / durationHours);
+    const width = hourWidth * durationHours;
+
+    return {
+      ...dailyTimelineBaseRange,
+      hourWidth,
+      width,
+    };
+  }, [
+    dailyTimelineBaseRange,
+    dailyTimelineViewportWidth,
+    effectiveDailyTimelineMode,
+  ]);
+
+  useEffect(() => {
+    if (view !== SCHEDULING_BOARD_VIEWS.daily) return;
+    const timelineViewport = dailyTimelineViewportRef.current;
+    if (!timelineViewport) return;
+
+    function updateViewportWidth(width: number) {
+      if (width <= 0) return;
+      setDailyTimelineViewportWidth(width);
+      if (!canFitDailyTimeline(width, dailyTimelineBaseRange)) {
+        setDailyTimelineMode((currentMode) =>
+          currentMode === 'fit' ? 'scroll' : currentMode
+        );
+      }
+    }
+
+    updateViewportWidth(timelineViewport.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateViewportWidth(timelineViewport.clientWidth);
+    });
+    resizeObserver.observe(timelineViewport);
+    return () => resizeObserver.disconnect();
+  }, [dailyTimelineBaseRange, view]);
+
+  useEffect(() => {
+    if (
+      view === SCHEDULING_BOARD_VIEWS.daily
+      && effectiveDailyTimelineMode === 'fit'
+      && dailyTimelineViewportRef.current
+    ) {
+      dailyTimelineViewportRef.current.scrollLeft = 0;
+    }
+  }, [dailyTimelineViewportWidth, effectiveDailyTimelineMode, view]);
+
+  useEffect(() => {
+    function trackPointer(event: globalThis.PointerEvent | globalThis.MouseEvent) {
+      latestPointerClientX.current = event.clientX;
+    }
+    window.addEventListener('pointermove', trackPointer, { passive: true });
+    window.addEventListener('mousemove', trackPointer, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', trackPointer);
+      window.removeEventListener('mousemove', trackPointer);
+    };
+  }, []);
   const capacityByDate = useMemo(
     () => new Map(
       (board?.employee_capacity || []).map((capacity) => [capacity.date, capacity])
@@ -1258,11 +1777,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
     return Array.from(values.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [board]);
-  const unscheduledQuotes = useMemo(
+  const unscheduledQuotes = useMemo<SchedulingQueueItem[]>(
     () => (quoteCandidatesQuery.data || []).filter(
       (quote) => !quote.start_date && getScheduleQuoteStage(quote.status) !== null
-    ),
+    ).map((quote) => ({ ...quote, kind: 'quote' as const })),
     [quoteCandidatesQuery.data]
+  );
+  const unscheduledProjects = useMemo<SchedulingQueueItem[]>(
+    () => (projectCandidatesQuery.data || []).map((project) => ({
+      kind: 'project' as const,
+      id: project.id,
+      quote_reference: project.project_reference,
+      base_quote_reference: project.project_reference,
+      title: project.title,
+      customer_name: null,
+      status: 'Project' as const,
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: 1 as const,
+      estimated_duration_minutes: 180 as const,
+      project,
+    })),
+    [projectCandidatesQuery.data]
   );
   const quoteStageCounts = useMemo(() => {
     const counts: Record<ScheduleQuoteStage, number> = {
@@ -1278,9 +1814,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [unscheduledQuotes]);
   const filteredQuoteCandidates = useMemo(() => {
     const search = quoteSearch.trim().toLowerCase();
-    return unscheduledQuotes.filter(
+    const source = quoteStage === 'projects' ? unscheduledProjects : unscheduledQuotes;
+    return source.filter(
       (quote) =>
-        getScheduleQuoteStage(quote.status) === quoteStage
+        (quoteStage === 'projects' || getScheduleQuoteStage(quote.status) === quoteStage)
         && (
           !search
           || quote.quote_reference.toLowerCase().includes(search)
@@ -1289,7 +1826,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           || (quote.customer_name || '').toLowerCase().includes(search)
         )
     );
-  }, [quoteSearch, quoteStage, unscheduledQuotes]);
+  }, [quoteSearch, quoteStage, unscheduledProjects, unscheduledQuotes]);
 
   const matchingEmployees = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
@@ -1391,11 +1928,48 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     await queryClient.invalidateQueries({ queryKey: ['scheduling-board'] });
   }
 
+  async function toggleCrewOffer(job: ScheduleJob) {
+    if (pendingCrewOfferJobIds.has(job.id)) return;
+    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
+      'scheduling-board',
+      weekStart,
+    ]);
+    const nextValue = !job.is_drop_on_ready;
+    setPendingCrewOfferJobIds((current) => new Set(current).add(job.id));
+    setBoardData((current) => ({
+      ...current,
+      jobs: current.jobs.map((item) =>
+        item.id === job.id ? { ...item, is_drop_on_ready: nextValue } : item
+      ),
+    }));
+    try {
+      await saveScheduleJob({ is_drop_on_ready: nextValue }, job.id);
+      toast.success(nextValue ? 'Crew offer enabled' : 'Crew offer disabled');
+      await refresh();
+    } catch (error) {
+      if (previous) {
+        queryClient.setQueryData(['scheduling-board', weekStart], previous);
+      }
+      toast.error(error instanceof Error ? error.message : 'Unable to update crew offer');
+    } finally {
+      setPendingCrewOfferJobIds((current) => {
+        const next = new Set(current);
+        next.delete(job.id);
+        return next;
+      });
+    }
+  }
+
   async function scheduleQuoteFromDate(
-    quote: ScheduleQuoteCandidate,
-    startDate: string
+    quote: SchedulingQueueItem,
+    startDate: string,
+    initialVisit?: { starts_at: string; ends_at: string }
   ) {
     if (isSchedulingQuote) return;
+    if (quote.kind === 'project') {
+      setProjectPlacement({ project: quote.project, date: startDate, initialVisit });
+      return;
+    }
     const endDate = getScheduleQuoteEndDate(
       startDate,
       quote.estimated_duration_days
@@ -1406,6 +1980,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         quote_id: quote.id,
         start_date: startDate,
         end_date: endDate,
+        ...(initialVisit ? { initial_visit: initialVisit } : {}),
       });
       setSelectedQuote(null);
       toast.success(
@@ -1741,6 +2316,60 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     setActiveVisitTarget(null);
   }
 
+  function handleTimelinePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (
+      effectiveDailyTimelineMode !== 'scroll'
+      || event.pointerType === 'touch'
+      || event.button !== 0
+    ) return;
+
+    const panSurface =
+      event.target instanceof Element
+        ? event.target.closest('[data-timeline-pan-surface="true"]')
+        : null;
+    if (!panSurface || event.target !== panSurface) return;
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dailyTimelinePanOperation.current = {
+      pointerId: event.pointerId,
+      originClientX: event.clientX,
+      originScrollLeft: event.currentTarget.scrollLeft,
+      hasDragged: false,
+    };
+  }
+
+  function handleTimelinePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const operation = dailyTimelinePanOperation.current;
+    if (!operation || operation.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - operation.originClientX;
+    if (!operation.hasDragged && Math.abs(deltaX) < DAILY_TIMELINE_PAN_THRESHOLD) {
+      return;
+    }
+
+    operation.hasDragged = true;
+    event.preventDefault();
+    setIsDailyTimelinePanning(true);
+    event.currentTarget.scrollLeft = operation.originScrollLeft - deltaX;
+  }
+
+  function finishTimelinePan(event: PointerEvent<HTMLDivElement>) {
+    const operation = dailyTimelinePanOperation.current;
+    if (!operation || operation.pointerId !== event.pointerId) return;
+    if (operation.hasDragged) event.preventDefault();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    dailyTimelinePanOperation.current = null;
+    setIsDailyTimelinePanning(false);
+  }
+
+  function cancelTimelinePan(event: PointerEvent<HTMLDivElement>) {
+    if (dailyTimelinePanOperation.current?.pointerId !== event.pointerId) return;
+    dailyTimelinePanOperation.current = null;
+    setIsDailyTimelinePanning(false);
+  }
+
   function openVisitEditor(job: ScheduleJob, date: string, visit: ScheduleVisit | null = null) {
     setVisitTarget({ job, visit, date });
   }
@@ -1756,9 +2385,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     handleViewChange(SCHEDULING_BOARD_VIEWS.daily);
   }
 
-  function openQuoteScheduler(job: ScheduleJob | null = null) {
+  function openQuoteScheduler(job: ScheduleJob) {
     setSchedulingQuoteJob(job);
-    setQuoteDialogOpen(true);
   }
 
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
@@ -1769,7 +2397,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           <p className="text-red-300">
             {boardQuery.error instanceof Error ? boardQuery.error.message : 'Unable to load the board.'}
           </p>
-          <Button className="mt-4" variant="outline" onClick={() => void boardQuery.refetch()}>Try again</Button>
+          <Button
+            className={cn('mt-4', schedulingControlStyles.outline)}
+            variant="outline"
+            onClick={() => void boardQuery.refetch()}
+          >
+            Try again
+          </Button>
         </CardContent>
       </Card>
     );
@@ -1794,7 +2428,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             dragstart({ operation: { source } }: DndAnnouncementEvent) {
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
-              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
+              const quote = source?.data?.quote as SchedulingQueueItem | undefined;
               if (quote) return `Picked up ${quote.base_quote_reference}.`;
               if (resource) return `Picked up ${resource.label}.`;
               if (assignment) return 'Picked up an existing assignment.';
@@ -1802,20 +2436,32 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             },
             dragover({ operation: { source, target } }: DndAnnouncementEvent) {
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
-              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
-              const data = target?.data as { workDate?: string } | undefined;
+              const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
+              const quote = source?.data?.quote as SchedulingQueueItem | undefined;
+              const data = target?.data as {
+                jobReference?: string;
+                visitSequenceNumber?: number;
+                workDate?: string;
+              } | undefined;
               if (quote && data?.workDate) {
                 return `${quote.base_quote_reference} is over ${format(parseISO(data.workDate), 'EEEE d MMMM')}.`;
               }
-              return resource && data?.workDate
-                ? `${resource.label} is over ${format(parseISO(data.workDate), 'EEEE d MMMM')}.`
+              const visitTarget =
+                data?.jobReference && data.visitSequenceNumber
+                  ? `visit ${data.visitSequenceNumber} for ${data.jobReference}`
+                  : null;
+              if (resource && visitTarget) {
+                return `${resource.label} is over ${visitTarget}.`;
+              }
+              return assignment && visitTarget
+                ? `The assignment is over ${visitTarget}.`
                 : undefined;
             },
             dragend({ operation: { source, target }, canceled }: DndAnnouncementEvent) {
               if (canceled) return 'Drag cancelled.';
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
-              const quote = source?.data?.quote as ScheduleQuoteCandidate | undefined;
+              const quote = source?.data?.quote as SchedulingQueueItem | undefined;
               if (quote && target) return `${quote.base_quote_reference} was scheduled.`;
               if (resource && target) return `${resource.label} was dropped on a visit.`;
               if (assignment && target) return 'Assignment was dropped on a visit.';
@@ -1827,8 +2473,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       onDragStart={(event) => {
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const assignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
-        const quote = event.operation.source?.data?.quote as ScheduleQuoteCandidate | undefined;
-        if (quote) setSelectedQuote(quote);
+        const quote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
         if (resource) setSelectedResource(resource);
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
@@ -1837,17 +2482,60 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const sourceAssignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
-        const sourceQuote = event.operation.source?.data?.quote as ScheduleQuoteCandidate | undefined;
+        const sourceQuote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
         const targetData = event.operation.target?.data as {
           jobId?: string;
           visitId?: string;
           workDate?: string;
         } | undefined;
+        const operationPosition = (
+          event.operation as unknown as {
+            position?: { current?: { x?: number } };
+          }
+        ).position?.current;
+        const dropClientX =
+          typeof operationPosition?.x === 'number'
+            ? operationPosition.x
+            : latestPointerClientX.current;
         setDraggedResource(null);
         setDraggedAssignment(null);
         setDraggedQuote(null);
         if (event.canceled) return;
         if (sourceQuote) {
+          if (
+            view === SCHEDULING_BOARD_VIEWS.daily
+            && dropClientX !== null
+          ) {
+            const header = dailyTimelineViewportRef.current?.querySelector<HTMLElement>(
+              '[data-testid="schedule-daily-timeline-header"]'
+            );
+            if (header) {
+              const startMinutes = mapDailyScheduleClientXToMinutes({
+                clientX: dropClientX,
+                rangeLeft: header.getBoundingClientRect().left,
+                hourWidth: dailyTimelineRange.hourWidth,
+                startHour: dailyTimelineRange.startHour,
+                endHour: dailyTimelineRange.endHour,
+              });
+              const window = getDailyInitialVisitWindow(
+                startMinutes,
+                sourceQuote.estimated_duration_minutes || null,
+                dailyTimelineRange.endHour
+              );
+              const toIso = (minutes: number) => {
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                return new Date(
+                  `${selectedDate}T${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`
+                ).toISOString();
+              };
+              void scheduleQuoteFromDate(sourceQuote, selectedDate, {
+                starts_at: toIso(window.startMinutes),
+                ends_at: toIso(window.endMinutes),
+              });
+              return;
+            }
+          }
           if (!targetData?.workDate) {
             toast.info('Drop onto a calendar date.');
             return;
@@ -1872,7 +2560,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         }
       }}
     >
-      <div className="space-y-4" onClick={handleBoardClick}>
+      <div
+        className="space-y-4"
+        onClick={handleBoardClick}
+        onPointerMoveCapture={(event) => {
+          latestPointerClientX.current = event.clientX;
+        }}
+      >
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/70 p-4 xl:flex-row xl:items-center xl:justify-between">
           <SchedulingDateRangeControls
             selectedDate={selectedDate}
@@ -1881,32 +2575,41 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             onViewChange={handleViewChange}
           />
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setUnavailabilityOpen(true)}>
+            <Button className={schedulingControlStyles.outline} variant="outline" onClick={() => setUnavailabilityOpen(true)}>
               <CalendarOff className="mr-2 h-4 w-4" />
               Plant availability
             </Button>
             <Button
               variant="outline"
-              onClick={() => {
-                setEditingJob(null);
-                setJobDialogOpen(true);
-              }}
+              className={schedulingControlStyles.outline}
+              disabled={!canCreateQuotes || !canViewCustomers}
+              title={!canCreateQuotes || !canViewCustomers ? 'Quotes and Customers access required' : 'New Quote'}
+              onClick={() => requestCreation('quote')}
             >
               <Plus className="mr-2 h-4 w-4" />
-              Add Project job
+              New Quote
             </Button>
             <Button
-              onClick={() => openQuoteScheduler()}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              variant="outline"
+              className={schedulingControlStyles.outline}
+              disabled={!canCreateQuotes}
+              title={!canCreateQuotes ? 'Quotes access required' : 'New Project Number'}
+              onClick={() => requestCreation('project')}
             >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Schedule Quote
+              <Plus className="mr-2 h-4 w-4" />
+              New Project Number
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <Card className="h-fit border-border xl:sticky xl:top-4">
+        <div
+          className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]"
+          data-testid="schedule-manager-layout"
+        >
+          <Card
+            className="h-fit border-border xl:sticky xl:top-4"
+            data-testid="schedule-resources-panel"
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Resources</CardTitle>
             </CardHeader>
@@ -1919,7 +2622,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   setSelectedResource(null);
                 }}
               >
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList
+                  className="grid w-full grid-cols-3"
+                  data-testid="schedule-resource-tabs"
+                >
                   <TabsTrigger value="jobs">Jobs</TabsTrigger>
                   <TabsTrigger value="employee">Employees</TabsTrigger>
                   <TabsTrigger value="plant">Plant</TabsTrigger>
@@ -1927,14 +2633,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </Tabs>
               {sidebarTab === 'jobs' ? (
                 <>
-                  <p className="mt-2 text-muted-foreground">
+                  <p className={RESOURCE_GUIDANCE_CLASS}>
                     Drag an unscheduled job onto a date, or select it and use a date&apos;s placement button.
                   </p>
                   <Tabs
                     value={quoteStage}
-                    onValueChange={(value) => setQuoteStage(value as ScheduleQuoteStage)}
+                    onValueChange={(value) => setQuoteStage(value as ScheduleQuoteStage | 'projects')}
                   >
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className="px-1 text-[10px]">
                         Draft ({quoteStageCounts.draft})
                       </TabsTrigger>
@@ -1943,6 +2649,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </TabsTrigger>
                       <TabsTrigger value={SCHEDULE_QUOTE_STAGES.accepted} className="px-1 text-[10px]">
                         Accepted ({quoteStageCounts.accepted})
+                      </TabsTrigger>
+                      <TabsTrigger value="projects" className="px-1 text-[10px]">
+                        Projects ({unscheduledProjects.length})
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -1957,12 +2666,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </div>
                   {selectedQuote ? (
                     <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
-                      <span className="truncate">Selected: {selectedQuote.base_quote_reference}</span>
+                      <span className="truncate text-foreground">
+                        Selected: {selectedQuote.base_quote_reference}
+                      </span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setSelectedQuote(null)}
-                        className="h-6 px-1"
+                        className={cn('h-6 px-1', schedulingControlStyles.ghost)}
                         aria-label="Clear selected job"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -1975,7 +2686,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="mt-1"
+                        className={cn('mt-1', schedulingControlStyles.ghost)}
                         onClick={() => void quoteCandidatesQuery.refetch()}
                       >
                         Try again
@@ -2003,7 +2714,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           ))
                         ) : (
                           <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-                            No unscheduled {quoteStage} jobs match this search.
+                            No unscheduled {quoteStage === 'projects' ? 'Projects' : quoteStage} match this search.
                           </div>
                         )}
                       </div>
@@ -2030,18 +2741,18 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           variant="ghost"
                           size="sm"
                           onClick={() => setActiveVisitTarget(null)}
-                          className="h-7 px-2"
+                          className={cn('h-7 px-2', schedulingControlStyles.ghost)}
                           aria-label="Clear selected visit"
                         >
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                       <p className="mt-2 text-muted-foreground">
-                        Tap a resource or drag its handle onto this or another visit.
+                        Tap a resource or drag its card onto this or another visit.
                       </p>
                     </div>
                   ) : (
-                    <p className="rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground">
+                    <p className={RESOURCE_GUIDANCE_CLASS}>
                       Select a visit to show resources available for its exact time.
                     </p>
                   )}
@@ -2083,32 +2794,49 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </div>
                   {selectedResource ? (
                     <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
-                      <span className="truncate">Selected: {selectedResource.label}</span>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedResource(null)} className="h-6 px-1">
+                      <span className="truncate text-foreground">
+                        Selected: {selectedResource.label}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedResource(null)}
+                        className={cn('h-6 px-1', schedulingControlStyles.ghost)}
+                        aria-label="Clear selected resource"
+                      >
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   ) : null}
-                  <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
+                  <ScrollArea
+                    className="h-[420px] pr-3"
+                    data-mobile-scroll-lock="true"
+                    data-testid="schedule-resource-scroll-area"
+                  >
                     <div className="space-y-2">
                       {sidebarTab === 'employee'
                         ? filteredEmployees.map((employee) => {
                             const resource = resourceFromEmployee(employee);
+                            const isUnavailable = Boolean(
+                              activeVisitTarget
+                              && isResourceUnavailableForVisit(
+                                { type: 'employee', id: employee.id },
+                                board.assignments,
+                                activeVisitTarget.visit
+                              )
+                            );
                             return (
                               <ResourceCard
                                 key={employee.id}
                                 resource={resource}
-                                subtitle={employee.team_name || employee.employee_id || 'No team'}
-                                warning={
+                                subtitle={employee.team_name || 'No team assigned'}
+                                metadata={[
                                   activeVisitTarget
-                                  && isResourceUnavailableForVisit(
-                                    { type: 'employee', id: employee.id },
-                                    board.assignments,
-                                    activeVisitTarget.visit
-                                  )
-                                    ? 'Already assigned during this visit'
-                                    : undefined
-                                }
+                                    ? isUnavailable ? 'Unavailable' : 'Available'
+                                    : 'Employee',
+                                  employee.employee_id,
+                                ].filter(Boolean).join(' · ')}
+                                warning={isUnavailable ? 'Already assigned during this visit' : undefined}
                                 selected={selectedResource?.type === 'employee' && selectedResource.id === employee.id}
                                 dragEnabled
                                 onSelect={() => handleResourceSelect(resource)}
@@ -2117,18 +2845,27 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           })
                         : filteredPlant.map((plant) => {
                             const resource = resourceFromPlant(plant);
+                            const isUnavailable = Boolean(
+                              activeVisitTarget
+                              && isResourceUnavailableForVisit(
+                                { type: 'plant', id: plant.id },
+                                board.assignments,
+                                activeVisitTarget.visit
+                              )
+                            );
                             return (
                               <ResourceCard
                                 key={plant.id}
                                 resource={resource}
-                                subtitle={[plant.make, plant.model, plant.status].filter(Boolean).join(' · ')}
-                                warning={
+                                subtitle={[plant.make, plant.model].filter(Boolean).join(' · ') || 'Plant asset'}
+                                metadata={[
                                   activeVisitTarget
-                                  && isResourceUnavailableForVisit(
-                                    { type: 'plant', id: plant.id },
-                                    board.assignments,
-                                    activeVisitTarget.visit
-                                  )
+                                    ? isUnavailable ? 'Unavailable' : 'Available'
+                                    : 'Plant',
+                                  plant.status,
+                                ].filter(Boolean).join(' · ')}
+                                warning={
+                                  isUnavailable
                                     ? 'Already assigned during this visit'
                                     : plant.status !== 'active'
                                       ? `Status: ${plant.status}`
@@ -2168,15 +2905,94 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   />
                 </div>
               </div>
+              <div
+                className="flex min-h-7 items-center justify-between gap-3"
+                data-testid={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? 'schedule-daily-instruction-row'
+                    : undefined
+                }
+              >
+                <div>
+                  <p className="text-sm text-muted-foreground xl:hidden">
+                    Select a visit, then tap an available resource to assign it immediately.
+                  </p>
+                  <p className="hidden text-sm text-muted-foreground xl:block">
+                    Drag a resource card onto a timed visit, or select the visit and tap a resource.
+                  </p>
+                </div>
+                {view === SCHEDULING_BOARD_VIEWS.daily ? (
+                  <TooltipProvider delayDuration={200}>
+                    <div
+                      className="hidden shrink-0 items-center gap-1 md:flex"
+                      role="group"
+                      aria-label="Daily timeline display mode"
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={cn(
+                              'h-7 w-7 p-0',
+                              effectiveDailyTimelineMode === 'fit'
+                                ? schedulingControlStyles.primary
+                                : schedulingControlStyles.ghost
+                            )}
+                            aria-label="Shrink to fit width"
+                            aria-pressed={effectiveDailyTimelineMode === 'fit'}
+                            disabled={!isDailyTimelineFitEligible}
+                            title="Shrink to fit width"
+                            onClick={() => setDailyTimelineMode('fit')}
+                          >
+                            <Minimize2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          Shrink to fit width
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={cn(
+                              'h-7 w-7 p-0',
+                              effectiveDailyTimelineMode === 'scroll'
+                                ? schedulingControlStyles.primary
+                                : schedulingControlStyles.ghost
+                            )}
+                            aria-label="Scroll"
+                            aria-pressed={effectiveDailyTimelineMode === 'scroll'}
+                            title="Scroll"
+                            onClick={() => setDailyTimelineMode('scroll')}
+                          >
+                            <MoveHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">Scroll</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </TooltipProvider>
+                ) : null}
+              </div>
               <div className="flex flex-wrap items-center gap-2" aria-label="Job classification filters">
                 <Button
                   type="button"
                   size="sm"
-                  variant={jobFilters.ready ? 'default' : 'outline'}
+                  variant="ghost"
+                  className={
+                    jobFilters.ready
+                      ? schedulingControlStyles.primary
+                      : schedulingControlStyles.outline
+                  }
                   aria-pressed={jobFilters.ready}
                   onClick={() => void setJobFilters({ ready: !jobFilters.ready })}
                 >
-                  Ready for drop-on
+                  Offer if crew free
                 </Button>
                 {(board.tags || []).map((tag) => {
                   const isSelected = jobFilters.tags.includes(tag.id);
@@ -2185,7 +3001,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       key={tag.id}
                       type="button"
                       size="sm"
-                      variant={isSelected ? 'secondary' : 'outline'}
+                      variant="ghost"
+                      className={
+                        isSelected
+                          ? schedulingControlStyles.primary
+                          : schedulingControlStyles.outline
+                      }
                       aria-pressed={isSelected}
                       onClick={() =>
                         void setJobFilters({
@@ -2195,6 +3016,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         })
                       }
                     >
+                      {isSelected ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                       {tag.name}
                     </Button>
                   );
@@ -2204,30 +3026,85 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     type="button"
                     size="sm"
                     variant="ghost"
+                    className={schedulingControlStyles.ghost}
                     onClick={() => void setJobFilters({ q: '', tags: [], ready: false })}
                   >
                     Clear filters
                   </Button>
                 ) : null}
               </div>
-              <p className="text-sm text-muted-foreground xl:hidden">
-                Select a visit, then tap an available resource to assign it immediately.
-              </p>
-              <p className="hidden text-sm text-muted-foreground xl:block">
-                Drag a resource handle onto a timed visit, or select the visit and tap a resource.
-              </p>
             </CardHeader>
             <CardContent>
               <div
-                className="scrollbar-hidden hidden overflow-x-auto rounded-lg border border-border overscroll-x-contain md:block"
+                ref={dailyTimelineViewportRef}
+                className={cn(
+                  'hidden rounded-lg border border-border overscroll-x-contain md:block',
+                  view === SCHEDULING_BOARD_VIEWS.weekly
+                    && 'scrollbar-hidden overflow-x-auto',
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    && effectiveDailyTimelineMode === 'fit'
+                    && 'overflow-x-hidden',
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    && effectiveDailyTimelineMode === 'scroll'
+                    && 'overflow-x-auto [scrollbar-color:hsl(var(--muted-foreground)/0.45)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent',
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    && draggedQuote
+                    && 'ring-2 ring-inset ring-emerald-400',
+                  isDailyTimelinePanning && 'cursor-grabbing select-none'
+                )}
                 data-testid={view === SCHEDULING_BOARD_VIEWS.daily ? 'schedule-daily-timeline' : undefined}
                 aria-label={view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily schedule timeline' : undefined}
+                data-timeline-mode={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? effectiveDailyTimelineMode
+                    : undefined
+                }
+                data-fit-eligible={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? String(isDailyTimelineFitEligible)
+                    : undefined
+                }
+                data-timeline-panning={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? String(isDailyTimelinePanning)
+                    : undefined
+                }
+                onPointerDown={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? handleTimelinePointerDown
+                    : undefined
+                }
+                onPointerMove={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? handleTimelinePointerMove
+                    : undefined
+                }
+                onPointerUp={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? finishTimelinePan
+                    : undefined
+                }
+                onPointerCancel={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? cancelTimelinePan
+                    : undefined
+                }
               >
                 <div
                   className={view === SCHEDULING_BOARD_VIEWS.daily ? undefined : 'min-w-[1260px]'}
                   style={
                     view === SCHEDULING_BOARD_VIEWS.daily
-                      ? { minWidth: 240 + dailyTimelineRange.width }
+                      ? {
+                          minWidth:
+                            DAILY_TIMELINE_JOB_COLUMN_WIDTH + dailyTimelineRange.width,
+                          width:
+                            DAILY_TIMELINE_JOB_COLUMN_WIDTH + dailyTimelineRange.width,
+                        }
+                      : undefined
+                  }
+                  data-testid={
+                    view === SCHEDULING_BOARD_VIEWS.daily
+                      ? 'schedule-daily-timeline-content'
                       : undefined
                   }
                 >
@@ -2239,11 +3116,26 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     )}
                     style={
                       view === SCHEDULING_BOARD_VIEWS.daily
-                        ? { gridTemplateColumns: `240px ${dailyTimelineRange.width}px` }
+                        ? {
+                            gridTemplateColumns:
+                              `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                          }
                         : undefined
                     }
                   >
-                    <div className="sticky left-0 z-20 border-r border-border bg-muted/95 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+                    <div
+                      className={cn(
+                        'border-r border-border p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+                        view === SCHEDULING_BOARD_VIEWS.daily
+                          ? 'sticky left-0 z-30 bg-[hsl(var(--background)/0.5)]'
+                          : 'sticky left-0 z-20 bg-slate-800/95'
+                      )}
+                      data-testid={
+                        view === SCHEDULING_BOARD_VIEWS.daily
+                          ? 'schedule-daily-job-header'
+                          : undefined
+                      }
+                    >
                       <span>Job</span>
                       {view === SCHEDULING_BOARD_VIEWS.daily ? (
                         <span className="mt-1 block normal-case tracking-normal text-foreground">
@@ -2255,6 +3147,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       <DailyTimelineHeader
                         date={selectedDate}
                         range={dailyTimelineRange}
+                        isPannable={effectiveDailyTimelineMode === 'scroll'}
                         selectedQuote={selectedQuote}
                         isSchedulingQuote={isSchedulingQuote}
                         onScheduleQuote={(quote, date) => void scheduleQuoteFromDate(quote, date)}
@@ -2276,8 +3169,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       ))
                     )}
                   </div>
-                  {filteredJobs.map((job) => (
-                    <div
+                  {filteredJobs.map((job) => {
+                    const jobVisits = visitsFor(job.id);
+                    const jobAssignments = assignmentsFor(job.id, selectedDate);
+                    const dailyLayout = getDailyTimelineLayout(
+                      jobVisits,
+                      jobAssignments,
+                      selectedDate
+                    );
+
+                    return (
+                      <div
                       key={job.id}
                       className={cn(
                         'grid border-t border-border',
@@ -2286,98 +3188,82 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       )}
                       style={
                         view === SCHEDULING_BOARD_VIEWS.daily
-                          ? { gridTemplateColumns: `240px ${dailyTimelineRange.width}px` }
+                          ? {
+                              gridTemplateColumns:
+                                `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                            height: dailyLayout.rowHeight,
+                            }
                           : undefined
                       }
                     >
-                      <div className="sticky left-0 z-10 border-r border-border bg-card p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="font-semibold text-foreground">{job.job_reference}</span>
-                              {job.source_type === 'sample' ? <Badge variant="outline">Sample</Badge> : null}
-                              {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
-                              {job.source_type === 'manual' && job.quote_project_number_id ? (
-                                <Badge variant="outline">Project</Badge>
-                              ) : null}
-                            </div>
-                            <p className="truncate text-sm text-muted-foreground">
-                              {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
+                      <div
+                        className={cn(
+                          'flex h-full min-h-0 flex-col overflow-hidden border-r border-border p-3',
+                          view === SCHEDULING_BOARD_VIEWS.daily
+                            ? 'sticky left-0 z-30 bg-[hsl(var(--background)/0.5)]'
+                            : 'sticky left-0 z-10 bg-slate-900'
+                        )}
+                        data-testid={
+                          view === SCHEDULING_BOARD_VIEWS.daily
+                            ? `schedule-daily-job-cell-${job.id}`
+                            : undefined
+                        }
+                        style={
+                          view === SCHEDULING_BOARD_VIEWS.daily
+                            ? { height: dailyLayout.rowHeight }
+                            : undefined
+                        }
+                      >
+                        <div className="min-w-0 overflow-hidden">
+                          <span className="block truncate font-semibold text-foreground">
+                            {job.job_reference}
+                          </span>
+                          <p
+                            className="mt-1 truncate text-sm text-muted-foreground"
+                            title={`${job.customer_name ? `${job.customer_name} · ` : ''}${job.title}`}
+                          >
+                            {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {job.site_address || 'No site'}
+                          </p>
+                          {job.estimated_duration_minutes ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Estimated {Math.round(job.estimated_duration_minutes / 60 * 10) / 10} hours
                             </p>
-                            <p className="truncate text-xs text-muted-foreground">{job.site_address || 'No site'}</p>
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {job.is_drop_on_ready ? (
-                                <Badge className="bg-emerald-500/15 text-emerald-300">
-                                  Drop-on ready
-                                </Badge>
-                              ) : null}
-                              {(job.tags || []).map((tag) => (
-                                <Badge key={tag.id} variant="secondary">{tag.name}</Badge>
-                              ))}
-                            </div>
-                            {job.estimated_duration_minutes ? (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Estimated {Math.round(job.estimated_duration_minutes / 60 * 10) / 10} hours
-                              </p>
+                          ) : null}
+                        </div>
+                        <div
+                          className="mt-auto flex min-w-0 items-end justify-between gap-1 pt-2"
+                          data-testid={`schedule-job-footer-desktop-${job.id}`}
+                        >
+                          <div className="flex max-h-10 min-w-0 flex-wrap items-center gap-1 overflow-hidden">
+                            {job.source_type === 'sample' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Sample</Badge> : null}
+                            {job.source_type === 'quote' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Quote</Badge> : null}
+                            {job.source_type === 'manual' && job.quote_project_number_id ? (
+                              <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Project</Badge>
                             ) : null}
-                            {view === SCHEDULING_BOARD_VIEWS.daily ? (
-                              <button
-                                type="button"
-                                onClick={() => openVisitEditor(job, selectedDate)}
-                                className="mt-3 flex items-center gap-1 text-xs font-medium text-scheduling hover:underline"
-                                aria-label={`Add visit to ${job.job_reference} on ${selectedDate}`}
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                                Add visit
-                              </button>
-                            ) : null}
+                            {(job.tags || []).map((tag) => (
+                              <Badge key={tag.id} variant="secondary">{tag.name}</Badge>
+                            ))}
                           </div>
-                          <div className="flex items-center">
-                            {job.source_type === 'quote' && job.quote_id ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() => openQuoteScheduler(job)}
-                                  aria-label={`Reschedule ${job.job_reference}`}
-                                >
-                                  <CalendarPlus className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button asChild size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                  <Link
-                                    href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
-                                    aria-label={`Open Quote ${job.job_reference}`}
-                                  >
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                  </Link>
-                                </Button>
-                              </>
-                            ) : null}
-                            {job.source_type !== 'sample' ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-red-300 hover:bg-red-500/10 hover:text-red-200"
-                                onClick={() => setPendingRemoveJob(job)}
-                                aria-label={`Remove ${job.job_reference}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : null}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => {
-                                setEditingJob(job);
-                                setJobDialogOpen(true);
-                              }}
-                              aria-label={`Edit ${job.job_reference}`}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          <ScheduledJobActions
+                            job={job}
+                            isCrewOfferPending={pendingCrewOfferJobIds.has(job.id)}
+                            visitDate={
+                              view === SCHEDULING_BOARD_VIEWS.daily
+                                ? selectedDate
+                                : undefined
+                            }
+                            onAddVisit={() => openVisitEditor(job, selectedDate)}
+                            onEdit={() => {
+                              setEditingJob(job);
+                              setJobDialogOpen(true);
+                            }}
+                            onRemove={() => setPendingRemoveJob(job)}
+                            onReschedule={() => openQuoteScheduler(job)}
+                            onToggleCrewOffer={() => void toggleCrewOffer(job)}
+                          />
                         </div>
                       </div>
                       {view === SCHEDULING_BOARD_VIEWS.daily ? (
@@ -2385,9 +3271,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           key={`${job.id}-${selectedDate}`}
                           job={job}
                           date={selectedDate}
-                          visits={visitsFor(job.id)}
-                          assignments={assignmentsFor(job.id, selectedDate)}
+                          visits={jobVisits}
+                          assignments={jobAssignments}
                           range={dailyTimelineRange}
+                          layout={dailyLayout}
+                          isPannable={effectiveDailyTimelineMode === 'scroll'}
                           activeVisitId={activeVisitTarget?.visit.id || null}
                           onActivateVisit={(visit) => activateVisit(job, visit)}
                           onAddVisit={() => openVisitEditor(job, selectedDate)}
@@ -2411,8 +3299,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           />
                         ))
                       )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -2443,65 +3332,53 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </div>
                 {filteredJobs.map((job) => (
                   <div key={job.id} className="rounded-lg border border-border bg-muted/20 p-3">
-                    <div className="mb-3 flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-foreground">{job.job_reference}</p>
-                          {job.source_type === 'quote' ? <Badge variant="outline">Quote</Badge> : null}
+                    <div className="mb-3 min-w-0">
+                      <p className="truncate font-semibold text-foreground">
+                        {job.job_reference}
+                      </p>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                        {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {job.site_address || 'No site'}
+                      </p>
+                      {job.estimated_duration_minutes ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Estimated {Math.round(job.estimated_duration_minutes / 60 * 10) / 10} hours
+                        </p>
+                      ) : null}
+                      <div
+                        className="mt-2 flex min-w-0 items-end justify-between gap-2"
+                        data-testid={`schedule-job-footer-mobile-${job.id}`}
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-1 overflow-hidden">
+                          {job.source_type === 'sample' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Sample</Badge> : null}
+                          {job.source_type === 'quote' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Quote</Badge> : null}
                           {job.source_type === 'manual' && job.quote_project_number_id ? (
-                            <Badge variant="outline">Project</Badge>
-                          ) : null}
-                          {job.is_drop_on_ready ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300">Drop-on ready</Badge>
+                            <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Project</Badge>
                           ) : null}
                           {(job.tags || []).map((tag) => (
                             <Badge key={tag.id} variant="secondary">{tag.name}</Badge>
                           ))}
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {job.customer_name ? `${job.customer_name} · ` : ''}{job.title}
-                        </p>
-                      </div>
-                      <div className="flex items-center">
-                        {job.source_type === 'quote' && job.quote_id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openQuoteScheduler(job)}
-                              aria-label={`Reschedule ${job.job_reference}`}
-                            >
-                              <CalendarPlus className="h-4 w-4" />
-                            </Button>
-                            <Button asChild size="sm" variant="ghost">
-                              <Link
-                                href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
-                                aria-label={`Open Quote ${job.job_reference}`}
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                          </>
-                        ) : null}
-                        {job.source_type !== 'sample' ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
-                            onClick={() => setPendingRemoveJob(job)}
-                            aria-label={`Remove ${job.job_reference}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => { setEditingJob(job); setJobDialogOpen(true); }}
-                          aria-label={`Edit ${job.job_reference}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <ScheduledJobActions
+                          job={job}
+                          visitDate={
+                            view === SCHEDULING_BOARD_VIEWS.daily
+                              ? selectedDate
+                              : undefined
+                          }
+                          isMobile
+                          isCrewOfferPending={pendingCrewOfferJobIds.has(job.id)}
+                          onAddVisit={() => openVisitEditor(job, selectedDate)}
+                          onEdit={() => {
+                            setEditingJob(job);
+                            setJobDialogOpen(true);
+                          }}
+                          onRemove={() => setPendingRemoveJob(job)}
+                          onReschedule={() => openQuoteScheduler(job)}
+                          onToggleCrewOffer={() => void toggleCrewOffer(job)}
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -2527,14 +3404,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                   {format(parseISO(date), 'EEEE d MMM')}
                                 </span>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => openVisitEditor(job, date)}
-                                className="flex items-center gap-1 text-xs font-medium text-scheduling"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                                Add visit
-                              </button>
+                              {view === SCHEDULING_BOARD_VIEWS.weekly ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className={cn('h-11 w-11 p-0', schedulingControlStyles.ghost)}
+                                  onClick={() => openVisitEditor(job, date)}
+                                  aria-label={`Add Additional Visit to ${job.job_reference} on ${date}`}
+                                  title="Add Additional Visit"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              ) : null}
                             </div>
                             <div className="space-y-1">
                               {assignmentsFor(job.id, date).filter((assignment) => !assignment.visit_id).map((assignment) => (
@@ -2583,28 +3465,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     </p>
                     <p className="mt-1 text-sm">
                       {!hasActiveJobFilters
-                        ? `Add a job that overlaps this ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}, or choose another ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}.`
+                        ? `Use Resources > Jobs for queued Quotes, add a Project job, or choose another ${view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week'}.`
                         : 'Clear or change the job filters to see more results.'}
                     </p>
                   </div>
-                  {!hasActiveJobFilters ? (
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Button onClick={() => openQuoteScheduler()}>
-                        <CalendarPlus className="mr-2 h-4 w-4" />
-                        Schedule a Quote
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setEditingJob(null);
-                          setJobDialogOpen(true);
-                        }}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Project job
-                      </Button>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
             </CardContent>
@@ -2652,16 +3516,92 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         defaultDate={weekDates[0] || board.week.start}
         onSaved={() => void refresh()}
       />
-      <ScheduleQuoteDialog
-        open={quoteDialogOpen}
-        onOpenChange={setQuoteDialogOpen}
-        job={schedulingQuoteJob}
-        defaultDate={selectedDate}
+      {schedulingQuoteJob ? (
+        <ScheduleQuoteDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSchedulingQuoteJob(null);
+          }}
+          job={schedulingQuoteJob}
+          onSaved={() => {
+            void Promise.all([
+              refresh(),
+              queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
+            ]);
+          }}
+        />
+      ) : null}
+      <ScheduleProjectPlacementDialog
+        project={projectPlacement?.project || null}
+        date={projectPlacement?.date || selectedDate}
+        initialVisit={projectPlacement?.initialVisit}
+        onClose={() => setProjectPlacement(null)}
         onSaved={() => {
+          setSelectedQuote(null);
           void Promise.all([
             refresh(),
-            queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
+            queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] }),
           ]);
+        }}
+      />
+      <QuoteCreationHost
+        open={quoteCreationOpen}
+        onClose={() => setQuoteCreationOpen(false)}
+        onCreated={async (quote) => {
+          await queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] });
+          setQuoteStage(SCHEDULE_QUOTE_STAGES.draft);
+          setSelectedQuote({
+            kind: 'quote',
+            id: quote.id,
+            quote_reference: quote.quote_reference,
+            base_quote_reference: quote.base_quote_reference || quote.quote_reference,
+            title: quote.subject_line || quote.project_description || 'Quoted work',
+            customer_name: quote.customer?.company_name || null,
+            status: 'draft',
+            start_date: null,
+            end_date: null,
+            estimated_duration_days: quote.estimated_duration_days || null,
+            estimated_duration_minutes: null,
+          });
+        }}
+      />
+      {quotesSensitiveAccess.canAccess ? (
+        <SensitiveModuleSessionManager moduleLabel="Quotes" access={quotesSensitiveAccess} />
+      ) : null}
+      {pendingCreationKind && !quotesSensitiveAccess.canAccess ? (
+        <div className="fixed inset-0 z-[190] overflow-y-auto bg-slate-950/95">
+          <SensitiveModuleGate moduleLabel="Quotes" access={quotesSensitiveAccess} />
+        </div>
+      ) : null}
+      <ProjectNumberFormDialog
+        open={projectCreationOpen}
+        managerOptions={quoteManagerOptions}
+        onClose={() => setProjectCreationOpen(false)}
+        onCreated={async (project: QuoteProjectNumber) => {
+          await queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
+          setQuoteStage('projects');
+          setSelectedQuote({
+            kind: 'project',
+            id: project.id,
+            quote_reference: project.project_reference,
+            base_quote_reference: project.project_reference,
+            title: project.title,
+            customer_name: null,
+            status: 'Project',
+            start_date: null,
+            end_date: null,
+            estimated_duration_days: 1,
+            estimated_duration_minutes: 180,
+            project: {
+              id: project.id,
+              project_reference: project.project_reference,
+              manager_profile_id: project.manager_profile_id,
+              requester_initials: project.requester_initials,
+              title: project.title,
+              description: project.description,
+              status: 'open',
+            },
+          });
         }}
       />
       <PlantUnavailabilityDialog
@@ -2695,11 +3635,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             ))}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep current schedule</AlertDialogCancel>
+            <AlertDialogCancel className={schedulingControlStyles.outline}>Keep current schedule</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void overridePendingConflict()}
               disabled={isAssigning}
-              className="bg-amber-600 text-white hover:bg-amber-500"
+              className={schedulingControlStyles.warning}
             >
               Assign anyway
             </AlertDialogAction>
@@ -2726,9 +3666,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRemovingJob}>Keep job</AlertDialogCancel>
+            <AlertDialogCancel className={schedulingControlStyles.outline} disabled={isRemovingJob}>Keep job</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 text-white hover:bg-red-500"
+              className={schedulingControlStyles.danger}
               onClick={() => void handleRemoveJob()}
               disabled={isRemovingJob}
             >
@@ -2749,9 +3689,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className={schedulingControlStyles.outline}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 text-white hover:bg-red-500"
+              className={schedulingControlStyles.danger}
               onClick={() => {
                 if (!pendingDeleteAssignment) return;
                 void handleDeleteAssignment(pendingDeleteAssignment).finally(() =>

@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { loadTagsForScheduleJob } from '@/lib/server/scheduling-tags';
 import type { Database } from '@/types/database';
 import type {
   QuoteOverviewDetailPayload,
@@ -898,6 +899,29 @@ export async function getQuoteOverviewDetail(
 
   const labourRows = getLabourRowsForReferences(sources.labourRowsByReference, record.sourceReferences);
   const invoices = getInvoicesForQuoteIds(sources.invoicesByQuoteId, record.quoteIds);
+  let scheduleJob: QuoteOverviewDetailPayload['schedule_job'] = null;
+  const scheduleJobFilters = [
+    record.quote?.id ? { column: 'quote_id', value: record.quote.id } : null,
+    record.project?.id
+      ? { column: 'quote_project_number_id', value: record.project.id }
+      : null,
+  ].filter((filter): filter is { column: string; value: string } => Boolean(filter));
+  for (const filter of scheduleJobFilters) {
+    const scheduleJobResult = await admin
+      .from('schedule_jobs')
+      .select('id, is_drop_on_ready')
+      .eq(filter.column, filter.value)
+      .maybeSingle();
+    if (scheduleJobResult.error) throw scheduleJobResult.error;
+    if (scheduleJobResult.data) {
+      scheduleJob = {
+        id: scheduleJobResult.data.id,
+        is_drop_on_ready: scheduleJobResult.data.is_drop_on_ready === true,
+        tags: await loadTagsForScheduleJob(admin, scheduleJobResult.data.id),
+      };
+      break;
+    }
+  }
 
   return {
     item: record.item,
@@ -914,5 +938,6 @@ export async function getQuoteOverviewDetail(
       invoicesByQuoteId: sources.invoicesByQuoteId,
       labourRowsByReference: sources.labourRowsByReference,
     }),
+    schedule_job: scheduleJob,
   };
 }

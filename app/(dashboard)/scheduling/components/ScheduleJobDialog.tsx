@@ -30,6 +30,7 @@ import type {
   ScheduleJobTag,
   ScheduleProjectCandidate,
 } from '@/types/scheduling';
+import { schedulingControlStyles } from './scheduling-control-styles';
 
 interface ScheduleJobDialogProps {
   open: boolean;
@@ -312,6 +313,8 @@ export function ScheduleJobDialog({
     }
   }
 
+  if (!job) return null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border">
@@ -561,7 +564,7 @@ export function ScheduleJobDialog({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Operational classification</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tags and drop-on readiness can be updated here for both Project and Quote jobs.
+                Tags and crew-offer availability can be updated here for both Project and Quote jobs.
               </p>
             </div>
             <label
@@ -572,11 +575,14 @@ export function ScheduleJobDialog({
                 id="schedule-job-drop-on-ready"
                 checked={isDropOnReady}
                 onCheckedChange={(checked) => setIsDropOnReady(checked === true)}
+                className={schedulingControlStyles.checkbox}
               />
               <span>
-                <span className="block text-sm font-medium text-foreground">Ready for drop-on</span>
+                <span className="block text-sm font-medium text-foreground">
+                  Offer if crew finishes early
+                </span>
                 <span className="block text-xs text-muted-foreground">
-                  Crews finishing early can be offered this job.
+                  Makes this scheduled job available to offer when a crew finishes its planned work early.
                 </span>
               </span>
             </label>
@@ -602,6 +608,7 @@ export function ScheduleJobDialog({
                                 : current.filter((id) => id !== tag.id)
                             )
                           }
+                          className={schedulingControlStyles.checkbox}
                         />
                         <span className="text-sm text-foreground">{tag.name}</span>
                       </label>
@@ -626,6 +633,7 @@ export function ScheduleJobDialog({
                 <Button
                   type="button"
                   variant="outline"
+                  className={schedulingControlStyles.outline}
                   onClick={() => void handleCreateTag()}
                   disabled={!newTagName.trim() || isCreatingTag}
                 >
@@ -638,9 +646,9 @@ export function ScheduleJobDialog({
 
           <DialogFooter className="gap-2">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
               {isQuoteJob && job ? (
-                <Button asChild variant="outline">
+                <Button asChild variant="outline" className={schedulingControlStyles.outline}>
                   <Link href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}>
                     <ExternalLink className="mr-2 h-4 w-4" />
                     Open Quote
@@ -648,7 +656,7 @@ export function ScheduleJobDialog({
                 </Button>
               ) : null}
               {isProjectJob ? (
-                <Button asChild variant="outline">
+                <Button asChild variant="outline" className={schedulingControlStyles.outline}>
                   <Link href="/quotes?tab=projects">
                     <ExternalLink className="mr-2 h-4 w-4" />
                     Open Projects
@@ -665,7 +673,7 @@ export function ScheduleJobDialog({
                   || (!job && projectMode === 'new' && (!managerProfileId || !title.trim()))
                   || (!job && projectMode === 'existing' && !projectNumberId)
                 }
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                className={schedulingControlStyles.primary}
               >
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {isQuoteJob

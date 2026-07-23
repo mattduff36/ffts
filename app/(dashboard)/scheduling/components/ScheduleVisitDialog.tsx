@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { deleteScheduleVisit, saveScheduleVisit } from '@/lib/client/scheduling';
 import type { ScheduleJob, ScheduleVisit, ScheduleVisitStatus } from '@/types/scheduling';
+import { schedulingControlStyles } from './scheduling-control-styles';
 
 interface ScheduleVisitDialogProps {
   open: boolean;
@@ -180,15 +181,15 @@ export function ScheduleVisitDialog({
                 type="button"
                 variant="outline"
                 onClick={() => setDeleteOpen(true)}
-                className="border-red-500/40 text-red-300 hover:bg-red-500/10"
+                className={schedulingControlStyles.danger}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </Button>
             ) : <span />}
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+              <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="button" className={schedulingControlStyles.primary} disabled={saving} onClick={() => void handleSave()}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save visit
               </Button>
@@ -206,10 +207,10 @@ export function ScheduleVisitDialog({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className={schedulingControlStyles.outline}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void handleDelete()}
-              className="bg-red-600 text-white hover:bg-red-500"
+              className={schedulingControlStyles.danger}
             >
               Delete visit
             </AlertDialogAction>

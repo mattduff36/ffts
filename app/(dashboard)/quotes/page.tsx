@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { QuotesTable } from './components/QuotesTable';
 import type { QuoteSettingsSubTab } from './components/settings/QuoteSettingsTab';
-import { uploadQuoteAttachment } from './quote-attachment-client';
+import { buildQuoteCreatePayload, uploadClientQuoteAttachments } from './quote-creation-client';
 import { getQuoteManagerNameFilterValue, normalizeQuoteManagerName } from './types';
 import type { LegacyQuote, Quote, QuoteFormData, QuoteManagerOption, QuoteProjectNumber } from './types';
 import type { LegacyQuoteEditForm } from './components/LegacyQuotesTable';
@@ -127,22 +127,6 @@ function buildFormRequestError(payload: { error?: string; field_errors?: Record<
 async function buildResponseError(response: Response, fallback: string) {
   const payload = await response.json().catch(() => null) as { error?: string } | null;
   return createStatusError(payload?.error || fallback, response.status, payload);
-}
-
-function buildQuotePayload(data: QuoteFormData) {
-  const { attachment_files: _attachmentFiles, ...payload } = data;
-  return payload;
-}
-
-async function uploadClientQuoteAttachments(quoteId: string, files?: File[]) {
-  if (!files?.length) return;
-
-  await Promise.all(files.map(file => uploadQuoteAttachment({
-    quoteId,
-    file,
-    isClientVisible: true,
-    attachmentPurpose: 'client_pricing',
-  })));
 }
 
 function getCompactManagerLabel(label: string) {
@@ -569,7 +553,7 @@ export default function QuotesPage() {
     const res = await fetch('/api/quotes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildQuotePayload(data)),
+      body: JSON.stringify(buildQuoteCreatePayload(data)),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -586,7 +570,7 @@ export default function QuotesPage() {
     const res = await fetch(`/api/quotes/${editingQuote.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildQuotePayload(data)),
+      body: JSON.stringify(buildQuoteCreatePayload(data)),
     });
     if (!res.ok) {
       const err = await res.json();

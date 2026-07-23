@@ -570,11 +570,51 @@ html[data-display-board-text-size="5"] {
   border-color: rgba(220, 38, 38, 0.3) !important;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #f1f1f1; }
-::-webkit-scrollbar-thumb { background: #F1D64A; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #d1b82f; }
+/* Subtle native scrollbars across viewport and nested scroll surfaces. */
+:where(*, .scrollbar-subtle) {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: hsl(var(--muted-foreground) / 0.6);
+}
+
+@media (forced-colors: active) {
+  :where(*, .scrollbar-subtle) {
+    scrollbar-color: auto;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: Canvas;
+  }
+
+  ::-webkit-scrollbar-thumb,
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background: ButtonText;
+  }
+}
 
 .scrollbar-hidden {
   -ms-overflow-style: none;

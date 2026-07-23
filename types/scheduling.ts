@@ -63,6 +63,7 @@ export interface ScheduleQuoteCandidate {
   start_date: string | null;
   end_date: string | null;
   estimated_duration_days: number | null;
+  estimated_duration_minutes?: number | null;
 }
 
 export interface ScheduleProjectCandidate {
@@ -74,6 +75,23 @@ export interface ScheduleProjectCandidate {
   description: string | null;
   status: 'open';
 }
+
+export type SchedulingQueueItem =
+  | ({ kind: 'quote' } & ScheduleQuoteCandidate)
+  | {
+      kind: 'project';
+      id: string;
+      quote_reference: string;
+      base_quote_reference: string;
+      title: string;
+      customer_name: null;
+      status: 'Project';
+      start_date: null;
+      end_date: null;
+      estimated_duration_days: 1;
+      estimated_duration_minutes: 180;
+      project: ScheduleProjectCandidate;
+    };
 
 export interface ScheduleVisit {
   id: string;

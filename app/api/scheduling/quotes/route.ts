@@ -11,6 +11,10 @@ const scheduleQuoteSchema = z
     quote_id: z.uuid(),
     start_date: z.iso.date(),
     end_date: z.iso.date(),
+    initial_visit: z.object({
+      starts_at: z.iso.datetime(),
+      ends_at: z.iso.datetime(),
+    }).optional(),
   })
   .refine((value) => value.end_date >= value.start_date, {
     message: 'End date must be on or after the start date.',
@@ -52,6 +56,10 @@ function mapQuoteCandidate(row: Record<string, unknown>): ScheduleQuoteCandidate
         ? format(addDays(parseISO(startDate), (estimatedDays || 1) - 1), 'yyyy-MM-dd')
         : null,
     estimated_duration_days: estimatedDays,
+    estimated_duration_minutes:
+      typeof row.estimated_duration_minutes === 'number'
+        ? row.estimated_duration_minutes
+        : null,
   };
 }
 
@@ -74,6 +82,7 @@ export async function GET() {
         status,
         start_date,
         estimated_duration_days,
+        estimated_duration_minutes,
         customer:customers(company_name)
       `)
       .eq('is_latest_version', true)
@@ -118,6 +127,7 @@ export async function POST(request: NextRequest) {
         is_latest_version,
         commercial_status,
         start_date
+        , estimated_duration_minutes
       `)
       .eq('id', parsed.data.quote_id)
       .maybeSingle();
@@ -140,6 +150,32 @@ export async function POST(request: NextRequest) {
         parseISO(parsed.data.end_date),
         parseISO(parsed.data.start_date)
       ) + 1;
+    if (parsed.data.initial_visit) {
+      const startsAt = new Date(parsed.data.initial_visit.starts_at);
+      const endsAt = new Date(parsed.data.initial_visit.ends_at);
+      const durationMinutes = (endsAt.getTime() - startsAt.getTime()) / 60_000;
+      const authoritativeDuration = Math.min(
+        Math.max(Number(quoteResult.data.estimated_duration_minutes) || 180, 30),
+        180
+      );
+      if (
+        !Number.isFinite(durationMinutes)
+        || durationMinutes < 30
+        || durationMinutes > authoritativeDuration
+      ) {
+        return NextResponse.json({ error: 'Invalid initial visit duration.' }, { status: 400 });
+      }
+      const rpcResult = await admin.rpc('schedule_quote_with_initial_visit', {
+        p_quote_id: parsed.data.quote_id,
+        p_start_date: parsed.data.start_date,
+        p_end_date: parsed.data.end_date,
+        p_visit_starts_at: parsed.data.initial_visit.starts_at,
+        p_visit_ends_at: parsed.data.initial_visit.ends_at,
+        p_actor_user_id: access.userId,
+      });
+      if (rpcResult.error) throw rpcResult.error;
+      return NextResponse.json(rpcResult.data);
+    }
     const updateResult = await admin
       .from('quotes')
       .update({

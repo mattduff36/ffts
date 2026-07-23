@@ -78,6 +78,10 @@ export interface CreateProjectScheduleJobInput {
   estimated_duration_minutes?: number | null;
   is_drop_on_ready: boolean;
   tag_ids: string[];
+  initial_visit?: {
+    starts_at: string;
+    ends_at: string;
+  };
 }
 
 export async function createProjectScheduleJob(
@@ -126,6 +130,10 @@ export async function saveQuoteSchedule(input: {
   quote_id: string;
   start_date: string;
   end_date: string;
+  initial_visit?: {
+    starts_at: string;
+    ends_at: string;
+  };
 }): Promise<ScheduleJob> {
   const response = await fetch('/api/scheduling/quotes', {
     method: 'POST',

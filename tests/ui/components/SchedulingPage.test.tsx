@@ -84,7 +84,12 @@ describe('SchedulingPage access states', () => {
     expect(
       await screen.findByText('Scheduling access could not be checked')
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass(
+      'bg-[#0f172a]',
+      'text-[#f1f5f9]',
+      'hover:bg-[#334155]',
+      'hover:text-[#ffffff]'
+    );
   });
 
   it('explains insufficient manager-level scheduling access', async () => {

@@ -1,5 +1,22 @@
 [
   {
+    "version": "0726.9.0",
+    "updateKind": "major",
+    "title": "App screens update",
+    "description": "Updated app screens.",
+    "summary": "Updated app screens.",
+    "details": [
+      "Updated app screens, with changes to app screens."
+    ],
+    "areas": [
+      "App screens"
+    ],
+    "areaKeys": [
+      "app-screens"
+    ],
+    "pushedAt": "2026-07-23T16:53:49.824Z"
+  },
+  {
     "version": "0726.8.0",
     "updateKind": "major",
     "title": "Quotes update",

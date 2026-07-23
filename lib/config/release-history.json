@@ -1,5 +1,37 @@
 [
   {
+    "version": "0726.10.0",
+    "updateKind": "major",
+    "title": "Debug tools update",
+    "description": "Updated Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ.",
+    "summary": "Updated Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ.",
+    "details": [
+      "Updated Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ, with changes to background routes, app screens, automated tests, and data storage.",
+      "Updated fleet, with changes to app screens, shared logic, automation scripts, automated tests, and documentation.",
+      "Updated inventory, with changes to shared logic, automation scripts, automated tests, and documentation.",
+      "Updated projects, with changes to background routes, automated tests, and data storage.",
+      "Updated data storage, with changes to shared logic, shared typing, automated tests, and data storage.",
+      "Updated help and FAQ, with changes to app screens and documentation."
+    ],
+    "areas": [
+      "Debug tools",
+      "Fleet",
+      "Data storage",
+      "Projects",
+      "Inventory",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "debug",
+      "fleet",
+      "data-storage",
+      "projects",
+      "inventory"
+    ],
+    "pushedAt": "2026-07-23T20:04:00.298Z"
+  },
+  {
     "version": "0726.9.0",
     "updateKind": "major",
     "title": "App screens update",

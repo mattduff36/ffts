@@ -2,6 +2,28 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0726.10.0
+
+**GIT COMMIT MESSAGE**
+`feat(debug): update Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ`
+
+**PUSHED AT**
+2026-07-23T20:04:00.298Z
+
+**WHAT CHANGED**
+Update Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ, with changes to background routes, app screens, automated tests, and data storage.
+- Updated fleet, with changes to app screens, shared logic, automation scripts, automated tests, and documentation.
+- Updated inventory, with changes to shared logic, automation scripts, automated tests, and documentation.
+- Updated projects, with changes to background routes, automated tests, and data storage.
+- Updated data storage, with changes to shared logic, shared typing, automated tests, and data storage.
+- Updated help and FAQ, with changes to app screens and documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(debug): update Debug tools, Fleet, Data storage, Projects, Inventory, and Help and FAQ`
+
 ## 0726.9.0
 
 **GIT COMMIT MESSAGE**

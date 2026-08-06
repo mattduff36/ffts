@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.1.0
+
+**GIT COMMIT MESSAGE**
+`feat(components): update app screens`
+
+**PUSHED AT**
+2026-08-06T21:49:03.159Z
+
+**WHAT CHANGED**
+Update app screens.
+
+**VERSION HISTORY DETAILS**
+- Updated app screens, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `feat(components): update app screens`
+
 ## 0826.0.0
 
 **GIT COMMIT MESSAGE**

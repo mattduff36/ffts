@@ -1,5 +1,25 @@
 [
   {
+    "version": "0826.0.0",
+    "updateKind": "minor",
+    "title": "Quotes update",
+    "description": "Updated Quotes and Projects.",
+    "summary": "Updated Quotes and Projects.",
+    "details": [
+      "Updated Quotes and Projects, with changes to app screens, shared logic, and automated tests.",
+      "Updated projects, with changes to app screens."
+    ],
+    "areas": [
+      "Quotes",
+      "Projects"
+    ],
+    "areaKeys": [
+      "quotes",
+      "projects"
+    ],
+    "pushedAt": "2026-08-06T13:58:10.834Z"
+  },
+  {
     "version": "0726.11.0",
     "updateKind": "major",
     "title": "Quotes update",

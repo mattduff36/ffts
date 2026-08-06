@@ -1109,7 +1109,7 @@ describe('SchedulingManagerBoard', () => {
 
     await waitFor(() => expect(timelineContent).toHaveStyle({ width: '2400px' }));
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'fit');
-    expect(dailyTimeline).toHaveClass('overflow-x-hidden');
+    expect(dailyTimeline).toHaveClass('overflow-x-hidden', 'overflow-y-hidden');
     expect(dailyTimeline).not.toHaveClass('overflow-x-auto');
     expect(timelineHeader).toHaveAttribute('data-hour-width', '144');
     expect(timelineHeader).toHaveStyle({ width: '2160px' });
@@ -1125,7 +1125,7 @@ describe('SchedulingManagerBoard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Scroll' }));
 
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll');
-    expect(dailyTimeline).toHaveClass('overflow-x-auto');
+    expect(dailyTimeline).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
     expect(dailyTimeline).not.toHaveClass('overflow-x-hidden');
     expect(timelineContent).toHaveStyle({ width: '1680px' });
     expect(timelineHeader).toHaveAttribute('data-hour-width', '96');
@@ -1148,7 +1148,7 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll');
     expect(dailyTimeline).not.toHaveClass('scrollbar-hidden');
-    expect(dailyTimeline).toHaveClass('overflow-x-auto');
+    expect(dailyTimeline).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
     expect(dailyTimeline).toHaveClass('[scrollbar-width:thin]');
     expect(screen.getByTestId('schedule-daily-timeline-content')).toHaveStyle({
       width: '1680px',

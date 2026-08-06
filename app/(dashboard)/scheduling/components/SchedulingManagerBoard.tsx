@@ -3067,7 +3067,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden rounded-lg border border-border overscroll-x-contain md:block',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:block',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily

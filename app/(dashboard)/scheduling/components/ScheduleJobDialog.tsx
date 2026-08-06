@@ -360,7 +360,11 @@ export function ScheduleJobDialog({
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="schedule-project-manager">Manager *</Label>
-                    <Select value={managerProfileId} onValueChange={setManagerProfileId}>
+                    <Select
+                      value={managerProfileId}
+                      onValueChange={setManagerProfileId}
+                      disabled={managerOptions.length === 0}
+                    >
                       <SelectTrigger id="schedule-project-manager">
                         <SelectValue placeholder="Select manager" />
                       </SelectTrigger>
@@ -372,6 +376,11 @@ export function ScheduleJobDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!projectOptionsError && managerOptions.length === 0 ? (
+                      <p className="text-sm text-amber-300">
+                        No active quote managers are configured. Add them in Quotes → Settings → Managers, then try again.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="schedule-project-title">Project title *</Label>

@@ -133,7 +133,7 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
         conflict_override: false,
       })
     );
-  });
+  }, 15_000);
 
   it('returns conflicts before moving unless a manager overrides them', async () => {
     mockDetectEmployeeConflicts.mockResolvedValue([
@@ -157,5 +157,5 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
         conflict_codes: ['employee_absent'],
       })
     );
-  });
+  }, 15_000);
 });

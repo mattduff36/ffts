@@ -21,6 +21,7 @@ interface ProjectNumberForm {
 interface ProjectNumberFormDialogProps {
   open: boolean;
   managerOptions: QuoteManagerOption[];
+  managerLoadError?: string | null;
   onClose: () => void;
   onCreated: (project: QuoteProjectNumber) => void | Promise<void>;
 }
@@ -35,11 +36,13 @@ const EMPTY_FORM: ProjectNumberForm = {
 export function ProjectNumberFormDialog({
   open,
   managerOptions,
+  managerLoadError = null,
   onClose,
   onCreated,
 }: ProjectNumberFormDialogProps) {
   const [form, setForm] = useState<ProjectNumberForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const activeManagerOptions = managerOptions.filter((option) => option.is_active);
   const guard = useDirtyDialogGuard({
     isDirty: Object.values(form).some(Boolean),
     disabled: saving,
@@ -88,16 +91,24 @@ export function ProjectNumberFormDialog({
             <Select
               value={form.manager_profile_id}
               onValueChange={(value) => setForm((current) => ({ ...current, manager_profile_id: value }))}
+              disabled={activeManagerOptions.length === 0}
             >
               <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
               <SelectContent>
-                {managerOptions.filter((option) => option.is_active).map((option) => (
+                {activeManagerOptions.map((option) => (
                   <SelectItem key={option.profile_id} value={option.profile_id}>
                     {option.profile?.full_name || option.signoff_name || option.initials}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {managerLoadError ? (
+              <p role="alert" className="text-sm text-amber-300">{managerLoadError}</p>
+            ) : activeManagerOptions.length === 0 ? (
+              <p className="text-sm text-amber-300">
+                No active quote managers are configured. Add them in Quotes → Settings → Managers, then try again.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="project-number-title">Title *</Label>

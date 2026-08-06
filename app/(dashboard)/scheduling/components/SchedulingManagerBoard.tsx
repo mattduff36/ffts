@@ -1639,6 +1639,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [quoteCreationOpen, setQuoteCreationOpen] = useState(false);
   const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
+  const [quoteManagerOptionsError, setQuoteManagerOptionsError] = useState<string | null>(null);
   const [pendingCreationKind, setPendingCreationKind] = useState<'quote' | 'project' | null>(null);
 
   const weekStart = getSchedulingWeek(selectedDate).start;
@@ -1656,11 +1657,39 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   });
   useEffect(() => {
     if (!canCreateQuotes) return;
+    let cancelled = false;
     void fetch('/api/quotes/metadata')
-      .then((response) => response.json())
-      .then((payload) => setQuoteManagerOptions(payload.managerOptions || []))
-      .catch(() => setQuoteManagerOptions([]));
-  }, [canCreateQuotes]);
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          managerOptions?: QuoteManagerOption[];
+          error?: string;
+        };
+        if (cancelled) return;
+        if (!response.ok) {
+          setQuoteManagerOptions([]);
+          if (response.status === 428) {
+            setQuoteManagerOptionsError(
+              'Unlock the Quotes sensitive PIN to load quote managers.'
+            );
+            return;
+          }
+          setQuoteManagerOptionsError(
+            payload.error || 'Unable to load quote managers. Check Quotes access and try again.'
+          );
+          return;
+        }
+        setQuoteManagerOptions(payload.managerOptions || []);
+        setQuoteManagerOptionsError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setQuoteManagerOptions([]);
+        setQuoteManagerOptionsError('Unable to load quote managers. Check Quotes access and try again.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canCreateQuotes, quotesSensitiveAccess.canAccess]);
   useEffect(() => {
     if (!pendingCreationKind || !quotesSensitiveAccess.canAccess) return;
     if (pendingCreationKind === 'quote') setQuoteCreationOpen(true);
@@ -2636,6 +2665,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   <p className={RESOURCE_GUIDANCE_CLASS}>
                     Drag an unscheduled job onto a date, or select it and use a date&apos;s placement button.
                   </p>
+                  {quoteStage === SCHEDULE_QUOTE_STAGES.draft ? (
+                    <p className={RESOURCE_GUIDANCE_CLASS}>
+                      Draft quotes with a Start Date already appear on the calendar, not in this queue. Leave Start Date blank when creating a quote to keep it selectable here.
+                    </p>
+                  ) : null}
                   <Tabs
                     value={quoteStage}
                     onValueChange={(value) => setQuoteStage(value as ScheduleQuoteStage | 'projects')}
@@ -3576,6 +3610,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       <ProjectNumberFormDialog
         open={projectCreationOpen}
         managerOptions={quoteManagerOptions}
+        managerLoadError={quoteManagerOptionsError}
         onClose={() => setProjectCreationOpen(false)}
         onCreated={async (project: QuoteProjectNumber) => {
           await queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });

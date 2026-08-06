@@ -1188,6 +1188,32 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 </div>
               ) : null}
 
+              {isLatestVersion && ['draft', 'changes_requested', 'pending_internal_approval'].includes(quote.status) ? (
+                <div className="rounded-md border border-brand-yellow/30 bg-brand-yellow/10 px-3 py-3 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium text-brand-yellow">Next step: Confirm And Send</p>
+                      <p className="text-slate-300">
+                        Open the Workflow tab to confirm this quote and email the customer. Status will update to Confirmed.
+                      </p>
+                      {!recipientEmail ? (
+                        <p className="text-amber-300">
+                          Add a primary customer contact email before confirming and sending this quote.
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => setActiveTab('workflow')}
+                      className="shrink-0 bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Go to Workflow
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Customer</span>

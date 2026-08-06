@@ -9,44 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PanelLoader } from '@/components/ui/panel-loader';
 import { SearchInput } from '@/components/ui/search-input';
+import {
+  getDefaultQuotesOverviewDateRange,
+  readQuotesOverviewDateRange,
+  writeQuotesOverviewDateRange,
+} from '@/lib/config/quotes-overview-date-range';
 import { cn } from '@/lib/utils/cn';
 import { ArrowRight, CalendarDays, Clock, Coins, FileSearch, Receipt, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { QuoteOverviewItem, QuoteOverviewPayload, QuoteOverviewSummary } from '../overview-types';
-
-function formatDateInput(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getPreviousWeekBounds(): { monday: string; sunday: string } {
-  const today = new Date();
-  const daysSinceMonday = (today.getDay() + 6) % 7;
-  const currentWeekMonday = new Date(today);
-  currentWeekMonday.setHours(0, 0, 0, 0);
-  currentWeekMonday.setDate(today.getDate() - daysSinceMonday);
-
-  const previousWeekMonday = new Date(currentWeekMonday);
-  previousWeekMonday.setDate(currentWeekMonday.getDate() - 7);
-
-  const previousWeekSunday = new Date(previousWeekMonday);
-  previousWeekSunday.setDate(previousWeekMonday.getDate() + 6);
-
-  return {
-    monday: formatDateInput(previousWeekMonday),
-    sunday: formatDateInput(previousWeekSunday),
-  };
-}
-
-function getDefaultDateFrom(): string {
-  return getPreviousWeekBounds().monday;
-}
-
-function getDefaultDateTo(): string {
-  return getPreviousWeekBounds().sunday;
-}
 
 function formatCurrency(value: number): string {
   return `£${Number(value || 0).toLocaleString('en-GB', {
@@ -142,7 +113,11 @@ function RecentItemCard({ item, estimatedRate }: RecentItemCardProps) {
         </div>
         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-brand-yellow" />
       </div>
-      <div className="mt-auto grid grid-cols-2 gap-2 pt-3 text-sm">
+      <div className="mt-auto grid grid-cols-3 gap-2 pt-3 text-sm">
+        <div>
+          <p className="text-xs text-slate-500">Quoted</p>
+          <p className="font-semibold text-brand-yellow">{formatCurrency(item.quote_total)}</p>
+        </div>
         <div>
           <p className="text-xs text-slate-500">Invoices</p>
           <p className="font-semibold text-emerald-200">{formatCurrency(item.invoice_total)}</p>
@@ -220,7 +195,7 @@ function SearchResultsDropdown({
                   {item.customer_name || item.contact_name || 'No customer linked'} · {item.title}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {formatCurrency(item.invoice_total)} invoiced · {formatHours(item.worked_hours)} worked
+                  {formatCurrency(item.quote_total)} quoted · {formatCurrency(item.invoice_total)} invoiced · {formatHours(item.worked_hours)} worked
                   {estimatedRate > 0 ? ` · ${formatCurrency(getEstimatedValue(item.worked_hours, estimatedRate))} est.` : ''}
                 </p>
               </div>
@@ -280,21 +255,33 @@ export function QuotesOverviewTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
-  const [dateFrom, setDateFrom] = useState(getDefaultDateFrom);
-  const [dateTo, setDateTo] = useState(getDefaultDateTo);
+  const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null);
   const [estimatedRateInput, setEstimatedRateInput] = useState('');
   const estimatedRate = useMemo(() => Number(estimatedRateInput || 0), [estimatedRateInput]);
   const hasSearchQuery = search.trim().length > 0;
+  const dateFrom = dateRange?.from ?? '';
+  const dateTo = dateRange?.to ?? '';
 
   useEffect(() => {
+    setDateRange(readQuotesOverviewDateRange());
+  }, []);
+
+  useEffect(() => {
+    if (!dateRange) return;
+    writeQuotesOverviewDateRange(dateRange);
+  }, [dateRange]);
+
+  useEffect(() => {
+    if (!dateRange) return;
+
     const controller = new AbortController();
     const timeoutId = window.setTimeout(async () => {
       try {
         setLoading(true);
         const params = new URLSearchParams();
         if (search.trim()) params.set('search', search.trim());
-        if (dateFrom) params.set('date_from', dateFrom);
-        if (dateTo) params.set('date_to', dateTo);
+        if (dateRange.from) params.set('date_from', dateRange.from);
+        if (dateRange.to) params.set('date_to', dateRange.to);
 
         const response = await fetch(`/api/quotes/overview?${params.toString()}`, {
           signal: controller.signal,
@@ -315,7 +302,7 @@ export function QuotesOverviewTab() {
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [dateFrom, dateTo, search]);
+  }, [dateRange, search]);
 
   useEffect(() => {
     if (!searchDropdownOpen) return;
@@ -393,7 +380,13 @@ export function QuotesOverviewTab() {
                 id="quotes-overview-date-from"
                 type="date"
                 value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
+                onChange={(event) => {
+                  const from = event.target.value || getDefaultQuotesOverviewDateRange().from;
+                  setDateRange((current) => ({
+                    from,
+                    to: current?.to || getDefaultQuotesOverviewDateRange().to,
+                  }));
+                }}
                 className="border-slate-700 bg-slate-900 text-white lg:w-40"
               />
             </div>
@@ -403,7 +396,13 @@ export function QuotesOverviewTab() {
                 id="quotes-overview-date-to"
                 type="date"
                 value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
+                onChange={(event) => {
+                  const to = event.target.value || getDefaultQuotesOverviewDateRange().to;
+                  setDateRange((current) => ({
+                    from: current?.from || getDefaultQuotesOverviewDateRange().from,
+                    to,
+                  }));
+                }}
                 className="border-slate-700 bg-slate-900 text-white lg:w-40"
               />
             </div>
@@ -422,7 +421,7 @@ export function QuotesOverviewTab() {
             </div>
           </div>
 
-          {isInitialOverviewLoading ? (
+          {isInitialOverviewLoading || !dateRange ? (
             <PanelLoader message="Loading quotes overview..." className="py-10" />
           ) : dateRangeSummary ? (
             <DateRangeSummary summary={dateRangeSummary} estimatedRate={estimatedRate} />
@@ -436,7 +435,7 @@ export function QuotesOverviewTab() {
         </CardContent>
       </Card>
 
-      {!isInitialOverviewLoading ? (
+      {!isInitialOverviewLoading && dateRange ? (
         <Card className="border-slate-700 bg-slate-950">
           <CardHeader className="p-4 pb-3">
             <CardTitle className="flex items-center gap-2 text-lg text-white">

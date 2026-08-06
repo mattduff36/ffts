@@ -1371,6 +1371,9 @@ export function QuoteFormDialog({
                     onChange={e => updateField('start_date', e.target.value)}
                     className={getFieldClassName('start_date')}
                   />
+                  <p className="text-xs text-slate-400">
+                    If set, this quote appears on the scheduling board for that date and is removed from the unscheduled Draft queue. Leave blank to keep it selectable under Scheduling → Jobs → Draft.
+                  </p>
                   {renderFieldError('start_date')}
                 </div>
                 <div className="space-y-2">

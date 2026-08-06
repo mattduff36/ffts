@@ -1754,11 +1754,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     function updateViewportWidth(width: number) {
       if (width <= 0) return;
       setDailyTimelineViewportWidth(width);
-      if (!canFitDailyTimeline(width, dailyTimelineBaseRange)) {
-        setDailyTimelineMode((currentMode) =>
-          currentMode === 'fit' ? 'scroll' : currentMode
-        );
-      }
     }
 
     updateViewportWidth(timelineViewport.clientWidth);

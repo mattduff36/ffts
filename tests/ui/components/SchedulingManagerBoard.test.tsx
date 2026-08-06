@@ -1177,6 +1177,36 @@ describe('SchedulingManagerBoard', () => {
     });
   });
 
+  it('restores Fit after a narrow viewport becomes wide enough again', async () => {
+    prepareDailyBoard();
+    renderBoard();
+
+    const dailyTimeline = await screen.findByTestId('schedule-daily-timeline');
+    const timelineContent = screen.getByTestId('schedule-daily-timeline-content');
+    const fitButton = screen.getByRole('button', { name: 'Shrink to fit width' });
+    const scrollButton = screen.getByRole('button', { name: 'Scroll' });
+
+    await waitFor(() => expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'fit'));
+    expect(timelineContent).toHaveStyle({ width: '1800px' });
+
+    act(() => resizeTimelineViewport(1100));
+
+    await waitFor(() => expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll'));
+    expect(dailyTimeline).toHaveAttribute('data-fit-eligible', 'false');
+    expect(fitButton).toBeDisabled();
+    expect(scrollButton).toHaveAttribute('aria-pressed', 'true');
+    expect(timelineContent).toHaveStyle({ width: '1680px' });
+
+    act(() => resizeTimelineViewport(1800));
+
+    await waitFor(() => expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'fit'));
+    expect(dailyTimeline).toHaveAttribute('data-fit-eligible', 'true');
+    expect(fitButton).toBeEnabled();
+    expect(fitButton).toHaveAttribute('aria-pressed', 'true');
+    expect(scrollButton).toHaveAttribute('aria-pressed', 'false');
+    expect(timelineContent).toHaveStyle({ width: '1800px' });
+  });
+
   it('pans Scroll mode from empty timeline space without hijacking visit controls', async () => {
     timelineViewportWidth = 1100;
     const today = prepareDailyBoard();

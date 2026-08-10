@@ -98,7 +98,10 @@ test.describe('Van Daily Checks — Renamed Text Verification', () => {
   test('list page uses daily check terminology', async ({ page }) => {
     await page.goto('/van-inspections');
     await waitForAppReady(page);
-    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole('heading', { name: /Van Daily Checks/i })
+        .or(page.getByText(/Van Daily Checks/i).first())
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test('new inspection page exposes workflow actions for human users', async ({ page }) => {

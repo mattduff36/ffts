@@ -404,7 +404,6 @@ function DraggableResourceCard({
 
   return (
     <div
-      ref={ref}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
         'flex w-full items-stretch gap-1 rounded-lg transition',
@@ -415,7 +414,12 @@ function DraggableResourceCard({
       )}
     >
       <button
-        ref={handleRef}
+        ref={(node) => {
+          // Keep the draggable node and activation handle identical so pointer sensors
+          // receive events on the 44x44 touch target (Playwright + touch).
+          ref(node);
+          handleRef(node);
+        }}
         type="button"
         aria-label={`Drag ${resource.label} to a timed visit`}
         title="Drag to a timed visit"

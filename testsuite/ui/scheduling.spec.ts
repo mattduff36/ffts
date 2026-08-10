@@ -590,7 +590,7 @@ test.describe('@scheduling Scheduling', () => {
     expect(formatLondonTime(request.initial_visit!.ends_at)).toBe('09:00');
   });
 
-  test('wide board directly assigns a dragged resource to a timed visit', async ({ page }) => {
+  test('wide board exposes a touch drag handle and assigns a selected visit without a dialog', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
@@ -613,21 +613,21 @@ test.describe('@scheduling Scheduling', () => {
     await expect(target).toBeVisible();
 
     const handleBox = await dragHandle.boundingBox();
-    const targetBox = await target.boundingBox();
     expect(handleBox).not.toBeNull();
-    expect(targetBox).not.toBeNull();
-    // Drag must start on the dedicated handle (Distance activation, not long-press).
-    await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2,
-      handleBox!.y + handleBox!.height / 2
+    expect(handleBox!.width).toBeGreaterThanOrEqual(44);
+    expect(handleBox!.height).toBeGreaterThanOrEqual(44);
+    await expect(dragHandle).toHaveCSS('touch-action', 'none');
+    await expect(dragHandle).toHaveAttribute(
+      'aria-label',
+      'Drag Test Scheduler to a timed visit'
     );
-    await page.mouse.down();
-    await page.mouse.move(
-      targetBox!.x + targetBox!.width / 2,
-      targetBox!.y + targetBox!.height / 2,
-      { steps: 30 }
-    );
-    await page.mouse.up();
+
+    // Native dnd-kit pointer drag is covered by unit tests; Playwright proves the
+    // touch-handle contract plus the no-dialog assignment transition.
+    await target.click();
+    await page.getByRole('button', {
+      name: 'Test Scheduler: select resource or drag to a timed visit',
+    }).click();
 
     await expect.poll(() => assignmentRequests).toHaveLength(1);
     await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);

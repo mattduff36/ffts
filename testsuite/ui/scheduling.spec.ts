@@ -599,6 +599,9 @@ test.describe('@scheduling Scheduling', () => {
     const source = page.getByTestId(
       'schedule-resource-employee-22222222-2222-4222-8222-222222222222'
     );
+    const dragHandle = page.getByTestId(
+      'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
+    );
     const target = page
       .getByTestId(
         'schedule-cell-11111111-1111-4111-8111-111111111111-'
@@ -606,24 +609,24 @@ test.describe('@scheduling Scheduling', () => {
       )
       .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
     await expect(source).toBeVisible();
+    await expect(dragHandle).toBeVisible();
     await expect(target).toBeVisible();
 
-    const sourceBox = await source.boundingBox();
+    const handleBox = await dragHandle.boundingBox();
     const targetBox = await target.boundingBox();
-    expect(sourceBox).not.toBeNull();
+    expect(handleBox).not.toBeNull();
     expect(targetBox).not.toBeNull();
+    // Drag must start on the dedicated handle (Distance activation, not long-press).
     await page.mouse.move(
-      sourceBox!.x + sourceBox!.width / 2,
-      sourceBox!.y + sourceBox!.height / 2
+      handleBox!.x + handleBox!.width / 2,
+      handleBox!.y + handleBox!.height / 2
     );
     await page.mouse.down();
-    await page.waitForTimeout(200);
     await page.mouse.move(
       targetBox!.x + targetBox!.width / 2,
       targetBox!.y + targetBox!.height / 2,
       { steps: 30 }
     );
-    await page.waitForTimeout(500);
     await page.mouse.up();
 
     await expect.poll(() => assignmentRequests).toHaveLength(1);

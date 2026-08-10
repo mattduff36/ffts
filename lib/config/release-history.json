@@ -1,5 +1,24 @@
 [
   {
+    "version": "0826.3.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Stabilize scheduling handle and van daily-check E2E. Start wide-board E2E drag from resource handle. Add Schedule Board Quick add and touch-first assignment.",
+    "summary": "Stabilize scheduling handle and van daily-check E2E. Start wide-board E2E drag from resource handle. Add Schedule Board Quick add and touch-first assignment.",
+    "details": [
+      "Updated data storage, with changes to shared typing, automated tests, and data storage.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated projects, with changes to automated tests.",
+      "Updated daily tasks, with changes to automated tests."
+    ],
+    "areas": [
+      "Stabilize scheduling handle",
+      "Touch-first assignment"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-08-10T22:10:32.428Z"
+  },
+  {
     "version": "0826.2.0",
     "updateKind": "major",
     "title": "App screens update",

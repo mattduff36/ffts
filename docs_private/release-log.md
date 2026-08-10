@@ -2,6 +2,28 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.3.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): add Schedule Board Quick add and touch-first assignment`
+
+**PUSHED AT**
+2026-08-10T22:10:32.428Z
+
+**WHAT CHANGED**
+Stabilize scheduling handle and van daily-check E2E. Start wide-board E2E drag from resource handle. Add Schedule Board Quick add and touch-first assignment.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to shared typing, automated tests, and data storage.
+- Updated help and FAQ, with changes to documentation.
+- Updated projects, with changes to automated tests.
+- Updated daily tasks, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(testsuite): stabilize scheduling handle and van daily-check E2E`
+- `fix(scheduling): start wide-board E2E drag from resource handle`
+- `feat(scheduling): add Schedule Board Quick add and touch-first assignment`
+
 ## 0826.2.0
 
 **GIT COMMIT MESSAGE**

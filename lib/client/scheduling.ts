@@ -1,5 +1,6 @@
 import type {
   ScheduleAssignment,
+  ScheduleDayCapacity,
   ScheduleJob,
   ScheduleJobTag,
   ScheduleProjectCandidate,
@@ -95,6 +96,58 @@ export async function createProjectScheduleJob(
   return (await readResponse<{ job: ScheduleJob }>(response)).job;
 }
 
+export interface QuickAddScheduleProjectInput {
+  request_id: string;
+  manager_profile_id: string;
+  project_title: string;
+  project_description?: string | null;
+  project_notes?: string | null;
+  customer_id: string;
+  customer_site_id?: string | null;
+  site_address?: string | null;
+  start_date: string;
+  end_date?: string;
+  estimated_duration_minutes?: number | null;
+  is_drop_on_ready?: boolean;
+  tag_ids?: string[];
+  initial_visit: {
+    starts_at: string;
+    ends_at: string;
+  };
+}
+
+export interface QuickAddScheduleProjectResult {
+  job: ScheduleJob;
+  visit: ScheduleVisit;
+  project_number_id: string;
+  project_reference: string;
+  was_project_created: boolean;
+}
+
+export async function quickAddScheduleProject(
+  input: QuickAddScheduleProjectInput
+): Promise<QuickAddScheduleProjectResult> {
+  const response = await fetch('/api/scheduling/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'quick_add',
+      status: 'scheduled',
+      is_drop_on_ready: false,
+      tag_ids: [],
+      ...input,
+    }),
+  });
+  return readResponse<QuickAddScheduleProjectResult>(response);
+}
+
+export interface AssignmentMutationResult {
+  assignments?: Array<Record<string, unknown>>;
+  assignment?: Record<string, unknown>;
+  employee_capacity?: ScheduleDayCapacity[];
+  success?: boolean;
+}
+
 export async function createScheduleJobTag(input: {
   name: string;
   color?: string;
@@ -181,8 +234,10 @@ export async function deleteScheduleVisit(id: string): Promise<void> {
   await readResponse(await fetch(`/api/scheduling/visits/${id}`, { method: 'DELETE' }));
 }
 
-export async function createScheduleAssignment(input: CreateAssignmentInput): Promise<void> {
-  await readResponse(
+export async function createScheduleAssignment(
+  input: CreateAssignmentInput
+): Promise<AssignmentMutationResult> {
+  return readResponse(
     await fetch('/api/scheduling/assignments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -195,8 +250,8 @@ export async function moveScheduleAssignment(
   assignment: Pick<ScheduleAssignment, 'id' | 'resource_type'>,
   visitId: string,
   overrideConflicts = false
-): Promise<void> {
-  await readResponse(
+): Promise<AssignmentMutationResult> {
+  return readResponse(
     await fetch(`/api/scheduling/assignments/${assignment.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -212,8 +267,8 @@ export async function moveScheduleAssignment(
 export async function deleteScheduleAssignment(
   id: string,
   resourceType: 'employee' | 'plant'
-): Promise<void> {
-  await readResponse(
+): Promise<AssignmentMutationResult> {
+  return readResponse(
     await fetch(
       `/api/scheduling/assignments/${id}?resource_type=${encodeURIComponent(resourceType)}`,
       { method: 'DELETE' }

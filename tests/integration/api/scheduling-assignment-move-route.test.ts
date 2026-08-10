@@ -6,11 +6,13 @@ vi.mock('server-only', () => ({}));
 const {
   mockAccess,
   mockDetectEmployeeConflicts,
-  mockUpdate,
+  mockRpc,
+  mockLoadCapacity,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
   mockDetectEmployeeConflicts: vi.fn(),
-  mockUpdate: vi.fn(),
+  mockRpc: vi.fn(),
+  mockLoadCapacity: vi.fn(),
 }));
 
 vi.mock('@/lib/server/scheduling-auth', () => ({
@@ -28,8 +30,13 @@ vi.mock('@/lib/server/scheduling-conflicts', async () => {
   };
 });
 
+vi.mock('@/lib/server/scheduling-assignment-capacity', () => ({
+  loadEmployeeCapacityForDates: mockLoadCapacity,
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
+    rpc: mockRpc,
     from: (table: string) => {
       if (table === 'schedule_employee_assignments') {
         return {
@@ -39,12 +46,12 @@ vi.mock('@/lib/supabase/admin', () => ({
                 data: {
                   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
                   profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  work_date: '2026-07-14',
                 },
                 error: null,
               }),
             }),
           }),
-          update: mockUpdate,
         };
       }
       if (table === 'schedule_visits') {
@@ -105,13 +112,27 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
       isManagerOrAdmin: true,
     });
     mockDetectEmployeeConflicts.mockResolvedValue([]);
-    mockUpdate.mockImplementation((values) => ({
-      eq: () => ({
-        select: () => ({
-          single: async () => ({ data: { ...values, id: 'assignment-1' }, error: null }),
-        }),
-      }),
-    }));
+    mockLoadCapacity.mockResolvedValue([]);
+    mockRpc.mockResolvedValue({
+      data: [{
+        assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        resource_type: 'employee',
+        job_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        work_date: '2026-07-14',
+        profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        plant_id: null,
+        notes: null,
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        created_at: '2026-07-14T08:00:00.000Z',
+        updated_at: '2026-07-14T13:00:00.000Z',
+      }],
+      error: null,
+    });
   });
 
   it('moves an assignment and excludes itself from overlap detection', async () => {
@@ -126,14 +147,15 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
         excludeAssignmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       })
     );
-    expect(mockUpdate).toHaveBeenCalledWith(
+    expect(mockRpc).toHaveBeenCalledWith(
+      'move_schedule_assignment_v1',
       expect.objectContaining({
-        job_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-        visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-        conflict_override: false,
+        p_assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        p_visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        p_override_conflicts: false,
       })
     );
-  }, 15_000);
+  });
 
   it('returns conflicts before moving unless a manager overrides them', async () => {
     mockDetectEmployeeConflicts.mockResolvedValue([
@@ -147,15 +169,37 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
 
     const blockedResponse = await PATCH(request(), params);
     expect(blockedResponse.status).toBe(409);
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+
+    mockRpc.mockResolvedValue({
+      data: [{
+        assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        resource_type: 'employee',
+        job_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        work_date: '2026-07-14',
+        profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        plant_id: null,
+        notes: null,
+        conflict_override: true,
+        conflict_codes: ['employee_absent'],
+        conflict_override_by: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        conflict_override_at: '2026-07-14T13:00:00.000Z',
+        assigned_by: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        created_at: '2026-07-14T08:00:00.000Z',
+        updated_at: '2026-07-14T13:00:00.000Z',
+      }],
+      error: null,
+    });
 
     const overrideResponse = await PATCH(request(true), params);
     expect(overrideResponse.status).toBe(200);
-    expect(mockUpdate).toHaveBeenCalledWith(
+    expect(mockRpc).toHaveBeenCalledWith(
+      'move_schedule_assignment_v1',
       expect.objectContaining({
-        conflict_override: true,
-        conflict_codes: ['employee_absent'],
+        p_override_conflicts: true,
+        p_conflict_codes: ['employee_absent'],
       })
     );
-  }, 15_000);
+  });
 });

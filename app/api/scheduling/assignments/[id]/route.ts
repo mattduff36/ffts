@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { loadEmployeeCapacityForDates } from '@/lib/server/scheduling-assignment-capacity';
 import {
   conflictCodes,
   detectEmployeeConflicts,
@@ -48,7 +49,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const [assignmentResult, visitResult] = await Promise.all([
       admin
         .from(table)
-        .select(`id, ${resourceColumn}`)
+        .select(`id, ${resourceColumn}, work_date`)
         .eq('id', id)
         .maybeSingle(),
       admin
@@ -85,6 +86,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       input.resource_type === 'employee'
         ? String((assignmentResult.data as { profile_id: string }).profile_id)
         : String((assignmentResult.data as { plant_id: string }).plant_id);
+    const previousWorkDate = String(
+      (assignmentResult.data as { work_date: string }).work_date
+    );
     const conflicts =
       input.resource_type === 'employee'
         ? await detectEmployeeConflicts(admin, {
@@ -112,33 +116,64 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const isOverridden = input.override_conflicts && conflicts.length > 0;
-    const { data, error } = await admin
-      .from(table)
-      .update({
-        job_id: job.id,
-        work_date: workDate,
-        visit_id: visit.id,
-        assigned_by: access.userId,
-        conflict_override: isOverridden,
-        conflict_codes: conflictCodes(conflicts),
-        conflict_override_by: isOverridden ? access.userId : null,
-        conflict_override_at: isOverridden ? new Date().toISOString() : null,
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    const { data: rows, error } = await admin.rpc('move_schedule_assignment_v1', {
+      p_assignment_id: id,
+      p_resource_type: input.resource_type,
+      p_visit_id: visit.id,
+      p_override_conflicts: input.override_conflicts,
+      p_conflict_codes: conflictCodes(conflicts),
+      p_actor_user_id: access.userId,
+    });
     if (error) {
-      if (error.code === '23505') {
+      if (error.code === '23505' || error.message.includes('RESOURCE_OVERLAP')) {
         return NextResponse.json(
-          { error: 'This resource is already assigned to the target visit.' },
+          {
+            error: 'This resource is already assigned to the target visit.',
+            conflicts_by_date: {
+              [workDate]: [{
+                code: input.resource_type === 'employee'
+                  ? 'employee_double_booked'
+                  : 'plant_double_booked',
+                severity: 'warning',
+                message: 'This resource is already assigned during an overlapping visit.',
+              }],
+            },
+          },
           { status: 409 }
         );
+      }
+      if (error.code === 'P0001') {
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
       throw error;
     }
 
-    return NextResponse.json({ assignment: data });
+    const moved = rows?.[0];
+    if (!moved) throw new Error('Assignment move returned no result.');
+    const capacity = await loadEmployeeCapacityForDates(
+      admin,
+      Array.from(new Set([previousWorkDate, workDate]))
+    );
+    return NextResponse.json({
+      assignment: {
+        id: moved.assignment_id,
+        job_id: moved.job_id,
+        work_date: moved.work_date,
+        visit_id: moved.visit_id,
+        notes: moved.notes,
+        conflict_override: moved.conflict_override,
+        conflict_codes: moved.conflict_codes,
+        conflict_override_by: moved.conflict_override_by,
+        conflict_override_at: moved.conflict_override_at,
+        assigned_by: moved.assigned_by,
+        created_at: moved.created_at,
+        updated_at: moved.updated_at,
+        ...(input.resource_type === 'employee'
+          ? { profile_id: moved.profile_id }
+          : { plant_id: moved.plant_id }),
+      },
+      employee_capacity: capacity,
+    });
   } catch (error) {
     console.error('Error moving scheduling assignment:', error);
     return NextResponse.json({ error: 'Unable to move this assignment.' }, { status: 500 });
@@ -157,11 +192,23 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'A valid resource type is required.' }, { status: 400 });
     }
     const { id } = await params;
+    const admin = createAdminClient();
     const table =
       resourceType === 'employee' ? 'schedule_employee_assignments' : 'schedule_plant_assignments';
-    const { error } = await createAdminClient().from(table).delete().eq('id', id);
+    const existing = await admin
+      .from(table)
+      .select('id, work_date')
+      .eq('id', id)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (!existing.data) {
+      return NextResponse.json({ error: 'Assignment not found.' }, { status: 404 });
+    }
+
+    const { error } = await admin.from(table).delete().eq('id', id);
     if (error) throw error;
-    return NextResponse.json({ success: true });
+    const capacity = await loadEmployeeCapacityForDates(admin, [String(existing.data.work_date)]);
+    return NextResponse.json({ success: true, employee_capacity: capacity });
   } catch (error) {
     console.error('Error deleting scheduling assignment:', error);
     return NextResponse.json({ error: 'Unable to remove this assignment.' }, { status: 500 });

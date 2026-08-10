@@ -155,3 +155,106 @@ export function scheduleVisitIntervalsOverlap(
     && new Date(second.starts_at).getTime() < new Date(first.ends_at).getTime()
   );
 }
+
+function readScheduleLondonParts(ms: number): {
+  date: string;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: SCHEDULING_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(ms)).map((part) => [part.type, part.value])
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour === '24' ? 0 : parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+function compareLondonWallClock(
+  parts: { date: string; hour: number; minute: number; second: number },
+  date: string,
+  hour: number,
+  minute: number
+): number {
+  if (parts.date !== date) {
+    return parts.date < date ? -1 : 1;
+  }
+  const left = parts.hour * 3600 + parts.minute * 60 + parts.second;
+  const right = hour * 3600 + minute * 60;
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+
+/**
+ * Inclusive London calendar-date range as UTC timestamptz bounds for starts_at filters.
+ * Uses half-open [start, endExclusive) so early-morning BST visits are not dropped.
+ */
+export function getScheduleLondonStartsAtRangeIso(
+  startDate: string,
+  endDate: string
+): { startInclusiveIso: string; endExclusiveIso: string } {
+  const endExclusiveDate = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
+  return {
+    startInclusiveIso: toScheduleLondonDateTimeIso(startDate, '00:00'),
+    endExclusiveIso: toScheduleLondonDateTimeIso(endExclusiveDate, '00:00'),
+  };
+}
+
+/**
+ * Convert a Europe/London wall-clock date and HH:mm time into a UTC ISO string.
+ * Nonexistent spring-forward times snap forward to the next valid London minute.
+ * Ambiguous fall-back times resolve to the earlier (BST) occurrence.
+ */
+export function toScheduleLondonDateTimeIso(date: string, time: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  if (
+    !year || !month || !day
+    || Number.isNaN(hour) || Number.isNaN(minute)
+  ) {
+    return new Date(`${date}T${time}:00`).toISOString();
+  }
+
+  // Linear scan so fall-back ambiguity stays monotonic; prefer the earlier match.
+  const nominalUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const windows: Array<[number, number]> = [
+    [nominalUtc - 3 * 60 * 60_000, nominalUtc + 3 * 60 * 60_000],
+    [Date.UTC(year, month - 1, day - 1, 0, 0, 0), Date.UTC(year, month - 1, day + 1, 23, 59, 0)],
+  ];
+
+  for (const [scanStart, scanEnd] of windows) {
+    let exact: number | null = null;
+    let firstAtOrAfter: number | null = null;
+    const alignedStart = scanStart - (scanStart % 60_000);
+    for (let cursor = alignedStart; cursor <= scanEnd; cursor += 60_000) {
+      const parts = readScheduleLondonParts(cursor);
+      const cmp = compareLondonWallClock(parts, date, hour, minute);
+      if (cmp === 0) {
+        exact = cursor;
+        break;
+      }
+      if (cmp > 0 && parts.date === date && firstAtOrAfter == null) {
+        firstAtOrAfter = cursor;
+      }
+    }
+    if (exact != null) {
+      return new Date(exact).toISOString();
+    }
+    if (firstAtOrAfter != null) {
+      return new Date(firstAtOrAfter).toISOString();
+    }
+  }
+
+  return new Date(nominalUtc).toISOString();
+}

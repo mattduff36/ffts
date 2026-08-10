@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom';
 import { SchedulingManagerBoard } from '@/app/(dashboard)/scheduling/components/SchedulingManagerBoard';
 import {
   getSchedulingViewStorageKey,
@@ -97,6 +98,7 @@ const {
   mockFetchProjectCandidates,
   mockFetchQuoteCandidates,
   mockMoveAssignment,
+  mockQuickAdd,
   mockSaveQuoteSchedule,
   mockSaveScheduleJob,
   mockSaveVisit,
@@ -116,6 +118,7 @@ const {
   mockFetchProjectCandidates: vi.fn(),
   mockFetchQuoteCandidates: vi.fn(),
   mockMoveAssignment: vi.fn(),
+  mockQuickAdd: vi.fn(),
   mockSaveQuoteSchedule: vi.fn(),
   mockSaveScheduleJob: vi.fn(),
   mockSaveVisit: vi.fn(),
@@ -205,12 +208,13 @@ vi.mock('@/lib/client/scheduling', async () => {
     createProjectScheduleJob: mockCreateProjectJob,
     createScheduleAssignment: mockCreateAssignment,
     deletePlantUnavailability: vi.fn(),
-    deleteScheduleAssignment: vi.fn(),
+    deleteScheduleAssignment: vi.fn().mockResolvedValue({ success: true }),
     deleteScheduleJob: mockDeleteJob,
     fetchScheduleProjectCandidates: mockFetchProjectCandidates,
     fetchSchedulingBoard: mockFetchBoard,
     fetchScheduleQuoteCandidates: mockFetchQuoteCandidates,
     moveScheduleAssignment: mockMoveAssignment,
+    quickAddScheduleProject: mockQuickAdd,
     deleteScheduleVisit: vi.fn(),
     savePlantUnavailability: vi.fn(),
     saveScheduleJob: mockSaveScheduleJob,
@@ -397,11 +401,49 @@ describe('SchedulingManagerBoard', () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
-    mockCreateAssignment.mockResolvedValue(undefined);
+    mockCreateAssignment.mockResolvedValue({
+      assignments: [{
+        id: 'assignment-new',
+        job_id: 'job-1',
+        work_date: '2026-07-14',
+        visit_id: 'visit-1',
+        profile_id: 'employee-2',
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: 'manager-1',
+        notes: null,
+        created_at: '2026-07-14T08:00:00.000Z',
+        updated_at: '2026-07-14T08:00:00.000Z',
+      }],
+      employee_capacity: [{
+        date: '2026-07-14',
+        available_employee_count: 0,
+        total_available_minutes: 0,
+        employees: [],
+      }],
+    });
     mockCreateProjectJob.mockResolvedValue(undefined);
     mockDeleteJob.mockResolvedValue(undefined);
     mockFetchProjectCandidates.mockResolvedValue([]);
-    mockMoveAssignment.mockResolvedValue(undefined);
+    mockMoveAssignment.mockResolvedValue({ assignment: { id: 'assignment-1' } });
+    mockQuickAdd.mockResolvedValue({
+      job: {
+        ...board.jobs[0],
+        id: 'job-quick',
+        job_reference: '60010-MD',
+        title: 'Emergency works',
+      },
+      visit: {
+        ...board.visits[0],
+        id: 'visit-quick',
+        job_id: 'job-quick',
+      },
+      project_number_id: 'project-quick',
+      project_reference: '60010-MD',
+      was_project_created: true,
+    });
     mockFetchQuoteCandidates.mockResolvedValue([{
       id: '33333333-3333-4333-8333-333333333333',
       quote_reference: 'Q-100',
@@ -455,11 +497,12 @@ describe('SchedulingManagerBoard', () => {
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
   });
 
-  it('replaces Add Project job with shared Quote and Project creation controls', async () => {
+  it('replaces Add Project job with shared Quote, Project, and Quick add controls', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New Quote' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New Project Number' })).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-quick-add-button')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Project job' })).not.toBeInTheDocument();
   });
 
@@ -700,7 +743,7 @@ describe('SchedulingManagerBoard', () => {
     );
   });
 
-  it('uses whole Jobs, Employees, and Plant cards as accessible drag activators', async () => {
+  it('uses dedicated drag handles with tap targets for Employees and Plant cards', async () => {
     mockFetchBoard.mockResolvedValue({
       ...board,
       resources: {
@@ -718,6 +761,7 @@ describe('SchedulingManagerBoard', () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     const jobsGuidance = screen.getByText(/Drag an unscheduled job onto a date/);
+    expect(jobsGuidance).toBeInTheDocument();
     expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
       'xl:grid-cols-[350px_minmax(0,1fr)]'
     );
@@ -746,16 +790,19 @@ describe('SchedulingManagerBoard', () => {
       .toBe(jobsGuidance.className);
 
     expect(dndState.sensors).toHaveLength(2);
-    const employeeCard = screen.getByRole('button', {
+    const employeeCard = screen.getByTestId('schedule-resource-employee-employee-2');
+    const employeeHandle = within(employeeCard).getByTestId(
+      'schedule-resource-drag-handle-employee-employee-2'
+    );
+    const employeeSelect = within(employeeCard).getByRole('button', {
       name: 'Bob Jones: select resource or drag to a timed visit',
     });
-    const employeeDragCue = within(employeeCard).getByTestId(
+    const employeeDragCue = within(employeeHandle).getByTestId(
       'schedule-resource-drag-cue'
     );
     expect(employeeDragCue).toHaveAttribute('aria-hidden', 'true');
     expect(employeeDragCue).toHaveClass('pointer-events-none');
-    expect(employeeDragCue).not.toHaveAttribute('tabindex');
-    expect(employeeCard.querySelector('button')).toBeNull();
+    expect(employeeHandle).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
     expect(within(employeeCard).getByText('Bob Jones')).toHaveClass(
       'text-sm',
       'font-semibold'
@@ -768,22 +815,22 @@ describe('SchedulingManagerBoard', () => {
       'text-[10px]',
       'text-slate-400'
     );
-    fireEvent.click(employeeCard);
-    expect(employeeCard).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(employeeSelect);
+    expect(employeeSelect).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
       button: 0,
       ctrlKey: false,
     });
-    const plantCard = screen.getByRole('button', {
+    const plantCard = screen.getByTestId('schedule-resource-plant-plant-1');
+    const plantHandle = within(plantCard).getByTestId(
+      'schedule-resource-drag-handle-plant-plant-1'
+    );
+    const plantSelect = within(plantCard).getByRole('button', {
       name: 'P001 — Loader: select resource or drag to a timed visit',
     });
-    const plantDragCue = within(plantCard).getByTestId(
-      'schedule-resource-drag-cue'
-    );
-    expect(plantDragCue).toHaveAttribute('aria-hidden', 'true');
-    expect(plantDragCue).toHaveClass('pointer-events-none');
-    expect(plantCard.querySelector('button')).toBeNull();
+    expect(within(plantHandle).getByTestId('schedule-resource-drag-cue'))
+      .toHaveClass('pointer-events-none');
     expect(within(plantCard).getByText('JCB · 403')).toHaveClass(
       'text-xs',
       'text-slate-300'
@@ -792,14 +839,14 @@ describe('SchedulingManagerBoard', () => {
       'text-[10px]',
       'text-slate-400'
     );
-    fireEvent.click(plantCard);
-    expect(plantCard).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(plantSelect);
+    expect(plantSelect).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('schedule-resource-scroll-area')).toHaveClass(
       'scrollbar-subtle'
     );
 
     expect(screen.queryByRole('button', {
-      name: /^(Drag Q-100|Drag Bob Jones|Drag P001|Select Bob Jones|Select P001)/,
+      name: /^(Select Bob Jones|Select P001)/,
     })).not.toBeInTheDocument();
     expect(
       screen.getAllByRole('button', { name: 'Move Alex Smith to another visit' })[0]
@@ -1003,7 +1050,7 @@ describe('SchedulingManagerBoard', () => {
     );
     const instructionRow = screen.getByTestId('schedule-daily-instruction-row');
     expect(instructionRow).toHaveTextContent(
-      'Drag a resource card onto a timed visit, or select the visit and tap a resource.'
+      'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.'
     );
     const modeControls = within(instructionRow).getByRole('group', {
       name: 'Daily timeline display mode',
@@ -1276,8 +1323,9 @@ describe('SchedulingManagerBoard', () => {
     const assignmentChip = assignmentMoveButtons[0].closest('div');
     expect(assignmentChip).toHaveTextContent('Alex S');
     expect(assignmentChip).not.toHaveTextContent('Alex Smith');
-    expect(assignmentChip?.querySelector('.lucide-grip-vertical')).toBeNull();
+    expect(assignmentMoveButtons[0].querySelector('.lucide-grip-vertical')).not.toBeNull();
     expect(assignmentMoveButtons[0]).toHaveClass('cursor-grab');
+    expect(assignmentMoveButtons[0]).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
   });
 
   it('caps compact visit assignments at two rows with an exact accessible overflow count', async () => {
@@ -1360,7 +1408,7 @@ describe('SchedulingManagerBoard', () => {
     for (const assignmentChip of within(layout).getAllByTestId(
       /^schedule-assignment-chip-/
     )) {
-      expect(assignmentChip.querySelector('.lucide-grip-vertical')).toBeNull();
+      expect(assignmentChip.querySelector('.lucide-grip-vertical')).not.toBeNull();
     }
     expect(within(layout).getByText('Alice S')).toBeInTheDocument();
     expect(within(layout).getByText('Loader')).toBeInTheDocument();
@@ -1599,7 +1647,7 @@ describe('SchedulingManagerBoard', () => {
         resource_id: 'employee-2',
       })
     );
-    expect(screen.queryByRole('button', { name: 'Clear selected visit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear selected visit' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
     expect(container.querySelector('button button')).toBeNull();
   });
@@ -1840,5 +1888,141 @@ describe('SchedulingManagerBoard', () => {
       'text-[#e2e8f0]',
       'hover:text-[#ffffff]'
     );
+  });
+
+  it('exposes a dedicated touch drag handle and distance activation for resources', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    const dragHandle = screen.getByTestId('schedule-resource-drag-handle-employee-employee-2');
+    expect(dragHandle).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
+    expect(dragHandle).toHaveStyle({ touchAction: 'none' });
+    expect(PointerSensor.configure).toHaveBeenCalled();
+    const configureCall = vi.mocked(PointerSensor.configure).mock.calls.at(-1)?.[0] as {
+      activationConstraints?: (event?: { pointerType?: string }) => unknown[];
+    };
+    const constraints = configureCall.activationConstraints?.({ pointerType: 'touch' }) || [];
+    expect(constraints.some((constraint) => constraint instanceof PointerActivationConstraints.Distance))
+      .toBe(true);
+    expect(constraints.some((constraint) => constraint instanceof PointerActivationConstraints.Delay))
+      .toBe(false);
+  });
+
+  it('opens Quick add from the board toolbar', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+    expect(screen.getByText(/No quote or document upload is required/i)).toBeInTheDocument();
+  });
+
+  it('activates the Quick-added visit and switches to Employees from the cache patch', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Employees' })).toHaveAttribute(
+        'aria-selected',
+        'false'
+      )
+    );
+
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Emergency works' },
+    });
+    fireEvent.click(screen.getAllByRole('combobox')[0]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Manager One' }));
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Example Customer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
+
+    await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
+    expect(await screen.findByText(/60010-MD · Visit/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Employees' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('patches the destination week cache when Quick add targets another week', async () => {
+    const nextWeekBoard = {
+      ...board,
+      week: { start: '2026-07-20', end: '2026-07-26' },
+      jobs: [],
+      visits: [],
+      assignments: [],
+    };
+    mockFetchBoard.mockImplementation(async (weekStart?: string) => {
+      if (weekStart === '2026-07-20') return nextWeekBoard;
+      return board;
+    });
+    mockQuickAdd.mockResolvedValue({
+      job: {
+        ...board.jobs[0],
+        id: 'job-quick-next',
+        job_reference: '60011-MD',
+        title: 'Next-week emergency',
+        start_date: '2026-07-21',
+        end_date: '2026-07-21',
+      },
+      visit: {
+        ...board.visits[0],
+        id: 'visit-quick-next',
+        job_id: 'job-quick-next',
+        starts_at: '2026-07-21T08:00:00Z',
+        ends_at: '2026-07-21T12:00:00Z',
+      },
+      project_number_id: 'project-quick-next',
+      project_reference: '60011-MD',
+      was_project_created: true,
+    });
+
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Next-week emergency' },
+    });
+    fireEvent.change(screen.getByLabelText('Date *'), {
+      target: { value: '2026-07-21' },
+    });
+    fireEvent.click(screen.getAllByRole('combobox')[0]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Manager One' }));
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Example Customer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
+
+    await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
+    expect(await screen.findByText(/60011-MD · Visit/i)).toBeInTheDocument();
+    expect(screen.getByText(/20 Jul – 26 Jul 2026/i)).toBeInTheDocument();
+    expect(mockFetchBoard).toHaveBeenCalledWith('2026-07-20');
+  });
+
+  it('keeps an employee available for a non-overlapping same-day visit', async () => {
+    const afternoonVisit = {
+      ...board.visits[0],
+      id: 'visit-2',
+      sequence_number: 2,
+      title: 'Afternoon visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T17:00:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, afternoonVisit],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Select visit 2 for JOB-101' })[0]
+    );
+    expect(screen.getByTestId('schedule-resource-employee-employee-1')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Available (2)' })).toBeInTheDocument();
   });
 });

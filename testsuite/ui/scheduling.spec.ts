@@ -891,13 +891,19 @@ test.describe('@scheduling Scheduling', () => {
       const resourceCard = page.getByTestId(
         'schedule-resource-employee-22222222-2222-4222-8222-222222222222'
       );
-      await expect(resourceCard).toHaveRole('button');
+      const dragHandle = page.getByTestId(
+        'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
+      );
       expect(await resourceCard.evaluate((element) => getComputedStyle(element).touchAction))
         .not.toBe('none');
+      expect(await dragHandle.evaluate((element) => getComputedStyle(element).touchAction))
+        .toBe('none');
       await page
         .getByRole('button', { name: 'Select visit 1 for TEST-JOB-101' })
         .tap();
-      await resourceCard.tap();
+      await page.getByRole('button', {
+        name: 'Test Scheduler: select resource or drag to a timed visit',
+      }).tap();
 
       await expect.poll(() => assignmentRequests).toHaveLength(1);
       await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);

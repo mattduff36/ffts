@@ -83,8 +83,18 @@ import {
   saveScheduleJob,
   saveScheduleVisit,
   SchedulingApiError,
+  type AssignmentMutationResult,
   type CreateAssignmentInput,
+  type QuickAddScheduleProjectResult,
 } from '@/lib/client/scheduling';
+import {
+  patchBoardMoveAssignment,
+  patchBoardRemoveAssignment,
+  patchBoardWithAssignment,
+  patchBoardWithQuickAdd,
+  replaceEmployeeCapacity,
+} from './scheduling-board-cache';
+import { ScheduleBoardQuickAddDialog } from './ScheduleBoardQuickAddDialog';
 import {
   SCHEDULING_BOARD_VIEWS,
   readSchedulingViewPreference,
@@ -109,6 +119,7 @@ import {
   mapDailyScheduleClientXToMinutes,
   getScheduleQuoteStage,
   getScheduleVisitDate,
+  toScheduleLondonDateTimeIso,
   getSchedulingWeek,
   SCHEDULE_QUOTE_STAGES,
   type ScheduleQuoteStage,
@@ -318,7 +329,7 @@ function ResourceDragCue({ testId }: { testId: string }) {
       aria-hidden="true"
       focusable="false"
       data-testid={testId}
-      className="pointer-events-none mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+      className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground"
     />
   );
 }
@@ -394,28 +405,41 @@ function DraggableResourceCard({
   return (
     <div
       ref={ref}
+      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
+      className={cn(
+        'flex w-full items-stretch gap-1 rounded-lg transition',
+        selected
+          ? schedulingControlStyles.primary
+          : schedulingControlStyles.outline,
+        isDragging && 'opacity-40'
+      )}
     >
       <button
         ref={handleRef}
         type="button"
-        onClick={handleClick}
+        aria-label={`Drag ${resource.label} to a timed visit`}
+        title="Drag to a timed visit"
+        data-testid={`schedule-resource-drag-handle-${resource.type}-${resource.id}`}
+        className="flex min-h-11 min-w-11 touch-none items-center justify-center rounded-l-lg cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+        style={{ touchAction: 'none' }}
+      >
+        <ResourceDragCue testId="schedule-resource-drag-cue" />
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          handleClick(event);
+        }}
         onPointerDown={resetDragState}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') resetDragState();
         }}
         aria-pressed={selected}
         aria-label={`${resource.label}: select resource or drag to a timed visit`}
-        title="Select resource, or drag to a timed visit"
-        data-testid={`schedule-resource-${resource.type}-${resource.id}`}
-        className={cn(
-          'flex w-full cursor-grab items-center gap-2 rounded-lg p-2 text-left transition active:cursor-grabbing',
-          selected
-            ? schedulingControlStyles.primary
-            : schedulingControlStyles.outline,
-          isDragging && 'cursor-grabbing opacity-40'
-        )}
+        title="Tap to assign to the selected visit"
+        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-r-lg p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
       >
-        <ResourceDragCue testId="schedule-resource-drag-cue" />
         <span className="min-w-0 flex-1 space-y-0.5">
           <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
             {resource.label}
@@ -686,7 +710,7 @@ function AssignmentChip({
       ref={ref}
       data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
-        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pl-1.5 pr-0.5 text-[11px]',
+        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pr-0.5 text-[11px]',
         assignment.resource_type === 'employee'
           ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
@@ -698,9 +722,14 @@ function AssignmentChip({
       <button
         ref={handleRef}
         type="button"
-        className="flex min-w-0 cursor-grab items-center gap-1 overflow-hidden rounded-l-full py-0.5 text-left active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
+        className="flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-l-full active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
+        style={{ touchAction: 'none' }}
         aria-label={`Move ${fullLabel} to another visit`}
+        data-testid={`schedule-assignment-drag-handle-${assignment.id}`}
       >
+        <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden="true" />
+      </button>
+      <span className="flex min-w-0 items-center gap-1 py-0.5 pr-1">
         {assignment.resource_type === 'employee' ? (
           <UserRound className="h-3.5 w-3.5 shrink-0" />
         ) : (
@@ -711,7 +740,7 @@ function AssignmentChip({
         {assignment.conflict_override ? (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" aria-label="Conflict overridden" />
         ) : null}
-      </button>
+      </span>
       <button
         type="button"
         onClick={(event) => {
@@ -1609,7 +1638,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [resourceAvailabilityView, setResourceAvailabilityView] =
     useState<'available' | 'unavailable' | 'all'>('available');
   const [pendingConflict, setPendingConflict] = useState<PendingAssignmentConflict | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
+  const [inFlightMutationKeys, setInFlightMutationKeys] = useState<Set<string>>(
+    () => new Set()
+  );
+  const inFlightMutationKeysRef = useRef<Set<string>>(new Set());
+  const mutationEpochByKeyRef = useRef<Map<string, number>>(new Map());
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [pendingCreationKind, setPendingCreationKind] = useState<
+    'quote' | 'project' | 'quick_add' | null
+  >(null);
   const [visitTarget, setVisitTarget] = useState<{
     job: ScheduleJob;
     visit: ScheduleVisit | null;
@@ -1640,7 +1677,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
   const [quoteManagerOptionsError, setQuoteManagerOptionsError] = useState<string | null>(null);
-  const [pendingCreationKind, setPendingCreationKind] = useState<'quote' | 'project' | null>(null);
 
   const weekStart = getSchedulingWeek(selectedDate).start;
   const boardQuery = useQuery({
@@ -1693,17 +1729,47 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   useEffect(() => {
     if (!pendingCreationKind || !quotesSensitiveAccess.canAccess) return;
     if (pendingCreationKind === 'quote') setQuoteCreationOpen(true);
-    else setProjectCreationOpen(true);
+    else if (pendingCreationKind === 'project') setProjectCreationOpen(true);
+    else setQuickAddOpen(true);
     setPendingCreationKind(null);
   }, [pendingCreationKind, quotesSensitiveAccess.canAccess]);
 
-  function requestCreation(kind: 'quote' | 'project') {
+  function requestCreation(kind: 'quote' | 'project' | 'quick_add') {
     if (!quotesSensitiveAccess.canAccess) {
       setPendingCreationKind(kind);
       return;
     }
     if (kind === 'quote') setQuoteCreationOpen(true);
-    else setProjectCreationOpen(true);
+    else if (kind === 'project') setProjectCreationOpen(true);
+    else setQuickAddOpen(true);
+  }
+
+  function beginMutation(key: string): number | null {
+    if (inFlightMutationKeysRef.current.has(key)) return null;
+    inFlightMutationKeysRef.current = new Set(inFlightMutationKeysRef.current).add(key);
+    setInFlightMutationKeys(new Set(inFlightMutationKeysRef.current));
+    const nextEpoch = (mutationEpochByKeyRef.current.get(key) || 0) + 1;
+    mutationEpochByKeyRef.current.set(key, nextEpoch);
+    return nextEpoch;
+  }
+
+  function endMutation(key: string) {
+    const next = new Set(inFlightMutationKeysRef.current);
+    next.delete(key);
+    inFlightMutationKeysRef.current = next;
+    setInFlightMutationKeys(next);
+  }
+
+  function isCurrentMutation(key: string, epoch: number): boolean {
+    return mutationEpochByKeyRef.current.get(key) === epoch;
+  }
+
+  function assignmentMutationKey(assignmentId: string): string {
+    return `assignment:${assignmentId}`;
+  }
+
+  function reconcileBoardInBackground() {
+    void queryClient.invalidateQueries({ queryKey: ['scheduling-board'] });
   }
   const board = boardQuery.data;
   const weekDates = useMemo(
@@ -1949,7 +2015,61 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   async function refresh() {
-    await queryClient.invalidateQueries({ queryKey: ['scheduling-board'] });
+    reconcileBoardInBackground();
+  }
+
+  function applyCapacity(
+    boardData: SchedulingBoardPayload,
+    capacity?: ScheduleDayCapacity[]
+  ): SchedulingBoardPayload {
+    return capacity?.length
+      ? replaceEmployeeCapacity(boardData, capacity)
+      : boardData;
+  }
+
+  function assignmentFromMutationRow(
+    row: Record<string, unknown>,
+    resource: SelectedScheduleResource | null,
+    visit: ScheduleVisit | null
+  ): ScheduleAssignment {
+    const resourceType = (row.resource_type as 'employee' | 'plant' | undefined)
+      || (resource?.type)
+      || (typeof row.profile_id === 'string' ? 'employee' : 'plant');
+    const base = {
+      id: String(row.id),
+      job_id: String(row.job_id),
+      work_date: String(row.work_date),
+      visit_id: typeof row.visit_id === 'string' ? row.visit_id : visit?.id || null,
+      notes: typeof row.notes === 'string' ? row.notes : null,
+      conflict_override: row.conflict_override === true,
+      conflict_codes: Array.isArray(row.conflict_codes) ? row.conflict_codes : [],
+      conflict_override_by:
+        typeof row.conflict_override_by === 'string' ? row.conflict_override_by : null,
+      conflict_override_at:
+        typeof row.conflict_override_at === 'string' ? row.conflict_override_at : null,
+      assigned_by: typeof row.assigned_by === 'string' ? row.assigned_by : null,
+      created_at: String(row.created_at || new Date().toISOString()),
+      updated_at: String(row.updated_at || new Date().toISOString()),
+      conflicts: [],
+      visit,
+    };
+    if (resourceType === 'employee') {
+      const profileId = String(row.profile_id || resource?.id || '');
+      return {
+        ...base,
+        resource_type: 'employee',
+        profile_id: profileId,
+        employee:
+          board?.resources.employees.find((employee) => employee.id === profileId) || null,
+      };
+    }
+    const plantId = String(row.plant_id || resource?.id || '');
+    return {
+      ...base,
+      resource_type: 'plant',
+      plant_id: plantId,
+      plant: board?.resources.plant.find((plant) => plant.id === plantId) || null,
+    };
   }
 
   async function toggleCrewOffer(job: ScheduleJob) {
@@ -2123,32 +2243,49 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     target: ActiveVisitTarget,
     resource: SelectedScheduleResource
   ) {
-    if (isAssigning) return;
+    const mutationKey = `assign:${resource.type}:${resource.id}:${target.visit.id}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
     const input: CreateAssignmentInput = {
       job_id: target.job.id,
       visit_id: target.visit.id,
       resource_type: resource.type,
       resource_id: resource.id,
     };
-    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
-      'scheduling-board',
-      weekStart,
-    ]);
     const optimisticAssignment = createOptimisticAssignment(target, resource);
-    setBoardData((current) => ({
-      ...current,
-      assignments: [...current.assignments, optimisticAssignment],
-    }));
+    setBoardData((current) =>
+      patchBoardWithAssignment(current, optimisticAssignment)
+    );
     setSelectedResource(null);
-    setIsAssigning(true);
+    activateVisit(target.job, target.visit);
 
     try {
-      await createScheduleAssignment(input);
+      const result = await createScheduleAssignment(input);
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      const createdRow = result.assignments?.[0];
+      if (createdRow) {
+        const authoritative = assignmentFromMutationRow(
+          createdRow,
+          resource,
+          target.visit
+        );
+        setBoardData((current) =>
+          applyCapacity(
+            patchBoardWithAssignment(current, authoritative, {
+              replaceOptimisticId: optimisticAssignment.id,
+            }),
+            result.employee_capacity
+          )
+        );
+      }
       toast.success(`${resource.label} assigned`);
-      await refresh();
+      reconcileBoardInBackground();
     } catch (error) {
-      if (previous) {
-        queryClient.setQueryData(['scheduling-board', weekStart], previous);
+      // Reverse only this mutation's optimistic row when it is still the current epoch.
+      if (isCurrentMutation(mutationKey, mutationEpoch)) {
+        setBoardData((current) =>
+          patchBoardRemoveAssignment(current, optimisticAssignment.id)
+        );
       }
       if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
         setPendingConflict({
@@ -2159,7 +2296,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         toast.error(error instanceof Error ? error.message : 'Unable to create assignment');
       }
     } finally {
-      setIsAssigning(false);
+      endMutation(mutationKey);
     }
   }
 
@@ -2167,34 +2304,51 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     assignment: ScheduleAssignment,
     target: ActiveVisitTarget
   ) {
-    if (isAssigning || assignment.visit_id === target.visit.id) return;
-    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
-      'scheduling-board',
-      weekStart,
-    ]);
-    setBoardData((current) => ({
-      ...current,
-      assignments: current.assignments.map((item) =>
-        item.id === assignment.id
-          ? {
-              ...item,
-              job_id: target.job.id,
-              work_date: getScheduleVisitDate(target.visit.starts_at),
-              visit_id: target.visit.id,
-              visit: target.visit,
-            }
-          : item
-      ),
-    }));
-    setIsAssigning(true);
+    if (assignment.visit_id === target.visit.id) return;
+    const mutationKey = assignmentMutationKey(assignment.id);
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const previousAssignment = assignment;
+    setBoardData((current) =>
+      patchBoardMoveAssignment(current, assignment.id, (item) => ({
+        ...item,
+        job_id: target.job.id,
+        work_date: getScheduleVisitDate(target.visit.starts_at),
+        visit_id: target.visit.id,
+        visit: target.visit,
+      }))
+    );
+    activateVisit(target.job, target.visit);
 
     try {
-      await moveScheduleAssignment(assignment, target.visit.id);
+      const result = await moveScheduleAssignment(assignment, target.visit.id);
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      if (result.assignment) {
+        const authoritative = assignmentFromMutationRow(
+          result.assignment,
+          null,
+          target.visit
+        );
+        setBoardData((current) =>
+          applyCapacity(
+            patchBoardWithAssignment(current, authoritative, {
+              replaceOptimisticId: assignment.id,
+            }),
+            result.employee_capacity
+          )
+        );
+      } else if (result.employee_capacity) {
+        setBoardData((current) => applyCapacity(current, result.employee_capacity));
+      }
       toast.success('Assignment moved');
-      await refresh();
+      reconcileBoardInBackground();
     } catch (error) {
-      if (previous) {
-        queryClient.setQueryData(['scheduling-board', weekStart], previous);
+      if (isCurrentMutation(mutationKey, mutationEpoch)) {
+        setBoardData((current) =>
+          patchBoardWithAssignment(current, previousAssignment, {
+            replaceOptimisticId: assignment.id,
+          })
+        );
       }
       if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
         setPendingConflict({
@@ -2214,49 +2368,102 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         toast.error(error instanceof Error ? error.message : 'Unable to move assignment');
       }
     } finally {
-      setIsAssigning(false);
+      endMutation(mutationKey);
     }
   }
 
   async function overridePendingConflict() {
-    if (!pendingConflict || isAssigning) return;
-    setIsAssigning(true);
+    if (!pendingConflict) return;
+    const mutationKey = pendingConflict.assignment
+      ? assignmentMutationKey(pendingConflict.assignment.id)
+      : `assign:${pendingConflict.input.resource_type}:${pendingConflict.input.resource_id}:${pendingConflict.input.visit_id}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const conflict = pendingConflict;
+    const targetVisit = conflict.input.visit_id
+      ? board?.visits.find((visit) => visit.id === conflict.input.visit_id) || null
+      : null;
+    const targetJob = conflict.input.job_id
+      ? board?.jobs.find((job) => job.id === conflict.input.job_id) || null
+      : null;
     try {
-      if (pendingConflict.assignment && pendingConflict.input.visit_id) {
-        await moveScheduleAssignment(
-          pendingConflict.assignment,
-          pendingConflict.input.visit_id,
+      let result: AssignmentMutationResult;
+      if (conflict.assignment && conflict.input.visit_id) {
+        result = await moveScheduleAssignment(
+          conflict.assignment,
+          conflict.input.visit_id,
           true
         );
+        if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+        if (result.assignment && targetVisit) {
+          const authoritative = assignmentFromMutationRow(
+            result.assignment,
+            null,
+            targetVisit
+          );
+          setBoardData((current) =>
+            applyCapacity(
+              patchBoardWithAssignment(current, authoritative, {
+                replaceOptimisticId: conflict.assignment?.id,
+              }),
+              result.employee_capacity
+            )
+          );
+        } else if (result.employee_capacity) {
+          setBoardData((current) => applyCapacity(current, result.employee_capacity));
+        }
+        if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
         toast.success('Assignment moved with conflict override');
       } else {
-        await createScheduleAssignment({
-          ...pendingConflict.input,
+        result = await createScheduleAssignment({
+          ...conflict.input,
           override_conflicts: true,
         });
+        if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+        const createdRow = result.assignments?.[0];
+        if (createdRow && targetVisit) {
+          const authoritative = assignmentFromMutationRow(
+            createdRow,
+            {
+              type: conflict.input.resource_type,
+              id: conflict.input.resource_id,
+              label: conflict.input.resource_type,
+            },
+            targetVisit
+          );
+          setBoardData((current) =>
+            applyCapacity(
+              patchBoardWithAssignment(current, authoritative),
+              result.employee_capacity
+            )
+          );
+        } else if (result.employee_capacity) {
+          setBoardData((current) => applyCapacity(current, result.employee_capacity));
+        }
+        if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
         toast.success('Resource assigned with conflict override');
       }
       setPendingConflict(null);
       setSelectedResource(null);
-      await refresh();
+      reconcileBoardInBackground();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to override conflict');
     } finally {
-      setIsAssigning(false);
+      endMutation(mutationKey);
     }
   }
 
   async function handleDeleteAssignment(assignment: ScheduleAssignment) {
-    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
-      'scheduling-board',
-      weekStart,
-    ]);
-    setBoardData((current) => ({
-      ...current,
-      assignments: current.assignments.filter((item) => item.id !== assignment.id),
-    }));
+    const mutationKey = assignmentMutationKey(assignment.id);
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    setBoardData((current) => patchBoardRemoveAssignment(current, assignment.id));
     try {
-      await deleteScheduleAssignment(assignment.id, assignment.resource_type);
+      const result = await deleteScheduleAssignment(assignment.id, assignment.resource_type);
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      if (result.employee_capacity) {
+        setBoardData((current) => applyCapacity(current, result.employee_capacity));
+      }
       toast.success('Assignment removed', {
         action: {
           label: 'Undo',
@@ -2273,7 +2480,25 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               notes: assignment.notes,
               override_conflicts: assignment.conflict_override,
             })
-              .then(() => refresh())
+              .then((restoreResult) => {
+                const restored = restoreResult.assignments?.[0];
+                if (restored) {
+                  setBoardData((current) =>
+                    applyCapacity(
+                      patchBoardWithAssignment(
+                        current,
+                        assignmentFromMutationRow(restored, null, assignment.visit)
+                      ),
+                      restoreResult.employee_capacity
+                    )
+                  );
+                } else if (restoreResult.employee_capacity) {
+                  setBoardData((current) =>
+                    applyCapacity(current, restoreResult.employee_capacity)
+                  );
+                }
+                reconcileBoardInBackground();
+              })
               .then(() => toast.success('Assignment restored'))
               .catch((error) =>
                 toast.error(error instanceof Error ? error.message : 'Unable to restore assignment')
@@ -2281,13 +2506,46 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           },
         },
       });
-      void refresh();
+      reconcileBoardInBackground();
     } catch (error) {
-      if (previous) {
-        queryClient.setQueryData(['scheduling-board', weekStart], previous);
+      if (isCurrentMutation(mutationKey, mutationEpoch)) {
+        setBoardData((current) => patchBoardWithAssignment(current, assignment));
       }
       toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
+    } finally {
+      endMutation(mutationKey);
     }
+  }
+
+  async function handleQuickAddCreated(result: QuickAddScheduleProjectResult) {
+    const visitDate = getScheduleVisitDate(result.visit.starts_at);
+    const targetWeekStart = getSchedulingWeek(visitDate).start;
+    const applyQuickAdd = (current: SchedulingBoardPayload) =>
+      patchBoardWithQuickAdd({
+        board: current,
+        job: result.job,
+        visit: result.visit,
+      });
+
+    if (targetWeekStart === weekStart) {
+      setBoardData(applyQuickAdd);
+    } else {
+      const cached = queryClient.getQueryData<SchedulingBoardPayload>([
+        'scheduling-board',
+        targetWeekStart,
+      ]);
+      if (cached) {
+        queryClient.setQueryData(['scheduling-board', targetWeekStart], applyQuickAdd(cached));
+      } else {
+        const fresh = await fetchSchedulingBoard(targetWeekStart);
+        queryClient.setQueryData(['scheduling-board', targetWeekStart], applyQuickAdd(fresh));
+      }
+    }
+
+    setSelectedDate(visitDate);
+    activateVisit(result.job, result.visit);
+    reconcileBoardInBackground();
+    void queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
   }
 
   async function handleRemoveJob() {
@@ -2437,10 +2695,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     <DragDropProvider
       sensors={[
         PointerSensor.configure({
-          activationConstraints(event) {
-            return event.pointerType === 'touch'
-              ? [new PointerActivationConstraints.Delay({ value: 180, tolerance: 10 })]
-              : [new PointerActivationConstraints.Distance({ value: 6 })];
+          activationConstraints() {
+            // Touch-first: short movement threshold on the dedicated drag handle.
+            return [new PointerActivationConstraints.Distance({ value: 4 })];
           },
         }),
         KeyboardSensor,
@@ -2498,7 +2755,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const assignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
         const quote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
-        if (resource) setSelectedResource(resource);
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
         setDraggedQuote(quote || null);
@@ -2549,9 +2805,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               const toIso = (minutes: number) => {
                 const hours = Math.floor(minutes / 60);
                 const mins = minutes % 60;
-                return new Date(
-                  `${selectedDate}T${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`
-                ).toISOString();
+                return toScheduleLondonDateTimeIso(
+                  selectedDate,
+                  `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+                );
               };
               void scheduleQuoteFromDate(sourceQuote, selectedDate, {
                 starts_at: toIso(window.startMinutes),
@@ -2576,7 +2833,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const visit = board.visits.find((item) => item.id === targetData.visitId);
         if (job && visit) {
           const target = { job, visit };
-          setActiveVisitTarget(target);
+          activateVisit(job, visit);
           if (sourceResource) void assignResource(target, sourceResource);
           else if (sourceAssignment) void moveAssignmentToVisit(sourceAssignment, target);
         } else {
@@ -2622,6 +2879,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             >
               <Plus className="mr-2 h-4 w-4" />
               New Project Number
+            </Button>
+            <Button
+              className={schedulingControlStyles.primary}
+              disabled={!canCreateQuotes || !canViewCustomers}
+              title={
+                !canCreateQuotes || !canViewCustomers
+                  ? 'Quotes and Customers access required'
+                  : 'Quick add a Project job with a timed visit'
+              }
+              onClick={() => requestCreation('quick_add')}
+              data-testid="schedule-quick-add-button"
+            >
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Quick add
             </Button>
           </div>
         </div>
@@ -2944,10 +3215,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               >
                 <div>
                   <p className="text-sm text-muted-foreground xl:hidden">
-                    Select a visit, then tap an available resource to assign it immediately.
+                    Drag from the grip handle onto a visit, or select a visit and tap a resource.
                   </p>
                   <p className="hidden text-sm text-muted-foreground xl:block">
-                    Drag a resource card onto a timed visit, or select the visit and tap a resource.
+                    Drag from the grip handle onto a timed visit, or select the visit and tap a resource.
                   </p>
                 </div>
                 {view === SCHEDULING_BOARD_VIEWS.daily ? (
@@ -3464,7 +3735,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     job={job}
                                     visit={visit}
                                     assignments={assignmentsFor(job.id, date).filter((assignment) => assignment.visit_id === visit.id)}
-                                    isDropEnabled={false}
+                                    isDropEnabled
                                     isActiveTarget={activeVisitTarget?.visit.id === visit.id}
                                     onActivate={() => activateVisit(job, visit)}
                                     onEdit={() => openVisitEditor(job, date, visit)}
@@ -3634,6 +3905,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           });
         }}
       />
+      <ScheduleBoardQuickAddDialog
+        open={quickAddOpen}
+        defaultDate={selectedDate}
+        managerOptions={quoteManagerOptions}
+        managerLoadError={quoteManagerOptionsError}
+        onClose={() => setQuickAddOpen(false)}
+        onCreated={handleQuickAddCreated}
+      />
       <PlantUnavailabilityDialog
         open={unavailabilityOpen}
         onOpenChange={setUnavailabilityOpen}
@@ -3668,7 +3947,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             <AlertDialogCancel className={schedulingControlStyles.outline}>Keep current schedule</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void overridePendingConflict()}
-              disabled={isAssigning}
+              disabled={inFlightMutationKeys.size > 0}
               className={schedulingControlStyles.warning}
             >
               Assign anyway

@@ -11,6 +11,9 @@ const {
   mockSensitiveAccess,
   mockSyncProjectLocation,
   mockCreateRpc,
+  mockQuickAddRpc,
+  mockVisitSingle,
+  mockCustomerMaybeSingle,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
   mockLoadTags: vi.fn(),
@@ -19,6 +22,9 @@ const {
   mockSensitiveAccess: vi.fn(),
   mockSyncProjectLocation: vi.fn(),
   mockCreateRpc: vi.fn(),
+  mockQuickAddRpc: vi.fn(),
+  mockVisitSingle: vi.fn(),
+  mockCustomerMaybeSingle: vi.fn(),
 }));
 
 vi.mock('@/lib/server/scheduling-auth', () => ({
@@ -48,6 +54,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     rpc: (name: string, args: Record<string, unknown>) => {
       if (name === 'create_project_schedule_job') return mockCreateRpc(args);
+      if (name === 'quick_add_schedule_project_v1') return mockQuickAddRpc(args);
       if (name === 'remove_schedule_job') return mockRemoveRpc(args);
       throw new Error(`Unexpected RPC ${name}`);
     },
@@ -77,7 +84,16 @@ vi.mock('@/lib/supabase/admin', () => ({
                 error: null,
               };
             }
+            if (table === 'schedule_visits') {
+              return mockVisitSingle();
+            }
             throw new Error(`Unexpected table ${table}`);
+          },
+          maybeSingle: async () => {
+            if (table === 'customers') {
+              return mockCustomerMaybeSingle();
+            }
+            throw new Error(`Unexpected maybeSingle table ${table}`);
           },
         }),
       }),
@@ -149,6 +165,34 @@ describe('Project-backed scheduling job routes', () => {
       error: null,
     });
     mockSyncProjectLocation.mockResolvedValue(undefined);
+    mockQuickAddRpc.mockResolvedValue({
+      data: [{
+        project_number_id: 'project-1',
+        schedule_job_id: 'job-1',
+        schedule_visit_id: 'visit-1',
+        project_reference: '60001-MD',
+        was_project_created: true,
+      }],
+      error: null,
+    });
+    mockVisitSingle.mockResolvedValue({
+      data: {
+        id: 'visit-1',
+        job_id: 'job-1',
+        sequence_number: 1,
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+        status: 'planned',
+      },
+      error: null,
+    });
+    mockCustomerMaybeSingle.mockResolvedValue({
+      data: {
+        id: '33333333-3333-4333-8333-333333333333',
+        status: 'active',
+      },
+      error: null,
+    });
   });
 
   it('requires the Quotes sensitive-access boundary before creation', async () => {
@@ -225,6 +269,89 @@ describe('Project-backed scheduling job routes', () => {
       source_type: 'quote',
       quote_id: 'quote-1',
     });
+  });
+
+  it('quick-adds a Project Number, job, and visit atomically', async () => {
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const response = await POST(postRequest({
+      mode: 'quick_add',
+      request_id: '77777777-7777-4777-8777-777777777777',
+      manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      project_title: 'Emergency works',
+      customer_id: '33333333-3333-4333-8333-333333333333',
+      status: 'scheduled',
+      start_date: '2026-07-27',
+      end_date: '2026-07-27',
+      is_drop_on_ready: false,
+      tag_ids: [],
+      initial_visit: {
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+      },
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(mockQuickAddRpc).toHaveBeenCalledWith(expect.objectContaining({
+      p_request_id: '77777777-7777-4777-8777-777777777777',
+      p_manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      p_visit_starts_at: '2026-07-27T08:00:00.000Z',
+    }));
+    expect(payload.visit.id).toBe('visit-1');
+    expect(payload.project_reference).toBe('60001-MD');
+  });
+
+  it('requires the Quotes sensitive-access boundary before quick add', async () => {
+    mockSensitiveAccess.mockResolvedValue(
+      NextResponse.json({ error: 'Sensitive access PIN required.' }, { status: 428 })
+    );
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const response = await POST(postRequest({
+      mode: 'quick_add',
+      request_id: '77777777-7777-4777-8777-777777777777',
+      manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      project_title: 'Emergency works',
+      customer_id: '33333333-3333-4333-8333-333333333333',
+      status: 'scheduled',
+      start_date: '2026-07-27',
+      initial_visit: {
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+      },
+    }));
+
+    expect(response.status).toBe(428);
+    expect(mockQuickAddRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects quick add for inactive customers before calling the RPC', async () => {
+    mockCustomerMaybeSingle.mockResolvedValue({
+      data: {
+        id: '33333333-3333-4333-8333-333333333333',
+        status: 'inactive',
+      },
+      error: null,
+    });
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const response = await POST(postRequest({
+      mode: 'quick_add',
+      request_id: '77777777-7777-4777-8777-777777777777',
+      manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      project_title: 'Emergency works',
+      customer_id: '33333333-3333-4333-8333-333333333333',
+      status: 'scheduled',
+      start_date: '2026-07-27',
+      end_date: '2026-07-27',
+      initial_visit: {
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+      },
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toMatch(/active customer/i);
+    expect(mockQuickAddRpc).not.toHaveBeenCalled();
   });
 
   it('returns Project provenance without deleting the Project source', async () => {

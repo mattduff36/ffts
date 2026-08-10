@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
+import { loadEmployeeCapacityForDates } from '@/lib/server/scheduling-assignment-capacity';
 import {
   conflictCodes,
   detectEmployeeConflicts,
@@ -111,42 +112,98 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const now = new Date().toISOString();
-    const rows = input.work_dates.map((workDate) => {
-      const conflicts = conflictsByDate[workDate] || [];
-      const isOverridden = input.override_conflicts && conflicts.length > 0;
-      return {
-        job_id: input.job_id,
-        work_date: workDate,
-        notes: input.notes || null,
-        conflict_override: isOverridden,
-        conflict_codes: conflictCodes(conflicts),
-        conflict_override_by: isOverridden ? access.userId : null,
-        conflict_override_at: isOverridden ? now : null,
-        assigned_by: access.userId,
-        visit_id: visit?.id || null,
-        ...(input.resource_type === 'employee'
-          ? { profile_id: input.resource_id }
-          : { plant_id: input.resource_id }),
-      };
+    // All creates use a single transactional RPC so multi-date requests are all-or-nothing.
+    const conflictCodesByDate = Object.fromEntries(
+      input.work_dates.map((workDate) => [
+        workDate,
+        conflictCodes(conflictsByDate[workDate] || []),
+      ])
+    );
+    const { data: rows, error } = await admin.rpc('create_schedule_assignments_bulk_v1', {
+      p_job_id: input.job_id,
+      p_visit_id: visit?.id || null,
+      p_resource_type: input.resource_type,
+      p_resource_id: input.resource_id,
+      p_work_dates: input.work_dates,
+      p_notes: input.notes || null,
+      p_override_conflicts: input.override_conflicts,
+      p_conflict_codes_by_date: conflictCodesByDate,
+      p_actor_user_id: access.userId,
     });
-
-    const table =
-      input.resource_type === 'employee'
-        ? 'schedule_employee_assignments'
-        : 'schedule_plant_assignments';
-    const { data, error } = await admin.from(table).insert(rows).select();
     if (error) {
-      if (error.code === '23505') {
+      if (error.code === '23505' || error.message.includes('RESOURCE_OVERLAP')) {
         return NextResponse.json(
-          { error: 'This resource is already assigned to the job on one of those dates.' },
+          {
+            error: visit
+              ? 'This resource is already assigned during an overlapping visit.'
+              : 'This resource is already assigned to the job on one of those dates.',
+            conflicts_by_date: Object.fromEntries(
+              input.work_dates.map((workDate) => [
+                workDate,
+                [{
+                  code: input.resource_type === 'employee'
+                    ? 'employee_double_booked'
+                    : 'plant_double_booked',
+                  severity: 'warning',
+                  message: visit
+                    ? 'This resource is already assigned during an overlapping visit.'
+                    : 'This resource is already assigned on this date.',
+                }],
+              ])
+            ),
+          },
           { status: 409 }
         );
+      }
+      if (error.code === 'P0001') {
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
       throw error;
     }
 
-    return NextResponse.json({ assignments: data || [] }, { status: 201 });
+    type CreatedAssignmentRow = {
+      assignment_id: string;
+      job_id: string;
+      work_date: string;
+      visit_id: string | null;
+      notes: string | null;
+      conflict_override: boolean;
+      conflict_codes: string[];
+      conflict_override_by: string | null;
+      conflict_override_at: string | null;
+      assigned_by: string | null;
+      created_at: string;
+      updated_at: string;
+      profile_id: string | null;
+      plant_id: string | null;
+    };
+    const createdRows = (rows || []) as CreatedAssignmentRow[];
+    const createdAssignments = createdRows.map((created) => ({
+      id: created.assignment_id,
+      job_id: created.job_id,
+      work_date: created.work_date,
+      visit_id: created.visit_id,
+      notes: created.notes,
+      conflict_override: created.conflict_override,
+      conflict_codes: created.conflict_codes,
+      conflict_override_by: created.conflict_override_by,
+      conflict_override_at: created.conflict_override_at,
+      assigned_by: created.assigned_by,
+      created_at: created.created_at,
+      updated_at: created.updated_at,
+      ...(input.resource_type === 'employee'
+        ? { profile_id: created.profile_id }
+        : { plant_id: created.plant_id }),
+    }));
+    if (createdAssignments.length === 0) {
+      throw new Error('Assignment creation returned no result.');
+    }
+
+    const capacity = await loadEmployeeCapacityForDates(admin, input.work_dates);
+    return NextResponse.json(
+      { assignments: createdAssignments, employee_capacity: capacity },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating scheduling assignment:', error);
     return NextResponse.json({ error: 'Unable to create this assignment.' }, { status: 500 });

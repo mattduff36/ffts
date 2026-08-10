@@ -25,6 +25,7 @@ This directory contains the public developer, feature, setup, and verification d
 ## Product Domains
 
 - [`PRD_WORKSHOP_TASKS.md`](PRD_WORKSHOP_TASKS.md) and [`guides/WORKSHOP_TASKS_IMPLEMENTATION.md`](guides/WORKSHOP_TASKS_IMPLEMENTATION.md)
+- [`guides/SCHEDULING_IMPLEMENTATION.md`](guides/SCHEDULING_IMPLEMENTATION.md) and [`guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`](guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md)
 - [`guides/INVENTORY_LOCATIONS.md`](guides/INVENTORY_LOCATIONS.md)
 - [`features/RAMS_FEATURE_PRD.md`](features/RAMS_FEATURE_PRD.md) and [`features/RAMS_IMPLEMENTATION_PROGRESS.md`](features/RAMS_IMPLEMENTATION_PROGRESS.md)
 - [`features/VEHICLE_MANAGEMENT_SYSTEM.md`](features/VEHICLE_MANAGEMENT_SYSTEM.md)

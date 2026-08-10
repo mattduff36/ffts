@@ -6246,6 +6246,39 @@ export type Database = {
           },
         ]
       }
+      schedule_quick_add_requests: {
+        Row: {
+          request_id: string
+          actor_user_id: string
+          project_number_id: string
+          schedule_job_id: string
+          schedule_visit_id: string
+          project_reference: string
+          was_project_created: boolean
+          created_at: string
+        }
+        Insert: {
+          request_id: string
+          actor_user_id: string
+          project_number_id: string
+          schedule_job_id: string
+          schedule_visit_id: string
+          project_reference: string
+          was_project_created?: boolean
+          created_at?: string
+        }
+        Update: {
+          request_id?: string
+          actor_user_id?: string
+          project_number_id?: string
+          schedule_job_id?: string
+          schedule_visit_id?: string
+          project_reference?: string
+          was_project_created?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       schedule_jobs: {
         Row: {
           id: string
@@ -9413,6 +9446,148 @@ export type Database = {
           p_is_drop_on_ready: boolean
           p_tag_ids: string[]
           p_actor_user_id: string
+        }
+        Returns: {
+          project_number_id: string
+          schedule_job_id: string
+          project_reference: string
+          was_project_created: boolean
+        }[]
+      }
+      create_schedule_assignment_v1: {
+        Args: {
+          p_job_id: string
+          p_visit_id: string | null
+          p_resource_type: string
+          p_resource_id: string
+          p_work_date: string
+          p_notes: string | null
+          p_override_conflicts: boolean
+          p_conflict_codes: string[]
+          p_actor_user_id: string
+        }
+        Returns: {
+          assignment_id: string
+          resource_type: string
+          job_id: string
+          visit_id: string
+          work_date: string
+          profile_id: string | null
+          plant_id: string | null
+          notes: string | null
+          conflict_override: boolean
+          conflict_codes: string[]
+          conflict_override_by: string | null
+          conflict_override_at: string | null
+          assigned_by: string | null
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      create_schedule_assignments_bulk_v1: {
+        Args: {
+          p_job_id: string
+          p_visit_id: string | null
+          p_resource_type: string
+          p_resource_id: string
+          p_work_dates: string[]
+          p_notes: string | null
+          p_override_conflicts: boolean
+          p_conflict_codes_by_date: Record<string, string[]> | null
+          p_actor_user_id: string
+        }
+        Returns: {
+          assignment_id: string
+          resource_type: string
+          job_id: string
+          visit_id: string
+          work_date: string
+          profile_id: string | null
+          plant_id: string | null
+          notes: string | null
+          conflict_override: boolean
+          conflict_codes: string[]
+          conflict_override_by: string | null
+          conflict_override_at: string | null
+          assigned_by: string | null
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      move_schedule_assignment_v1: {
+        Args: {
+          p_assignment_id: string
+          p_resource_type: string
+          p_visit_id: string
+          p_override_conflicts: boolean
+          p_conflict_codes: string[]
+          p_actor_user_id: string
+        }
+        Returns: {
+          assignment_id: string
+          resource_type: string
+          job_id: string
+          visit_id: string
+          work_date: string
+          profile_id: string | null
+          plant_id: string | null
+          notes: string | null
+          conflict_override: boolean
+          conflict_codes: string[]
+          conflict_override_by: string | null
+          conflict_override_at: string | null
+          assigned_by: string | null
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      quick_add_schedule_project_v1: {
+        Args: {
+          p_request_id: string
+          p_manager_profile_id: string
+          p_project_title: string
+          p_project_description: string | null
+          p_project_notes: string | null
+          p_customer_id: string
+          p_customer_site_id: string | null
+          p_site_address: string | null
+          p_job_status: string
+          p_start_date: string
+          p_end_date: string
+          p_estimated_duration_minutes: number | null
+          p_is_drop_on_ready: boolean
+          p_tag_ids: string[]
+          p_actor_user_id: string
+          p_visit_starts_at: string
+          p_visit_ends_at: string
+        }
+        Returns: {
+          project_number_id: string
+          schedule_job_id: string
+          schedule_visit_id: string
+          project_reference: string
+          was_project_created: boolean
+        }[]
+      }
+      schedule_project_with_initial_visit: {
+        Args: {
+          p_project_number_id: string
+          p_manager_profile_id: string | null
+          p_project_title: string | null
+          p_project_description: string | null
+          p_project_notes: string | null
+          p_customer_id: string
+          p_customer_site_id: string | null
+          p_site_address: string | null
+          p_job_status: string
+          p_start_date: string
+          p_end_date: string
+          p_estimated_duration_minutes: number | null
+          p_is_drop_on_ready: boolean
+          p_tag_ids: string[]
+          p_actor_user_id: string
+          p_visit_starts_at: string
+          p_visit_ends_at: string
         }
         Returns: {
           project_number_id: string

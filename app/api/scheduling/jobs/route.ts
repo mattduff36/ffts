@@ -10,27 +10,33 @@ import {
   loadTagsForScheduleJob,
 } from '@/lib/server/scheduling-tags';
 import type { Database } from '@/types/database';
+import type { ScheduleJob, ScheduleVisit } from '@/types/scheduling';
 
-const jobSchema = z
+const sharedJobFields = {
+  project_description: z.string().trim().max(5000).nullish(),
+  project_notes: z.string().trim().max(5000).nullish(),
+  site_address: z.string().trim().max(2000).nullish(),
+  customer_id: z.uuid(),
+  customer_site_id: z.uuid().nullish(),
+  status: z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']).default('draft'),
+  estimated_duration_minutes: z.number().int().min(15).max(100800).nullish(),
+  is_drop_on_ready: z.boolean().default(false),
+  tag_ids: z.array(z.uuid()).max(30).default([]),
+};
+
+const standardJobSchema = z
   .object({
+    mode: z.literal('standard').optional(),
     project_number_id: z.uuid().nullish(),
     manager_profile_id: z.uuid().nullish(),
     project_title: z.string().trim().max(500).nullish(),
-    project_description: z.string().trim().max(5000).nullish(),
-    project_notes: z.string().trim().max(5000).nullish(),
-    site_address: z.string().trim().max(2000).nullish(),
-    customer_id: z.uuid(),
-    customer_site_id: z.uuid().nullish(),
-    status: z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']).default('draft'),
     start_date: z.iso.date(),
     end_date: z.iso.date(),
-    estimated_duration_minutes: z.number().int().min(15).max(100800).nullish(),
-    is_drop_on_ready: z.boolean().default(false),
-    tag_ids: z.array(z.uuid()).max(30).default([]),
     initial_visit: z.object({
       starts_at: z.iso.datetime(),
       ends_at: z.iso.datetime(),
     }).optional(),
+    ...sharedJobFields,
   })
   .refine((value) => value.end_date >= value.start_date, {
     message: 'End date must be on or after the start date.',
@@ -53,6 +59,23 @@ const jobSchema = z
       });
     }
   });
+
+const quickAddJobSchema = z.object({
+  mode: z.literal('quick_add'),
+  request_id: z.uuid(),
+  manager_profile_id: z.uuid(),
+  project_title: z.string().trim().min(1).max(500),
+  start_date: z.iso.date(),
+  end_date: z.iso.date().optional(),
+  initial_visit: z.object({
+    starts_at: z.iso.datetime(),
+    ends_at: z.iso.datetime(),
+  }),
+  ...sharedJobFields,
+}).refine((value) => (value.end_date || value.start_date) >= value.start_date, {
+  message: 'End date must be on or after the start date.',
+  path: ['end_date'],
+});
 
 type QuoteProjectNumberRow = Database['public']['Tables']['quote_project_numbers']['Row'];
 
@@ -97,7 +120,10 @@ export async function POST(request: NextRequest) {
     const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
     if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
-    const parsed = jobSchema.safeParse(await request.json());
+    const body = await request.json() as { mode?: string };
+    const parsed = body?.mode === 'quick_add'
+      ? quickAddJobSchema.safeParse(body)
+      : standardJobSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message || 'Invalid job details.' },
@@ -118,6 +144,98 @@ export async function POST(request: NextRequest) {
           field_errors: resolvedSite.fieldErrors,
         },
         { status: 400 }
+      );
+    }
+
+    if (parsed.data.mode === 'quick_add') {
+      const customerResult = await admin
+        .from('customers')
+        .select('id, status')
+        .eq('id', parsed.data.customer_id)
+        .maybeSingle();
+      if (customerResult.error) throw customerResult.error;
+      if (!customerResult.data || customerResult.data.status !== 'active') {
+        return NextResponse.json(
+          { error: 'Select an active customer.' },
+          { status: 400 }
+        );
+      }
+
+      const endDate = parsed.data.end_date || parsed.data.start_date;
+      const { data: creationRows, error: creationError } = await admin.rpc(
+        'quick_add_schedule_project_v1',
+        {
+          p_request_id: parsed.data.request_id,
+          p_manager_profile_id: parsed.data.manager_profile_id,
+          p_project_title: parsed.data.project_title,
+          p_project_description: parsed.data.project_description || null,
+          p_project_notes: parsed.data.project_notes || null,
+          p_customer_id: parsed.data.customer_id,
+          p_customer_site_id: resolvedSite.customerSiteId,
+          p_site_address: resolvedSite.siteAddress,
+          p_job_status: parsed.data.status,
+          p_start_date: parsed.data.start_date,
+          p_end_date: endDate,
+          p_estimated_duration_minutes: parsed.data.estimated_duration_minutes || null,
+          p_is_drop_on_ready: parsed.data.is_drop_on_ready,
+          p_tag_ids: parsed.data.tag_ids,
+          p_actor_user_id: access.userId,
+          p_visit_starts_at: parsed.data.initial_visit.starts_at,
+          p_visit_ends_at: parsed.data.initial_visit.ends_at,
+        }
+      );
+      if (creationError) {
+        if (creationError.code === '23505') {
+          return NextResponse.json(
+            { error: 'That Project Number is already scheduled.' },
+            { status: 409 }
+          );
+        }
+        if (creationError.code === 'P0001') {
+          return NextResponse.json({ error: creationError.message }, { status: 400 });
+        }
+        throw creationError;
+      }
+
+      const creation = creationRows?.[0];
+      if (!creation) {
+        throw new Error('Quick add creation returned no result.');
+      }
+
+      if (creation.was_project_created) {
+        const projectResult = await admin
+          .from('quote_project_numbers')
+          .select('*')
+          .eq('id', creation.project_number_id)
+          .single();
+        if (projectResult.error) throw projectResult.error;
+        try {
+          await syncProjectNumberSiteLocation(
+            admin,
+            projectResult.data as QuoteProjectNumberRow,
+            access.userId
+          );
+        } catch (syncError) {
+          console.error('Unable to sync Project Number inventory location:', syncError);
+        }
+      }
+
+      const [jobResult, visitResult] = await Promise.all([
+        admin.from('schedule_jobs').select('*').eq('id', creation.schedule_job_id).single(),
+        admin.from('schedule_visits').select('*').eq('id', creation.schedule_visit_id).single(),
+      ]);
+      if (jobResult.error) throw jobResult.error;
+      if (visitResult.error) throw visitResult.error;
+      const tags = await loadTagsForScheduleJob(admin, creation.schedule_job_id);
+      return NextResponse.json(
+        {
+          job: { ...jobResult.data, tags } as ScheduleJob,
+          visit: visitResult.data as ScheduleVisit,
+          project_number_id: creation.project_number_id,
+          project_reference: creation.project_reference,
+          was_project_created: creation.was_project_created,
+        },
+        { status: 201 }
       );
     }
 

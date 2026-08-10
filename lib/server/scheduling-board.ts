@@ -4,6 +4,7 @@ import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import {
   enumerateScheduleDates,
+  getScheduleLondonStartsAtRangeIso,
   scheduleVisitIntervalsOverlap,
 } from '@/lib/utils/scheduling';
 import type {
@@ -213,6 +214,7 @@ export async function loadSchedulingBoard(
   weekStart: string,
   weekEnd: string
 ): Promise<SchedulingBoardPayload> {
+  const visitRange = getScheduleLondonStartsAtRangeIso(weekStart, weekEnd);
   const [jobsResult, tagsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
     await Promise.all([
       admin
@@ -230,8 +232,8 @@ export async function loadSchedulingBoard(
       admin
         .from('schedule_visits')
         .select('*')
-        .gte('starts_at', `${weekStart}T00:00:00.000Z`)
-        .lte('starts_at', `${weekEnd}T23:59:59.999Z`)
+        .gte('starts_at', visitRange.startInclusiveIso)
+        .lt('starts_at', visitRange.endExclusiveIso)
         .order('starts_at'),
       admin
         .from('schedule_employee_assignments')
@@ -370,6 +372,7 @@ export async function loadSchedulingSelf(
   }
 
   const dates = Array.from(new Set(employeeRows.map((row) => String(row.work_date))));
+  const visitRange = getScheduleLondonStartsAtRangeIso(weekStart, weekEnd);
   const [jobsResult, visitsResult, plantAssignmentsResult] = await Promise.all([
     admin
       .from('schedule_jobs')
@@ -379,8 +382,8 @@ export async function loadSchedulingSelf(
       .from('schedule_visits')
       .select('*')
       .in('job_id', jobIds)
-      .gte('starts_at', `${weekStart}T00:00:00.000Z`)
-      .lte('starts_at', `${weekEnd}T23:59:59.999Z`),
+      .gte('starts_at', visitRange.startInclusiveIso)
+      .lt('starts_at', visitRange.endExclusiveIso),
     admin
       .from('schedule_plant_assignments')
       .select('*, plant:plant(id, plant_id, nickname, make, model, status)')

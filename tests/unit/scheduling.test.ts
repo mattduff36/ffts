@@ -8,11 +8,13 @@ import {
   enumerateScheduleDates,
   formatScheduleEmployeeCompactName,
   getDailyInitialVisitWindow,
+  getScheduleLondonStartsAtRangeIso,
   getScheduleQuoteEndDate,
   getScheduleQuoteStage,
   getSchedulingWeek,
   isScheduleDate,
   mapDailyScheduleClientXToMinutes,
+  toScheduleLondonDateTimeIso,
 } from '@/lib/utils/scheduling';
 import {
   buildEmployeeAssignmentConflicts,
@@ -101,6 +103,36 @@ describe('daily scheduling coordinate mapping', () => {
     });
     expect(getDailyInitialVisitWindow(420, 400).durationMinutes).toBe(180);
     expect(getDailyInitialVisitWindow(420, null).durationMinutes).toBe(180);
+  });
+
+  it('converts Europe/London wall-clock times into UTC ISO values', () => {
+    const winter = toScheduleLondonDateTimeIso('2026-01-15', '08:00');
+    const summer = toScheduleLondonDateTimeIso('2026-07-14', '08:00');
+    expect(winter).toBe('2026-01-15T08:00:00.000Z');
+    expect(summer).toBe('2026-07-14T07:00:00.000Z');
+  });
+
+  it('snaps nonexistent spring-forward London times forward to the next valid minute', () => {
+    // 2026-03-29 01:00 GMT -> 02:00 BST; 01:30 never exists.
+    const snapped = toScheduleLondonDateTimeIso('2026-03-29', '01:30');
+    expect(snapped).toBe('2026-03-29T01:00:00.000Z'); // 02:00 BST
+  });
+
+  it('prefers the earlier occurrence for ambiguous fall-back London times', () => {
+    // 2026-10-25 01:30 occurs twice; choose the earlier (BST) occurrence.
+    const earlier = toScheduleLondonDateTimeIso('2026-10-25', '01:30');
+    expect(earlier).toBe('2026-10-25T00:30:00.000Z');
+    const nearEnd = toScheduleLondonDateTimeIso('2026-10-25', '01:59');
+    expect(nearEnd).toBe('2026-10-25T00:59:00.000Z');
+  });
+
+  it('builds London-local starts_at bounds that include early BST visits', () => {
+    const range = getScheduleLondonStartsAtRangeIso('2026-07-14', '2026-07-14');
+    expect(range.startInclusiveIso).toBe('2026-07-13T23:00:00.000Z');
+    expect(range.endExclusiveIso).toBe('2026-07-14T23:00:00.000Z');
+    const earlyVisitUtc = '2026-07-13T23:30:00.000Z'; // 00:30 London BST
+    expect(earlyVisitUtc >= range.startInclusiveIso).toBe(true);
+    expect(earlyVisitUtc < range.endExclusiveIso).toBe(true);
   });
 });
 

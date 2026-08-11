@@ -96,6 +96,10 @@ Model registry version: `ffts-tee-model-registry-v1`.
 
 The Markdown release log is the only tracked file under `docs_private/`. If release generation unexpectedly fails after the product commit, finalise blocks the push, preserves the local commit and generated files, and prints exact recovery commands.
 
+Exact finalise checkpointing reuses prior passed steps only when content/command/environment/artifact fingerprints match. Protocol-managed CRITICAL runs bind `activeFinaliseContext` after `workflow-protocol finalise-start`. Ordinary runs use `docs_private/automation/finalise-cache/`. The 45-minute mtime skip path remains an explicit compatibility fallback only (`allowLegacyMtimeFallback`).
+
+`npm run finalise:repair` re-runs only a fresh allowlisted failed step (`build`, `test:run`, `testsuite`) from `docs_private/automation/finalise-last-failure.json`. Migrations, database validation, commit, push, stale, and unknown failures are refused. Successful repair writes `finalise-repair-complete.json` (awaiting closure) and blocks another repair until the original `npm run finalise` / `finalise:full` clears that gate. Open CRITICAL protocol workstreams that are not `finalise_ready` block mutating finalise; `--help` / `--dry-run` never apply finalise completion correlation.
+
 Project rules under `.cursor/rules/` map finalise/fixerrors requests, require push-content reporting, and keep all workflows self-contained in FFTS.
 
 ## Invoice Evidence

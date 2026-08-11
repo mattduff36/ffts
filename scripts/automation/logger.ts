@@ -10,7 +10,19 @@ import type {
   AutomationRunMetadata,
   AutomationRunStatus,
   AutomationStepLog,
+  WorkflowFinaliseCorrelation,
+  WorkflowReviewState,
 } from './types';
+import {
+  getWorkflowPaths,
+  loadWorkflowReviewState,
+  saveWorkflowReviewState,
+  withWorkflowLock,
+} from './workflow-events';
+import {
+  correlateFinaliseRun,
+  shouldApplyFinaliseCorrelation,
+} from './workflow-finalise-correlation';
 
 const REPO_ROOT = process.cwd();
 const AUTOMATION_ROOT = path.join(REPO_ROOT, 'docs_private', 'automation');
@@ -73,6 +85,78 @@ function getMetadata(): AutomationRunMetadata {
     npmVersion: runMetadataCommand('npm', ['--version']) || 'unknown',
     platform: process.platform,
   };
+}
+
+export function readPostRunGitIdentity(): {
+  branchName: string;
+  headCommit: string | null;
+} {
+  return {
+    branchName:
+      runMetadataCommand('git', ['branch', '--show-current']) || '(detached HEAD)',
+    headCommit: runMetadataCommand('git', ['rev-parse', 'HEAD']) || null,
+  };
+}
+
+export function correlateFinaliseAutomationRun(params: {
+  scriptName: string;
+  status: AutomationRunStatus;
+  runId: string;
+  repoRoot?: string;
+  state?: WorkflowReviewState;
+  mode?: string;
+  args?: string[];
+}): WorkflowFinaliseCorrelation | undefined {
+  if (
+    !shouldApplyFinaliseCorrelation({
+      scriptName: params.scriptName,
+      mode: params.mode,
+      args: params.args,
+    })
+  ) {
+    return undefined;
+  }
+  const repoRoot = params.repoRoot ?? REPO_ROOT;
+  const identity = readPostRunGitIdentity();
+  const correlate = (state: WorkflowReviewState) =>
+    correlateFinaliseRun({
+      state,
+      repoRoot,
+      finaliseRunId: params.runId,
+      finaliseOutcome: params.status === 'passed' ? 'passed' : 'failed',
+      // Intentionally omit resultingCommit: correlation must read finish-time HEAD.
+    });
+
+  try {
+    if (params.state) {
+      const result = correlate(params.state);
+      return {
+        ...result.correlation,
+        resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
+        branchName: result.correlation.branchName || identity.branchName,
+      };
+    }
+    const paths = getWorkflowPaths(repoRoot);
+    return withWorkflowLock(paths.lockPath, () => {
+      const result = correlate(loadWorkflowReviewState(paths.statePath));
+      saveWorkflowReviewState(paths.statePath, result.state);
+      return {
+        ...result.correlation,
+        resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
+        branchName: result.correlation.branchName || identity.branchName,
+      };
+    });
+  } catch {
+    return {
+      workstreamIds: [],
+      matchedBy: 'none',
+      branchName: identity.branchName,
+      headCommit: identity.headCommit,
+      resultingCommit: identity.headCommit,
+      identityStatus: 'missing',
+      checkpointId: null,
+    };
+  }
 }
 
 export function redactSensitiveText(value: string): string {
@@ -286,6 +370,19 @@ export class AutomationRun {
     return { status: result.status, stdout, stderr };
   }
 
+  private correlateWorkflowIfFinalise(
+    status: AutomationRunStatus
+  ): WorkflowFinaliseCorrelation | undefined {
+    return correlateFinaliseAutomationRun({
+      scriptName: this.log.scriptName,
+      status,
+      runId: this.log.id,
+      repoRoot: REPO_ROOT,
+      mode: this.log.mode,
+      args: this.log.args,
+    });
+  }
+
   async finish(status: AutomationRunStatus, error?: unknown): Promise<void> {
     const endedAt = new Date();
     const artifacts = this.log.expectedArtifacts.map((artifact) => ({
@@ -293,6 +390,7 @@ export class AutomationRun {
       exists: existsSync(path.join(REPO_ROOT, artifact.path)),
       required: artifact.required !== false,
     }));
+    const workflowCorrelation = this.correlateWorkflowIfFinalise(status);
     const finalLog: AutomationRunLog = {
       ...this.log,
       endedAt: endedAt.toISOString(),
@@ -300,6 +398,7 @@ export class AutomationRun {
       status,
       artifacts,
       error: error ? redactSensitiveText(error instanceof Error ? error.message : String(error)) : undefined,
+      workflowCorrelation,
     };
 
     writeFileSync(this.logPath, JSON.stringify(finalLog, null, 2), 'utf8');

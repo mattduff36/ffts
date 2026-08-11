@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe('finalise release metadata safety', () => {
-  it('rejects an ignored release log before finalise commits product changes', () => {
+  it('TEE-RELEASE-001 rejects an ignored release log before finalise commits product changes', () => {
     const root = createReleaseFixture('/docs_private/\n');
     expect(() => assertReleaseMetadataTracking(root)).toThrow(/release-log\.md is ignored/u);
   });

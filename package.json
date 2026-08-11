@@ -11,6 +11,7 @@
     "finalise:push": "tsx scripts/finalise.ts --push",
     "finalise:full": "tsx scripts/finalise.ts --full",
     "finalise:full:push": "tsx scripts/finalise.ts --full --push",
+    "finalise:repair": "tsx scripts/finalise-repair.ts",
     "lint": "eslint .",
     "lint:fast": "oxlint .",
     "deps:check": "depcheck",

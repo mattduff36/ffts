@@ -1,6 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 import type { AutomationRunLog, AutomationStepLog } from './automation/types';
+import {
+  canReuseOrdinaryFinaliseStep,
+  type FinaliseModeKey,
+  getProtocolSkippableFinaliseTasks,
+  resolveActiveProtocolFinaliseContext,
+} from './automation/finalise-checkpoint';
 import { getDefaultTerminalDirectory } from './finalise-activity-guard';
 
 export type FinaliseTaskKey = 'migrations' | 'db-validate' | 'build' | 'test-run' | 'testsuite';
@@ -10,7 +16,9 @@ export interface RecentFinaliseTaskRun {
   command: string;
   completedAt: string;
   completedAtMs: number;
-  source: 'terminal' | 'automation-log';
+  source: 'terminal' | 'automation-log' | 'exact-cache';
+  /** Present when skip came from the explicit 45-minute mtime compatibility path. */
+  reuseEvidence?: 'legacy-mtime-fallback';
 }
 
 export interface RecentFinaliseTaskScanOptions {
@@ -22,6 +30,11 @@ export interface RecentFinaliseTaskScanOptions {
   automationRunDirectory?: string;
   now?: Date;
   recentWindowMs?: number;
+  /** When true, only protocol checkpoints may skip (no mtime fallback). */
+  preferProtocolCheckpoints?: boolean;
+  mode?: FinaliseModeKey;
+  /** Explicit opt-in compatibility path. Exact fingerprint cache is the default. */
+  allowLegacyMtimeFallback?: boolean;
 }
 
 export type SkippableFinaliseTasks = Partial<Record<FinaliseTaskKey, RecentFinaliseTaskRun>>;
@@ -126,6 +139,7 @@ function readRecentTerminalTaskRuns(options: Required<Pick<RecentFinaliseTaskSca
         completedAt: new Date(completedAtMs).toISOString(),
         completedAtMs,
         source: 'terminal',
+        reuseEvidence: 'legacy-mtime-fallback',
       }];
     });
 }
@@ -181,6 +195,7 @@ function readRecentAutomationTaskRuns(options: Required<Pick<RecentFinaliseTaskS
             completedAt: new Date(completedAtMs).toISOString(),
             completedAtMs,
             source: 'automation-log',
+            reuseEvidence: 'legacy-mtime-fallback',
           }];
         });
       } catch {
@@ -217,6 +232,61 @@ function canSkipTask(task: FinaliseTaskKey, run: RecentFinaliseTaskRun, options:
 }
 
 export function getSkippableFinaliseTasks(options: RecentFinaliseTaskScanOptions): SkippableFinaliseTasks {
+  // Protocol workstreams use content-addressed checkpoints only — never mtime heuristics.
+  const activeProtocol = resolveActiveProtocolFinaliseContext(options.repoRoot);
+  if (activeProtocol || options.preferProtocolCheckpoints) {
+    const protocolSkips = getProtocolSkippableFinaliseTasks({
+      repoRoot: options.repoRoot,
+      buildArtifactPath: options.buildArtifactPath,
+    });
+    const skippableFromProtocol: SkippableFinaliseTasks = {};
+    for (const [task, meta] of Object.entries(protocolSkips) as Array<
+      [FinaliseTaskKey, { reason: string; checkpointId: string }]
+    >) {
+      skippableFromProtocol[task] = {
+        task,
+        command: `protocol-checkpoint:${meta.checkpointId}`,
+        completedAt: new Date().toISOString(),
+        completedAtMs: Date.now(),
+        source: 'exact-cache',
+      };
+    }
+    return skippableFromProtocol;
+  }
+
+  const mode = options.mode ?? 'finalise';
+  const exactCommands: Partial<Record<FinaliseTaskKey, string>> = {
+    build: 'npm run build',
+    'test-run': 'npm run test:run',
+    testsuite: 'npm run testsuite',
+  };
+  const exact: SkippableFinaliseTasks = {};
+  for (const [task, command] of Object.entries(exactCommands) as Array<
+    [FinaliseTaskKey, string]
+  >) {
+    const requiredArtifactPaths =
+      task === 'build' && options.buildArtifactPath ? [options.buildArtifactPath] : [];
+    const result = canReuseOrdinaryFinaliseStep({
+      repoRoot: options.repoRoot,
+      mode,
+      task,
+      command,
+      requiredArtifactPaths,
+    });
+    if (result.reusable && result.step?.endedAt) {
+      exact[task] = {
+        task,
+        command,
+        completedAt: result.step.endedAt,
+        completedAtMs: Date.parse(result.step.endedAt),
+        source: 'exact-cache',
+      };
+    }
+  }
+  if (!options.allowLegacyMtimeFallback) {
+    return exact;
+  }
+
   const now = options.now ?? new Date();
   const recentWindowMs = options.recentWindowMs ?? DEFAULT_RECENT_WINDOW_MS;
   const terminalDirectory = options.terminalDirectory ?? getDefaultTerminalDirectory(options.repoRoot);
@@ -231,7 +301,7 @@ export function getSkippableFinaliseTasks(options: RecentFinaliseTaskScanOptions
     }),
   ].sort((left, right) => right.completedAtMs - left.completedAtMs);
 
-  const skippableTasks: SkippableFinaliseTasks = {};
+  const skippableTasks: SkippableFinaliseTasks = { ...exact };
 
   for (const run of runs) {
     if (skippableTasks[run.task]) {

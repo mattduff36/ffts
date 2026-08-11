@@ -900,6 +900,58 @@ export function reduceFinaliseStart(params: {
   return succeed('finalise context activated', next, { checkpointId });
 }
 
+/**
+ * Safe finalise completion/failure transition. Does not invent review tokens.
+ * Passed: phase -> finalised, clear activeCheckpointId.
+ * Failed/unknown: keep finalise_ready (or current), clear nothing required for retry.
+ */
+export function applyFinaliseProtocolOutcome(params: {
+  repoRoot: string;
+  state: WorkflowReviewState;
+  workstreamId: string;
+  outcome: 'passed' | 'failed' | 'unknown';
+  now?: () => Date;
+}): {
+  state: WorkflowReviewState;
+  record: WorkflowProtocolRecord | null;
+} {
+  const current = readProtocolRecord(params.repoRoot, params.workstreamId);
+  if (!current || !isWorkflowProtocolRecord(current)) {
+    return { state: params.state, record: null };
+  }
+  if (current.phase !== 'finalise_ready' && current.phase !== 'finalised') {
+    return { state: params.state, record: current };
+  }
+
+  const updatedAt = nowIso(params.now);
+  if (params.outcome !== 'passed') {
+    const failedRecord: WorkflowProtocolRecord = {
+      ...current,
+      nextAction: 'rerun_or_repair_finalise',
+      updatedAt,
+    };
+    writeJsonAtomic(getProtocolRecordPath(params.repoRoot, params.workstreamId), failedRecord);
+    return {
+      state: upsertProtocolInState(params.state, failedRecord),
+      record: failedRecord,
+    };
+  }
+
+  const finalized: WorkflowProtocolRecord = {
+    ...current,
+    phase: 'finalised',
+    nextAction: 'done',
+    activeCheckpointId: null,
+    updatedAt,
+  };
+  writeJsonAtomic(getProtocolRecordPath(params.repoRoot, params.workstreamId), finalized);
+  let nextState = upsertProtocolInState(params.state, finalized);
+  if (nextState.activeFinaliseContext?.workstreamId === params.workstreamId) {
+    nextState = setActiveFinaliseContext(nextState, null);
+  }
+  return { state: nextState, record: finalized };
+}
+
 function persistParentAndOptionalChildUnlocked(params: {
   repoRoot: string;
   parent: WorkflowProtocolRecord;

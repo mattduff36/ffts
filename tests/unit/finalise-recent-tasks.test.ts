@@ -1,8 +1,17 @@
 import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { spawnSync } from 'child_process';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSkippableFinaliseTasks } from '@/scripts/finalise-recent-tasks';
+import * as finaliseCheckpoint from '@/scripts/automation/finalise-checkpoint';
+import {
+  canResumeFinaliseCheckpointStep,
+  canReuseOrdinaryFinaliseStep,
+  createOrLoadFinaliseCheckpoint,
+  markFinaliseCheckpointStep,
+  markOrdinaryFinaliseStep,
+} from '@/scripts/automation/finalise-checkpoint';
 import type { AutomationRunLog, AutomationStepLog } from '@/scripts/automation/types';
 
 const NOW = new Date('2026-05-28T12:00:00.000Z');
@@ -10,6 +19,7 @@ const COMPLETED_AT = new Date('2026-05-28T11:55:00.000Z');
 const STARTED_AT = new Date('2026-05-28T11:54:00.000Z');
 
 let tempRoots: string[] = [];
+let environmentSnapshot: NodeJS.ProcessEnv | null = null;
 
 function createTempRoot(): string {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'finalise-recent-tasks-'));
@@ -47,6 +57,48 @@ function writeBuildArtifact(repoRoot: string): string {
   return buildArtifactPath;
 }
 
+function useControlledFinaliseEnvironment(): void {
+  environmentSnapshot = { ...process.env };
+  for (const key of Object.keys(process.env)) {
+    if (
+      key === 'PATH' ||
+      key === 'PATHEXT' ||
+      key === 'SystemRoot' ||
+      key === 'SYSTEMROOT' ||
+      key === 'ComSpec' ||
+      key === 'COMSPEC' ||
+      key === 'TEMP' ||
+      key === 'TMP' ||
+      key === 'HOME' ||
+      key === 'USERPROFILE' ||
+      key === 'APPDATA' ||
+      key === 'LOCALAPPDATA' ||
+      key === 'USERNAME' ||
+      key === 'USER' ||
+      key === 'OS' ||
+      key === 'WINDIR' ||
+      key.startsWith('CURSOR_') ||
+      key.startsWith('VSCODE_') ||
+      key.startsWith('npm_') ||
+      key.startsWith('NPM_')
+    ) {
+      continue;
+    }
+    delete process.env[key];
+  }
+  process.env.NODE_ENV = 'test';
+}
+
+function initializeGitRepo(repoRoot: string): void {
+  spawnSync('git', ['init'], { cwd: repoRoot, encoding: 'utf8' });
+  spawnSync('git', ['add', '.'], { cwd: repoRoot, encoding: 'utf8' });
+  spawnSync(
+    'git',
+    ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'fixture'],
+    { cwd: repoRoot, encoding: 'utf8' }
+  );
+}
+
 function createAutomationLog(steps: AutomationStepLog[]): AutomationRunLog {
   return {
     id: 'run-1',
@@ -72,10 +124,16 @@ function createAutomationLog(steps: AutomationStepLog[]): AutomationRunLog {
 }
 
 afterEach(() => {
+  if (environmentSnapshot) {
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, environmentSnapshot);
+    environmentSnapshot = null;
+  }
   for (const tempRoot of tempRoots) {
     rmSync(tempRoot, { recursive: true, force: true });
   }
   tempRoots = [];
+  vi.restoreAllMocks();
 });
 
 describe('finalise recent task detection', () => {
@@ -93,9 +151,11 @@ describe('finalise recent task detection', () => {
       automationRunDirectory: path.join(repoRoot, 'automation-runs'),
       buildArtifactPath,
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.build?.command).toBe('npm run build');
+    expect(tasks.build?.reuseEvidence).toBe('legacy-mtime-fallback');
   });
 
   it('does not skip a build when a changed file is newer than the prior build', () => {
@@ -112,6 +172,7 @@ describe('finalise recent task detection', () => {
       automationRunDirectory: path.join(repoRoot, 'automation-runs'),
       buildArtifactPath,
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.build).toBeUndefined();
@@ -130,6 +191,7 @@ describe('finalise recent task detection', () => {
       automationRunDirectory: path.join(repoRoot, 'automation-runs'),
       buildArtifactPath: path.join(repoRoot, '.next', 'BUILD_ID'),
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.build).toBeUndefined();
@@ -149,6 +211,7 @@ describe('finalise recent task detection', () => {
       automationRunDirectory: path.join(repoRoot, 'automation-runs'),
       buildArtifactPath,
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.build).toBeUndefined();
@@ -176,9 +239,11 @@ describe('finalise recent task detection', () => {
       automationRunDirectory,
       buildArtifactPath,
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.build?.source).toBe('automation-log');
+    expect(tasks.build?.reuseEvidence).toBe('legacy-mtime-fallback');
   });
 
   it('marks recently logged pending migrations as skippable only when all pending files match', () => {
@@ -204,8 +269,138 @@ describe('finalise recent task detection', () => {
       terminalDirectory: path.join(repoRoot, 'terminals'),
       automationRunDirectory,
       now: NOW,
+      allowLegacyMtimeFallback: true,
     });
 
     expect(tasks.migrations?.source).toBe('automation-log');
+  });
+
+  it('TEE-CHECKPOINT-001 reuses exact passed fingerprints independent of age', () => {
+    useControlledFinaliseEnvironment();
+    const repoRoot = createTempRoot();
+    writeRepoFile(repoRoot, 'package.json', NOW);
+    writeRepoFile(repoRoot, 'package-lock.json', NOW);
+    writeRepoFile(repoRoot, 'tsconfig.json', NOW);
+    writeRepoFile(repoRoot, 'next.config.ts', NOW);
+    writeRepoFile(repoRoot, 'app/page.tsx', NOW);
+    writeRepoFile(repoRoot, '.gitignore', NOW);
+    initializeGitRepo(repoRoot);
+    const buildArtifactPath = writeBuildArtifact(repoRoot);
+
+    markOrdinaryFinaliseStep({
+      repoRoot,
+      mode: 'finalise',
+      task: 'build',
+      status: 'passed',
+      command: 'npm run build',
+      exitCode: 0,
+      artifactPaths: [buildArtifactPath],
+    });
+
+    const tasks = getSkippableFinaliseTasks({
+      repoRoot,
+      mode: 'finalise',
+      changedFiles: [],
+      buildArtifactPath,
+      now: new Date('2036-01-01T00:00:00.000Z'),
+    });
+    expect(tasks.build?.source).toBe('exact-cache');
+    expect(
+      canReuseOrdinaryFinaliseStep({
+        repoRoot,
+        mode: 'finalise',
+        task: 'build',
+        command: 'npm run build',
+        requiredArtifactPaths: [buildArtifactPath],
+      }).reusable
+    ).toBe(true);
+  });
+
+  it('TEE-NOLIVE-001: non-db checkpoint bind/mark does not open a database connection', () => {
+    useControlledFinaliseEnvironment();
+    process.env.POSTGRES_URL_NON_POOLING = 'postgres://should-not-connect/ffts';
+    const repoRoot = createTempRoot();
+    writeRepoFile(repoRoot, 'package.json', NOW);
+    writeRepoFile(repoRoot, 'package-lock.json', NOW);
+    writeRepoFile(repoRoot, 'tsconfig.json', NOW);
+    writeRepoFile(repoRoot, '.gitignore', NOW);
+    initializeGitRepo(repoRoot);
+    const artifact = writeBuildArtifact(repoRoot);
+
+    const liveSpy = vi
+      .spyOn(finaliseCheckpoint, 'liveSchemaFingerprint')
+      .mockReturnValue('would-have-connected');
+
+    const created = createOrLoadFinaliseCheckpoint({
+      repoRoot,
+      workstreamId: 'ws_nolive_1',
+      checkpointId: 'ckpt_nolive',
+    });
+    expect(created.liveSchemaFingerprint).toBe('unavailable');
+    expect(liveSpy).not.toHaveBeenCalled();
+
+    const marked = markFinaliseCheckpointStep({
+      repoRoot,
+      workstreamId: 'ws_nolive_1',
+      checkpointId: 'ckpt_nolive',
+      task: 'build',
+      status: 'passed',
+      command: 'npm run build',
+      exitCode: 0,
+      artifactPaths: [artifact],
+    });
+    expect(marked.liveSchemaFingerprint).toBe('unavailable');
+    expect(liveSpy).not.toHaveBeenCalled();
+  });
+
+  it('TEE-CHECKPOINT-001 rejects command mismatch and unsafe checkpoint path ids', () => {
+    useControlledFinaliseEnvironment();
+    const repoRoot = createTempRoot();
+    writeRepoFile(repoRoot, 'package.json', NOW);
+    writeRepoFile(repoRoot, 'package-lock.json', NOW);
+    writeRepoFile(repoRoot, 'tsconfig.json', NOW);
+    mkdirSync(path.join(repoRoot), { recursive: true });
+    writeFileSync(
+      path.join(repoRoot, '.gitignore'),
+      ['docs_private/', '.next/', '.env.local'].join('\n'),
+      'utf8'
+    );
+    initializeGitRepo(repoRoot);
+    const artifact = writeBuildArtifact(repoRoot);
+
+    createOrLoadFinaliseCheckpoint({
+      repoRoot,
+      workstreamId: 'ws_ckpt_cmd_1',
+      checkpointId: 'ckpt_cmd_1',
+    });
+    markFinaliseCheckpointStep({
+      repoRoot,
+      workstreamId: 'ws_ckpt_cmd_1',
+      checkpointId: 'ckpt_cmd_1',
+      task: 'build',
+      status: 'passed',
+      command: 'npm run build',
+      exitCode: 0,
+      artifactPaths: [artifact],
+    });
+
+    const mismatch = canResumeFinaliseCheckpointStep({
+      repoRoot,
+      workstreamId: 'ws_ckpt_cmd_1',
+      checkpointId: 'ckpt_cmd_1',
+      task: 'build',
+      command: 'npm run build:analyze',
+      requiredArtifactPaths: [artifact],
+    });
+    expect(mismatch.resumable).toBe(false);
+    expect(mismatch.reason).toBe('command-mismatch');
+
+    expect(() =>
+      createOrLoadFinaliseCheckpoint({
+        repoRoot,
+        workstreamId: '../evil',
+        checkpointId: 'ckpt_x',
+      })
+    ).toThrow(/path|opaque|workstreamId/iu);
   });
 });

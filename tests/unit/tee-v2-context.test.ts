@@ -84,6 +84,10 @@ describe('TEE V2.2 FFTS project context', () => {
     const files = [
       'scripts/automation/workflow-plan-contract.ts',
       'scripts/automation/workflow-model-tier.ts',
+      'scripts/automation/finalise-checkpoint.ts',
+      'scripts/automation/finalise-failure.ts',
+      'scripts/automation/workflow-finalise-correlation.ts',
+      'scripts/finalise-repair.ts',
       'scripts/review-preflight.ts',
       '.cursor/rules/ffts-core.mdc',
       '.cursor/rules/workspace-independence.mdc',
@@ -93,5 +97,18 @@ describe('TEE V2.2 FFTS project context', () => {
       expect(text, relative).not.toMatch(/D:\\\\Websites\\\\(?!ffts)|\/(?:avs|sibling)-worklog\//i);
       expect(text, relative).not.toContain('avsworklog');
     }
+  });
+
+  it('TEE-PUSH-001: finalise commands document repair without authorizing push', () => {
+    const finalise = readFileSync(path.join(root, '.cursor', 'commands', 'finalise.md'), 'utf8');
+    const finaliseFull = readFileSync(
+      path.join(root, '.cursor', 'commands', 'finalise-full.md'),
+      'utf8'
+    );
+    expect(finalise).toMatch(/finalise:repair/);
+    expect(finaliseFull).toMatch(/finalise:repair/);
+    expect(finalise).toMatch(/Never push/iu);
+    expect(finaliseFull).toMatch(/Never push/iu);
+    expect(finalise).not.toMatch(/push to GitHub/iu);
   });
 });

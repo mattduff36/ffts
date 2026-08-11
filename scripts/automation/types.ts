@@ -49,6 +49,8 @@ export interface AutomationRunLog {
   steps: AutomationStepLog[];
   review?: AutomationReviewSummary;
   error?: string;
+  /** Optional TEE workstream correlation for finalise runs. */
+  workflowCorrelation?: WorkflowFinaliseCorrelation;
 }
 
 export interface AutomationReviewSuggestion {

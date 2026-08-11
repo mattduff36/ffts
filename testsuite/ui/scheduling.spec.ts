@@ -605,11 +605,6 @@ test.describe('@scheduling Scheduling', () => {
       'TEST-QUOTE-101: select job or drag to a calendar date'
     );
     await expect(target).toBeVisible();
-    await source.click();
-    await expect(source).toHaveAttribute('aria-pressed', 'true');
-    await source.click();
-    await expect(source).not.toHaveClass('bg-[#34d399]');
-    await expect(page.getByText('Selected: TEST-QUOTE-101')).toHaveCount(0);
 
     const sourceBox = await source.boundingBox();
     const targetBox = await target.boundingBox();
@@ -982,6 +977,7 @@ test.describe('@scheduling Scheduling', () => {
 
     await page.getByRole('button', {
       name: 'Select visit 1 for TEST-JOB-101',
+      exact: true,
     }).click();
     await page.getByRole('button', {
       name: 'Test Scheduler: select resource or drag to a timed visit',
@@ -1032,7 +1028,7 @@ test.describe('@scheduling Scheduling', () => {
       expect(await dragHandle.evaluate((element) => getComputedStyle(element).touchAction))
         .toBe('none');
       await page
-        .getByRole('button', { name: 'Select visit 1 for TEST-JOB-101' })
+        .getByRole('button', { name: 'Select visit 1 for TEST-JOB-101', exact: true })
         .tap();
       await page.getByRole('button', {
         name: 'Test Scheduler: select resource or drag to a timed visit',

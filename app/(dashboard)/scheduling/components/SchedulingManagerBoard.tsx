@@ -1752,6 +1752,21 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
   const [quoteManagerOptionsError, setQuoteManagerOptionsError] = useState<string | null>(null);
+  const shouldAutoPromptQuotes =
+    canCreateQuotes
+    && quotesSensitiveAccess.state?.required === true
+    && quotesSensitiveAccess.state.unlocked === false;
+  const shouldShowQuotesGate =
+    !quotesSensitiveAccess.canAccess
+    && (pendingCreationKind !== null || shouldAutoPromptQuotes);
+  const visibleSelectedQuote =
+    selectedQuote?.kind === 'project' && !quotesSensitiveAccess.canAccess
+      ? null
+      : selectedQuote;
+  const visibleDraggedQuote =
+    draggedQuote?.kind === 'project' && !quotesSensitiveAccess.canAccess
+      ? null
+      : draggedQuote;
 
   const weekStart = getSchedulingWeek(selectedDate).start;
   const boardQuery = useQuery({
@@ -1765,6 +1780,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const projectCandidatesQuery = useQuery({
     queryKey: ['scheduling-project-candidates'],
     queryFn: fetchScheduleProjectCandidates,
+    enabled: quotesSensitiveAccess.canAccess,
   });
   const visitBacklogQuery = useQuery({
     queryKey: ['scheduling-visit-backlog'],
@@ -1780,7 +1796,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     data: { returnToResources: true },
   });
   useEffect(() => {
-    if (!canCreateQuotes) return;
+    if (!canCreateQuotes || !quotesSensitiveAccess.canAccess) {
+      setQuoteManagerOptions([]);
+      setQuoteManagerOptionsError(null);
+      return;
+    }
     let cancelled = false;
     void fetch('/api/quotes/metadata')
       .then(async (response) => {
@@ -1821,6 +1841,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     else setQuickAddOpen(true);
     setPendingCreationKind(null);
   }, [pendingCreationKind, quotesSensitiveAccess.canAccess]);
+  useEffect(() => {
+    if (quotesSensitiveAccess.canAccess) return;
+    setSelectedQuote((current) => current?.kind === 'project' ? null : current);
+    setDraggedQuote((current) => current?.kind === 'project' ? null : current);
+    setProjectPlacement(null);
+  }, [quotesSensitiveAccess.canAccess]);
 
   function requestCreation(kind: 'quote' | 'project' | 'quick_add') {
     if (!quotesSensitiveAccess.canAccess) {
@@ -1962,7 +1988,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     [quoteCandidatesQuery.data]
   );
   const unscheduledProjects = useMemo<SchedulingQueueItem[]>(
-    () => (projectCandidatesQuery.data || []).map((project) => ({
+    () => (quotesSensitiveAccess.canAccess ? projectCandidatesQuery.data || [] : []).map((project) => ({
       kind: 'project' as const,
       id: project.id,
       quote_reference: project.project_reference,
@@ -1976,7 +2002,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       estimated_duration_minutes: 180 as const,
       project,
     })),
-    [projectCandidatesQuery.data]
+    [projectCandidatesQuery.data, quotesSensitiveAccess.canAccess]
   );
   const returnedVisits = useMemo<SchedulingQueueItem[]>(
     () => (visitBacklogQuery.data || []).map((item) => ({
@@ -2263,6 +2289,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       return;
     }
     if (quote.kind === 'project') {
+      if (!quotesSensitiveAccess.canAccess) return;
       setProjectPlacement({ project: quote.project, date: startDate, initialVisit });
       return;
     }
@@ -3233,10 +3260,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       className="pl-9"
                     />
                   </div>
-                  {selectedQuote ? (
+                  {visibleSelectedQuote ? (
                     <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
                       <span className="truncate text-foreground">
-                        Selected: {selectedQuote.base_quote_reference}
+                        Selected: {visibleSelectedQuote.base_quote_reference}
                       </span>
                       <Button
                         variant="ghost"
@@ -3250,7 +3277,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     </div>
                   ) : null}
                   {quoteCandidatesQuery.isError
-                    || projectCandidatesQuery.isError
+                    || (
+                      quotesSensitiveAccess.canAccess
+                      && projectCandidatesQuery.isError
+                    )
                     || visitBacklogQuery.isError ? (
                     <div className="rounded-lg border border-red-500/30 p-3 text-sm text-red-300">
                       <p>Some queued jobs could not be loaded. Available results are still shown.</p>
@@ -3260,7 +3290,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         className={cn('mt-1', schedulingControlStyles.ghost)}
                         onClick={() => void Promise.all([
                           quoteCandidatesQuery.refetch(),
-                          projectCandidatesQuery.refetch(),
+                          ...(quotesSensitiveAccess.canAccess
+                            ? [projectCandidatesQuery.refetch()]
+                            : []),
                           visitBacklogQuery.refetch(),
                         ])}
                       >
@@ -3281,7 +3313,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             <DraggableQuoteCard
                               key={quote.id}
                               quote={quote}
-                              selected={selectedQuote?.id === quote.id}
+                              selected={visibleSelectedQuote?.id === quote.id}
                               onSelect={() =>
                                 setSelectedQuote((current) =>
                                   current?.id === quote.id ? null : quote
@@ -3624,7 +3656,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     && effectiveDailyTimelineMode === 'scroll'
                     && 'overflow-x-auto [scrollbar-color:hsl(var(--muted-foreground)/0.45)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent',
                   view === SCHEDULING_BOARD_VIEWS.daily
-                    && draggedQuote
+                    && visibleDraggedQuote
                     && 'ring-2 ring-inset ring-emerald-400',
                   isDailyTimelinePanning && 'cursor-grabbing select-none'
                 )}
@@ -3724,7 +3756,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         date={selectedDate}
                         range={dailyTimelineRange}
                         isPannable={effectiveDailyTimelineMode === 'scroll'}
-                        selectedQuote={selectedQuote}
+                        selectedQuote={visibleSelectedQuote}
                         isSchedulingQuote={isSchedulingQuote}
                         onScheduleQuote={(quote, date) => void scheduleQuoteFromDate(quote, date)}
                       />
@@ -3735,7 +3767,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           date={date}
                           capacity={capacityByDate.get(date) || null}
                           dropScope="desktop"
-                          selectedQuote={selectedQuote}
+                          selectedQuote={visibleSelectedQuote}
                           isSchedulingQuote={isSchedulingQuote}
                           onOpenDaily={openDailyForDate}
                           onScheduleQuote={(quote, workDate) =>
@@ -3899,7 +3931,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         capacity={capacityByDate.get(date) || null}
                         compact
                         dropScope="mobile"
-                        selectedQuote={selectedQuote}
+                        selectedQuote={visibleSelectedQuote}
                         isSchedulingQuote={isSchedulingQuote}
                         onOpenDaily={openDailyForDate}
                         onScheduleQuote={(quote, workDate) =>
@@ -4066,13 +4098,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               {formatScheduleVisitTime(draggedVisit.visit.ends_at)}
             </p>
           </div>
-        ) : draggedQuote ? (
+        ) : visibleDraggedQuote ? (
           <div className="max-w-72 rounded-lg border border-scheduling bg-popover px-3 py-2 shadow-2xl">
             <p className="text-sm font-semibold text-foreground">
-              {draggedQuote.base_quote_reference}
+              {visibleDraggedQuote.base_quote_reference}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {draggedQuote.title}
+              {visibleDraggedQuote.title}
             </p>
           </div>
         ) : draggedResource ? (
@@ -4120,88 +4152,96 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           }}
         />
       ) : null}
-      <ScheduleProjectPlacementDialog
-        project={projectPlacement?.project || null}
-        date={projectPlacement?.date || selectedDate}
-        initialVisit={projectPlacement?.initialVisit}
-        onClose={() => setProjectPlacement(null)}
-        onSaved={() => {
-          setSelectedQuote(null);
-          void Promise.all([
-            refresh(),
-            queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] }),
-          ]);
-        }}
-      />
-      <QuoteCreationHost
-        open={quoteCreationOpen}
-        onClose={() => setQuoteCreationOpen(false)}
-        onCreated={async (quote) => {
-          await queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] });
-          setQuoteStage(SCHEDULE_QUOTE_STAGES.draft);
-          setSelectedQuote({
-            kind: 'quote',
-            id: quote.id,
-            quote_reference: quote.quote_reference,
-            base_quote_reference: quote.base_quote_reference || quote.quote_reference,
-            title: quote.subject_line || quote.project_description || 'Quoted work',
-            customer_name: quote.customer?.company_name || null,
-            status: 'draft',
-            start_date: null,
-            end_date: null,
-            estimated_duration_days: quote.estimated_duration_days || null,
-            estimated_duration_minutes: null,
-          });
-        }}
-      />
+      {quotesSensitiveAccess.canAccess ? (
+        <>
+          <ScheduleProjectPlacementDialog
+            project={projectPlacement?.project || null}
+            date={projectPlacement?.date || selectedDate}
+            initialVisit={projectPlacement?.initialVisit}
+            onClose={() => setProjectPlacement(null)}
+            onSaved={() => {
+              setSelectedQuote(null);
+              void Promise.all([
+                refresh(),
+                queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] }),
+              ]);
+            }}
+          />
+          <QuoteCreationHost
+            open={quoteCreationOpen}
+            onClose={() => setQuoteCreationOpen(false)}
+            onCreated={async (quote) => {
+              await queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] });
+              setQuoteStage(SCHEDULE_QUOTE_STAGES.draft);
+              setSelectedQuote({
+                kind: 'quote',
+                id: quote.id,
+                quote_reference: quote.quote_reference,
+                base_quote_reference: quote.base_quote_reference || quote.quote_reference,
+                title: quote.subject_line || quote.project_description || 'Quoted work',
+                customer_name: quote.customer?.company_name || null,
+                status: 'draft',
+                start_date: null,
+                end_date: null,
+                estimated_duration_days: quote.estimated_duration_days || null,
+                estimated_duration_minutes: null,
+              });
+            }}
+          />
+        </>
+      ) : null}
       {quotesSensitiveAccess.canAccess ? (
         <SensitiveModuleSessionManager moduleLabel="Quotes" access={quotesSensitiveAccess} />
       ) : null}
-      {pendingCreationKind && !quotesSensitiveAccess.canAccess ? (
+      {shouldShowQuotesGate ? (
         <div className="fixed inset-0 z-[190] overflow-y-auto bg-slate-950/95">
           <SensitiveModuleGate moduleLabel="Quotes" access={quotesSensitiveAccess} />
         </div>
       ) : null}
-      <ProjectNumberFormDialog
-        open={projectCreationOpen}
-        managerOptions={quoteManagerOptions}
-        managerLoadError={quoteManagerOptionsError}
-        onClose={() => setProjectCreationOpen(false)}
-        onCreated={async (project: QuoteProjectNumber) => {
-          await queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
-          setQuoteStage('projects');
-          setSelectedQuote({
-            kind: 'project',
-            id: project.id,
-            quote_reference: project.project_reference,
-            base_quote_reference: project.project_reference,
-            title: project.title,
-            customer_name: null,
-            status: 'Project',
-            start_date: null,
-            end_date: null,
-            estimated_duration_days: 1,
-            estimated_duration_minutes: 180,
-            project: {
-              id: project.id,
-              project_reference: project.project_reference,
-              manager_profile_id: project.manager_profile_id,
-              requester_initials: project.requester_initials,
-              title: project.title,
-              description: project.description,
-              status: 'open',
-            },
-          });
-        }}
-      />
-      <ScheduleBoardQuickAddDialog
-        open={quickAddOpen}
-        defaultDate={selectedDate}
-        managerOptions={quoteManagerOptions}
-        managerLoadError={quoteManagerOptionsError}
-        onClose={() => setQuickAddOpen(false)}
-        onCreated={handleQuickAddCreated}
-      />
+      {quotesSensitiveAccess.canAccess ? (
+        <>
+          <ProjectNumberFormDialog
+            open={projectCreationOpen}
+            managerOptions={quoteManagerOptions}
+            managerLoadError={quoteManagerOptionsError}
+            onClose={() => setProjectCreationOpen(false)}
+            onCreated={async (project: QuoteProjectNumber) => {
+              await queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
+              setQuoteStage('projects');
+              setSelectedQuote({
+                kind: 'project',
+                id: project.id,
+                quote_reference: project.project_reference,
+                base_quote_reference: project.project_reference,
+                title: project.title,
+                customer_name: null,
+                status: 'Project',
+                start_date: null,
+                end_date: null,
+                estimated_duration_days: 1,
+                estimated_duration_minutes: 180,
+                project: {
+                  id: project.id,
+                  project_reference: project.project_reference,
+                  manager_profile_id: project.manager_profile_id,
+                  requester_initials: project.requester_initials,
+                  title: project.title,
+                  description: project.description,
+                  status: 'open',
+                },
+              });
+            }}
+          />
+          <ScheduleBoardQuickAddDialog
+            open={quickAddOpen}
+            defaultDate={selectedDate}
+            managerOptions={quoteManagerOptions}
+            managerLoadError={quoteManagerOptionsError}
+            onClose={() => setQuickAddOpen(false)}
+            onCreated={handleQuickAddCreated}
+          />
+        </>
+      ) : null}
       <PlantUnavailabilityDialog
         open={unavailabilityOpen}
         onOpenChange={setUnavailabilityOpen}

@@ -91,6 +91,8 @@ function resizeTimelineViewport(width: number, contentRectWidth = width) {
 
 const {
   dndState,
+  permissionState,
+  sensitiveAccessState,
   mockCreateAssignment,
   mockCreateProjectJob,
   mockDeleteJob,
@@ -114,6 +116,17 @@ const {
     announcements: undefined as DndAnnouncements | undefined,
     draggableOptions: [] as DraggableOptions[],
     sensors: [] as unknown[],
+  },
+  permissionState: {
+    quotes: true,
+    customers: true,
+  },
+  sensitiveAccessState: {
+    loading: false,
+    required: true,
+    unlocked: true,
+    canAccess: true,
+    stateAvailable: true,
   },
   mockCreateAssignment: vi.fn(),
   mockCreateProjectJob: vi.fn(),
@@ -187,8 +200,8 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('@/lib/hooks/usePermissionCheck', () => ({
-  usePermissionCheck: () => ({
-    hasPermission: true,
+  usePermissionCheck: (moduleName: 'quotes' | 'customers') => ({
+    hasPermission: permissionState[moduleName] ?? true,
     loading: false,
     serviceUnavailable: false,
   }),
@@ -196,14 +209,19 @@ vi.mock('@/lib/hooks/usePermissionCheck', () => ({
 
 vi.mock('@/components/security/SensitiveModuleGate', () => ({
   useSensitiveModuleAccess: () => ({
-    loading: false,
-    state: { required: false, unlocked: true },
-    canAccess: true,
+    loading: sensitiveAccessState.loading,
+    state: sensitiveAccessState.stateAvailable
+      ? {
+          required: sensitiveAccessState.required,
+          unlocked: sensitiveAccessState.unlocked,
+        }
+      : null,
+    canAccess: sensitiveAccessState.canAccess,
     refresh: vi.fn(),
     unlock: vi.fn(),
     renew: vi.fn(),
   }),
-  SensitiveModuleGate: () => null,
+  SensitiveModuleGate: () => <div data-testid="quotes-sensitive-pin-gate">Sensitive PIN gate</div>,
   SensitiveModuleSessionManager: () => null,
 }));
 
@@ -365,13 +383,17 @@ function renderBoard(searchParams = '') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const renderTree = () => (
     <NuqsTestingAdapter searchParams={searchParams}>
       <QueryClientProvider client={queryClient}>
         <SchedulingManagerBoard userId="manager-1" />
       </QueryClientProvider>
     </NuqsTestingAdapter>
   );
+  const result = render(renderTree());
+  return Object.assign(result, {
+    rerenderBoard: () => result.rerender(renderTree()),
+  });
 }
 
 function prepareDailyBoard() {
@@ -410,6 +432,13 @@ describe('SchedulingManagerBoard', () => {
     localStorage.clear();
     timelineViewportWidth = 1800;
     resizeObservers = [];
+    permissionState.quotes = true;
+    permissionState.customers = true;
+    sensitiveAccessState.loading = false;
+    sensitiveAccessState.required = true;
+    sensitiveAccessState.unlocked = true;
+    sensitiveAccessState.canAccess = true;
+    sensitiveAccessState.stateAvailable = true;
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
@@ -527,6 +556,199 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Jobs' })).toHaveAttribute('aria-selected', 'true');
     expect(localStorage.getItem(getSchedulingViewStorageKey('manager-1'))).toBeNull();
+  });
+
+  it('prompts for the sensitive PIN before loading protected scheduling data', async () => {
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+    mockFetchProjectCandidates.mockRejectedValue(new Error('Sensitive module access required'));
+
+    const { rerenderBoard } = renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.getByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+    expect(mockFetchProjectCandidates).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(globalThis.fetch).mock.calls.some(([input]) =>
+        String(input).includes('/api/quotes/metadata')
+      )
+    ).toBe(false);
+    expect(
+      screen.queryByText('Some queued jobs could not be loaded. Available results are still shown.')
+    ).not.toBeInTheDocument();
+
+    sensitiveAccessState.loading = true;
+    rerenderBoard();
+    expect(screen.getByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+  });
+
+  it('loads protected scheduling data immediately after the PIN unlocks', async () => {
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+    const { rerenderBoard } = renderBoard();
+    expect(await screen.findByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+
+    sensitiveAccessState.unlocked = true;
+    sensitiveAccessState.canAccess = true;
+    rerenderBoard();
+
+    await waitFor(() => expect(mockFetchProjectCandidates).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.some(([input]) =>
+          String(input).includes('/api/quotes/metadata')
+        )
+      ).toBe(true)
+    );
+    expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument();
+  });
+
+  it('does not prompt or fetch while sensitive access status is unavailable', async () => {
+    sensitiveAccessState.loading = true;
+    sensitiveAccessState.stateAvailable = false;
+    sensitiveAccessState.canAccess = false;
+
+    renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument();
+    expect(mockFetchProjectCandidates).not.toHaveBeenCalled();
+  });
+
+  it('does not prompt users without Quotes permission', async () => {
+    permissionState.quotes = false;
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+
+    renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument();
+    expect(mockFetchProjectCandidates).not.toHaveBeenCalled();
+  });
+
+  it('loads protected scheduling data without prompting when a PIN is not required', async () => {
+    sensitiveAccessState.required = false;
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = true;
+
+    renderBoard();
+
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    await waitFor(() => expect(mockFetchProjectCandidates).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument();
+  });
+
+  it('hides cached Project Numbers and prompts again when sensitive access expires', async () => {
+    const project = {
+      id: 'project-sensitive-1',
+      project_reference: '99050-MD',
+      manager_profile_id: 'manager-1',
+      requester_initials: 'MD',
+      title: 'Protected project',
+      description: null,
+      status: 'open',
+    };
+    const queueItem = {
+      kind: 'project' as const,
+      id: project.id,
+      quote_reference: project.project_reference,
+      base_quote_reference: project.project_reference,
+      title: project.title,
+      customer_name: null,
+      status: 'Project' as const,
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: 1 as const,
+      estimated_duration_minutes: 180 as const,
+      project,
+    };
+    mockFetchProjectCandidates.mockResolvedValue([project]);
+    const { rerenderBoard } = renderBoard();
+    const projectCard = await screen.findByRole('button', {
+      name: '99050-MD: select job or drag to a calendar date',
+    });
+    fireEvent.click(projectCard);
+    act(() => {
+      dndState.onDragStart?.({
+        operation: {
+          source: { data: { quote: queueItem } },
+          target: null,
+        },
+      });
+    });
+    expect(screen.getAllByText('99050-MD').length).toBeGreaterThan(1);
+
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+    rerenderBoard();
+
+    expect(screen.getByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+    expect(screen.queryByText('99050-MD')).not.toBeInTheDocument();
+  });
+
+  it('closes a protected Project placement surface when sensitive access expires', async () => {
+    const project = {
+      id: 'project-sensitive-placement',
+      project_reference: '99051-MD',
+      manager_profile_id: 'manager-1',
+      requester_initials: 'MD',
+      title: 'Protected placement',
+      description: null,
+      status: 'open',
+    };
+    const queueItem = {
+      kind: 'project' as const,
+      id: project.id,
+      quote_reference: project.project_reference,
+      base_quote_reference: project.project_reference,
+      title: project.title,
+      customer_name: null,
+      status: 'Project' as const,
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: 1 as const,
+      estimated_duration_minutes: 180 as const,
+      project,
+    };
+    mockFetchProjectCandidates.mockResolvedValue([project]);
+    const { rerenderBoard } = renderBoard();
+    expect(await screen.findByRole('button', {
+      name: '99051-MD: select job or drag to a calendar date',
+    })).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { quote: queueItem } },
+          target: { data: { workDate: '2026-07-14' } },
+        },
+      });
+    });
+    expect(await screen.findByRole('dialog', { name: 'Schedule Project' })).toBeInTheDocument();
+
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+    rerenderBoard();
+
+    expect(screen.getByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Schedule Project' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/99051-MD/)).not.toBeInTheDocument();
+  });
+
+  it('resumes a requested creation flow immediately after PIN unlock', async () => {
+    sensitiveAccessState.unlocked = false;
+    sensitiveAccessState.canAccess = false;
+    const { rerenderBoard } = renderBoard();
+    expect(await screen.findByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    sensitiveAccessState.unlocked = true;
+    sensitiveAccessState.canAccess = true;
+    rerenderBoard();
+
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
   });
 
   it('replaces Add Project job with shared Quote, Project, and Quick add controls', async () => {

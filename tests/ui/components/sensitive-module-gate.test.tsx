@@ -147,6 +147,25 @@ describe('SensitiveModuleGate mobile PIN keypad fallback', () => {
     expect(screen.getByLabelText('Sensitive PIN')).not.toHaveAttribute('readonly');
   });
 
+  it('keeps the PIN workflow ready after an unsuccessful unlock attempt', async () => {
+    configureDesktopViewport();
+    const unlock = vi.fn(async () => false);
+
+    render(<SensitiveModuleGate moduleLabel="Quotes" access={buildAccess({ unlock })} />);
+    const input = screen.getByLabelText('Sensitive PIN');
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '1234' } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(unlock).toHaveBeenCalledOnce();
+    expect(unlock).toHaveBeenCalledWith('1234');
+    expect(screen.getByText('Verify your identity')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sensitive PIN')).toHaveValue('');
+  });
+
   it('keeps the custom keypad hidden when mobile viewport shrink indicates a native keyboard opened', async () => {
     const visualViewport = configureMobileViewport();
 

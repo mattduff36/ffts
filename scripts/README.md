@@ -80,13 +80,13 @@ Canonical private artifact roots (ignored, repository-local):
 
 Native writers emit lane-based `plan-contract-marker:v2` and V4 completion markers. Readers remain compatible with V1-V3 evidence. Opaque workstream/checkpoint IDs are sanitized before filesystem use. External/sibling plan roots are rejected. The Cursor stop hook is fail-open with `loop_limit: 1`.
 
-Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`, `/finalise-full`, `/createinvoice`, and `/cleancodebase`. None of those commands authorize a push. `/fap`, `/ffap`, and `/fixerrors` are intentionally absent. Until the deferred production-safety workstream is separately approved, use only `npm run fixerrors -- --no-clear` for non-destructive analysis.
+Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`, `/finalise-full`, `/createinvoice`, `/cleancodebase`, and `/fixerrors`. None of those commands authorize a push. `/fap` and `/ffap` are intentionally absent. `/fixerrors` is a trusted operational command under safety contract `fixerrors-exact-snapshot-v1`: default `npm run fixerrors` exports a repeatable-read snapshot only; destructive cleanup requires the exact printed bound `--cleanup` command after confirmation.
 
 Model registry version: `ffts-tee-model-registry-v1`.
 
 ## Automation Artifacts
 
-`fixerrors` creates `docs_private/` when needed and writes the ignored analysis, fix-log, and structured automation-run files there. Use `--no-clear` to generate and validate those artifacts without deleting production error rows.
+`fixerrors` creates `docs_private/` when needed and writes ignored analysis, fix-log, snapshot (`error-snapshot.json` / `error-snapshots/`), and structured automation-run files. Default export and `--no-clear` never mutate production. Cleanup deletes only exact verified snapshot `error_logs` IDs plus inventoried `error_log_alerts`, records SET NULL collateral, and refuses automatic retry after `indeterminate` / `committed_unverified` outcomes. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted.
 
 `finalise` preflights the three release artifacts before making a product commit:
 

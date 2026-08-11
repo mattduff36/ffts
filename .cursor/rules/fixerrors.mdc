@@ -5,11 +5,12 @@ alwaysApply: false
 
 # Fixerrors Workflow
 
-- Run `npm run fixerrors` for the normal analyze-and-clear workflow.
-- Use `npm run fixerrors -- --no-clear` when reviewing or validating without deleting remote error rows.
-- Read `docs_private/error-analysis.md` after a successful run.
-- Read `docs_private/error-fix-log.md` when it exists, plus generated automation review/follow-up files.
+- Run `npm run fixerrors` for the non-destructive export/analysis phase (repeatable-read snapshot + local reports). `npm run fixerrors -- --no-clear` is an alias of the same non-destructive path.
+- Destructive cleanup is trusted only through the exact printed bound command under safety contract `fixerrors-exact-snapshot-v1` (see `.cursor/commands/fixerrors.md` and `scripts/automation/trusted-operational-actions.ts`). Never reconstruct or loosen cleanup arguments.
+- Read `docs_private/error-analysis.md` after a successful export.
+- Read `docs_private/error-fix-log.md` when it exists, plus generated automation review/follow-up files and `docs_private/error-snapshot.json` / `docs_private/error-snapshots/`.
 - Summarize actionable error groups without reproducing sensitive payloads, tokens, user data, or full stack traces.
-- Claim remote errors were cleared only when the automation run log explicitly records a successful clear step.
+- Claim remote errors were cleared only when the automation run log explicitly records a successful trusted cleanup step (`committed`).
+- Treat `committed_unverified` / `indeterminate` as manual-investigation states; do not auto-retry cleanup.
+- Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted.
 - Keep every generated error and automation artifact local and ignored.
-

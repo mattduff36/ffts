@@ -12,30 +12,41 @@ describe('TEE V2.2 FFTS project context', () => {
       'createinvoice.md',
       'finalise-full.md',
       'finalise.md',
+      'fixerrors.md',
       'workflow-review.md',
     ]);
     expect(existsSync(path.join(commandDirectory, 'fap.md'))).toBe(false);
     expect(existsSync(path.join(commandDirectory, 'ffap.md'))).toBe(false);
-    expect(existsSync(path.join(commandDirectory, 'fixerrors.md'))).toBe(false);
 
     const finalise = readFileSync(path.join(commandDirectory, 'finalise.md'), 'utf8');
     const finaliseFull = readFileSync(path.join(commandDirectory, 'finalise-full.md'), 'utf8');
     const workflowReview = readFileSync(path.join(commandDirectory, 'workflow-review.md'), 'utf8');
+    const fixerrors = readFileSync(path.join(commandDirectory, 'fixerrors.md'), 'utf8');
     expect(finalise).toMatch(/not push/iu);
     expect(finaliseFull).toMatch(/not push/iu);
     expect(workflowReview).toMatch(/Never push/iu);
     expect(finalise).not.toMatch(/\/fap|\/ffap/iu);
+    expect(fixerrors).toContain('fixerrors-exact-snapshot-v1');
+    expect(fixerrors).toMatch(/Never push/iu);
   });
 
-  it('TEE-DOCS-001: keeps database intent discoverable without always loading detailed procedure', () => {
+  it('TEE-DOCS-001 / FXERR-DOCS-001 / FXERR-COMPAT-001: documents trusted fixerrors export and bound cleanup', () => {
     const core = readFileSync(path.join(root, '.cursor', 'rules', 'ffts-core.mdc'), 'utf8');
+    const fixerrorsRule = readFileSync(path.join(root, '.cursor', 'rules', 'fixerrors.mdc'), 'utf8');
+    const scriptsReadme = readFileSync(path.join(root, 'scripts', 'README.md'), 'utf8');
     const database = readFileSync(
       path.join(root, '.cursor', 'rules', 'database-migrations.mdc'),
       'utf8'
     );
     expect(core).toContain('load `.cursor/rules/database-migrations.mdc`');
     expect(core).toContain('push to GitHub');
-    expect(core).toMatch(/fixerrors -- --no-clear/);
+    expect(core).toContain('fixerrors-exact-snapshot-v1');
+    expect(core).toMatch(/non-destructive export\/analysis/i);
+    expect(fixerrorsRule).toContain('fixerrors-exact-snapshot-v1');
+    expect(fixerrorsRule).toMatch(/--no-clear/);
+    expect(fixerrorsRule).toMatch(/untrusted/i);
+    expect(scriptsReadme).toContain('fixerrors-exact-snapshot-v1');
+    expect(scriptsReadme).toMatch(/never mutate production/i);
     expect(database).toContain('alwaysApply: false');
     expect(database).toContain('npm run db:validate');
     expect(database).toContain('must not open an implicit database connection');

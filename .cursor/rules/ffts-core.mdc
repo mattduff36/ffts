@@ -15,5 +15,5 @@ alwaysApply: true
 - Keep functions typed and focused; update targeted tests when behavior changes.
 - Do not expose environment values or secrets.
 - Keep all workflows self-contained in FFTS. Do not add runtime, test, script, rule, or configuration dependencies on sibling repositories.
-- `npm run fixerrors -- --no-clear` remains the only explicitly non-destructive fixerrors analysis path until a separately approved production-safety workstream lands. Do not treat broad-clear fixerrors as trusted.
+- `npm run fixerrors` (and `--no-clear`) is the non-destructive export/analysis path. Trusted cleanup uses only the exact printed bound command under `fixerrors-exact-snapshot-v1`. Debug UI / `clear-all-error-logs` clears remain untrusted.
 - Run application builds only when the user authorizes a test build. Project-specific rules override generic TEE when stricter.

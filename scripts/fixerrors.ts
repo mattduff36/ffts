@@ -1,31 +1,58 @@
 /**
  * Fix Errors - Automated Error Analysis & Report Generator
  *
- * This script:
- * 1. Fetches recent errors from the error_logs table (matching /debug page filters)
- * 2. Filters out localhost and admin errors
- * 3. Parses stack traces to extract source file paths
- * 4. Groups errors into patterns (by type + normalized message + component)
- * 5. Writes a structured markdown report to docs_private/error-analysis.md
- * 6. Updates the JSON tracking data in docs_private/error-fix-log.md
- * 7. Clears the production error_logs table after successful analysis
- * 8. Prints a concise terminal summary
+ * Two-phase trusted operational flow:
+ * 1. Default / `--no-clear`: non-destructive Postgres REPEATABLE READ snapshot export,
+ *    analysis report, and historical fix-log update. Never mutates production.
+ * 2. Exact printed `--cleanup` command: transactional delete of the verified snapshot IDs
+ *    (+ inventoried error_log_alerts) under safety contract fixerrors-exact-snapshot-v1.
  *
  * Usage:
  *   npm run fixerrors
  *   npm run fixerrors -- --no-clear
+ *   npm run fixerrors -- --cleanup --snapshot-id=... --checksum=... --row-count=... --target=... --expires-at=... --safety-contract=... --manifest=...
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { relative, resolve } from 'path';
 import * as fs from 'fs';
+import pg from 'pg';
 import { AutomationRun } from './automation/logger';
+import { TRUSTED_OPERATIONAL_ACTIONS } from './automation/trusted-operational-actions';
+import {
+  ERROR_ANALYSIS_PATH,
+  ERROR_SNAPSHOT_PATH,
+  acquireErrorSnapshotArtifactLock,
+  executeVerifiedSnapshotCleanup,
+  fetchDatabaseTargetFingerprint,
+  fetchProductionErrorSnapshot,
+  getErrorSnapshotArtifactPath,
+  markSnapshotAnalysisCompleted,
+  markSnapshotCleanupNotRequired,
+  writeAndVerifyErrorSnapshot,
+  writeAndVerifyTextArtifactAtomic,
+  type CleanupConfirmation,
+  type PgClientLike,
+} from './fixerrors-safety';
+
+export {
+  acquireErrorSnapshotArtifactLock,
+  createDatabaseTargetFingerprint,
+  executeVerifiedSnapshotCleanup,
+  fetchDatabaseTargetFingerprint,
+  fetchProductionErrorSnapshot,
+  getErrorSnapshotArtifactPath,
+  markSnapshotAnalysisCompleted,
+  markSnapshotCleanupNotRequired,
+  readAndVerifyErrorSnapshot,
+  verifyErrorSnapshot,
+  writeAndVerifyErrorSnapshot,
+  writeAndVerifyTextArtifactAtomic,
+} from './fixerrors-safety';
 
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
-const ERROR_ANALYSIS_PATH = resolve(process.cwd(), 'docs_private', 'error-analysis.md');
 const ERROR_FIX_LOG_PATH = resolve(process.cwd(), 'docs_private', 'error-fix-log.md');
 
 // Admin email to filter out (matches /debug page default)
@@ -36,6 +63,7 @@ const ADMIN_EMAIL = 'admin@mpdee.co.uk';
 export type ErrorLogEntry = {
   id: string;
   timestamp: string;
+  created_at: string;
   error_message: string;
   error_stack: string | null;
   error_type: string;
@@ -98,11 +126,6 @@ export type ErrorPattern = {
   affectedUsers: string[];
   firstSeen: string;
   lastSeen: string;
-};
-
-type ErrorLogClearResult = {
-  clearedCount: number | null;
-  skipped?: boolean;
 };
 
 export function ensurePrivateDocsDirectory(root = process.cwd()): void {
@@ -855,203 +878,410 @@ function updateFixLog(errors: ErrorLogEntry[]): FixLogStats {
   };
 }
 
-// ─── Error Log Cleanup ───────────────────────────────────────────────
+// ─── Postgres client / cleanup confirmation ──────────────────────────
 
-async function clearProductionErrorLogs(supabase: SupabaseClient): Promise<ErrorLogClearResult> {
-  const { count, error: countError } = await supabase
-    .from('error_logs')
-    .select('id', { count: 'exact', head: true });
+const { Client } = pg;
 
-  if (countError) {
-    throw new Error(`Failed to count error logs before clearing: ${countError.message}`);
+function requireNonPoolingConnectionString(): string {
+  const connectionString = process.env.POSTGRES_URL_NON_POOLING;
+  if (!connectionString) {
+    throw new Error(
+      'POSTGRES_URL_NON_POOLING is required for transaction-safe fixerrors execution'
+    );
+  }
+  return connectionString;
+}
+
+function createPostgresClient(connectionString: string): InstanceType<typeof Client> {
+  const url = new URL(connectionString);
+  return new Client({
+    host: url.hostname,
+    port: Number(url.port) || 5432,
+    database: url.pathname.replace(/^\/+/u, '') || 'postgres',
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    ssl: { rejectUnauthorized: false },
+  });
+}
+
+const CLEANUP_VALUE_FLAGS = [
+  '--snapshot-id',
+  '--checksum',
+  '--row-count',
+  '--target',
+  '--expires-at',
+  '--safety-contract',
+  '--manifest',
+] as const;
+
+function getExactFlagValue(args: string[], name: string): string | null {
+  const prefix = `${name}=`;
+  const matches = args.filter((argument) => argument.startsWith(prefix));
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    throw new Error(`Cleanup rejects duplicate flag: ${name}`);
+  }
+  return matches[0].slice(prefix.length);
+}
+
+/** Parse and strictly validate bound cleanup CLI confirmation args. */
+export function parseCleanupConfirmation(args: string[]): CleanupConfirmation | null {
+  const cleanupTokens = args.filter((argument) => argument === '--cleanup');
+  if (cleanupTokens.length === 0) {
+    if (args.some((argument) => argument === '--cleanup' || argument.startsWith('--cleanup='))) {
+      throw new Error('Cleanup mode requires a bare --cleanup flag');
+    }
+    return null;
+  }
+  if (cleanupTokens.length !== 1) {
+    throw new Error('Cleanup rejects duplicate flag: --cleanup');
+  }
+  if (args.some((argument) => argument.startsWith('--cleanup='))) {
+    throw new Error('Cleanup mode requires a bare --cleanup flag');
   }
 
-  if (count === 0) {
-    return { clearedCount: 0 };
+  for (const argument of args) {
+    if (argument === '--cleanup') continue;
+    const matched = CLEANUP_VALUE_FLAGS.some((flag) => argument.startsWith(`${flag}=`));
+    if (!matched) {
+      throw new Error(`Cleanup rejects unknown or malformed flag: ${argument}`);
+    }
   }
 
-  const { error: deleteError } = await supabase
-    .from('error_logs')
-    .delete()
-    .gte('timestamp', '1970-01-01');
-
-  if (deleteError) {
-    throw new Error(`Failed to clear production error logs: ${deleteError.message}`);
+  for (const flag of CLEANUP_VALUE_FLAGS) {
+    const occurrences = args.filter((argument) => argument.startsWith(`${flag}=`)).length;
+    if (occurrences === 0) {
+      throw new Error(
+        'Cleanup requires the exact snapshot ID, checksum, row count, target, expiry, safety contract, and manifest printed by export'
+      );
+    }
+    if (occurrences > 1) {
+      throw new Error(`Cleanup rejects duplicate flag: ${flag}`);
+    }
   }
 
-  return { clearedCount: count };
+  if (args.length !== 1 + CLEANUP_VALUE_FLAGS.length) {
+    throw new Error('Cleanup rejects unexpected arguments');
+  }
+
+  const snapshotId = getExactFlagValue(args, '--snapshot-id');
+  const checksum = getExactFlagValue(args, '--checksum');
+  const rowCountValue = getExactFlagValue(args, '--row-count');
+  const databaseTargetFingerprint = getExactFlagValue(args, '--target');
+  const expiresAt = getExactFlagValue(args, '--expires-at');
+  const safetyContract = getExactFlagValue(args, '--safety-contract');
+  const manifestChecksum = getExactFlagValue(args, '--manifest');
+  const rowCount = Number(rowCountValue);
+  if (
+    !snapshotId ||
+    !checksum ||
+    !/^[a-f0-9]{64}$/u.test(checksum) ||
+    !databaseTargetFingerprint ||
+    !/^[a-f0-9]{64}$/u.test(databaseTargetFingerprint) ||
+    !expiresAt ||
+    Number.isNaN(new Date(expiresAt).getTime()) ||
+    new Date(expiresAt).toISOString() !== expiresAt ||
+    !safetyContract ||
+    !manifestChecksum ||
+    !/^[a-f0-9]{64}$/u.test(manifestChecksum) ||
+    rowCountValue === null ||
+    !Number.isSafeInteger(rowCount) ||
+    rowCount < 0
+  ) {
+    throw new Error(
+      'Cleanup requires the exact snapshot ID, checksum, row count, target, expiry, safety contract, and manifest printed by export'
+    );
+  }
+  return {
+    snapshotId,
+    checksum,
+    rowCount,
+    databaseTargetFingerprint,
+    expiresAt,
+    safetyContract,
+    manifestChecksum,
+  };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────
 
 async function main() {
-  const noClear = process.argv.slice(2).includes('--no-clear');
+  const args = process.argv.slice(2);
+  // `--no-clear` remains a non-destructive alias of the default export/analysis mode.
+  const cleanupConfirmation = parseCleanupConfirmation(args);
   ensurePrivateDocsDirectory();
   const run = new AutomationRun({
     scriptName: 'fixerrors',
-    mode: noClear ? 'analysis-no-clear' : 'analysis',
-    args: process.argv.slice(2),
+    mode: cleanupConfirmation ? 'trusted-operational-cleanup' : 'analysis-export',
+    args,
     expectedArtifacts: [
       { path: 'docs_private/error-analysis.md' },
       { path: 'docs_private/error-fix-log.md', required: false },
+      { path: 'docs_private/error-snapshot.json' },
     ],
   });
 
   console.log('FIXERRORS - Error Analysis & Report Generator');
   console.log('=============================================\n');
 
+  let client: InstanceType<typeof Client> | null = null;
+  let releaseSnapshotArtifactLock: (() => void) | null = null;
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const connectionString = requireNonPoolingConnectionString();
+    client = createPostgresClient(connectionString);
+    await client.connect();
+    const databaseClient = client as unknown as PgClientLike;
+    const databaseTargetFingerprint =
+      await fetchDatabaseTargetFingerprint(databaseClient);
 
-    const clearErrorLogsAfterSuccessfulAnalysis = async (): Promise<ErrorLogClearResult> => {
-      if (noClear) {
-        console.log('Preserving production error log (--no-clear).');
+    if (cleanupConfirmation) {
+      console.log('Validating bound snapshot confirmation and cleanup scope...');
+      try {
+        const clearResult = await run.step(
+          'Execute verified transactional snapshot cleanup',
+          () =>
+            executeVerifiedSnapshotCleanup({
+              client: databaseClient,
+              confirmation: cleanupConfirmation,
+              databaseTargetFingerprint,
+            }),
+          {
+            operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+            operationalSafetyContract:
+              TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+            operationalExecutionCandidate: true,
+            confirmationBoundToSnapshot: true,
+          }
+        );
         run.recordStep({
-          name: 'Skip production error log clear',
+          name: 'Record trusted operational execution',
           status: 'passed',
           startedAt: new Date().toISOString(),
           endedAt: new Date().toISOString(),
           durationMs: 0,
-          metadata: { reason: '--no-clear' },
+          metadata: {
+            operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+            operationalExecutionTrusted: true,
+            operationalTrustSuspended: false,
+            operationalSafetyContract:
+              TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+          },
         });
-        return { clearedCount: null, skipped: true };
+        console.log(
+          `  Cleared ${clearResult.clearedCount} exact exported error log entr${clearResult.clearedCount === 1 ? 'y' : 'ies'}`
+        );
+        console.log(
+          `  Cleared ${clearResult.clearedAlertCount} dependent diagnostic alert entr${clearResult.clearedAlertCount === 1 ? 'y' : 'ies'}`
+        );
+        console.log(
+          `  SET NULL collateral: usage=${clearResult.collateral.userUsageEventsNulled}, service_health=${clearResult.collateral.serviceHealthEventsNulled}`
+        );
+        console.log(`  Newer/unexported error logs remaining: ${clearResult.remainingCount}`);
+        await run.finish('passed');
+        return;
+      } catch (error) {
+        run.recordStep({
+          name: 'Suspend trusted operational execution',
+          status: 'failed',
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: 0,
+          error: error instanceof Error ? error.message : String(error),
+          metadata: {
+            operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+            operationalExecutionTrusted: false,
+            operationalTrustSuspended: true,
+            operationalSafetyContract:
+              TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+          },
+        });
+        throw error;
       }
-
-      console.log('Clearing production error log...');
-      const clearResult = await run.step('Clear production error log', () => clearProductionErrorLogs(supabase));
-      const clearedLabel = clearResult.clearedCount === null ? 'all' : clearResult.clearedCount;
-      console.log(`  Cleared ${clearedLabel} error log entr${clearResult.clearedCount === 1 ? 'y' : 'ies'}`);
-      return clearResult;
-    };
-
-    // 1. Fetch errors
-    console.log('Fetching errors from error_logs...');
-    const { data: rawErrors, error: fetchError } = await run.step('Fetch production error logs', () =>
-      supabase
-        .from('error_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(200)
-    );
-
-    if (fetchError) {
-      throw new Error(`Failed to fetch production errors: ${fetchError.message}`);
     }
 
-    if (!rawErrors || rawErrors.length === 0) {
-      console.log('No errors in database. Writing empty report.');
-      const report = generateReport([], 0, 0);
-      await run.step('Write empty error analysis report', () => {
-        fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-      }, { totalFetched: 0, afterFiltering: 0, patternsFound: 0 });
-      console.log(`\nReport written to: docs_private/error-analysis.md`);
-      await clearErrorLogsAfterSuccessfulAnalysis();
-      await run.finish('passed');
-      return;
-    }
-
-    console.log(`  Fetched ${rawErrors.length} error(s) from database`);
-
-    // 2. Filter
-    const errors = filterErrors(rawErrors);
-    const filteredOut = rawErrors.length - errors.length;
-    console.log(`  Filtered out ${filteredOut} (localhost/admin) -> ${errors.length} remaining`);
-
-    if (errors.length === 0) {
-      console.log('All errors were filtered out. Writing empty report.');
-      const report = generateReport([], rawErrors.length, 0);
-      await run.step('Write filtered-empty error analysis report', () => {
-        fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-      }, { totalFetched: rawErrors.length, filteredOut, afterFiltering: 0, patternsFound: 0 });
-      console.log(`\nReport written to: docs_private/error-analysis.md`);
-      await clearErrorLogsAfterSuccessfulAnalysis();
-      await run.finish('passed');
-      return;
-    }
-
-    // 3. Group into patterns
-    console.log('Grouping errors into patterns...');
-    const patterns = await run.step('Group errors into patterns', () => groupIntoPatterns(errors), {
-      totalFetched: rawErrors.length,
-      filteredOut,
-      afterFiltering: errors.length,
-      patternsFound: 0,
-    });
-    console.log(`  Found ${patterns.length} distinct pattern(s)`);
-    const patternReviewMetadata = getPatternReviewMetadata(patterns);
-
-    // 4. Generate report
-    console.log('Generating analysis report...');
-    await run.step('Write error analysis report', () => {
-      const report = generateReport(patterns, rawErrors.length, errors.length);
-      fs.writeFileSync(ERROR_ANALYSIS_PATH, report, 'utf-8');
-    }, {
-      totalFetched: rawErrors.length,
-      filteredOut,
-      afterFiltering: errors.length,
-      patternsFound: patterns.length,
-      ...patternReviewMetadata,
-    });
-    console.log(`  Written to: docs_private/error-analysis.md`);
-
-    // 5. Update historical fix log (JSON only, no run summaries)
-    console.log('Updating historical fix log...');
-    const fixLogStats = await run.step('Update historical error fix log', () => updateFixLog(errors), {
-      entriesProcessed: errors.length,
-    });
     run.recordStep({
-      name: 'Summarise historical error fix log',
+      name: 'Recognise registered operational command',
       status: 'passed',
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
       durationMs: 0,
-      metadata: fixLogStats,
+      metadata: {
+        operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+        operationalExecutionTrusted: false,
+        operationalTrustSuspended: false,
+        operationalSafetyContract:
+          TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+        phase: 'non-destructive-export',
+        noClearAlias: args.includes('--no-clear'),
+      },
     });
-    console.log(`  Updated: docs_private/error-fix-log.md`);
 
-    // 6. Clear the production error log after the analysis artifacts are safely written.
-    const clearResult = await clearErrorLogsAfterSuccessfulAnalysis();
+    console.log('Capturing transaction-consistent error_logs snapshot...');
+    let snapshot = await run.step(
+      'Fetch complete repeatable-read production error snapshot',
+      () => fetchProductionErrorSnapshot(databaseClient)
+    );
+    if (snapshot.databaseTargetFingerprint !== databaseTargetFingerprint) {
+      throw new Error(
+        'Snapshot database target fingerprint drifted from the live server identity; cleanup blocked'
+      );
+    }
+    const snapshotArtifactPath = getErrorSnapshotArtifactPath(
+      snapshot.snapshotId
+    );
+    releaseSnapshotArtifactLock = acquireErrorSnapshotArtifactLock(
+      snapshot.snapshotId
+    );
+    snapshot = await run.step(
+      'Write and read-verify production error snapshot',
+      () => {
+        const verified = writeAndVerifyErrorSnapshot(
+          snapshot,
+          snapshotArtifactPath
+        );
+        writeAndVerifyErrorSnapshot(verified, ERROR_SNAPSHOT_PATH);
+        return verified;
+      },
+      {
+        snapshotId: snapshot.snapshotId,
+        snapshotBoundary: snapshot.boundary,
+        expectedRowCount: snapshot.expectedRowCount,
+        exactIdCount: snapshot.exactIds.length,
+        schemaFingerprint: snapshot.schemaFingerprint,
+      }
+    );
+    console.log('  Verified snapshot: docs_private/error-snapshot.json');
 
-    // 7. Terminal summary
+    const rawErrors = snapshot.errors;
+    console.log(`  Captured ${rawErrors.length} error(s)`);
+    const errors = filterErrors(rawErrors).sort((left, right) =>
+      right.timestamp.localeCompare(left.timestamp)
+    );
+    const filteredOut = rawErrors.length - errors.length;
+    console.log(
+      `  Filtered out ${filteredOut} (localhost/admin) -> ${errors.length} remaining`
+    );
+
+    console.log('Grouping errors into patterns...');
+    const patterns = await run.step(
+      'Group errors into patterns',
+      () => groupIntoPatterns(errors),
+      {
+        totalFetched: rawErrors.length,
+        filteredOut,
+        afterFiltering: errors.length,
+      }
+    );
+    const patternReviewMetadata = getPatternReviewMetadata(patterns);
+    const clusterLanes: Record<string, number> =
+      patterns.length > 0 ? { standard: patterns.length } : {};
+    console.log(`  Found ${patterns.length} distinct pattern(s)`);
+
+    console.log('Generating and validating analysis report...');
+    const report = generateReport(patterns, rawErrors.length, errors.length);
+    await run.step(
+      'Write and read-verify error analysis report',
+      () => {
+        writeAndVerifyTextArtifactAtomic(ERROR_ANALYSIS_PATH, report);
+      },
+      {
+        totalFetched: rawErrors.length,
+        filteredOut,
+        afterFiltering: errors.length,
+        patternsFound: patterns.length,
+        ...patternReviewMetadata,
+      }
+    );
+    console.log('  Written and verified: docs_private/error-analysis.md');
+
+    if (errors.length > 0) {
+      console.log('Updating historical fix log...');
+      const fixLogStats = await run.step(
+        'Update historical error fix log',
+        () => updateFixLog(errors),
+        { entriesProcessed: errors.length }
+      );
+      run.recordStep({
+        name: 'Summarise historical error fix log',
+        status: 'passed',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 0,
+        metadata: fixLogStats,
+      });
+      console.log('  Updated: docs_private/error-fix-log.md');
+    }
+
+    snapshot = markSnapshotAnalysisCompleted(
+      snapshot,
+      report,
+      clusterLanes
+    );
+    if (snapshot.rowCount === 0) {
+      snapshot = markSnapshotCleanupNotRequired(snapshot);
+    }
+    snapshot = await run.step(
+      'Seal verified snapshot with analysis evidence',
+      () => {
+        const verified = writeAndVerifyErrorSnapshot(
+          snapshot,
+          snapshotArtifactPath
+        );
+        writeAndVerifyErrorSnapshot(verified, ERROR_SNAPSHOT_PATH);
+        return verified;
+      },
+      {
+        snapshotId: snapshot.snapshotId,
+        analysisStatus: snapshot.analysis.status,
+        reportChecksumPresent: Boolean(snapshot.analysis.reportChecksum),
+        clusterCount: snapshot.analysis.clusterCount,
+        clusterLanes: snapshot.analysis.clusterLanes,
+      }
+    );
+
     console.log('\n=============================================');
-    console.log('SUMMARY');
+    console.log('EXPORT SUMMARY');
     console.log('=============================================');
-    console.log(`  Errors fetched:      ${rawErrors.length}`);
+    console.log(`  Snapshot rows:       ${snapshot.rowCount}`);
     console.log(`  After filtering:     ${errors.length}`);
     console.log(`  Patterns found:      ${patterns.length}`);
     console.log(
-      `  Error logs cleared:  ${
-        clearResult.skipped ? 'skipped (--no-clear)' : clearResult.clearedCount === null ? 'all' : clearResult.clearedCount
-      }`
+      snapshot.rowCount === 0
+        ? '  Production rows cleared: 0 (no cleanup required)'
+        : '  Production rows cleared: 0 (confirmation required)'
     );
-    console.log('');
 
-    // Top 5 patterns
-    console.log('Top patterns:');
-    patterns.slice(0, 5).forEach((p, i) => {
-      console.log(`  ${i + 1}. [${p.occurrences.length}x] ${p.errorType} in ${p.component}: ${p.normalizedMessage.substring(0, 60)}`);
-    });
-
-    if (patterns.length > 5) {
-      console.log(`  ...and ${patterns.length - 5} more`);
+    if (patterns.length > 0) {
+      console.log('\nTop patterns:');
+      patterns.slice(0, 5).forEach((pattern, index) => {
+        console.log(
+          `  ${index + 1}. [${pattern.occurrences.length}x] ${pattern.errorType} in ${pattern.component}: ${pattern.normalizedMessage.substring(0, 60)}`
+        );
+      });
+      if (patterns.length > 5) {
+        console.log(`  ...and ${patterns.length - 5} more`);
+      }
     }
 
-    console.log('\n=============================================');
-    console.log('Report ready: docs_private/error-analysis.md');
+    if (snapshot.rowCount === 0) {
+      console.log('\nNo cleanup is required; production error_logs is empty.');
+    } else {
+      console.log('\nCleanup is ready but has not run.');
+      console.log(
+        'After confirming the displayed snapshot, run this exact bound command:'
+      );
+      console.log(
+        `npm run fixerrors -- --cleanup --snapshot-id=${snapshot.snapshotId} --checksum=${snapshot.checksum} --row-count=${snapshot.rowCount} --target=${snapshot.databaseTargetFingerprint} --expires-at=${snapshot.expiresAt} --safety-contract=${snapshot.safetyContract} --manifest=${snapshot.manifestChecksum}`
+      );
+    }
     console.log('=============================================\n');
     await run.finish('passed');
   } catch (error) {
     await run.finish('failed', error);
     throw error;
+  } finally {
+    releaseSnapshotArtifactLock?.();
+    if (client) await client.end();
   }
 }
 

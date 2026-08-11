@@ -265,7 +265,7 @@ FFTS ports Token-Efficient Engineering V2.2 as a repository-enforced workflow la
 - Protocol state, immutable events, evidence manifests, and follow-up plans stay under ignored `docs_private/automation/**`.
 - The Cursor stop hook fails open and never authorizes a push.
 - Release-metadata preflight, consistency, recovery, and no-push-after-failure behavior in `scripts/finalise-release.ts` remain fail-closed and unchanged by TEE core.
-- Current `fixerrors` stays untrusted until a separately approved production-safety workstream lands; retain `npm run fixerrors -- --no-clear` for analysis.
+- `fixerrors` export/analysis is non-destructive by default; trusted cleanup uses exact-snapshot contract `fixerrors-exact-snapshot-v1` only. Debug UI / `clear-all-error-logs` clears remain untrusted.
 
 Verification ledger for the TEE port: `docs/guides/TEE_V2_2_VERIFICATION_LEDGER.md`.
 
@@ -282,19 +282,28 @@ In particular:
 
 ## `fixerrors` Contract
 
-`npm run fixerrors` must:
+`npm run fixerrors` (and `--no-clear`) is the non-destructive export/analysis phase and must:
 
-1. load production configuration from `.env.local`;
-2. verify required Supabase values without printing them;
-3. fetch and group recent production errors;
-4. write `docs_private/error-analysis.md`;
-5. create or update `docs_private/error-fix-log.md`;
-6. write structured automation run logs;
-7. validate required artifacts during self-review;
-8. clear or mark remote errors only after local output succeeds;
-9. report the local artifact paths and any monthly follow-up.
+1. load production configuration from `.env.local` (including `POSTGRES_URL_NON_POOLING`);
+2. verify required connection values without printing secrets;
+3. capture a complete repeatable-read snapshot of `public.error_logs` with target + schema fingerprints;
+4. write and read-verify `docs_private/error-snapshot.json` (and per-id snapshot under `docs_private/error-snapshots/`);
+5. filter/group for reporting only (filters must not shrink the cleanup ID set);
+6. write and read-verify `docs_private/error-analysis.md`;
+7. create or update `docs_private/error-fix-log.md` when applicable;
+8. write structured automation run logs and validate required artifacts during self-review;
+9. print the exact bound cleanup command when the snapshot is non-empty (do not mutate production in this phase);
+10. report local artifact paths and any monthly follow-up.
 
-An empty error set is a successful, logged outcome. Missing `docs_private/` is not a valid failure mode.
+Trusted cleanup (exact printed `--cleanup` args under `fixerrors-exact-snapshot-v1`) must:
+
+1. re-verify snapshot checksum/manifest/expiry/target/schema/analysis artifacts;
+2. delete only exact snapshot `error_logs` IDs inside one transaction after `FOR UPDATE`, plus inventoried `error_log_alerts`;
+3. record SET NULL collateral on usage/health FKs (including possible `service_health_events.updated_at` trigger updates);
+4. preserve newer/unexported rows;
+5. record durable outcomes (`rejected` / `rolled_back` / `committed` / `committed_unverified` / `indeterminate`) and never auto-retry indeterminate/commit-ambiguous states.
+
+An empty snapshot is a successful export with no cleanup required. Missing `docs_private/` is not a valid failure mode. Broad predicate clears (for example `timestamp >= 1970-01-01`) are forbidden in the trusted path. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted.
 
 ## `finalise` Contract
 
@@ -343,13 +352,15 @@ The finalise rule must:
 
 The fixerrors rule must:
 
-- run the existing `npm run fixerrors` command;
-- read the generated `docs_private/error-analysis.md`;
+- run `npm run fixerrors` for non-destructive export/analysis (`--no-clear` alias allowed);
+- use only the exact printed bound cleanup command for destructive clears under `fixerrors-exact-snapshot-v1`;
+- read the generated `docs_private/error-analysis.md` and snapshot artifacts;
 - inspect `docs_private/error-fix-log.md` when present;
 - summarize actionable groups without exposing sensitive payloads;
 - use automation review/follow-up files when generated;
-- avoid claiming remote errors were cleared unless the run log confirms it;
-- never require the AVS workspace or AVS terminal directory.
+- avoid claiming remote errors were cleared unless the run log confirms a trusted `committed` cleanup;
+- never auto-retry `indeterminate` / `committed_unverified` outcomes;
+- never require a sibling workspace or terminal directory.
 
 ### Rule Portability
 

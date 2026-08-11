@@ -24,6 +24,7 @@ function makeError(overrides: Partial<ErrorLogEntry>): ErrorLogEntry {
   return {
     id: 'error-1',
     timestamp: '2026-06-07T12:00:00.000Z',
+    created_at: '2026-06-07T12:00:00.000Z',
     error_message: 'Console Error: Example error',
     error_stack: null,
     error_type: 'Error',

@@ -672,6 +672,52 @@ test.describe('@scheduling Scheduling', () => {
     })).toBeVisible();
   });
 
+  test('wide board returns a visit to Jobs by dragging onto Resources', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, visitReturnRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+
+    const source = page
+      .getByTestId(
+        'schedule-cell-11111111-1111-4111-8111-111111111111-'
+          + fixture.week.start
+      )
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+    const resources = page.getByTestId('schedule-resources-panel');
+    await expect(source).toBeVisible();
+    await expect(resources).toBeVisible();
+
+    const sourceBox = await source.boundingBox();
+    const resourcesBox = await resources.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(resourcesBox).not.toBeNull();
+    await page.mouse.move(
+      sourceBox!.x + sourceBox!.width / 2,
+      sourceBox!.y + Math.min(20, sourceBox!.height / 2)
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      resourcesBox!.x + resourcesBox!.width / 2,
+      resourcesBox!.y + 40,
+      { steps: 25 }
+    );
+    await page.mouse.up();
+
+    const confirmation = page.getByRole('alertdialog', {
+      name: 'Return this visit to Jobs?',
+    });
+    await expect(confirmation).toBeVisible();
+    await expect(page.getByText(
+      'Drop this visit anywhere in Resources to return it to Jobs.'
+    )).toHaveCount(0);
+    await confirmation.getByRole('button', { name: 'Return visit to Jobs' }).click();
+
+    await expect.poll(() => visitReturnRequests).toHaveLength(1);
+    expect(visitReturnRequests[0]).toMatchObject({
+      expected_fingerprint: 'playwright-preview',
+    });
+  });
+
   test('Daily queued-job drops create one snapped atomic initial visit', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { quoteScheduleRequests } = await mockManagerBoard(page);

@@ -36,6 +36,13 @@ interface DraggableOptions {
   disabled?: boolean;
 }
 
+interface DroppableOptions {
+  id: string;
+  type?: string;
+  accept?: string[] | string;
+  data?: Record<string, unknown>;
+}
+
 let timelineViewportWidth = 1800;
 let resizeObservers: MockResizeObserver[] = [];
 
@@ -115,6 +122,7 @@ const {
     onDragStart: undefined as ((event: DragEndEvent) => void) | undefined,
     announcements: undefined as DndAnnouncements | undefined,
     draggableOptions: [] as DraggableOptions[],
+    droppableOptions: [] as DroppableOptions[],
     sensors: [] as unknown[],
   },
   permissionState: {
@@ -188,7 +196,10 @@ vi.mock('@dnd-kit/react', () => ({
     dndState.draggableOptions.push(options);
     return { ref: vi.fn(), handleRef: vi.fn(), isDragging: false };
   },
-  useDroppable: () => ({ ref: vi.fn(), isDropTarget: false }),
+  useDroppable: (options: DroppableOptions) => {
+    dndState.droppableOptions.push(options);
+    return { ref: vi.fn(), isDropTarget: false };
+  },
 }));
 
 vi.mock('sonner', () => ({
@@ -428,6 +439,7 @@ describe('SchedulingManagerBoard', () => {
     dndState.onDragStart = undefined;
     dndState.announcements = undefined;
     dndState.draggableOptions.length = 0;
+    dndState.droppableOptions.length = 0;
     dndState.sensors.length = 0;
     localStorage.clear();
     timelineViewportWidth = 1800;
@@ -919,6 +931,17 @@ describe('SchedulingManagerBoard', () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
+    expect(dndState.droppableOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'schedule-resources-return-drop',
+          type: 'schedule-resources-return',
+          accept: ['schedule-board-visit'],
+          data: { returnToResources: true },
+        }),
+      ])
+    );
+
     act(() => {
       dndState.onDragEnd?.({
         canceled: false,
@@ -947,6 +970,27 @@ describe('SchedulingManagerBoard', () => {
       })
     );
     expect(mockPreviewVisitBacklog).toHaveBeenCalledWith('visit-1');
+  });
+
+  it('prompts to drop on Resources when a board visit is released without a return target', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { visit: board.visits[0], job: board.jobs[0] } },
+          target: null,
+        },
+      });
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      'Drop this visit anywhere in Resources to return it to Jobs.'
+    );
+    expect(mockPreviewVisitBacklog).not.toHaveBeenCalled();
+    expect(mockEnqueueVisit).not.toHaveBeenCalled();
   });
 
   it('shows returned visits in Jobs All and reschedules the same visit identity', async () => {

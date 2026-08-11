@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 import {
   Accessibility,
@@ -337,6 +338,30 @@ function ResourceDragCue({ testId }: { testId: string }) {
       data-testid={testId}
       className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground"
     />
+  );
+}
+
+/** Must render inside DragDropProvider so the droppable registers with the manager. */
+function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
+  const { ref, isDropTarget } = useDroppable({
+    id: 'schedule-resources-return-drop',
+    type: 'schedule-resources-return',
+    accept: ['schedule-board-visit'],
+    data: { returnToResources: true },
+  });
+
+  return (
+    <Card
+      ref={ref}
+      className={cn(
+        'h-fit border-border transition xl:sticky xl:top-4',
+        isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
+      )}
+      data-testid="schedule-resources-panel"
+      data-visit-return-target="true"
+    >
+      {children}
+    </Card>
   );
 }
 
@@ -1786,15 +1811,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     queryKey: ['scheduling-visit-backlog'],
     queryFn: fetchScheduleVisitBacklog,
   });
-  const {
-    ref: resourcesPanelDropRef,
-    isDropTarget: isVisitOverResources,
-  } = useDroppable({
-    id: 'schedule-resources-return-drop',
-    type: 'schedule-resources-return',
-    accept: ['schedule-board-visit'],
-    data: { returnToResources: true },
-  });
   useEffect(() => {
     if (!canCreateQuotes || !quotesSensitiveAccess.canAccess) {
       setQuoteManagerOptions([]);
@@ -3186,16 +3202,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]"
           data-testid="schedule-manager-layout"
         >
-          <Card
-            ref={resourcesPanelDropRef}
-            className={cn(
-              'h-fit border-border transition xl:sticky xl:top-4',
-              isVisitOverResources
-                && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
-            )}
-            data-testid="schedule-resources-panel"
-            data-visit-return-target="true"
-          >
+          <ResourcesReturnDropCard>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Resources</CardTitle>
             </CardHeader>
@@ -3495,7 +3502,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 </>
               )}
             </CardContent>
-          </Card>
+          </ResourcesReturnDropCard>
 
           <Card className="min-w-0 border-border">
             <CardHeader className="gap-3">

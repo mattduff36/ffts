@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.3.1
+
+**GIT COMMIT MESSAGE**
+`chore(db): update Data storage and Help and FAQ`
+
+**PUSHED AT**
+2026-08-11T00:45:00.841Z
+
+**WHAT CHANGED**
+Update Data storage and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Data storage and Help and FAQ, with changes to automated tests and data storage.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `chore(db): update Data storage and Help and FAQ`
+
 ## 0826.3.0
 
 **GIT COMMIT MESSAGE**

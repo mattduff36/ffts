@@ -1,5 +1,25 @@
 [
   {
+    "version": "0826.3.1",
+    "updateKind": "minor",
+    "title": "Data storage maintenance update",
+    "description": "Updated Data storage and Help and FAQ.",
+    "summary": "Updated Data storage and Help and FAQ.",
+    "details": [
+      "Updated Data storage and Help and FAQ, with changes to automated tests and data storage.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Data storage",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "data-storage"
+    ],
+    "pushedAt": "2026-08-11T00:45:00.841Z"
+  },
+  {
     "version": "0826.3.0",
     "updateKind": "major",
     "title": "Scheduling update",

@@ -1,5 +1,28 @@
 [
   {
+    "version": "0826.6.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Projects, and Help and FAQ.",
+    "summary": "Updated Quotes, Projects, and Help and FAQ.",
+    "details": [
+      "Updated Quotes, Projects, and Help and FAQ, with changes to background routes, app screens, and automated tests.",
+      "Updated projects, with changes to app screens.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Quotes",
+      "Projects",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "quotes",
+      "projects"
+    ],
+    "pushedAt": "2026-08-11T14:16:58.269Z"
+  },
+  {
     "version": "0826.5.0",
     "updateKind": "major",
     "title": "App screens update",

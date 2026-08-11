@@ -2,6 +2,25 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.6.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Projects, and Help and FAQ`
+
+**PUSHED AT**
+2026-08-11T14:16:58.269Z
+
+**WHAT CHANGED**
+Update Quotes, Projects, and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes, Projects, and Help and FAQ, with changes to background routes, app screens, and automated tests.
+- Updated projects, with changes to app screens.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Projects, and Help and FAQ`
+
 ## 0826.5.0
 
 **GIT COMMIT MESSAGE**

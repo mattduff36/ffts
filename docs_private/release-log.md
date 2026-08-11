@@ -2,6 +2,32 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.7.0
+
+**GIT COMMIT MESSAGE**
+`feat(daily-tasks): update daily tasks`
+
+**PUSHED AT**
+2026-08-11T23:05:04.073Z
+
+**WHAT CHANGED**
+Update daily tasks. Close WS1/WS2 premium review blockers. Record WS3 fixerrors closure review pass. Add trusted exact-snapshot fixerrors cleanup. Integrate TEE checkpoints and finalise repair. Align protocol split test input. Add repository-enforced TEE V2.2 core workflow.
+
+**VERSION HISTORY DETAILS**
+- Updated actions, with changes to automation scripts and automated tests.
+- Updated help and FAQ, with changes to documentation.
+- Updated daily tasks, with changes to automated tests.
+- Updated data storage, with changes to data storage.
+
+**COMMITS IN THIS RELEASE**
+- `feat(daily-tasks): update daily tasks`
+- `fix(automation): close WS1/WS2 premium review blockers`
+- `docs(automation): record WS3 fixerrors closure review pass`
+- `feat(automation): add trusted exact-snapshot fixerrors cleanup`
+- `feat(automation): integrate TEE checkpoints and finalise repair`
+- `fix(automation): align protocol split test input`
+- `feat(automation): add repository-enforced TEE V2.2 core workflow`
+
 ## 0826.6.0
 
 **GIT COMMIT MESSAGE**

@@ -1,5 +1,27 @@
 [
   {
+    "version": "0826.7.0",
+    "updateKind": "major",
+    "title": "Daily Tasks update",
+    "description": "Updated daily tasks. Close WS1/WS2 premium review blockers. Record WS3 fixerrors closure review pass. Add trusted exact-snapshot fixerrors cleanup. Integrate TEE checkpoints and finalise repair. Align protocol split test input. Add repository-enforced TEE V2.2 core workflow.",
+    "summary": "Updated daily tasks. Close WS1/WS2 premium review blockers. Record WS3 fixerrors closure review pass. Add trusted exact-snapshot fixerrors cleanup. Integrate TEE checkpoints and finalise repair. Align protocol split test input. Add repository-enforced TEE V2.2 core workflow.",
+    "details": [
+      "Updated actions, with changes to automation scripts and automated tests.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated daily tasks, with changes to automated tests.",
+      "Updated data storage, with changes to data storage."
+    ],
+    "areas": [
+      "Daily Tasks",
+      "Release automation"
+    ],
+    "areaKeys": [
+      "daily-tasks",
+      "release-automation"
+    ],
+    "pushedAt": "2026-08-11T23:05:04.073Z"
+  },
+  {
     "version": "0826.6.0",
     "updateKind": "major",
     "title": "Quotes update",

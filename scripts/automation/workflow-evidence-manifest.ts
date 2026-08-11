@@ -409,14 +409,38 @@ export function buildEvidenceManifest(params: {
   if (commandViolations.length > 0) {
     throw new Error(`commandResults privacy violations: ${commandViolations.join('; ')}`);
   }
+  const rawBlockerPayload = {
+    closedBlockerIds: params.closedBlockerIds,
+    blockerEvidence: params.blockerEvidence,
+  };
+  const blockerInputViolations = assertNoForbiddenPayload(rawBlockerPayload);
+  if (blockerInputViolations.length > 0) {
+    throw new Error(
+      `blocker evidence privacy violations: ${blockerInputViolations.join('; ')}`
+    );
+  }
+  const sanitizedClosedBlockerIds = params.closedBlockerIds?.map((id) =>
+    sanitizeEvidenceLabel(id)
+  );
+  const sanitizedBlockerEvidence = params.blockerEvidence?.map((entry) => ({
+    blockerId: sanitizeEvidenceLabel(entry.blockerId),
+    evidenceLabel: sanitizeEvidenceLabel(entry.evidenceLabel),
+    commandName: entry.commandName
+      ? sanitizeEvidenceLabel(entry.commandName)
+      : undefined,
+  }));
+  const sanitizedRequiredTests = requiredTests.map((test) => ({
+    ...test,
+    evidenceLabel: sanitizeEvidenceLabel(test.evidenceLabel),
+  }));
   const liveOk =
     !liveVerification ||
     liveVerification.status === 'passed' ||
     liveVerification.status === 'skipped';
   const fixEvidenceReady =
     params.kind !== 'fix-delta' ||
-    ((params.closedBlockerIds?.length ?? 0) > 0 &&
-      (params.blockerEvidence?.length ?? 0) > 0);
+    ((sanitizedClosedBlockerIds?.length ?? 0) > 0 &&
+      (sanitizedBlockerEvidence?.length ?? 0) > 0);
 
   let status: WorkflowEvidenceManifest['status'] = 'passed';
   if (!checksPassed || !testsReady || !liveOk || !fixEvidenceReady) status = 'failed';
@@ -440,12 +464,17 @@ export function buildEvidenceManifest(params: {
       changedFilesSample: baseHeadFiles.slice(0, 50).map((file) => sanitizeEvidenceLabel(file)),
     },
     commands: sanitizedCommands,
-    requiredTests,
+    requiredTests: sanitizedRequiredTests,
     liveVerification,
-    closedBlockerIds: params.closedBlockerIds,
-    blockerEvidence: params.blockerEvidence,
+    closedBlockerIds: sanitizedClosedBlockerIds,
+    blockerEvidence: sanitizedBlockerEvidence,
     privacy: { redacted: true },
   };
+
+  const manifestViolations = assertNoForbiddenPayload(draft);
+  if (manifestViolations.length > 0) {
+    throw new Error(`manifest privacy violations: ${manifestViolations.join('; ')}`);
+  }
 
   const bodyHash = hashText(JSON.stringify(draft));
   const manifest: WorkflowEvidenceManifest = {

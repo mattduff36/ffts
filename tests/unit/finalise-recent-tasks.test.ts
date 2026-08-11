@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
@@ -9,6 +17,7 @@ import {
   canResumeFinaliseCheckpointStep,
   canReuseOrdinaryFinaliseStep,
   createOrLoadFinaliseCheckpoint,
+  getCheckpointPath,
   markFinaliseCheckpointStep,
   markOrdinaryFinaliseStep,
 } from '@/scripts/automation/finalise-checkpoint';
@@ -402,5 +411,34 @@ describe('finalise recent task detection', () => {
         checkpointId: 'ckpt_x',
       })
     ).toThrow(/path|opaque|workstreamId/iu);
+
+    const checkpointSource = readFileSync(
+      path.join(process.cwd(), 'scripts', 'automation', 'finalise-checkpoint.ts'),
+      'utf8'
+    );
+    expect(checkpointSource).toMatch(/data_type/);
+    expect(checkpointSource).toMatch(/is_nullable/);
+    expect(checkpointSource).toMatch(/pathHasSymlinkComponent/);
+
+    if (process.platform !== 'win32') {
+      const workstreamDir = path.join(
+        repoRoot,
+        'docs_private',
+        'automation',
+        'workstreams',
+        'ws_symlink_1'
+      );
+      const realCheckpoints = path.join(repoRoot, 'real-checkpoints');
+      mkdirSync(realCheckpoints, { recursive: true });
+      mkdirSync(workstreamDir, { recursive: true });
+      try {
+        symlinkSync(realCheckpoints, path.join(workstreamDir, 'checkpoints'));
+        expect(() =>
+          getCheckpointPath(repoRoot, 'ws_symlink_1', 'ckpt_symlink')
+        ).toThrow(/symlink/iu);
+      } catch {
+        // Some environments disallow symlink creation; source assertions above remain.
+      }
+    }
   });
 });

@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyFinaliseCorrelationToState,
   assertFinaliseAllowedForProtocol,
@@ -10,6 +10,7 @@ import {
   resolveFinaliseWorkstreamMatches,
   shouldApplyFinaliseCorrelation,
 } from '@/scripts/automation/workflow-finalise-correlation';
+import * as workflowEvents from '@/scripts/automation/workflow-events';
 import {
   createEmptyWorkflowReviewState,
   getWorkflowPaths,
@@ -21,7 +22,15 @@ import {
   correlateFinaliseAutomationRun,
   readPostRunGitIdentity,
 } from '@/scripts/automation/logger';
-import { writeProtocolRecord } from '@/scripts/automation/workflow-review-protocol';
+import {
+  getFinaliseRepairCompletePath,
+  markFinaliseRepairComplete,
+  writeFinaliseFailureArtifact,
+} from '@/scripts/automation/finalise-failure';
+import {
+  readProtocolRecord,
+  writeProtocolRecord,
+} from '@/scripts/automation/workflow-review-protocol';
 
 const tempRoots: string[] = [];
 
@@ -277,5 +286,191 @@ describe('workflow finalise correlation', () => {
     expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
       /stale|matching activeFinaliseContext|not finalise_ready/iu
     );
+  });
+
+  it('TEE-FINALISE-001: discovers disk-only CRITICAL protocols when state.protocolRecords is partial', () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-disk-'));
+    tempRoots.push(repoRoot);
+    mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+    const open = makeProtocol('ws_disk_only_1', 'initialized', null);
+    writeProtocolRecord(repoRoot, open);
+    const paths = getWorkflowPaths(repoRoot);
+    // Partial state write: omit protocolRecords entirely even though disk has an open CRITICAL protocol.
+    saveWorkflowReviewState(paths.statePath, createEmptyWorkflowReviewState());
+
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /CRITICAL workstream ws_disk_only_1|phase initialized/iu
+    );
+  });
+
+  it('TEE-FINALISE-001: correlates from protocol disk when workstream state record is briefly absent', () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-synth-'));
+    tempRoots.push(repoRoot);
+    mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+    const ready = makeProtocol('ws_synth_1', 'finalise_ready', 'ckpt_synth');
+    writeProtocolRecord(repoRoot, ready);
+    const state = {
+      ...createEmptyWorkflowReviewState(),
+      // No workstreams map entry for ws_synth_1.
+      protocolRecords: { ws_synth_1: ready },
+      activeFinaliseContext: {
+        workstreamId: 'ws_synth_1',
+        checkpointId: 'ckpt_synth',
+        activatedAt: new Date().toISOString(),
+      },
+    };
+    const matched = resolveFinaliseWorkstreamMatches({
+      state,
+      repoRoot,
+      branchName: 'main',
+      headCommit: 'abc123',
+    });
+    expect(matched.correlation.matchedBy).toBe('explicit_context');
+    expect(matched.correlation.identityStatus).toBe('present');
+    expect(matched.correlation.workstreamIds).toEqual(['ws_synth_1']);
+    expect(matched.matched[0]?.workstreamId).toBe('ws_synth_1');
+  });
+
+  it('TEE-FINALISE-001: malformed disk protocol blocks assertFinaliseAllowedForProtocol', () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-malformed-'));
+    tempRoots.push(repoRoot);
+    const workstreamId = 'ws_malformed_1';
+    const protocolDir = path.join(
+      repoRoot,
+      'docs_private',
+      'automation',
+      'workstreams',
+      workstreamId
+    );
+    mkdirSync(protocolDir, { recursive: true });
+    writeFileSync(path.join(protocolDir, 'protocol.json'), '{not-valid-json', 'utf8');
+    const paths = getWorkflowPaths(repoRoot);
+    saveWorkflowReviewState(paths.statePath, createEmptyWorkflowReviewState());
+
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /unreadable|malformed|refuse finalise/iu
+    );
+
+    writeFileSync(
+      path.join(protocolDir, 'protocol.json'),
+      JSON.stringify({ schemaVersion: '1', workstreamId }),
+      'utf8'
+    );
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /malformed|refuse finalise/iu
+    );
+  });
+
+  it('TEE-FINALISE-001: finish-time correlation failures fail closed and keep repair evidence', () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-corr-fail-'));
+    tempRoots.push(repoRoot);
+    mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+    const paths = getWorkflowPaths(repoRoot);
+    saveWorkflowReviewState(paths.statePath, createEmptyWorkflowReviewState());
+
+    const failure = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise',
+      failedStep: 'build',
+      command: 'npm run build',
+      workstreamId: 'ws_corr_fail_1',
+      checkpointId: 'ckpt_corr_fail_1',
+    });
+    markFinaliseRepairComplete(repoRoot, failure, { checkpointId: 'ckpt_corr_fail_1' });
+    expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(true);
+
+    const saveSpy = vi
+      .spyOn(workflowEvents, 'saveWorkflowReviewState')
+      .mockImplementation(() => {
+        throw new Error('state-save-boom');
+      });
+
+    let thrown: unknown;
+    try {
+      correlateFinaliseAutomationRun({
+        scriptName: 'finalise',
+        status: 'passed',
+        runId: 'run-corr-fail',
+        repoRoot,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toMatch(/state-save-boom/i);
+    // Fail closed: no successful correlation object is returned.
+    expect(thrown).not.toHaveProperty('matchedBy', 'none');
+
+    expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(true);
+
+    // Non-finalise automation must remain unaffected.
+    expect(
+      correlateFinaliseAutomationRun({
+        scriptName: 'fixerrors',
+        status: 'passed',
+        runId: 'not-finalise',
+        repoRoot,
+      })
+    ).toBeUndefined();
+
+    saveSpy.mockRestore();
+  });
+
+  it('TEE-FINALISE-001: state-save failure must not leave disk protocol falsely finalised', () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-atomic-'));
+    tempRoots.push(repoRoot);
+    mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+
+    const workstreamId = 'ws_atomic_1';
+    const checkpointId = 'ckpt_atomic_1';
+    const ready = makeProtocol(workstreamId, 'finalise_ready', checkpointId);
+    writeProtocolRecord(repoRoot, ready);
+
+    const paths = getWorkflowPaths(repoRoot);
+    let state = createEmptyWorkflowReviewState();
+    state = upsertWorkstreamRecord(state, openWorkstream(workstreamId, 'main', 'abc'));
+    state = {
+      ...state,
+      protocolRecords: { [workstreamId]: ready },
+      activeFinaliseContext: {
+        workstreamId,
+        checkpointId,
+        activatedAt: new Date().toISOString(),
+      },
+    };
+    saveWorkflowReviewState(paths.statePath, state);
+
+    const saveSpy = vi
+      .spyOn(workflowEvents, 'saveWorkflowReviewState')
+      .mockImplementation(() => {
+        throw new Error('state-save-after-outcome');
+      });
+
+    expect(() =>
+      correlateFinaliseAutomationRun({
+        scriptName: 'finalise',
+        status: 'passed',
+        runId: 'run-atomic-fail',
+        repoRoot,
+      })
+    ).toThrow(/state-save-after-outcome/i);
+
+    saveSpy.mockRestore();
+
+    const diskProtocol = readProtocolRecord(repoRoot, workstreamId);
+    expect(diskProtocol?.phase).toBe('finalise_ready');
+    expect(diskProtocol?.activeCheckpointId).toBe(checkpointId);
+
+    // Retry remains possible once state save works again.
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).not.toThrow();
+    const retried = correlateFinaliseAutomationRun({
+      scriptName: 'finalise',
+      status: 'passed',
+      runId: 'run-atomic-retry',
+      repoRoot,
+    });
+    expect(retried?.matchedBy).toBe('explicit_context');
+    expect(readProtocolRecord(repoRoot, workstreamId)?.phase).toBe('finalised');
+    expect(readProtocolRecord(repoRoot, workstreamId)?.activeCheckpointId).toBeNull();
   });
 });

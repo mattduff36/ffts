@@ -2,13 +2,27 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { Readable, Writable } from 'stream';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAutomationAdvisorReview } from '@/scripts/automation/advisor-review';
-import { redactSensitiveText } from '@/scripts/automation/logger';
+import {
+  correlateFinaliseAutomationRun,
+  redactSensitiveText,
+} from '@/scripts/automation/logger';
+import {
+  getFinaliseRepairCompletePath,
+  markFinaliseRepairComplete,
+  writeFinaliseFailureArtifact,
+} from '@/scripts/automation/finalise-failure';
 import { runMonthlyAutomationFollowUp, writeMonthlyAutomationPendingFollowUp } from '@/scripts/automation/monthly-follow-up';
 import { updateAutomationMemory } from '@/scripts/automation/memory';
 import { reviewAutomationRun } from '@/scripts/automation/self-review';
 import type { AutomationMemory, AutomationMemorySuggestion, AutomationRunLog } from '@/scripts/automation/types';
+import * as workflowEvents from '@/scripts/automation/workflow-events';
+import {
+  createEmptyWorkflowReviewState,
+  getWorkflowPaths,
+  saveWorkflowReviewState,
+} from '@/scripts/automation/workflow-events';
 
 function createRunLog(overrides: Partial<AutomationRunLog> = {}): AutomationRunLog {
   return {
@@ -114,6 +128,59 @@ function createFollowUpFixture(suggestions: AutomationMemorySuggestion[]) {
 }
 
 describe('automation logging helpers', () => {
+  const tempRoots: string[] = [];
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const root of tempRoots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('TEE-FINALISE-001: finalise correlation lock/state failures do not invent successful correlation', () => {
+    const repoRoot = path.join(
+      tmpdir(),
+      `automation-finalise-corr-${process.pid}-${Date.now()}`
+    );
+    tempRoots.push(repoRoot);
+    mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+    const paths = getWorkflowPaths(repoRoot);
+    saveWorkflowReviewState(paths.statePath, createEmptyWorkflowReviewState());
+
+    const failure = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise',
+      failedStep: 'build',
+      command: 'npm run build',
+      workstreamId: 'ws_log_corr_1',
+      checkpointId: 'ckpt_log_corr_1',
+    });
+    markFinaliseRepairComplete(repoRoot, failure, { checkpointId: 'ckpt_log_corr_1' });
+
+    vi.spyOn(workflowEvents, 'saveWorkflowReviewState').mockImplementation(() => {
+      throw new Error('lock-or-state-failure');
+    });
+
+    expect(() =>
+      correlateFinaliseAutomationRun({
+        scriptName: 'finalise',
+        status: 'passed',
+        runId: 'run-log-corr',
+        repoRoot,
+      })
+    ).toThrow(/lock-or-state-failure/i);
+
+    expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(true);
+    expect(
+      correlateFinaliseAutomationRun({
+        scriptName: 'fixerrors',
+        status: 'passed',
+        runId: 'run-other',
+        repoRoot,
+      })
+    ).toBeUndefined();
+  });
+
   it('redacts common secrets from command output', () => {
     const output = redactSensitiveText([
       'POSTGRES_URL_NON_POOLING=postgres://user:secret-password@example.com/db',

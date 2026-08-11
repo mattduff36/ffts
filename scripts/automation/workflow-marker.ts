@@ -24,6 +24,7 @@ import {
   WORKFLOW_MODEL_TIER_REGISTRY_VERSION,
   isWorkflowRoutingDecisionCoherent,
 } from './workflow-model-tier';
+import { assertSafeOpaqueId } from './workflow-plan-contract';
 
 export const WORKFLOW_MARKER_PREFIX_V1 = '<!-- workflow-completion-marker:v1';
 export const WORKFLOW_MARKER_PREFIX_V2 = '<!-- workflow-completion-marker:v2';
@@ -633,8 +634,17 @@ export function validateWorkflowCompletionMarker(value: unknown): ParsedWorkflow
   }
 
   if (schemaVersion === '4' && lane === 'critical') {
-    if (!workstreamId) errors.push('critical V4 markers require workstreamId');
+    if (!workstreamId) {
+      errors.push('critical V4 markers require workstreamId');
+    } else {
+      const idCheck = assertSafeOpaqueId(workstreamId, 'workstreamId');
+      if (!idCheck.ok) errors.push(idCheck.error);
+    }
     errors.push(...sourceWorkstreamIds.errors);
+    for (const sourceId of sourceWorkstreamIds.values ?? []) {
+      const sourceCheck = assertSafeOpaqueId(sourceId, 'sourceWorkstreamIds');
+      if (!sourceCheck.ok) errors.push(sourceCheck.error);
+    }
     if (!registryVersion) {
       errors.push('critical V4 markers require registryVersion');
     } else if (registryVersion !== WORKFLOW_MODEL_TIER_REGISTRY_VERSION) {
@@ -705,6 +715,18 @@ export function validateWorkflowCompletionMarker(value: unknown): ParsedWorkflow
       errors.push('critical V4 markers require reviewPasses');
     }
     errors.push(...reviewPasses.errors);
+    const independentFinalPass = reviewPasses.passes.some(
+      (pass) =>
+        pass.stage === 'final-diff-reviewer' &&
+        pass.source === 'independent_subagent' &&
+        pass.result === 'passed'
+    );
+    // Missing/incomplete independent final-diff evidence is never treated as passed.
+    if (!independentFinalPass) {
+      errors.push(
+        'critical V4 markers require a passed independent final-diff-reviewer reviewPass'
+      );
+    }
     if (
       !reviewClosure.closure ||
       (reviewClosure.closure.phase !== 'review_closed' &&

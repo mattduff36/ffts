@@ -95,7 +95,12 @@ describe('targeted finalise repair', () => {
     expect(blocked.status).not.toBe(0);
     expect(blocked.stderr).toMatch(/awaiting original finalise closure/iu);
 
-    clearFinaliseRepairClosureArtifacts(repoRoot);
+    clearFinaliseRepairClosureArtifacts({
+      repoRoot,
+      mode: 'finalise',
+      workstreamId: null,
+      checkpointId: null,
+    });
     expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(false);
   }, 15_000);
 
@@ -132,7 +137,9 @@ describe('targeted finalise repair', () => {
       failedStep: 'build',
       command: 'npm run build',
       workstreamId: 'ws_repair_1',
+      checkpointId: 'ckpt_1',
     });
+    expect(failure.checkpointId).toBe('ckpt_1');
     markFinaliseRepairComplete(repoRoot, failure, { checkpointId: 'ckpt_1' });
 
     expect(() =>
@@ -170,6 +177,44 @@ describe('targeted finalise repair', () => {
         checkpointId: 'ckpt_1',
       })
     ).not.toThrow();
+
+    expect(() =>
+      clearFinaliseRepairClosureArtifacts({
+        repoRoot,
+        mode: 'finalise-full',
+        workstreamId: 'ws_repair_1',
+        checkpointId: 'ckpt_1',
+      })
+    ).toThrow(/mode mismatch/iu);
+
+    clearFinaliseRepairClosureArtifacts({
+      repoRoot,
+      mode: 'finalise',
+      workstreamId: 'ws_repair_1',
+      checkpointId: 'ckpt_1',
+    });
+    expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(false);
+  });
+
+  it('TEE-REPAIR-001 refuses clearing a failure artifact without matching identity', () => {
+    const repoRoot = makeRepo();
+    writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise',
+      failedStep: 'build',
+      command: 'npm run build',
+      workstreamId: 'ws_fail_1',
+      checkpointId: 'ckpt_fail_1',
+    });
+    expect(() =>
+      clearFinaliseRepairClosureArtifacts({
+        repoRoot,
+        mode: 'finalise',
+        workstreamId: 'ws_fail_1',
+        checkpointId: 'ckpt_other',
+      })
+    ).toThrow(/checkpoint mismatch/iu);
+    expect(existsSync(getFinaliseFailurePath(repoRoot))).toBe(true);
   });
 
   it('TEE-PUSH-001: repair CLI and package script never push', () => {
@@ -203,7 +248,12 @@ describe('targeted finalise repair', () => {
   it('persists repeated repair-cycle history after successful targeted checks', () => {
     const repoRoot = makeRepo();
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      clearFinaliseRepairClosureArtifacts(repoRoot);
+      clearFinaliseRepairClosureArtifacts({
+        repoRoot,
+        mode: 'finalise',
+        workstreamId: null,
+        checkpointId: null,
+      });
       writeFinaliseFailureArtifact({
         repoRoot,
         originalMode: 'finalise',

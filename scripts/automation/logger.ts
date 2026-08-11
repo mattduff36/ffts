@@ -16,13 +16,13 @@ import type {
 import {
   getWorkflowPaths,
   loadWorkflowReviewState,
-  saveWorkflowReviewState,
   withWorkflowLock,
 } from './workflow-events';
 import {
   correlateFinaliseRun,
   shouldApplyFinaliseCorrelation,
 } from './workflow-finalise-correlation';
+import { commitFinaliseCorrelationStateAndProtocols } from './workflow-review-protocol';
 
 const REPO_ROOT = process.cwd();
 const AUTOMATION_ROOT = path.join(REPO_ROOT, 'docs_private', 'automation');
@@ -127,36 +127,35 @@ export function correlateFinaliseAutomationRun(params: {
       // Intentionally omit resultingCommit: correlation must read finish-time HEAD.
     });
 
-  try {
-    if (params.state) {
-      const result = correlate(params.state);
-      return {
-        ...result.correlation,
-        resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
-        branchName: result.correlation.branchName || identity.branchName,
-      };
-    }
-    const paths = getWorkflowPaths(repoRoot);
-    return withWorkflowLock(paths.lockPath, () => {
-      const result = correlate(loadWorkflowReviewState(paths.statePath));
-      saveWorkflowReviewState(paths.statePath, result.state);
-      return {
-        ...result.correlation,
-        resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
-        branchName: result.correlation.branchName || identity.branchName,
-      };
-    });
-  } catch {
+  // Fail closed: lock / state-save / correlation errors must propagate so a finalise
+  // finish('passed') cannot silently report identityStatus=missing and clear repair gates.
+  if (params.state) {
+    const result = correlate(params.state);
     return {
-      workstreamIds: [],
-      matchedBy: 'none',
-      branchName: identity.branchName,
-      headCommit: identity.headCommit,
-      resultingCommit: identity.headCommit,
-      identityStatus: 'missing',
-      checkpointId: null,
+      ...result.correlation,
+      resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
+      branchName: result.correlation.branchName || identity.branchName,
     };
   }
+  const paths = getWorkflowPaths(repoRoot);
+  return withWorkflowLock(paths.lockPath, () => {
+    const previousState = loadWorkflowReviewState(paths.statePath);
+    const result = correlate(previousState);
+    // State first, then protocol disk finalised — never leave irreversible finalised
+    // protocol.json when shared state did not persist.
+    commitFinaliseCorrelationStateAndProtocols({
+      repoRoot,
+      statePath: paths.statePath,
+      previousState,
+      nextState: result.state,
+      workstreamIds: result.correlation.workstreamIds,
+    });
+    return {
+      ...result.correlation,
+      resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
+      branchName: result.correlation.branchName || identity.branchName,
+    };
+  });
 }
 
 export function redactSensitiveText(value: string): string {
@@ -390,7 +389,19 @@ export class AutomationRun {
       exists: existsSync(path.join(REPO_ROOT, artifact.path)),
       required: artifact.required !== false,
     }));
-    const workflowCorrelation = this.correlateWorkflowIfFinalise(status);
+    let workflowCorrelation: WorkflowFinaliseCorrelation | undefined;
+    try {
+      workflowCorrelation = this.correlateWorkflowIfFinalise(status);
+    } catch (correlationError) {
+      // Passed finalise must fail closed so repair-complete clearance cannot proceed.
+      // Failed finishes still write the run log without inventing a successful correlation.
+      if (status === 'passed' && this.log.scriptName === 'finalise') {
+        throw correlationError instanceof Error
+          ? correlationError
+          : new Error(String(correlationError));
+      }
+      workflowCorrelation = undefined;
+    }
     const finalLog: AutomationRunLog = {
       ...this.log,
       endedAt: endedAt.toISOString(),

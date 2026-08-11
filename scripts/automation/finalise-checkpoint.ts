@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import type { FinaliseTaskKey } from '../finalise-recent-tasks';
-import { assertSafeOpaqueId } from './workflow-plan-contract';
+import { assertSafeOpaqueId, pathHasSymlinkComponent } from './workflow-plan-contract';
 import {
   getWorkflowPaths,
   loadWorkflowReviewState,
@@ -24,6 +24,19 @@ function requireSafeFinaliseIds(params: {
     throw new Error(checkpoint.error);
   }
   return { workstreamId: workstream.value, checkpointId: checkpoint.value };
+}
+
+/** Reject symlink components among existing path prefixes (missing leaf is allowed). */
+function assertCheckpointPathHasNoSymlink(absolutePath: string): void {
+  let candidate = path.normalize(absolutePath);
+  while (!existsSync(candidate)) {
+    const parent = path.dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  if (existsSync(candidate) && pathHasSymlinkComponent(candidate)) {
+    throw new Error('checkpoint path contains a symlink component');
+  }
 }
 
 export const FINALISE_TASK_COMMANDS: Record<FinaliseTaskKey, string> = {
@@ -360,7 +373,7 @@ export function liveSchemaFingerprint(): string {
           await client.connect();
           await client.query('BEGIN TRANSACTION READ ONLY');
           await client.query('SET LOCAL statement_timeout = 5000');
-          const res = await client.query("SELECT md5(string_agg(table_name || ':' || column_name, ',' ORDER BY table_name, column_name)) AS fp FROM information_schema.columns WHERE table_schema = 'public'");
+          const res = await client.query("SELECT md5(string_agg(table_name || ':' || column_name || ':' || data_type || ':' || is_nullable, ',' ORDER BY table_name, column_name)) AS fp FROM information_schema.columns WHERE table_schema = 'public'");
           await client.query('ROLLBACK');
           await client.end();
           process.stdout.write(String(res.rows[0]?.fp || 'unknown'));
@@ -578,7 +591,7 @@ export function getCheckpointDirectory(repoRoot: string, workstreamId: string): 
   if (!safe.ok) {
     throw new Error(safe.error);
   }
-  return path.join(
+  const directory = path.join(
     repoRoot,
     'docs_private',
     'automation',
@@ -586,6 +599,8 @@ export function getCheckpointDirectory(repoRoot: string, workstreamId: string): 
     safe.value,
     'checkpoints'
   );
+  assertCheckpointPathHasNoSymlink(directory);
+  return directory;
 }
 
 export function getCheckpointPath(
@@ -594,7 +609,12 @@ export function getCheckpointPath(
   checkpointId: string
 ): string {
   const ids = requireSafeFinaliseIds({ workstreamId, checkpointId });
-  return path.join(getCheckpointDirectory(repoRoot, ids.workstreamId), `${ids.checkpointId}.json`);
+  const filePath = path.join(
+    getCheckpointDirectory(repoRoot, ids.workstreamId),
+    `${ids.checkpointId}.json`
+  );
+  assertCheckpointPathHasNoSymlink(filePath);
+  return filePath;
 }
 
 export function readFinaliseCheckpoint(

@@ -7,7 +7,7 @@ alwaysApply: true
 
 - Stay on the current branch unless the user explicitly instructs otherwise.
 - Commit completed coding tasks locally unless the task is planning/review-only or the user says not to commit.
-- Never push unless the user writes the exact phrase `push to GitHub`, or explicitly requests a push as part of finalisation such as `finalise and push`, `finalise full and push`, or `finalise:push`. Local commands and aliases never authorize a push. State the branch and summary before pushing.
+- Never push unless the user writes the exact phrase `push to GitHub`, or explicitly requests a push as part of finalisation such as `finalise and push`, `finalise full and push`, or `finalise:push`. Short aliases such as `fap` / `ffap` / `/fap` / `/ffap` do **not** authorize a push. State the branch and summary before pushing.
 - Never destructively change production data without explicit permission.
 - Treat database, schema, persistence, migration, auth, permissions/RLS, security, money, concurrency, irreversible operations, and production-data risk as CRITICAL.
 - For database/persistence intent, load `.cursor/rules/database-migrations.mdc` and the migration guide before acting.

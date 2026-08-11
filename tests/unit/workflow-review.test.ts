@@ -278,6 +278,71 @@ describe('workflow-marker', () => {
     expect(validateWorkflowCompletionMarker(missingPlanEvidence).status).toBe('malformed');
   });
 
+  it('TEE-V2-CRITICAL-EVIDENCE-001 / TEE-PATH-001: critical V4 rejects non-opaque workstream IDs', () => {
+    const unsafeWorkstream = markerV4('critical', {
+      workstreamId: '../evil',
+    });
+    const parsedUnsafe = validateWorkflowCompletionMarker(unsafeWorkstream);
+    expect(parsedUnsafe.status).toBe('malformed');
+    expect(parsedUnsafe.errors.join(' ')).toMatch(/path-safe opaque identifier|path separators|traversal/i);
+
+    const unsafeSource = markerV4('critical', {
+      workstreamId: 'ws_v4_opaque_ok',
+      sourceWorkstreamIds: ['ws_ok', 'parent/../escape'],
+    });
+    const parsedSource = validateWorkflowCompletionMarker(unsafeSource);
+    expect(parsedSource.status).toBe('malformed');
+    expect(parsedSource.errors.join(' ')).toMatch(/sourceWorkstreamIds|path-safe|separator|traversal/i);
+  });
+
+  it('TEE-V2-CRITICAL-EVIDENCE-001: critical V4 requires a passed independent final-diff reviewPass', () => {
+    const localOnlyPass = markerV4('critical', {
+      reviewPasses: [
+        {
+          passId: 'local-1',
+          stage: 'local-review',
+          source: 'local',
+          tier: 'economical',
+          iteration: 1,
+          result: 'passed',
+        },
+      ],
+      reviewClosure: {
+        protocol: 'two-pass-v1',
+        phase: 'review_closed',
+        failedPremiumReviewCount: 0,
+      },
+      finalReview: 'passed',
+      finalReviewSource: 'independent_subagent',
+    });
+    const parsedLocal = validateWorkflowCompletionMarker(localOnlyPass);
+    expect(parsedLocal.status).toBe('malformed');
+    expect(parsedLocal.errors.join(' ')).toMatch(
+      /passed independent final-diff-reviewer reviewPass/i
+    );
+
+    const incompleteIndependent = markerV4('critical', {
+      reviewPasses: [
+        {
+          passId: 'final-1',
+          stage: 'final-diff-reviewer',
+          source: 'independent_subagent',
+          tier: 'premium',
+          iteration: 1,
+          result: 'unknown',
+        },
+      ],
+    });
+    const parsedIncomplete = validateWorkflowCompletionMarker(incompleteIndependent);
+    expect(parsedIncomplete.status).toBe('malformed');
+    expect(parsedIncomplete.errors.join(' ')).toMatch(
+      /passed independent final-diff-reviewer reviewPass/i
+    );
+
+    const ok = markerV4('critical');
+    expect(validateWorkflowCompletionMarker(ok).status).toBe('present');
+  });
+
   it('requires complete v2 routing and independent-review evidence', () => {
     const incomplete = markerV2();
     delete incomplete.routingDecision;

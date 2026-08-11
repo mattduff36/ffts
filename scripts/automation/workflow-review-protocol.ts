@@ -21,8 +21,21 @@ import {
   extractPlanContractMarker,
   isCriticalPlanContract,
   resolvePlanPath,
+  resolveRequiredTestIdsForWorkstream,
 } from './workflow-plan-contract';
 import { getCurrentTreeFingerprint } from './workflow-evidence-manifest';
+
+/** Resolve a protocol-stored planPath (repo-relative POSIX or legacy absolute) to an absolute path. */
+export function resolveProtocolPlanAbsolutePath(
+  repoRoot: string,
+  planPath: string
+): string {
+  return path.isAbsolute(planPath) ? planPath : path.resolve(repoRoot, planPath);
+}
+
+function toRepoRelativePosixPath(repoRoot: string, absolutePath: string): string {
+  return path.relative(repoRoot, absolutePath).replace(/\\/g, '/');
+}
 
 export const WORKFLOW_PROTOCOL_VERSION = '1' as const;
 export const WORKFLOW_ROUTING_REQUIRED_EXIT_CODE = 2;
@@ -440,7 +453,11 @@ export function reduceProtocolInit(params: {
     if (resolved.status !== 'ok' || !resolved.absolutePath) {
       return fail(`invalid plan path: ${resolved.errors.join('; ') || 'unresolved'}`);
     }
-    planPath = resolved.absolutePath;
+    // Persist repo-relative POSIX only — never absolute host paths.
+    planPath = toRepoRelativePosixPath(params.repoRoot, resolved.absolutePath);
+    if (!planPath || planPath.startsWith('..') || path.isAbsolute(planPath)) {
+      return fail('plan path must resolve to a repo-relative path');
+    }
     const raw = readFileSync(resolved.absolutePath, 'utf8');
     const parsed = extractPlanContractMarker(raw);
     if (parsed.status !== 'present' || !parsed.contract) {
@@ -534,18 +551,43 @@ export function reducePreflightRecord(params: {
     return fail(`preflight-record not allowed in phase ${current.phase}`, current);
   }
   let expectedRequiredTestIds: string[] | undefined;
-  if (current.planPath && existsSync(current.planPath)) {
-    try {
-      const parsedPlan = extractPlanContractMarker(readFileSync(current.planPath, 'utf8'));
-      if (parsedPlan.status === 'present' && parsedPlan.contract) {
-        expectedRequiredTestIds = parsedPlan.contract.requiredTests
-          .map((test) => test.id)
-          // Deferred pay behavioral IDs are inventory obligations until live-db mode.
-          .filter((id) => !id.startsWith('WF-PAY-'));
-      }
-    } catch {
-      // plan unreadable → treated as no expected IDs
+  if (current.planPath) {
+    const absolutePlanPath = resolveProtocolPlanAbsolutePath(
+      params.repoRoot,
+      current.planPath
+    );
+    if (!existsSync(absolutePlanPath)) {
+      return fail(
+        `preflight plan missing or unreadable: ${current.planPath}`,
+        current
+      );
     }
+    let parsedPlan: ReturnType<typeof extractPlanContractMarker>;
+    try {
+      parsedPlan = extractPlanContractMarker(readFileSync(absolutePlanPath, 'utf8'));
+    } catch (error) {
+      return fail(
+        `preflight plan unreadable: ${
+          error instanceof Error ? error.message : 'unknown read error'
+        }`,
+        current
+      );
+    }
+    if (parsedPlan.status !== 'present' || !parsedPlan.contract) {
+      return fail(
+        `preflight plan contract ${parsedPlan.status}: ${
+          parsedPlan.errors.join('; ') || 'malformed'
+        }`,
+        current
+      );
+    }
+    // Child workstreams bind to child-owned requiredTestIds; master uses requiredTests.
+    expectedRequiredTestIds = resolveRequiredTestIdsForWorkstream(
+      parsedPlan.contract,
+      params.workstreamId
+    )
+      // Deferred pay behavioral IDs are inventory obligations until live-db mode.
+      .filter((id) => !id.startsWith('WF-PAY-'));
   }
 
   const validation = validateEvidenceManifest({
@@ -889,7 +931,11 @@ export function reduceFinaliseStart(params: {
   if (current.phase !== 'review_closed' && current.phase !== 'finalise_ready') {
     return fail(`finalise-start requires review_closed (have ${current.phase})`, current);
   }
-  const checkpointId = createCheckpointId(current.workstreamId);
+  // Reuse the bound checkpoint when already finalise_ready so repair evidence stays valid.
+  const checkpointId =
+    current.phase === 'finalise_ready' && current.activeCheckpointId
+      ? current.activeCheckpointId
+      : createCheckpointId(current.workstreamId);
   const next: WorkflowProtocolRecord = {
     ...current,
     phase: 'finalise_ready',
@@ -902,8 +948,11 @@ export function reduceFinaliseStart(params: {
 
 /**
  * Safe finalise completion/failure transition. Does not invent review tokens.
- * Passed: phase -> finalised, clear activeCheckpointId.
- * Failed/unknown: keep finalise_ready (or current), clear nothing required for retry.
+ * Passed: phase -> finalised, clear activeCheckpointId in memory only.
+ * Disk persistence of `finalised` is deferred until shared workflow state is saved
+ * (see commitFinaliseCorrelationStateAndProtocols) so a state-save failure cannot
+ * leave an irreversible finalised protocol that blocks retry.
+ * Failed/unknown: keep finalise_ready (or current); disk write is safe to retry.
  */
 export function applyFinaliseProtocolOutcome(params: {
   repoRoot: string;
@@ -944,12 +993,55 @@ export function applyFinaliseProtocolOutcome(params: {
     activeCheckpointId: null,
     updatedAt,
   };
-  writeJsonAtomic(getProtocolRecordPath(params.repoRoot, params.workstreamId), finalized);
+  // Intentionally do not write protocol.json yet — commit after state save.
   let nextState = upsertProtocolInState(params.state, finalized);
   if (nextState.activeFinaliseContext?.workstreamId === params.workstreamId) {
     nextState = setActiveFinaliseContext(nextState, null);
   }
   return { state: nextState, record: finalized };
+}
+
+/**
+ * Persist shared workflow state first, then mark matched protocols finalised on disk.
+ * If either step fails, restore prior protocol records and prior state when possible.
+ */
+export function commitFinaliseCorrelationStateAndProtocols(params: {
+  repoRoot: string;
+  statePath: string;
+  previousState: WorkflowReviewState;
+  nextState: WorkflowReviewState;
+  workstreamIds: string[];
+}): void {
+  const protocolBackups = new Map<string, WorkflowProtocolRecord | null>();
+  for (const workstreamId of params.workstreamIds) {
+    protocolBackups.set(workstreamId, readProtocolRecord(params.repoRoot, workstreamId));
+  }
+
+  const restore = (): void => {
+    for (const [, previous] of protocolBackups) {
+      if (previous) {
+        writeProtocolRecord(params.repoRoot, previous);
+      }
+    }
+    try {
+      saveWorkflowReviewState(params.statePath, params.previousState);
+    } catch {
+      // Best-effort restore; original error is rethrown by caller.
+    }
+  };
+
+  try {
+    saveWorkflowReviewState(params.statePath, params.nextState);
+    for (const workstreamId of params.workstreamIds) {
+      const record = params.nextState.protocolRecords?.[workstreamId];
+      if (record && isWorkflowProtocolRecord(record) && record.phase === 'finalised') {
+        writeProtocolRecord(params.repoRoot, record);
+      }
+    }
+  } catch (error) {
+    restore();
+    throw error;
+  }
 }
 
 function persistParentAndOptionalChildUnlocked(params: {

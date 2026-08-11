@@ -265,6 +265,17 @@ describe('workflow review protocol', () => {
     expect(finaliseStart.ok).toBe(true);
     expect(finaliseStart.record?.phase).toBe('finalise_ready');
     expect(finaliseStart.checkpointId).toBeTruthy();
+
+    const restart = applyProtocolTransition({
+      repoRoot,
+      command: 'finalise-start',
+      workstreamId,
+    });
+    expect(restart.ok).toBe(true);
+    expect(restart.checkpointId).toBe(finaliseStart.checkpointId);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.activeCheckpointId).toBe(
+      finaliseStart.checkpointId
+    );
   });
 
   it('TEE-PROTO-001: null transcript remains unknown without inferred identity', async () => {
@@ -386,5 +397,237 @@ describe('workflow review protocol', () => {
     });
     expect(rejected.ok).toBe(false);
     expect(rejected.message).toMatch(/workstream protocol directory|escapes repository/i);
+  });
+
+  it('TEE-PATH-001 / TEE-PRIV-001: protocol init persists repo-relative planPath only', () => {
+    const repoRoot = makeTempRoot('relative-plan');
+    const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
+    mkdirSync(plansDir, { recursive: true });
+    const contract = createDefaultPlanContract({
+      workstreamId: 'ws_relative_plan_1',
+      taskId: 'relative-plan',
+      taskType: 'change',
+      lane: 'critical',
+      rationale: 'relative plan path',
+      fallbackEscalation: 'route',
+      requiredTests: [{ id: 'TEE-PATH-001', status: 'unresolved' }],
+      independentReviewReasons: ['broad-regression'],
+    });
+    const absolutePlanPath = path.join(plansDir, 'relative-plan.md');
+    writeFileSync(
+      absolutePlanPath,
+      `# Plan\n\n## Required tests\n\n- TEE-PATH-001\n\n${renderPlanContractMarker(contract)}\n`,
+      'utf8'
+    );
+
+    const init = applyProtocolTransition({
+      repoRoot,
+      command: 'init',
+      workstreamId: 'ws_relative_plan_1',
+      planPath: absolutePlanPath,
+      baseCommit: 'abc1234deadbeef',
+    });
+    expect(init.ok).toBe(true);
+    expect(init.record?.planPath).toBe('docs_private/automation/plans/relative-plan.md');
+    expect(init.record?.planPath).not.toMatch(/^[A-Za-z]:\\/u);
+    expect(init.record?.planPath).not.toMatch(/^\/(?:Users|home)\//u);
+    expect(path.isAbsolute(init.record?.planPath ?? '')).toBe(false);
+  });
+
+  it('TEE-EVID-001: preflight binds child-owned requiredTestIds, not only master requiredTests', () => {
+    const repoRoot = makeTempRoot('child-bind');
+    const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
+    const testsDir = path.join(repoRoot, 'tests', 'unit');
+    mkdirSync(plansDir, { recursive: true });
+    mkdirSync(testsDir, { recursive: true });
+    writeFileSync(
+      path.join(testsDir, 'child-bind.test.ts'),
+      "import { it } from 'vitest';\nit('TEE-PLAN-001 child');\nit('TEE-PATH-001 child');\nit('TEE-PROTO-001 child');\n",
+      'utf8'
+    );
+
+    const master = createDefaultPlanContract({
+      workstreamId: 'ws_master_bind_1',
+      taskId: 'master-bind',
+      taskType: 'change',
+      lane: 'critical',
+      rationale: 'child binding',
+      fallbackEscalation: 'route',
+      requiredTests: [
+        { id: 'TEE-FINALISE-001', status: 'unresolved' },
+        { id: 'TEE-PLAN-001', status: 'unresolved' },
+      ],
+      independentReviewReasons: ['broad-regression'],
+    });
+    const childId = 'ws_child_bind_1';
+    master.childWorkstreams = [
+      {
+        workstreamId: childId,
+        scope: 'core',
+        status: 'pending',
+        requiredTestIds: ['TEE-PLAN-001', 'TEE-PATH-001', 'TEE-PROTO-001'],
+        finalReview: { required: true, source: 'independent_subagent', status: 'pending' },
+        commit: { status: 'pending' },
+        handoff: { status: 'pending' },
+      },
+    ];
+    const planPath = path.join(plansDir, 'master-bind.md');
+    writeFileSync(
+      planPath,
+      `# Plan\n\n## Required tests\n\n- TEE-FINALISE-001\n- TEE-PLAN-001\n\n${renderPlanContractMarker(master)}\n`,
+      'utf8'
+    );
+
+    expect(
+      applyProtocolTransition({
+        repoRoot,
+        command: 'init',
+        workstreamId: childId,
+        planPath,
+        baseCommit: 'abc1234deadbeef',
+      }).ok
+    ).toBe(true);
+
+    const emptyManifest = writePassingManifest(repoRoot, childId, 'preflight');
+    const missingChild = applyProtocolTransition({
+      repoRoot,
+      command: 'preflight-record',
+      workstreamId: childId,
+      manifestPath: emptyManifest,
+    });
+    expect(missingChild.ok).toBe(false);
+    expect(missingChild.message).toMatch(/preflight missing plan requiredTests/i);
+    expect(missingChild.message).toMatch(/TEE-PLAN-001/);
+    expect(missingChild.message).not.toMatch(/TEE-FINALISE-001/);
+
+    const childManifest = buildEvidenceManifest({
+      repoRoot,
+      workstreamId: childId,
+      kind: 'preflight',
+      baseCommit: 'abc1234deadbeef',
+      requiredTestIds: ['TEE-PLAN-001', 'TEE-PATH-001', 'TEE-PROTO-001'],
+      executedTestIds: ['TEE-PLAN-001', 'TEE-PATH-001', 'TEE-PROTO-001'],
+      runChecks: false,
+      commandResults: [
+        { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
+      ],
+    });
+    const bound = applyProtocolTransition({
+      repoRoot,
+      command: 'preflight-record',
+      workstreamId: childId,
+      manifestPath: childManifest.relativePath,
+    });
+    expect(bound.ok).toBe(true);
+    expect(bound.record?.phase).toBe('preflight_ready');
+  });
+
+  it('TEE-EVID-001: preflight fails closed when the bound plan is malformed', () => {
+    const repoRoot = makeTempRoot('fail-closed-plan');
+    const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
+    mkdirSync(plansDir, { recursive: true });
+    const contract = createDefaultPlanContract({
+      workstreamId: 'ws_fail_closed_1',
+      taskId: 'fail-closed',
+      taskType: 'change',
+      lane: 'critical',
+      rationale: 'fail closed',
+      fallbackEscalation: 'route',
+      requiredTests: [{ id: 'TEE-EVID-001', status: 'unresolved' }],
+      independentReviewReasons: ['broad-regression'],
+    });
+    const planPath = path.join(plansDir, 'fail-closed.md');
+    writeFileSync(
+      planPath,
+      `# Plan\n\n## Required tests\n\n- TEE-EVID-001\n\n${renderPlanContractMarker(contract)}\n`,
+      'utf8'
+    );
+    expect(
+      applyProtocolTransition({
+        repoRoot,
+        command: 'init',
+        workstreamId: 'ws_fail_closed_1',
+        planPath,
+        baseCommit: 'abc1234deadbeef',
+      }).ok
+    ).toBe(true);
+
+    writeFileSync(planPath, '# corrupted\n<!-- plan-contract-marker:v2\n{not-json\n-->\n', 'utf8');
+    const manifestPath = writePassingManifest(repoRoot, 'ws_fail_closed_1', 'preflight');
+    const result = applyProtocolTransition({
+      repoRoot,
+      command: 'preflight-record',
+      workstreamId: 'ws_fail_closed_1',
+      manifestPath,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/preflight plan contract|malformed|unreadable/i);
+  });
+
+  it('TEE-PRIV-001: evidence manifests reject secrets and absolute private paths in blocker fields', () => {
+    const repoRoot = makeTempRoot('manifest-privacy');
+
+    expect(() =>
+      buildEvidenceManifest({
+        repoRoot,
+        workstreamId: 'ws_manifest_privacy_1',
+        kind: 'fix-delta',
+        baseCommit: 'abc1234deadbeef',
+        runChecks: false,
+        closedBlockerIds: ['C:\\Users\\example\\secret-blocker'],
+        blockerEvidence: [
+          {
+            blockerId: 'C:\\Users\\example\\secret-blocker',
+            evidenceLabel: 'targeted:/Users/example/private/note.txt',
+            commandName: 'fixture',
+          },
+        ],
+        commandResults: [
+          { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
+        ],
+      })
+    ).toThrow(/privacy violations|absolute private path/i);
+
+    expect(() =>
+      buildEvidenceManifest({
+        repoRoot,
+        workstreamId: 'ws_manifest_privacy_2',
+        kind: 'fix-delta',
+        baseCommit: 'abc1234deadbeef',
+        runChecks: false,
+        closedBlockerIds: ['BLK-EMAIL'],
+        blockerEvidence: [
+          {
+            blockerId: 'BLK-EMAIL',
+            evidenceLabel: 'contact leak@example.com',
+            commandName: 'fixture',
+          },
+        ],
+        commandResults: [
+          { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
+        ],
+      })
+    ).toThrow(/privacy violations|email/i);
+
+    const clean = buildEvidenceManifest({
+      repoRoot,
+      workstreamId: 'ws_manifest_privacy_3',
+      kind: 'fix-delta',
+      baseCommit: 'abc1234deadbeef',
+      runChecks: false,
+      closedBlockerIds: ['BLK-1'],
+      blockerEvidence: [
+        {
+          blockerId: 'BLK-1',
+          evidenceLabel: 'targeted:BLK-1',
+          commandName: 'fixture',
+        },
+      ],
+      commandResults: [
+        { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
+      ],
+    });
+    expect(clean.manifest.status).toBe('passed');
+    expect(clean.manifest.privacy.redacted).toBe(true);
   });
 });

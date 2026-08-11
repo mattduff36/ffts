@@ -100,6 +100,9 @@ function main(): void {
   if ((activeProtocol?.workstreamId ?? null) !== artifact.workstreamId) {
     fail('protocol workstream context changed; rerun the original finalise command');
   }
+  if ((activeProtocol?.checkpointId ?? null) !== (artifact.checkpointId ?? null)) {
+    fail('protocol checkpoint context changed; rerun the original finalise command');
+  }
   const attempted = incrementFinaliseRepairAttempt(REPO_ROOT);
   const recentAttemptCount = recordFinaliseRepairHistory(REPO_ROOT, artifact);
   if ((attempted?.repairAttemptCount ?? 0) > 2 || recentAttemptCount > 2) {
@@ -146,7 +149,7 @@ function main(): void {
 
   const latest = readFinaliseFailureArtifact(REPO_ROOT) ?? artifact;
   markFinaliseRepairComplete(REPO_ROOT, latest, {
-    checkpointId: activeProtocol?.checkpointId ?? null,
+    checkpointId: activeProtocol?.checkpointId ?? latest.checkpointId ?? null,
   });
   process.stdout.write(
     'Targeted finalise repair passed. Run the original finalise command once for closure.\n'

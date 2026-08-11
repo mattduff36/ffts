@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
+import path from 'path';
 import { spawnSync } from 'child_process';
 import type {
   WorkflowFinaliseCorrelation,
@@ -7,8 +8,10 @@ import type {
   WorkflowWorkstreamRecord,
 } from './types';
 import {
+  assertSafeOpaqueId,
   extractPlanContractMarker,
   isCriticalPlanContract,
+  pathHasSymlinkComponent,
 } from './workflow-plan-contract';
 import {
   getWorkflowPaths,
@@ -18,8 +21,10 @@ import {
 import {
   applyFinaliseProtocolOutcome,
   getActiveFinaliseContext,
+  getProtocolRecordPath,
   isWorkflowProtocolRecord,
   readProtocolRecord,
+  resolveProtocolPlanAbsolutePath,
 } from './workflow-review-protocol';
 
 function runGit(repoRoot: string, args: string[]): string | null {
@@ -62,17 +67,92 @@ function resolveProtocolRecord(
   return fromState && isWorkflowProtocolRecord(fromState) ? fromState : null;
 }
 
+/**
+ * Fail closed when protocol.json exists but cannot be parsed/validated.
+ * Returns null only when no disk protocol file is present (state fallback allowed).
+ */
+function requireProtocolRecordForGating(
+  repoRoot: string,
+  state: WorkflowReviewState,
+  workstreamId: string
+): WorkflowProtocolRecord | null {
+  const diskPath = getProtocolRecordPath(repoRoot, workstreamId);
+  if (existsSync(diskPath)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(diskPath, 'utf8')) as unknown;
+    } catch {
+      throw new Error(
+        `protocol record for ${workstreamId} exists but is unreadable; refuse finalise`
+      );
+    }
+    if (!isWorkflowProtocolRecord(parsed)) {
+      throw new Error(
+        `protocol record for ${workstreamId} exists but is malformed; refuse finalise`
+      );
+    }
+    return parsed;
+  }
+  const fromState = state.protocolRecords?.[workstreamId];
+  return fromState && isWorkflowProtocolRecord(fromState) ? fromState : null;
+}
+
+/** Discover protocol.json records on disk even when state.protocolRecords is partial. */
+export function listDiskProtocolWorkstreamIds(repoRoot: string): string[] {
+  const root = path.join(repoRoot, 'docs_private', 'automation', 'workstreams');
+  if (!existsSync(root)) return [];
+  const ids: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const safe = assertSafeOpaqueId(entry.name, 'workstreamId');
+    if (!safe.ok) continue;
+    const directory = path.join(root, entry.name);
+    if (pathHasSymlinkComponent(directory)) continue;
+    if (!existsSync(path.join(directory, 'protocol.json'))) continue;
+    ids.push(safe.value);
+  }
+  return ids;
+}
+
+function collectProtocolWorkstreamIds(
+  repoRoot: string,
+  state: WorkflowReviewState
+): string[] {
+  const fromState = Object.keys(state.protocolRecords ?? {});
+  const fromDisk = listDiskProtocolWorkstreamIds(repoRoot);
+  return [...new Set([...fromState, ...fromDisk])].sort();
+}
+
+function workstreamRecordFromProtocol(
+  protocol: WorkflowProtocolRecord,
+  fallbackBranch: string,
+  fallbackHead: string
+): WorkflowWorkstreamRecord {
+  return {
+    workstreamId: protocol.workstreamId,
+    branchName: protocol.branchName ?? fallbackBranch,
+    headCommit: protocol.headCommit ?? fallbackHead,
+    taskIds: [],
+    eventIds: [],
+    status: 'open',
+    updatedAt: protocol.updatedAt,
+  };
+}
+
 /** Protocol-managed workstreams are CRITICAL two-pass unless a plan explicitly says otherwise. */
 export function isCriticalProtocolWorkstream(
-  _repoRoot: string,
+  repoRoot: string,
   protocol: WorkflowProtocolRecord
 ): boolean {
-  void _repoRoot;
-  if (!protocol.planPath || !existsSync(protocol.planPath)) {
+  if (!protocol.planPath) {
+    return true;
+  }
+  const absolutePlanPath = resolveProtocolPlanAbsolutePath(repoRoot, protocol.planPath);
+  if (!existsSync(absolutePlanPath)) {
     return true;
   }
   try {
-    const parsed = extractPlanContractMarker(readFileSync(protocol.planPath, 'utf8'));
+    const parsed = extractPlanContractMarker(readFileSync(absolutePlanPath, 'utf8'));
     if (parsed.status !== 'present' || !parsed.contract) {
       return true;
     }
@@ -92,7 +172,7 @@ export function assertFinaliseAllowedForProtocol(repoRoot: string): void {
   const state = loadWorkflowReviewState(paths.statePath);
   const active = getActiveFinaliseContext(state);
   if (active) {
-    const protocol = resolveProtocolRecord(repoRoot, state, active.workstreamId);
+    const protocol = requireProtocolRecordForGating(repoRoot, state, active.workstreamId);
     if (
       !protocol ||
       protocol.phase !== 'finalise_ready' ||
@@ -104,13 +184,10 @@ export function assertFinaliseAllowedForProtocol(repoRoot: string): void {
     }
   }
 
-  const protocolRecords = {
-    ...(state.protocolRecords ?? {}),
-  };
-  // Also discover disk-only protocol records keyed in state or under workstreams dir via state.
-  for (const [workstreamId, candidate] of Object.entries(protocolRecords)) {
-    const protocol = resolveProtocolRecord(repoRoot, state, workstreamId) ?? candidate;
-    if (!isWorkflowProtocolRecord(protocol)) continue;
+  for (const workstreamId of collectProtocolWorkstreamIds(repoRoot, state)) {
+    const protocol = requireProtocolRecordForGating(repoRoot, state, workstreamId);
+    // Skip only when there is truly no protocol file/record to evaluate.
+    if (!protocol) continue;
     if (protocol.phase === 'finalised') continue;
 
     if (protocol.phase === 'finalise_ready') {
@@ -184,30 +261,18 @@ export function resolveFinaliseWorkstreamMatches(params: {
         },
       };
     }
-    const record = params.state.workstreams?.[active.workstreamId];
-    if (record) {
-      return {
-        matched: [record],
-        correlation: {
-          workstreamIds: [record.workstreamId],
-          matchedBy: 'explicit_context',
-          branchName: params.branchName,
-          headCommit: params.headCommit,
-          resultingCommit: null,
-          identityStatus: 'present',
-          checkpointId: active.checkpointId,
-        },
-      };
-    }
+    const record =
+      params.state.workstreams?.[active.workstreamId] ??
+      workstreamRecordFromProtocol(validity.protocol, params.branchName, params.headCommit);
     return {
-      matched: [],
+      matched: [record],
       correlation: {
-        workstreamIds: [],
-        matchedBy: 'none',
+        workstreamIds: [record.workstreamId],
+        matchedBy: 'explicit_context',
         branchName: params.branchName,
         headCommit: params.headCommit,
         resultingCommit: null,
-        identityStatus: 'missing',
+        identityStatus: 'present',
         checkpointId: active.checkpointId,
       },
     };

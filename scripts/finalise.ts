@@ -127,6 +127,7 @@ async function runDeterministicFinaliseStep<T>(params: {
       failedStep: params.task,
       command: params.command,
       workstreamId: active?.workstreamId ?? null,
+      checkpointId: active?.checkpointId ?? null,
     });
     throw error;
   }
@@ -1344,15 +1345,16 @@ async function main(): Promise<void> {
     getFinaliseTimingSummaryLines(timingEntries).forEach((line) => console.log(line));
     printProgress('Finalise workflow complete.', 100);
     const closureContext = resolveActiveProtocolFinaliseContext(REPO_ROOT);
-    assertRepairClosureClearanceAllowed({
+    const closureIdentity = {
       repoRoot: REPO_ROOT,
       mode: finaliseMode,
       workstreamId: closureContext?.workstreamId ?? null,
       checkpointId: closureContext?.checkpointId ?? null,
-    });
+    };
+    assertRepairClosureClearanceAllowed(closureIdentity);
     await run.finish('passed');
     // Clear repair/failure gates only after successful final logging.
-    clearFinaliseRepairClosureArtifacts(REPO_ROOT);
+    clearFinaliseRepairClosureArtifacts(closureIdentity);
   } catch (error) {
     await run.finish('failed', error);
     throw error;

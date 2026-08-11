@@ -16,6 +16,7 @@ export interface FinaliseFailureArtifact {
   inputFingerprint: string;
   safetyFingerprint: string;
   workstreamId: string | null;
+  checkpointId: string | null;
   createdAt: string;
   repairAttemptCount: number;
 }
@@ -72,6 +73,7 @@ export function writeFinaliseFailureArtifact(params: {
   failedStep: FinaliseTaskKey;
   command: string;
   workstreamId?: string | null;
+  checkpointId?: string | null;
 }): FinaliseFailureArtifact {
   const artifact: FinaliseFailureArtifact = {
     schemaVersion: '1',
@@ -91,6 +93,7 @@ export function writeFinaliseFailureArtifact(params: {
       command: params.command,
     }),
     workstreamId: params.workstreamId ?? null,
+    checkpointId: params.checkpointId ?? null,
     createdAt: new Date().toISOString(),
     repairAttemptCount: 0,
   };
@@ -116,7 +119,12 @@ export function readFinaliseFailureArtifact(repoRoot: string): FinaliseFailureAr
     ) {
       return null;
     }
-    return { ...parsed, repairAttemptCount: parsed.repairAttemptCount ?? 0 };
+    return {
+      ...parsed,
+      workstreamId: parsed.workstreamId ?? null,
+      checkpointId: parsed.checkpointId ?? null,
+      repairAttemptCount: parsed.repairAttemptCount ?? 0,
+    };
   } catch {
     return null;
   }
@@ -216,7 +224,7 @@ export function markFinaliseRepairComplete(
     command: artifact.command,
     originalMode: artifact.originalMode,
     workstreamId: artifact.workstreamId,
-    checkpointId: options?.checkpointId ?? null,
+    checkpointId: options?.checkpointId ?? artifact.checkpointId ?? null,
     originalFailure: artifact,
   };
   writeJsonAtomic(getFinaliseRepairCompletePath(repoRoot), complete);
@@ -239,10 +247,34 @@ export function clearFinaliseRepairCompleteArtifact(repoRoot: string): void {
   rmSync(getFinaliseRepairCompletePath(repoRoot), { force: true });
 }
 
-/** Clear repair/failure gates after a successful original finalise closure. */
-export function clearFinaliseRepairClosureArtifacts(repoRoot: string): void {
-  clearFinaliseFailureArtifact(repoRoot);
-  clearFinaliseRepairCompleteArtifact(repoRoot);
+function assertIdentityMatchesStored(params: {
+  label: string;
+  storedMode: FinaliseModeKey;
+  storedWorkstreamId: string | null;
+  storedCheckpointId: string | null;
+  mode: FinaliseModeKey;
+  workstreamId: string | null;
+  checkpointId?: string | null;
+}): void {
+  if (params.storedMode !== params.mode) {
+    throw new Error(
+      `${params.label} mode mismatch: stored=${params.storedMode} current=${params.mode}; refuse clearing closure gate`
+    );
+  }
+  if ((params.storedWorkstreamId ?? null) !== (params.workstreamId ?? null)) {
+    throw new Error(
+      `${params.label} workstream mismatch: stored=${params.storedWorkstreamId ?? 'none'} current=${params.workstreamId ?? 'none'}; refuse clearing closure gate`
+    );
+  }
+  const storedCheckpoint = params.storedCheckpointId ?? null;
+  const currentCheckpoint = params.checkpointId ?? null;
+  if (storedCheckpoint !== null || currentCheckpoint !== null) {
+    if (storedCheckpoint !== currentCheckpoint) {
+      throw new Error(
+        `${params.label} checkpoint mismatch: stored=${storedCheckpoint ?? 'none'} current=${currentCheckpoint ?? 'none'}; refuse clearing closure gate`
+      );
+    }
+  }
 }
 
 /**
@@ -257,23 +289,44 @@ export function assertRepairClosureClearanceAllowed(params: {
 }): void {
   const complete = readFinaliseRepairCompleteArtifact(params.repoRoot);
   if (!complete) return;
-  if (complete.originalMode !== params.mode) {
-    throw new Error(
-      `repair-complete mode mismatch: stored=${complete.originalMode} current=${params.mode}; refuse clearing closure gate`
-    );
-  }
-  if ((complete.workstreamId ?? null) !== (params.workstreamId ?? null)) {
-    throw new Error(
-      `repair-complete workstream mismatch: stored=${complete.workstreamId ?? 'none'} current=${params.workstreamId ?? 'none'}; refuse clearing closure gate`
-    );
-  }
-  const storedCheckpoint = complete.checkpointId ?? null;
-  const currentCheckpoint = params.checkpointId ?? null;
-  if (storedCheckpoint !== null || currentCheckpoint !== null) {
-    if (storedCheckpoint !== currentCheckpoint) {
-      throw new Error(
-        `repair-complete checkpoint mismatch: stored=${storedCheckpoint ?? 'none'} current=${currentCheckpoint ?? 'none'}; refuse clearing closure gate`
-      );
+  assertIdentityMatchesStored({
+    label: 'repair-complete',
+    storedMode: complete.originalMode,
+    storedWorkstreamId: complete.workstreamId ?? null,
+    storedCheckpointId: complete.checkpointId ?? null,
+    mode: params.mode,
+    workstreamId: params.workstreamId,
+    checkpointId: params.checkpointId,
+  });
+}
+
+/**
+ * Clear repair/failure gates only when mode/workstream/checkpoint match the stored
+ * repair-complete marker, or (when no repair-complete exists) the active failure artifact.
+ */
+export function clearFinaliseRepairClosureArtifacts(params: {
+  repoRoot: string;
+  mode: FinaliseModeKey;
+  workstreamId: string | null;
+  checkpointId?: string | null;
+}): void {
+  const complete = readFinaliseRepairCompleteArtifact(params.repoRoot);
+  if (complete) {
+    assertRepairClosureClearanceAllowed(params);
+  } else {
+    const failure = readFinaliseFailureArtifact(params.repoRoot);
+    if (failure) {
+      assertIdentityMatchesStored({
+        label: 'finalise-failure',
+        storedMode: failure.originalMode,
+        storedWorkstreamId: failure.workstreamId ?? null,
+        storedCheckpointId: failure.checkpointId ?? null,
+        mode: params.mode,
+        workstreamId: params.workstreamId,
+        checkpointId: params.checkpointId,
+      });
     }
   }
+  clearFinaliseFailureArtifact(params.repoRoot);
+  clearFinaliseRepairCompleteArtifact(params.repoRoot);
 }

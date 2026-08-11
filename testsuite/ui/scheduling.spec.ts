@@ -187,6 +187,8 @@ async function mockManagerBoard(
   const quoteScheduleRequests: Array<Record<string, unknown>> = [];
   const jobPatchRequests: Array<Record<string, unknown>> = [];
   const visitUpdateRequests: Array<Record<string, unknown>> = [];
+  const visitReturnRequests: Array<Record<string, unknown>> = [];
+  const returnedVisits: Array<Record<string, unknown>> = [];
   const projectScheduleRequests: Array<Record<string, unknown>> = [];
   const projectCandidates = [{
     id: '99999999-9999-4999-8999-999999999999',
@@ -257,6 +259,85 @@ async function mockManagerBoard(
       body: JSON.stringify({ projects: projectCandidates }),
     })
   );
+  await page.route('**/api/scheduling/visit-backlog', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: returnedVisits }),
+    })
+  );
+  await page.route('**/api/scheduling/visits/*/backlog', async (route) => {
+    const visitId = route.request().url().split('/').at(-2) || '';
+    const visit = fixture.visits.find((item) => item.id === visitId);
+    if (!visit) {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Scheduling visit not found.' }),
+      });
+      return;
+    }
+    if (route.request().method() === 'GET') {
+      const assignmentCount = fixture.assignments.filter(
+        (assignment) => assignment.visit_id === visitId
+      ).length;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          preview: {
+            visit_id: visit.id,
+            job_id: visit.job_id,
+            job_reference: fixture.jobs[0].job_reference,
+            sequence_number: visit.sequence_number,
+            assignment_count: assignmentCount,
+            fingerprint: 'playwright-preview',
+            already_queued: false,
+          },
+        }),
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    visitReturnRequests.push(body);
+    const assignmentCount = fixture.assignments.filter(
+      (assignment) => assignment.visit_id === visitId
+    ).length;
+    fixture.assignments = fixture.assignments.filter(
+      (assignment) => assignment.visit_id !== visitId
+    );
+    fixture.visits = fixture.visits.filter((item) => item.id !== visitId);
+    returnedVisits.push({
+      visit_id: visit.id,
+      job_id: visit.job_id,
+      job_reference: fixture.jobs[0].job_reference,
+      job_title: fixture.jobs[0].title,
+      source_type: fixture.jobs[0].source_type,
+      customer_name: null,
+      sequence_number: visit.sequence_number,
+      title: visit.title,
+      notes: visit.notes,
+      original_starts_at: visit.starts_at,
+      original_ends_at: visit.ends_at,
+      duration_milliseconds:
+        new Date(visit.ends_at).getTime() - new Date(visit.starts_at).getTime(),
+      duration_minutes:
+        (new Date(visit.ends_at).getTime() - new Date(visit.starts_at).getTime()) / 60_000,
+      queued_at: new Date().toISOString(),
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        transition: {
+          visit_id: visit.id,
+          job_id: visit.job_id,
+          assignment_count: assignmentCount,
+          queued_at: new Date().toISOString(),
+        },
+      }),
+    });
+  });
   await page.route('**/api/scheduling/jobs', async (route) => {
     if (route.request().method() === 'POST') {
       projectScheduleRequests.push(route.request().postDataJSON());
@@ -383,6 +464,8 @@ async function mockManagerBoard(
     quoteScheduleRequests,
     jobPatchRequests,
     visitUpdateRequests,
+    visitReturnRequests,
+    returnedVisits,
     projectScheduleRequests,
   };
 }
@@ -553,6 +636,47 @@ test.describe('@scheduling Scheduling', () => {
     }]);
   });
 
+  test('wide board exposes visit return and confirms one visit back to Jobs', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, visitReturnRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+
+    const source = page
+      .getByTestId(
+        'schedule-cell-11111111-1111-4111-8111-111111111111-'
+          + fixture.week.start
+      )
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+    const resources = page.getByTestId('schedule-resources-panel');
+    await expect(source).toBeVisible();
+    await expect(source).toHaveClass(/cursor-grab/);
+    await expect(resources).toBeVisible();
+    await expect(resources).toHaveAttribute('data-visit-return-target', 'true');
+    await source.getByRole('button', {
+      name: 'Return visit 1 for TEST-JOB-101 to Jobs',
+    }).click();
+
+    const confirmation = page.getByRole('alertdialog', {
+      name: 'Return this visit to Jobs?',
+    });
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText('Other visits for this job will stay scheduled');
+    await expect.poll(() => visitReturnRequests).toHaveLength(0);
+    await confirmation.getByRole('button', { name: 'Return visit to Jobs' }).click();
+
+    await expect.poll(() => visitReturnRequests).toHaveLength(1);
+    expect(visitReturnRequests[0]).toMatchObject({
+      expected_fingerprint: 'playwright-preview',
+    });
+    await expect(page.getByRole('tab', { name: /All \(/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(page.getByRole('button', {
+      name: 'TEST-JOB-101 · Visit 1: select job or drag to a calendar date',
+    })).toBeVisible();
+  });
+
   test('Daily queued-job drops create one snapped atomic initial visit', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { quoteScheduleRequests } = await mockManagerBoard(page);
@@ -611,19 +735,25 @@ test.describe('@scheduling Scheduling', () => {
     await expect(source).toBeVisible();
     await expect(dragHandle).toBeVisible();
     await expect(target).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'All (1)' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
 
     const handleBox = await dragHandle.boundingBox();
     expect(handleBox).not.toBeNull();
     expect(handleBox!.width).toBeGreaterThanOrEqual(44);
     expect(handleBox!.height).toBeGreaterThanOrEqual(44);
     await expect(dragHandle).toHaveCSS('touch-action', 'none');
-    await expect(dragHandle).toHaveAttribute(
+    await expect(source).toHaveAttribute(
       'aria-label',
-      'Drag Test Scheduler to a timed visit'
+      'Test Scheduler: select resource or drag to a timed visit'
     );
+    await expect(source).toHaveCSS('touch-action', 'none');
 
     // Native dnd-kit pointer drag is covered by unit tests; Playwright proves the
-    // touch-handle contract plus the no-dialog assignment transition.
+    // full-card touch contract plus the no-dialog assignment transition.
+    await page.getByRole('tab', { name: 'Available (1)' }).click();
     await target.click();
     await page.getByRole('button', {
       name: 'Test Scheduler: select resource or drag to a timed visit',
@@ -885,7 +1015,7 @@ test.describe('@scheduling Scheduling', () => {
       viewport: { width: 1280, height: 800 },
     });
 
-    test('keeps tap assignment available without starting a drag', async ({ page }) => {
+    test('keeps tap assignment available on a full-card drag target', async ({ page }) => {
       const { assignmentRequests } = await mockManagerBoard(page);
       await page.goto('/scheduling');
       await page.getByRole('tab', { name: 'Employees' }).click();
@@ -898,7 +1028,7 @@ test.describe('@scheduling Scheduling', () => {
         'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
       );
       expect(await resourceCard.evaluate((element) => getComputedStyle(element).touchAction))
-        .not.toBe('none');
+        .toBe('none');
       expect(await dragHandle.evaluate((element) => getComputedStyle(element).touchAction))
         .toBe('none');
       await page

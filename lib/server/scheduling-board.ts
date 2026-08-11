@@ -285,10 +285,28 @@ export async function loadSchedulingBoard(
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
 
+  // Read markers after visits and assignments so an enqueue committed between
+  // snapshots is still removed from this response.
+  const visitBacklogResult = await admin
+    .from('schedule_visit_backlog')
+    .select('visit_id');
+  if (visitBacklogResult.error) throw visitBacklogResult.error;
+
   const jobs = ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob);
-  const visits = (visitsResult.data || []) as ScheduleVisit[];
-  const employeeRows = (employeeAssignmentsResult.data || []) as Array<Record<string, unknown>>;
-  const plantRows = (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>;
+  const queuedVisitIds = new Set(
+    ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
+      (row) => row.visit_id
+    )
+  );
+  const visits = ((visitsResult.data || []) as ScheduleVisit[]).filter(
+    (visit) => !queuedVisitIds.has(visit.id)
+  );
+  const employeeRows = (
+    (employeeAssignmentsResult.data || []) as Array<Record<string, unknown>>
+  ).filter((row) => !row.visit_id || !queuedVisitIds.has(String(row.visit_id)));
+  const plantRows = (
+    (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>
+  ).filter((row) => !row.visit_id || !queuedVisitIds.has(String(row.visit_id)));
   const employees = ((employeesResult.data || []) as Array<Record<string, unknown>>).map(mapEmployee);
   const plants = ((plantResult.data || []) as Array<Record<string, unknown>>).map(mapPlant);
   const blocks = (blocksResult.data || []) as Array<{
@@ -394,10 +412,29 @@ export async function loadSchedulingSelf(
   if (visitsResult.error) throw visitsResult.error;
   if (plantAssignmentsResult.error) throw plantAssignmentsResult.error;
 
-  const visits = (visitsResult.data || []) as ScheduleVisit[];
+  const visitBacklogResult = await admin
+    .from('schedule_visit_backlog')
+    .select('visit_id');
+  if (visitBacklogResult.error) throw visitBacklogResult.error;
+
+  const queuedVisitIds = new Set(
+    ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
+      (row) => row.visit_id
+    )
+  );
+  const visits = ((visitsResult.data || []) as ScheduleVisit[]).filter(
+    (visit) => !queuedVisitIds.has(visit.id)
+  );
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
   const assignments: ScheduleEmployeeAssignment[] = employeeRows
-    .filter((row) => !row.visit_id || visitsById.get(String(row.visit_id))?.status !== 'cancelled')
+    .filter(
+      (row) =>
+        !row.visit_id
+        || (
+          !queuedVisitIds.has(String(row.visit_id))
+          && visitsById.get(String(row.visit_id))?.status !== 'cancelled'
+        )
+    )
     .map((row) => ({
       ...normalizeBaseAssignment(row),
       resource_type: 'employee',
@@ -409,7 +446,14 @@ export async function loadSchedulingSelf(
   const plantAssignments: SchedulePlantAssignment[] = (
     (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>
   )
-    .filter((row) => !row.visit_id || visitsById.get(String(row.visit_id))?.status !== 'cancelled')
+    .filter(
+      (row) =>
+        !row.visit_id
+        || (
+          !queuedVisitIds.has(String(row.visit_id))
+          && visitsById.get(String(row.visit_id))?.status !== 'cancelled'
+        )
+    )
     .map((row) => {
       const plant = pickRelation(row.plant as Record<string, unknown> | Array<Record<string, unknown>> | null);
       return {

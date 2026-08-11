@@ -66,6 +66,27 @@ npm run scheduling:sample:queue:apply -- --confirm-production=FFTS_SCHEDULING_SA
 
 The normal ownership-checked cleanup command removes the base fixture and this extension together.
 
+## Client-demo play pack
+
+When the base SAMPLE fixture already exists and you need denser board coverage for the
+**current and next week**, use the play pack. It reuses `SAMPLE Scheduling Manager` and the five
+fictional Customers, and creates reserved `99100-SD`…`99113-SD` Quotes/jobs/visits only (no
+assignments).
+
+```bash
+npm run scheduling:sample:play:plan
+```
+
+Before applying, report the project reference, existing SAMPLE identity, `99100-SD` range, date
+window, Quote/job/visit counts, and the shared cleanup command. Apply only after explicit approval:
+
+```bash
+npm run scheduling:sample:play:apply -- --confirm-production=FFTS_SCHEDULING_SAMPLE
+```
+
+Play-pack rows are owned by `scheduling-sample-v1` and are removed by the normal cleanup command.
+Cleanup still aborts if any owned SAMPLE visit has acquired employee or plant assignments.
+
 ## Verify
 
 1. Confirm the apply command reports 5 Customers, 22 Quotes, 22 jobs, the manifest visit count, and

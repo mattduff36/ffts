@@ -40,7 +40,8 @@ The approved Scheduling production sample fixture is `scripts/testing/scheduling
 fictional `example.test` data marked `scheduling-sample-v1`, requires the configured production project
 reference, validates the timed scheduling schema, creates no resource assignments, and has a matching
 ownership-checked cleanup command. Its guarded queue extension reuses that same owner and cleanup path,
-and adds unscheduled Quote workflow coverage only when the base fixture is still in its expected state.
+adds unscheduled Quote workflow coverage only when the base fixture is still in its expected state,
+and supports a denser current/next-week client-demo play pack (`99100-SD` range) on top of that owner.
 
 Follow `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`. Never run the apply or destructive cleanup
 commands without the exact confirmation token and an operator review of the generated manifest.

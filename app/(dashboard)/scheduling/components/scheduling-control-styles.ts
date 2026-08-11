@@ -13,4 +13,10 @@ export const schedulingControlStyles = {
     'border-[#64748b] bg-[#020617] text-[#020617] data-[state=checked]:border-[#34d399] data-[state=checked]:bg-[#34d399] data-[state=checked]:text-[#020617] focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-[#020617] disabled:border-[#475569] disabled:bg-[#1e293b] disabled:text-[#64748b] disabled:opacity-100',
   sourceBadge:
     'border-[#64748b] bg-[#0f172a] text-[#cbd5e1]',
+  resourceJob:
+    'border border-sky-700/60 bg-sky-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-sky-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+  resourceEmployee:
+    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+  resourcePlant:
+    'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
 } as const;

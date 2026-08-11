@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFixtureDefinitions,
+  buildPlayFixtureDefinitions,
   buildQueueFixtureDefinitions,
   createManifest,
+  createPlayManifest,
   createQueueManifest,
 } from '@/scripts/testing/scheduling-sample';
 
@@ -71,6 +73,32 @@ describe('scheduling SAMPLE fixture', () => {
       initials: 'SD',
       number_start: 99022,
       next_number: 99034,
+    });
+  });
+
+  it('plans a client-demo play pack across this week and next', () => {
+    const fixture = buildPlayFixtureDefinitions(new Date('2026-08-10T12:00:00Z'));
+    expect(fixture.windowStart).toBe('2026-08-10');
+    expect(fixture.windowEnd).toBe('2026-08-23');
+    expect(fixture.quotes).toHaveLength(14);
+    expect(fixture.quotes.every((quote) => quote.reference.startsWith('991'))).toBe(true);
+    expect(fixture.quotes.flatMap((quote) => quote.visits).length).toBeGreaterThan(14);
+    expect(fixture.quotes.some((quote) => quote.visits.length === 3)).toBe(true);
+  });
+
+  it('reports the play pack Quote, job, and visit counts without assignments', () => {
+    const manifest = createPlayManifest('approved-project', new Date('2026-08-10T12:00:00Z'));
+    expect(manifest.counts).toEqual({
+      customers: 0,
+      quotes: 14,
+      jobs: 14,
+      visits: 16,
+      assignments: 0,
+    });
+    expect(manifest.series).toEqual({
+      initials: 'SD',
+      number_start: 99100,
+      next_number: 99114,
     });
   });
 });

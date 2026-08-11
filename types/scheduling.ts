@@ -91,6 +91,20 @@ export type SchedulingQueueItem =
       estimated_duration_days: 1;
       estimated_duration_minutes: 180;
       project: ScheduleProjectCandidate;
+    }
+  | {
+      kind: 'returned_visit';
+      id: string;
+      quote_reference: string;
+      base_quote_reference: string;
+      title: string;
+      customer_name: string | null;
+      status: 'Returned visit';
+      start_date: null;
+      end_date: null;
+      estimated_duration_days: 1;
+      estimated_duration_minutes: number;
+      returned_visit: ScheduleVisitBacklogItem;
     };
 
 export interface ScheduleVisit {
@@ -106,6 +120,45 @@ export interface ScheduleVisit {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ScheduleVisitBacklogItem {
+  visit_id: string;
+  job_id: string;
+  job_reference: string;
+  job_title: string;
+  source_type: ScheduleJobSource;
+  customer_name: string | null;
+  sequence_number: number;
+  title: string | null;
+  notes: string | null;
+  original_starts_at: string;
+  original_ends_at: string;
+  duration_milliseconds: number;
+  duration_minutes: number;
+  queued_at: string;
+}
+
+export interface ScheduleVisitBacklogPreview {
+  visit_id: string;
+  job_id: string;
+  job_reference: string;
+  sequence_number: number;
+  assignment_count: number;
+  fingerprint: string;
+  already_queued: boolean;
+}
+
+export interface EnqueueScheduleVisitResult {
+  visit_id: string;
+  job_id: string;
+  assignment_count: number;
+  queued_at: string;
+}
+
+export interface ScheduleQueuedVisitResult {
+  visit: ScheduleVisit;
+  job: ScheduleJob;
 }
 
 export interface ScheduleEmployeeResource {

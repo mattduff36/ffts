@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
+import { mapScheduleVisitTransitionError } from '@/lib/server/scheduling-visit-backlog';
 import { getScheduleVisitDate } from '@/lib/utils/scheduling';
 
 interface RouteParams {
@@ -82,6 +83,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (result.error) throw result.error;
     return NextResponse.json({ visit: result.data });
   } catch (error) {
+    const mapped = mapScheduleVisitTransitionError(error as { code?: string; message?: string });
+    if (mapped?.code === 'visit_queued') {
+      return NextResponse.json(
+        { error: mapped.message, code: mapped.code },
+        { status: mapped.status }
+      );
+    }
     console.error('Error updating scheduling visit:', error);
     return NextResponse.json({ error: 'Unable to update this visit.' }, { status: 500 });
   }
@@ -98,6 +106,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {
+    const mapped = mapScheduleVisitTransitionError(error as { code?: string; message?: string });
+    if (mapped?.code === 'visit_queued') {
+      return NextResponse.json(
+        { error: mapped.message, code: mapped.code },
+        { status: mapped.status }
+      );
+    }
     console.error('Error deleting scheduling visit:', error);
     return NextResponse.json({ error: 'Unable to delete this visit.' }, { status: 500 });
   }

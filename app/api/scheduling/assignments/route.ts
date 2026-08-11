@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
 import { loadEmployeeCapacityForDates } from '@/lib/server/scheduling-assignment-capacity';
+import { mapScheduleVisitTransitionError } from '@/lib/server/scheduling-visit-backlog';
 import {
   conflictCodes,
   detectEmployeeConflicts,
@@ -156,6 +157,13 @@ export async function POST(request: NextRequest) {
         );
       }
       if (error.code === 'P0001') {
+        const mapped = mapScheduleVisitTransitionError(error);
+        if (mapped?.code === 'visit_queued') {
+          return NextResponse.json(
+            { error: mapped.message, code: mapped.code },
+            { status: mapped.status }
+          );
+        }
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
       throw error;

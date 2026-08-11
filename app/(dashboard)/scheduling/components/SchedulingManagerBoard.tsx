@@ -34,6 +34,7 @@ import {
   Clock3,
   ExternalLink,
   GripVertical,
+  ListRestart,
   Minimize2,
   MoveHorizontal,
   Pencil,
@@ -75,10 +76,14 @@ import {
   createScheduleAssignment,
   deleteScheduleAssignment,
   deleteScheduleJob,
+  enqueueScheduleVisit,
   fetchScheduleQuoteCandidates,
   fetchScheduleProjectCandidates,
+  fetchScheduleVisitBacklog,
   fetchSchedulingBoard,
   moveScheduleAssignment,
+  previewScheduleVisitBacklog,
+  scheduleQueuedVisit,
   saveQuoteSchedule,
   saveScheduleJob,
   saveScheduleVisit,
@@ -131,6 +136,7 @@ import type {
   ScheduleJob,
   SchedulePlantResource,
   ScheduleProjectCandidate,
+  ScheduleVisitBacklogPreview,
   SchedulingQueueItem,
   ScheduleVisit,
   SchedulingBoardPayload,
@@ -193,7 +199,7 @@ function WeeklyDayHeader({
   onOpenDaily,
   onScheduleQuote,
 }: WeeklyDayHeaderProps) {
-  const { ref, isDropTarget } = useDroppable({
+  const { ref: dropRef, isDropTarget } = useDroppable({
     id: `${dropScope}:schedule-date:${date}`,
     type: 'schedule-date',
     accept: ['schedule-queue-item'],
@@ -202,7 +208,7 @@ function WeeklyDayHeader({
 
   return (
     <div
-      ref={ref}
+      ref={dropRef}
       data-testid={`schedule-date-drop-${dropScope}-${date}`}
       className={cn(
         'border-l border-border text-center transition',
@@ -334,6 +340,12 @@ function ResourceDragCue({ testId }: { testId: string }) {
   );
 }
 
+function resourceCardTint(type: SelectedScheduleResource['type']): string {
+  return type === 'employee'
+    ? schedulingControlStyles.resourceEmployee
+    : schedulingControlStyles.resourcePlant;
+}
+
 function ResourceCard({
   resource,
   subtitle,
@@ -367,7 +379,7 @@ function ResourceCard({
         'flex w-full items-center gap-2 rounded-lg p-2 text-left transition',
         selected
           ? schedulingControlStyles.primary
-          : schedulingControlStyles.outline
+          : resourceCardTint(resource.type)
       )}
     >
       <ResourceDragCue testId="schedule-resource-drag-cue" />
@@ -403,47 +415,42 @@ function DraggableResourceCard({
   const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
 
   return (
-    <div
+    <button
+      ref={(node) => {
+        ref(node);
+        handleRef(node);
+      }}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        handleClick(event);
+      }}
+      onPointerDown={resetDragState}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') resetDragState();
+      }}
+      aria-pressed={selected}
+      aria-label={`${resource.label}: select resource or drag to a timed visit`}
+      title="Tap to assign, or drag to a timed visit"
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'flex w-full items-stretch gap-1 rounded-lg transition',
+        'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg text-left transition active:cursor-grabbing',
         selected
           ? schedulingControlStyles.primary
-          : schedulingControlStyles.outline,
+          : resourceCardTint(resource.type),
         isDragging && 'opacity-40'
       )}
+      style={{ touchAction: 'none' }}
     >
-      <button
-        ref={(node) => {
-          // Keep the draggable node and activation handle identical so pointer sensors
-          // receive events on the 44x44 touch target (Playwright + touch).
-          ref(node);
-          handleRef(node);
-        }}
-        type="button"
-        aria-label={`Drag ${resource.label} to a timed visit`}
-        title="Drag to a timed visit"
+      <span
         data-testid={`schedule-resource-drag-handle-${resource.type}-${resource.id}`}
-        className="flex min-h-11 min-w-11 touch-none items-center justify-center rounded-l-lg cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
+        className="flex min-h-11 min-w-11 touch-none items-center justify-center self-stretch"
         style={{ touchAction: 'none' }}
+        aria-hidden="true"
       >
         <ResourceDragCue testId="schedule-resource-drag-cue" />
-      </button>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          handleClick(event);
-        }}
-        onPointerDown={resetDragState}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') resetDragState();
-        }}
-        aria-pressed={selected}
-        aria-label={`${resource.label}: select resource or drag to a timed visit`}
-        title="Tap to assign to the selected visit"
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-r-lg p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-scheduling"
-      >
+      </span>
+      <span className="flex min-w-0 flex-1 items-center gap-2 p-2 pl-0">
         <span className="min-w-0 flex-1 space-y-0.5">
           <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
             {resource.label}
@@ -451,13 +458,13 @@ function DraggableResourceCard({
           <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
             {subtitle}
           </span>
-          <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
+          <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-300')} title={metadata}>
             {metadata}
           </span>
         </span>
         {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -505,15 +512,22 @@ function DraggableQuoteCard({
         title={`${quote.base_quote_reference} — ${quote.customer_name ? `${quote.customer_name} · ` : ''}${quote.title}`}
         data-testid={`schedule-quote-${quote.id}`}
         className={cn(
-          'flex w-full cursor-grab items-start gap-1.5 rounded-lg p-2 text-left transition active:cursor-grabbing',
+          'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg p-1 text-left transition active:cursor-grabbing',
           selected
             ? schedulingControlStyles.primary
-            : schedulingControlStyles.outline,
+            : schedulingControlStyles.resourceJob,
           isDragging && 'cursor-grabbing opacity-40'
         )}
+        style={{ touchAction: 'none' }}
       >
-        <ResourceDragCue testId="schedule-quote-drag-cue" />
-        <span className="min-w-0 flex-1">
+        <span
+          className="flex min-h-11 min-w-11 items-center justify-center self-stretch"
+          data-testid={`schedule-quote-drag-handle-${quote.kind}-${quote.id}`}
+          aria-hidden="true"
+        >
+          <ResourceDragCue testId="schedule-quote-drag-cue" />
+        </span>
+        <span className="min-w-0 flex-1 py-1.5 pr-1.5">
           <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')}>
             {quote.base_quote_reference}
           </span>
@@ -712,6 +726,7 @@ function AssignmentChip({
   return (
     <div
       ref={ref}
+      onPointerDown={(event) => event.stopPropagation()}
       data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
         'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pr-0.5 text-[11px]',
@@ -769,6 +784,7 @@ interface DayCellProps {
   onActivateVisit: (visit: ScheduleVisit) => void;
   onAddVisit: () => void;
   onEditVisit: (visit: ScheduleVisit) => void;
+  onReturnVisit: (visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
 }
 
@@ -782,6 +798,7 @@ interface VisitCardProps {
   isActiveTarget: boolean;
   onActivate: () => void;
   onEdit: () => void;
+  onReturn: () => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
   assignmentDragScope?: 'desktop' | 'mobile';
   cardWidth?: number;
@@ -797,12 +814,13 @@ function VisitCard({
   isActiveTarget,
   onActivate,
   onEdit,
+  onReturn,
   onDeleteAssignment,
   assignmentDragScope = 'desktop',
   cardWidth,
 }: VisitCardProps) {
   const workDate = getScheduleVisitDate(visit.starts_at);
-  const { ref, isDropTarget } = useDroppable({
+  const { ref: dropRef, isDropTarget } = useDroppable({
     id: isDropEnabled ? `visit:${visit.id}` : `mobile-visit:${visit.id}`,
     type: 'schedule-visit',
     accept: ['schedule-resource', 'schedule-assignment'],
@@ -815,6 +833,20 @@ function VisitCard({
       workDate,
     },
   });
+  const {
+    ref: dragRef,
+    handleRef: dragHandleRef,
+    isDragging,
+  } = useDraggable({
+    id: `${assignmentDragScope}:schedule-visit:${visit.id}`,
+    type: 'schedule-board-visit',
+    disabled: visit.status !== 'planned',
+    data: { visit, job },
+  });
+  const { handleClick, resetDragState } = useDragSafeActivation(
+    isDragging,
+    visit.status === 'cancelled' ? onEdit : onActivate
+  );
   const assignmentsPerRow =
     cardWidth === undefined || cardWidth >= 260 ? 3 : cardWidth >= 140 ? 2 : 1;
   const isCountOnly = cardWidth !== undefined && cardWidth < 140;
@@ -852,14 +884,19 @@ function VisitCard({
 
   return (
     <div
-      ref={ref}
+      ref={(node) => {
+        dropRef(node);
+        dragRef(node);
+        dragHandleRef(node);
+      }}
       data-schedule-visit-card
       data-testid={`schedule-visit-${visit.id}`}
-      style={style}
+      style={{ ...style, touchAction: 'none' }}
       className={cn(
-        'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
+        'flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5 active:cursor-grabbing',
         className,
         visit.status === 'cancelled' && 'opacity-60',
+        isDragging && 'opacity-40',
         isActiveTarget && 'border-scheduling ring-1 ring-scheduling',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
@@ -867,7 +904,8 @@ function VisitCard({
       <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
         <button
           type="button"
-          onClick={visit.status === 'cancelled' ? onEdit : onActivate}
+          onClick={handleClick}
+          onPointerDown={resetDragState}
           className="min-w-0 flex-1 overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
           aria-label={
             visit.status === 'cancelled'
@@ -901,14 +939,32 @@ function VisitCard({
             </span>
           ) : null}
         </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className={cn('h-6 w-6 shrink-0 rounded p-0.5', schedulingControlStyles.ghost)}
-          aria-label={`Edit visit ${visit.sequence_number}`}
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
+        <span className="flex shrink-0 items-center gap-0.5">
+          {visit.status === 'planned' ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onReturn();
+              }}
+              className={cn('h-6 w-6 rounded p-0.5', schedulingControlStyles.ghost)}
+              aria-label={`Return visit ${visit.sequence_number} for ${job.job_reference} to Jobs`}
+              title="Return visit to Jobs"
+            >
+              <ListRestart className="h-3 w-3" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onEdit}
+            className={cn('h-6 w-6 rounded p-0.5', schedulingControlStyles.ghost)}
+            aria-label={`Edit visit ${visit.sequence_number}`}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        </span>
       </div>
       <div
         className="mt-auto max-h-12 shrink-0 space-y-1 overflow-hidden"
@@ -958,6 +1014,7 @@ function DayCell({
   onActivateVisit,
   onAddVisit,
   onEditVisit,
+  onReturnVisit,
   onDeleteAssignment,
 }: DayCellProps) {
   const active = date >= job.start_date && date <= job.end_date;
@@ -995,6 +1052,7 @@ function DayCell({
             isActiveTarget={activeVisitId === visit.id}
             onActivate={() => onActivateVisit(visit)}
             onEdit={() => onEditVisit(visit)}
+            onReturn={() => onReturnVisit(visit)}
             onDeleteAssignment={onDeleteAssignment}
           />
         ))}
@@ -1257,6 +1315,7 @@ interface ResizableDailyVisitProps {
   isActiveTarget: boolean;
   onActivate: () => void;
   onEdit: () => void;
+  onReturn: () => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
   onResizeVisit: DailyTimelineCellProps['onResizeVisit'];
 }
@@ -1309,6 +1368,7 @@ function ResizableDailyVisit({
   isActiveTarget,
   onActivate,
   onEdit,
+  onReturn,
   onDeleteAssignment,
   onResizeVisit,
 }: ResizableDailyVisitProps) {
@@ -1471,6 +1531,7 @@ function ResizableDailyVisit({
         isActiveTarget={isActiveTarget}
         onActivate={onActivate}
         onEdit={onEdit}
+        onReturn={onReturn}
         onDeleteAssignment={onDeleteAssignment}
         cardWidth={width}
       />
@@ -1494,6 +1555,7 @@ function DailyTimelineCell({
   onActivateVisit,
   onAddVisit,
   onEditVisit,
+  onReturnVisit,
   onDeleteAssignment,
   onResizeVisit,
 }: DailyTimelineCellProps) {
@@ -1542,6 +1604,7 @@ function DailyTimelineCell({
           isActiveTarget={activeVisitId === visit.id}
           onActivate={() => onActivateVisit(visit)}
           onEdit={() => onEditVisit(visit)}
+          onReturn={() => onReturnVisit(visit)}
           onDeleteAssignment={onDeleteAssignment}
           onResizeVisit={onResizeVisit}
         />
@@ -1588,6 +1651,11 @@ interface PendingAssignmentConflict {
   assignment?: ScheduleAssignment;
 }
 
+interface PendingVisitReturn {
+  target: ActiveVisitTarget;
+  preview: ScheduleVisitBacklogPreview;
+}
+
 type DailyTimelineMode = 'fit' | 'scroll';
 
 interface DailyTimelinePanOperation {
@@ -1618,9 +1686,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     readSchedulingViewPreference(userId)
   );
   const [sidebarTab, setSidebarTab] = useState<'jobs' | 'employee' | 'plant'>('jobs');
-  const [quoteStage, setQuoteStage] = useState<ScheduleQuoteStage | 'projects'>(
-    SCHEDULE_QUOTE_STAGES.draft
-  );
+  const [quoteStage, setQuoteStage] =
+    useState<ScheduleQuoteStage | 'projects' | 'all'>('all');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [resourceSearch, setResourceSearch] = useState('');
   const [jobFilters, setJobFilters] = useQueryStates(
@@ -1638,10 +1705,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [draggedResource, setDraggedResource] = useState<SelectedScheduleResource | null>(null);
   const [draggedAssignment, setDraggedAssignment] = useState<ScheduleAssignment | null>(null);
   const [draggedQuote, setDraggedQuote] = useState<SchedulingQueueItem | null>(null);
+  const [draggedVisit, setDraggedVisit] = useState<ActiveVisitTarget | null>(null);
   const [activeVisitTarget, setActiveVisitTarget] = useState<ActiveVisitTarget | null>(null);
   const [resourceAvailabilityView, setResourceAvailabilityView] =
-    useState<'available' | 'unavailable' | 'all'>('available');
+    useState<'available' | 'unavailable' | 'all'>('all');
   const [pendingConflict, setPendingConflict] = useState<PendingAssignmentConflict | null>(null);
+  const [pendingVisitReturn, setPendingVisitReturn] =
+    useState<PendingVisitReturn | null>(null);
+  const [isReturningVisit, setIsReturningVisit] = useState(false);
   const [inFlightMutationKeys, setInFlightMutationKeys] = useState<Set<string>>(
     () => new Set()
   );
@@ -1694,6 +1765,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const projectCandidatesQuery = useQuery({
     queryKey: ['scheduling-project-candidates'],
     queryFn: fetchScheduleProjectCandidates,
+  });
+  const visitBacklogQuery = useQuery({
+    queryKey: ['scheduling-visit-backlog'],
+    queryFn: fetchScheduleVisitBacklog,
+  });
+  const {
+    ref: resourcesPanelDropRef,
+    isDropTarget: isVisitOverResources,
+  } = useDroppable({
+    id: 'schedule-resources-return-drop',
+    type: 'schedule-resources-return',
+    accept: ['schedule-board-visit'],
+    data: { returnToResources: true },
   });
   useEffect(() => {
     if (!canCreateQuotes) return;
@@ -1894,6 +1978,23 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     })),
     [projectCandidatesQuery.data]
   );
+  const returnedVisits = useMemo<SchedulingQueueItem[]>(
+    () => (visitBacklogQuery.data || []).map((item) => ({
+      kind: 'returned_visit' as const,
+      id: item.visit_id,
+      quote_reference: item.job_reference,
+      base_quote_reference: `${item.job_reference} · Visit ${item.sequence_number}`,
+      title: item.title || item.job_title,
+      customer_name: item.customer_name,
+      status: 'Returned visit' as const,
+      start_date: null,
+      end_date: null,
+      estimated_duration_days: 1 as const,
+      estimated_duration_minutes: item.duration_minutes,
+      returned_visit: item,
+    })),
+    [visitBacklogQuery.data]
+  );
   const quoteStageCounts = useMemo(() => {
     const counts: Record<ScheduleQuoteStage, number> = {
       draft: 0,
@@ -1908,10 +2009,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [unscheduledQuotes]);
   const filteredQuoteCandidates = useMemo(() => {
     const search = quoteSearch.trim().toLowerCase();
-    const source = quoteStage === 'projects' ? unscheduledProjects : unscheduledQuotes;
+    const source =
+      quoteStage === 'all'
+        ? [...returnedVisits, ...unscheduledQuotes, ...unscheduledProjects]
+        : quoteStage === 'projects'
+          ? unscheduledProjects
+          : unscheduledQuotes;
     return source.filter(
       (quote) =>
-        (quoteStage === 'projects' || getScheduleQuoteStage(quote.status) === quoteStage)
+        (
+          quoteStage === 'all'
+          || quoteStage === 'projects'
+          || getScheduleQuoteStage(quote.status) === quoteStage
+        )
         && (
           !search
           || quote.quote_reference.toLowerCase().includes(search)
@@ -1920,7 +2030,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           || (quote.customer_name || '').toLowerCase().includes(search)
         )
     );
-  }, [quoteSearch, quoteStage, unscheduledProjects, unscheduledQuotes]);
+  }, [quoteSearch, quoteStage, returnedVisits, unscheduledProjects, unscheduledQuotes]);
 
   const matchingEmployees = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
@@ -2114,6 +2224,44 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     initialVisit?: { starts_at: string; ends_at: string }
   ) {
     if (isSchedulingQuote) return;
+    if (quote.kind === 'returned_visit') {
+      const startsAt =
+        initialVisit?.starts_at
+        || toScheduleLondonDateTimeIso(
+          startDate,
+          formatScheduleVisitTime(quote.returned_visit.original_starts_at)
+        );
+      const endsAt = new Date(
+        parseISO(startsAt).getTime()
+        + quote.returned_visit.duration_milliseconds
+      ).toISOString();
+      if (getScheduleVisitDate(endsAt) !== startDate) {
+        toast.error('This visit does not fit within the selected day.');
+        return;
+      }
+
+      setIsSchedulingQuote(true);
+      try {
+        await scheduleQueuedVisit({
+          request_id: crypto.randomUUID(),
+          visit_id: quote.returned_visit.visit_id,
+          starts_at: startsAt,
+        });
+        setSelectedQuote(null);
+        toast.success(`${quote.base_quote_reference} returned to the schedule`);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
+          queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
+        ]);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Unable to schedule this returned visit'
+        );
+      } finally {
+        setIsSchedulingQuote(false);
+      }
+      return;
+    }
     if (quote.kind === 'project') {
       setProjectPlacement({ project: quote.project, date: startDate, initialVisit });
       return;
@@ -2142,6 +2290,70 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.error(error instanceof Error ? error.message : 'Unable to schedule this Quote');
     } finally {
       setIsSchedulingQuote(false);
+    }
+  }
+
+  async function prepareVisitReturn(target: ActiveVisitTarget) {
+    try {
+      const preview = await previewScheduleVisitBacklog(target.visit.id);
+      if (preview.already_queued) {
+        toast.info('This visit is already in the Jobs queue.');
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
+          queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
+        ]);
+        return;
+      }
+      setPendingVisitReturn({ target, preview });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Unable to review this visit before returning it to Jobs'
+      );
+    }
+  }
+
+  async function confirmVisitReturn() {
+    if (!pendingVisitReturn || isReturningVisit) return;
+    const { target, preview } = pendingVisitReturn;
+    setIsReturningVisit(true);
+    try {
+      await enqueueScheduleVisit({
+        request_id: crypto.randomUUID(),
+        visit_id: target.visit.id,
+        expected_fingerprint: preview.fingerprint,
+      });
+      setPendingVisitReturn(null);
+      setActiveVisitTarget((current) =>
+        current?.visit.id === target.visit.id ? null : current
+      );
+      setVisitTarget((current) =>
+        current?.visit?.id === target.visit.id ? null : current
+      );
+      setSelectedResource(null);
+      setSelectedQuote(null);
+      setSidebarTab('jobs');
+      setQuoteStage('all');
+      toast.success(
+        `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
+        queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof SchedulingApiError
+        && error.payload.code === 'stale_visit_preview'
+      ) {
+        setPendingVisitReturn(null);
+      }
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to return this visit to Jobs'
+      );
+    } finally {
+      setIsReturningVisit(false);
     }
   }
 
@@ -2714,7 +2926,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
               const quote = source?.data?.quote as SchedulingQueueItem | undefined;
+              const visit = source?.data?.visit as ScheduleVisit | undefined;
+              const job = source?.data?.job as ScheduleJob | undefined;
               if (quote) return `Picked up ${quote.base_quote_reference}.`;
+              if (visit && job) {
+                return `Picked up visit ${visit.sequence_number} for ${job.job_reference}.`;
+              }
               if (resource) return `Picked up ${resource.label}.`;
               if (assignment) return 'Picked up an existing assignment.';
               return 'Started dragging.';
@@ -2723,11 +2940,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
               const quote = source?.data?.quote as SchedulingQueueItem | undefined;
+              const visit = source?.data?.visit as ScheduleVisit | undefined;
+              const job = source?.data?.job as ScheduleJob | undefined;
               const data = target?.data as {
                 jobReference?: string;
+                returnToResources?: boolean;
                 visitSequenceNumber?: number;
                 workDate?: string;
               } | undefined;
+              if (visit && job && data?.returnToResources) {
+                return `Visit ${visit.sequence_number} for ${job.job_reference} is over Resources.`;
+              }
               if (quote && data?.workDate) {
                 return `${quote.base_quote_reference} is over ${format(parseISO(data.workDate), 'EEEE d MMMM')}.`;
               }
@@ -2747,6 +2970,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               const resource = source?.data?.resource as SelectedScheduleResource | undefined;
               const assignment = source?.data?.assignment as ScheduleAssignment | undefined;
               const quote = source?.data?.quote as SchedulingQueueItem | undefined;
+              const visit = source?.data?.visit as ScheduleVisit | undefined;
+              const job = source?.data?.job as ScheduleJob | undefined;
+              if (visit && job && target) {
+                return `Visit ${visit.sequence_number} for ${job.job_reference} is ready for confirmation.`;
+              }
               if (quote && target) return `${quote.base_quote_reference} was scheduled.`;
               if (resource && target) return `${resource.label} was dropped on a visit.`;
               if (assignment && target) return 'Assignment was dropped on a visit.';
@@ -2759,16 +2987,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const assignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
         const quote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
+        const visit = event.operation.source?.data?.visit as ScheduleVisit | undefined;
+        const job = event.operation.source?.data?.job as ScheduleJob | undefined;
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
         setDraggedQuote(quote || null);
+        setDraggedVisit(visit && job ? { visit, job } : null);
       }}
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const sourceAssignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
         const sourceQuote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
+        const sourceVisit = event.operation.source?.data?.visit as ScheduleVisit | undefined;
+        const sourceVisitJob = event.operation.source?.data?.job as ScheduleJob | undefined;
         const targetData = event.operation.target?.data as {
           jobId?: string;
+          returnToResources?: boolean;
           visitId?: string;
           workDate?: string;
         } | undefined;
@@ -2784,7 +3018,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         setDraggedResource(null);
         setDraggedAssignment(null);
         setDraggedQuote(null);
+        setDraggedVisit(null);
         if (event.canceled) return;
+        if (sourceVisit && sourceVisitJob) {
+          if (!targetData?.returnToResources) {
+            toast.info('Drop this visit anywhere in Resources to return it to Jobs.');
+            return;
+          }
+          void prepareVisitReturn({ visit: sourceVisit, job: sourceVisitJob });
+          return;
+        }
         if (sourceQuote) {
           if (
             view === SCHEDULING_BOARD_VIEWS.daily
@@ -2801,6 +3044,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 startHour: dailyTimelineRange.startHour,
                 endHour: dailyTimelineRange.endHour,
               });
+              if (
+                sourceQuote.kind === 'returned_visit'
+                && startMinutes
+                  + Math.ceil(
+                    sourceQuote.returned_visit.duration_milliseconds / 60_000
+                  )
+                  > dailyTimelineRange.endHour * 60
+              ) {
+                toast.error('This visit does not fit within the visible scheduling day.');
+                return;
+              }
               const window = getDailyInitialVisitWindow(
                 startMinutes,
                 sourceQuote.estimated_duration_minutes || null,
@@ -2906,8 +3160,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           data-testid="schedule-manager-layout"
         >
           <Card
-            className="h-fit border-border xl:sticky xl:top-4"
+            ref={resourcesPanelDropRef}
+            className={cn(
+              'h-fit border-border transition xl:sticky xl:top-4',
+              isVisitOverResources
+                && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
+            )}
             data-testid="schedule-resources-panel"
+            data-visit-return-target="true"
           >
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Resources</CardTitle>
@@ -2933,7 +3193,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               {sidebarTab === 'jobs' ? (
                 <>
                   <p className={RESOURCE_GUIDANCE_CLASS}>
-                    Drag an unscheduled job onto a date, or select it and use a date&apos;s placement button.
+                    Drag a queued job onto a date. Drag a scheduled visit back anywhere into Resources to return it here.
                   </p>
                   {quoteStage === SCHEDULE_QUOTE_STAGES.draft ? (
                     <p className={RESOURCE_GUIDANCE_CLASS}>
@@ -2942,9 +3202,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   ) : null}
                   <Tabs
                     value={quoteStage}
-                    onValueChange={(value) => setQuoteStage(value as ScheduleQuoteStage | 'projects')}
+                    onValueChange={(value) =>
+                      setQuoteStage(value as ScheduleQuoteStage | 'projects' | 'all')
+                    }
                   >
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-5">
+                      <TabsTrigger value="all" className="px-1 text-[10px]">
+                        All ({returnedVisits.length + unscheduledQuotes.length + unscheduledProjects.length})
+                      </TabsTrigger>
                       <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className="px-1 text-[10px]">
                         Draft ({quoteStageCounts.draft})
                       </TabsTrigger>
@@ -2984,22 +3249,30 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </Button>
                     </div>
                   ) : null}
-                  {quoteCandidatesQuery.isError ? (
+                  {quoteCandidatesQuery.isError
+                    || projectCandidatesQuery.isError
+                    || visitBacklogQuery.isError ? (
                     <div className="rounded-lg border border-red-500/30 p-3 text-sm text-red-300">
-                      <p>Unable to load unscheduled jobs.</p>
+                      <p>Some queued jobs could not be loaded. Available results are still shown.</p>
                       <Button
                         variant="ghost"
                         size="sm"
                         className={cn('mt-1', schedulingControlStyles.ghost)}
-                        onClick={() => void quoteCandidatesQuery.refetch()}
+                        onClick={() => void Promise.all([
+                          quoteCandidatesQuery.refetch(),
+                          projectCandidatesQuery.refetch(),
+                          visitBacklogQuery.refetch(),
+                        ])}
                       >
                         Try again
                       </Button>
                     </div>
-                  ) : (
-                    <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
-                      <div className="space-y-2">
-                        {quoteCandidatesQuery.isLoading ? (
+                  ) : null}
+                  <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
+                    <div className="space-y-2">
+                        {quoteCandidatesQuery.isLoading
+                          && projectCandidatesQuery.isLoading
+                          && visitBacklogQuery.isLoading ? (
                           <p className="px-3 py-8 text-center text-sm text-muted-foreground">
                             Loading unscheduled jobs…
                           </p>
@@ -3018,12 +3291,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           ))
                         ) : (
                           <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-                            No unscheduled {quoteStage === 'projects' ? 'Projects' : quoteStage} match this search.
+                            No {quoteStage === 'all' ? 'queued jobs' : quoteStage === 'projects' ? 'Projects' : quoteStage} match this search.
                           </div>
                         )}
-                      </div>
-                    </ScrollArea>
-                  )}
+                    </div>
+                  </ScrollArea>
                 </>
               ) : (
                 <>
@@ -3067,14 +3339,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     }
                   >
                     <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="all" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                        All ({sidebarTab === 'employee' ? matchingEmployees.length : matchingPlant.length})
+                      </TabsTrigger>
                       <TabsTrigger value="available" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
                         Available ({sidebarTab === 'employee' ? availableEmployees.length : availablePlant.length})
                       </TabsTrigger>
                       <TabsTrigger value="unavailable" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
                         Unavailable ({sidebarTab === 'employee' ? unavailableEmployees.length : unavailablePlant.length})
-                      </TabsTrigger>
-                      <TabsTrigger value="all" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
-                        All ({sidebarTab === 'employee' ? matchingEmployees.length : matchingPlant.length})
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -3584,6 +3856,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           onActivateVisit={(visit) => activateVisit(job, visit)}
                           onAddVisit={() => openVisitEditor(job, selectedDate)}
                           onEditVisit={(visit) => openVisitEditor(job, selectedDate, visit)}
+                          onReturnVisit={(visit) => void prepareVisitReturn({ job, visit })}
                           onDeleteAssignment={setPendingDeleteAssignment}
                           onResizeVisit={resizeVisit}
                         />
@@ -3599,6 +3872,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             onActivateVisit={(visit) => activateVisit(job, visit)}
                             onAddVisit={() => openVisitEditor(job, date)}
                             onEditVisit={(visit) => openVisitEditor(job, date, visit)}
+                            onReturnVisit={(visit) => void prepareVisitReturn({ job, visit })}
                             onDeleteAssignment={setPendingDeleteAssignment}
                           />
                         ))
@@ -3743,6 +4017,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     isActiveTarget={activeVisitTarget?.visit.id === visit.id}
                                     onActivate={() => activateVisit(job, visit)}
                                     onEdit={() => openVisitEditor(job, date, visit)}
+                                    onReturn={() => void prepareVisitReturn({ job, visit })}
                                     onDeleteAssignment={setPendingDeleteAssignment}
                                     assignmentDragScope="mobile"
                                   />
@@ -3781,7 +4056,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       </div>
 
       <DragOverlay>
-        {draggedQuote ? (
+        {draggedVisit ? (
+          <div className="max-w-72 rounded-lg border border-scheduling bg-popover px-3 py-2 shadow-2xl">
+            <p className="text-sm font-semibold text-foreground">
+              {draggedVisit.job.job_reference} · Visit {draggedVisit.visit.sequence_number}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {formatScheduleVisitTime(draggedVisit.visit.starts_at)}–
+              {formatScheduleVisitTime(draggedVisit.visit.ends_at)}
+            </p>
+          </div>
+        ) : draggedQuote ? (
           <div className="max-w-72 rounded-lg border border-scheduling bg-popover px-3 py-2 shadow-2xl">
             <p className="text-sm font-semibold text-foreground">
               {draggedQuote.base_quote_reference}
@@ -3955,6 +4240,40 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               className={schedulingControlStyles.warning}
             >
               Assign anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={pendingVisitReturn !== null}
+        onOpenChange={(open) => {
+          if (!open && !isReturningVisit) setPendingVisitReturn(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Return this visit to Jobs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingVisitReturn
+                ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${pendingVisitReturn.preview.assignment_count === 0
+                  ? 'It has no resource assignments.'
+                  : `${pendingVisitReturn.preview.assignment_count} ${pendingVisitReturn.preview.assignment_count === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className={schedulingControlStyles.outline}
+              disabled={isReturningVisit}
+            >
+              Keep scheduled
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={schedulingControlStyles.warning}
+              onClick={() => void confirmVisitReturn()}
+              disabled={isReturningVisit}
+            >
+              {isReturningVisit ? 'Returning...' : 'Return visit to Jobs'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

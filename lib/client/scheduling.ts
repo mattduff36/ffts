@@ -6,6 +6,10 @@ import type {
   ScheduleProjectCandidate,
   ScheduleQuoteCandidate,
   ScheduleVisit,
+  ScheduleVisitBacklogItem,
+  ScheduleVisitBacklogPreview,
+  EnqueueScheduleVisitResult,
+  ScheduleQueuedVisitResult,
   SchedulingBoardPayload,
   SchedulingContext,
   SchedulingSelfPayload,
@@ -177,6 +181,57 @@ export async function fetchScheduleProjectCandidates(): Promise<ScheduleProjectC
     await fetch('/api/scheduling/projects')
   );
   return payload.projects;
+}
+
+export async function fetchScheduleVisitBacklog(): Promise<ScheduleVisitBacklogItem[]> {
+  const payload = await readResponse<{ items: ScheduleVisitBacklogItem[] }>(
+    await fetch('/api/scheduling/visit-backlog')
+  );
+  return payload.items;
+}
+
+export async function previewScheduleVisitBacklog(
+  visitId: string
+): Promise<ScheduleVisitBacklogPreview> {
+  const payload = await readResponse<{ preview: ScheduleVisitBacklogPreview }>(
+    await fetch(`/api/scheduling/visits/${visitId}/backlog`)
+  );
+  return payload.preview;
+}
+
+export async function enqueueScheduleVisit(input: {
+  request_id: string;
+  visit_id: string;
+  expected_fingerprint: string;
+}): Promise<EnqueueScheduleVisitResult> {
+  const payload = await readResponse<{ transition: EnqueueScheduleVisitResult }>(
+    await fetch(`/api/scheduling/visits/${input.visit_id}/backlog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request_id: input.request_id,
+        expected_fingerprint: input.expected_fingerprint,
+      }),
+    })
+  );
+  return payload.transition;
+}
+
+export async function scheduleQueuedVisit(input: {
+  request_id: string;
+  visit_id: string;
+  starts_at: string;
+}): Promise<ScheduleQueuedVisitResult> {
+  return readResponse(
+    await fetch(`/api/scheduling/visit-backlog/${input.visit_id}/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request_id: input.request_id,
+        starts_at: input.starts_at,
+      }),
+    })
+  );
 }
 
 export async function saveQuoteSchedule(input: {

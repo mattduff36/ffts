@@ -19,8 +19,10 @@ const SAMPLE_NUMBER_START = 99000;
 const QUOTE_COUNT = 22;
 const QUEUE_SAMPLE_NUMBER_START = SAMPLE_NUMBER_START + QUOTE_COUNT;
 const QUEUE_QUOTE_COUNT = 12;
+const PLAY_SAMPLE_NUMBER_START = 99100;
+const PLAY_QUOTE_COUNT = 14;
 
-type Mode = 'plan' | 'apply' | 'cleanup' | 'queue-plan' | 'queue-apply';
+type Mode = 'plan' | 'apply' | 'cleanup' | 'queue-plan' | 'queue-apply' | 'play-plan' | 'play-apply';
 
 interface VisitDefinition {
   date: string;
@@ -81,6 +83,31 @@ interface SampleManifest {
     start_date: string;
     estimated_days: number;
     estimated_minutes: number;
+    visit_count: number;
+  }>;
+}
+
+interface PlaySampleManifest {
+  fixture_key: string;
+  project_ref: string;
+  profile_email: string;
+  series: {
+    initials: string;
+    number_start: number;
+    next_number: number;
+  };
+  date_window: { start: string; end: string };
+  counts: {
+    customers: number;
+    quotes: number;
+    jobs: number;
+    visits: number;
+    assignments: number;
+  };
+  quotes: Array<{
+    reference: string;
+    start_date: string;
+    estimated_days: number;
     visit_count: number;
   }>;
 }
@@ -379,6 +406,115 @@ export function createQueueManifest(projectRef: string): QueueSampleManifest {
   };
 }
 
+/**
+ * Client-demo play pack: denser timed visits across this week and next.
+ * Reuses the existing SAMPLE owner/customers; reserved references 99100-SD+.
+ */
+export function buildPlayFixtureDefinitions(today = new Date()): {
+  windowStart: string;
+  windowEnd: string;
+  quotes: QuoteDefinition[];
+} {
+  const monday = startOfWeek(today, { weekStartsOn: 1 });
+  const windowStart = format(monday, 'yyyy-MM-dd');
+  const windowEnd = format(addDays(monday, 13), 'yyyy-MM-dd');
+  const titles = [
+    'Client demo — morning crown reduction',
+    'Client demo — school playground prune',
+    'Client demo — afternoon roadside clearance',
+    'Client demo — estate hedge reduction',
+    'Client demo — storm limb make-safe',
+    'Client demo — veteran oak inspection',
+    'Client demo — woodland path clearance',
+    'Client demo — stump grinding pair',
+    'Client demo — multi-visit thinning programme',
+    'Client demo — cemetery yew works',
+    'Client demo — next-week avenue lift',
+    'Client demo — next-week habitat piles',
+    'Client demo — next-week orchard prune',
+    'Client demo — next-week site survey',
+  ];
+
+  const quotes: QuoteDefinition[] = titles.map((title, index) => {
+    const reference = `${PLAY_SAMPLE_NUMBER_START + index}-${SAMPLE_INITIALS}`;
+    if (index === 8) {
+      const start = addDays(monday, 1);
+      const startDate = format(start, 'yyyy-MM-dd');
+      const visits = [0, 2, 4].map((offset, visitIndex) => {
+        const date = format(addDays(start, offset), 'yyyy-MM-dd');
+        return buildVisit(date, 8, 4, `${title} — day ${visitIndex + 1}`);
+      });
+      return {
+        id: randomUUID(),
+        customerIndex: index % 5,
+        reference,
+        title,
+        siteAddress: `${100 + index} Demo Park Road`,
+        startDate,
+        estimatedDays: 5,
+        estimatedMinutes: visits.reduce(
+          (total, visit) =>
+            total
+            + (new Date(visit.endsAt).getTime() - new Date(visit.startsAt).getTime()) / 60_000,
+          0
+        ),
+        status: 'in_progress',
+        visits,
+      };
+    }
+
+    const weekOffset = index < 10 ? 0 : 7;
+    const dayIndex = index < 10 ? index % 5 : (index - 10) % 4;
+    const start = addDays(monday, weekOffset + dayIndex);
+    const startDate = format(start, 'yyyy-MM-dd');
+    const startHour = index % 2 === 0 ? 8 : 13;
+    const durationHours = index % 3 === 0 ? 5 : 3;
+    const visits = [buildVisit(startDate, startHour, durationHours, title)];
+    return {
+      id: randomUUID(),
+      customerIndex: index % 5,
+      reference,
+      title,
+      siteAddress: `${100 + index} Demo Park Road`,
+      startDate,
+      estimatedDays: 1,
+      estimatedMinutes: durationHours * 60,
+      status: index % 3 === 0 ? 'in_progress' : 'po_received',
+      visits,
+    };
+  });
+
+  return { windowStart, windowEnd, quotes };
+}
+
+export function createPlayManifest(projectRef: string, today = new Date()): PlaySampleManifest {
+  const fixture = buildPlayFixtureDefinitions(today);
+  return {
+    fixture_key: FIXTURE_KEY,
+    project_ref: projectRef,
+    profile_email: SAMPLE_EMAIL,
+    series: {
+      initials: SAMPLE_INITIALS,
+      number_start: PLAY_SAMPLE_NUMBER_START,
+      next_number: PLAY_SAMPLE_NUMBER_START + PLAY_QUOTE_COUNT,
+    },
+    date_window: { start: fixture.windowStart, end: fixture.windowEnd },
+    counts: {
+      customers: 0,
+      quotes: fixture.quotes.length,
+      jobs: fixture.quotes.length,
+      visits: fixture.quotes.reduce((total, quote) => total + quote.visits.length, 0),
+      assignments: 0,
+    },
+    quotes: fixture.quotes.map((quote) => ({
+      reference: quote.reference,
+      start_date: quote.startDate,
+      estimated_days: quote.estimatedDays,
+      visit_count: quote.visits.length,
+    })),
+  };
+}
+
 function createPgClient(connectionString: string): Client {
   const url = new URL(connectionString);
   return new PgClient({
@@ -473,6 +609,13 @@ function queueSampleReferences(): string[] {
   );
 }
 
+function playSampleReferences(): string[] {
+  return Array.from(
+    { length: PLAY_QUOTE_COUNT },
+    (_, index) => `${PLAY_SAMPLE_NUMBER_START + index}-${SAMPLE_INITIALS}`
+  );
+}
+
 async function assertQueueExtensionReady(client: Client) {
   const result = await client.query<{
     profiles: string;
@@ -539,6 +682,38 @@ async function assertQueueExtensionReady(client: Client) {
   return counts;
 }
 
+async function assertPlayExtensionReady(client: Client) {
+  const result = await client.query<{
+    profiles: string;
+    customers: string;
+    play_collisions: string;
+  }>(
+    `
+      SELECT
+        (SELECT COUNT(*)::text FROM public.profiles
+          WHERE placeholder_key = $1 AND is_placeholder = TRUE) AS profiles,
+        (SELECT COUNT(*)::text FROM public.customers WHERE notes = $1) AS customers,
+        (SELECT COUNT(*)::text FROM public.quotes
+          WHERE quote_reference = ANY($2::text[])) AS play_collisions
+    `,
+    [FIXTURE_KEY, playSampleReferences()]
+  );
+  const counts = Object.fromEntries(
+    Object.entries(result.rows[0]).map(([key, value]) => [key, Number(value)])
+  );
+  if (counts.profiles !== 1 || counts.customers !== 5) {
+    throw new Error(
+      `Play pack requires the base SAMPLE identity and five Customers: ${JSON.stringify(counts)}`
+    );
+  }
+  if (counts.play_collisions > 0) {
+    throw new Error(
+      `Play pack references already exist (${PLAY_SAMPLE_NUMBER_START}-SD range). Cleanup or choose another week.`
+    );
+  }
+  return counts;
+}
+
 async function findAuthUserByEmail(
   supabase: SupabaseClient,
   email: string
@@ -565,6 +740,14 @@ function writeQueueManifest(manifest: QueueSampleManifest) {
   const directory = resolve(process.cwd(), 'docs_private', 'automation', 'runs', 'scheduling-sample');
   mkdirSync(directory, { recursive: true });
   const path = resolve(directory, `queue-plan-${manifest.date_window.start}.json`);
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  console.log(`Manifest: ${path}`);
+}
+
+function writePlayManifest(manifest: PlaySampleManifest) {
+  const directory = resolve(process.cwd(), 'docs_private', 'automation', 'runs', 'scheduling-sample');
+  mkdirSync(directory, { recursive: true });
+  const path = resolve(directory, `play-plan-${manifest.date_window.start}.json`);
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   console.log(`Manifest: ${path}`);
 }
@@ -911,6 +1094,154 @@ async function applyQueueFixture(
   }
 }
 
+async function applyPlayFixture(client: Client, manifest: PlaySampleManifest) {
+  await assertPlayExtensionReady(client);
+  const fixture = buildPlayFixtureDefinitions(
+    new Date(`${manifest.date_window.start}T12:00:00Z`)
+  );
+  const profileResult = await client.query<{ id: string }>(
+    `
+      SELECT id FROM public.profiles
+      WHERE placeholder_key = $1
+        AND is_placeholder = TRUE
+        AND employer_profile_notes = $1
+    `,
+    [FIXTURE_KEY]
+  );
+  const customerResult = await client.query<{ id: string }>(
+    `
+      SELECT id FROM public.customers
+      WHERE notes = $1
+      ORDER BY company_name
+    `,
+    [FIXTURE_KEY]
+  );
+  if (profileResult.rows.length !== 1 || customerResult.rows.length !== 5) {
+    throw new Error('The base SAMPLE identity or Customers are not uniquely available.');
+  }
+  const profileId = profileResult.rows[0].id;
+
+  await client.query('BEGIN');
+  try {
+    for (const quote of fixture.quotes) {
+      const total = Math.max(quote.estimatedMinutes * 2.5, 350);
+      await client.query(
+        `
+          INSERT INTO public.quotes (
+            id, quote_reference, base_quote_reference, quote_thread_id,
+            customer_id, requester_id, requester_initials, quote_date,
+            subject_line, project_description, scope, site_address,
+            subtotal, total, status, accepted, started, po_number,
+            po_received_at, start_date, estimated_duration_days,
+            estimated_duration_minutes, completion_status, commercial_status,
+            revision_number, revision_type, version_label, version_notes,
+            is_latest_version, pricing_mode, manager_name, manager_email,
+            created_by, updated_by
+          ) VALUES (
+            $1, $2, $2, $1,
+            $3, $4, $5, CURRENT_DATE,
+            $6, $7, $7, $8,
+            $9, $9, $10, TRUE, $11, $12,
+            NOW(), $13, $14,
+            $15, 'not_completed', 'open',
+            0, 'original', 'Original', $16,
+            TRUE, 'itemized', $17, $18,
+            $4, $4
+          )
+        `,
+        [
+          quote.id,
+          quote.reference,
+          customerResult.rows[quote.customerIndex].id,
+          profileId,
+          SAMPLE_INITIALS,
+          quote.title,
+          `Fictional client-demo play pack for ${quote.title.toLowerCase()}.`,
+          quote.siteAddress,
+          total,
+          quote.status,
+          quote.status === 'in_progress',
+          `SAMPLE-${quote.reference}`,
+          quote.startDate,
+          quote.estimatedDays,
+          quote.estimatedMinutes,
+          FIXTURE_KEY,
+          'SAMPLE Scheduling Manager',
+          SAMPLE_EMAIL,
+        ]
+      );
+      await client.query(
+        `
+          INSERT INTO public.quote_line_items (
+            quote_id, description, quantity, unit, unit_rate, line_total, sort_order
+          ) VALUES ($1, $2, 1, 'job', $3, $3, 0)
+        `,
+        [quote.id, quote.title, total]
+      );
+
+      const jobResult = await client.query<{ id: string; job_reference: string }>(
+        `SELECT id, job_reference FROM public.schedule_jobs WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (jobResult.rows[0]?.job_reference !== quote.reference) {
+        throw new Error(`Quote synchronization failed for ${quote.reference}.`);
+      }
+      for (const [visitIndex, visit] of quote.visits.entries()) {
+        await client.query(
+          `
+            INSERT INTO public.schedule_visits (
+              job_id, sequence_number, title, starts_at, ends_at,
+              status, notes, created_by, updated_by
+            ) VALUES ($1, $2, $3, $4, $5, 'planned', $6, $7, $7)
+          `,
+          [
+            jobResult.rows[0].id,
+            visitIndex + 1,
+            visit.title,
+            visit.startsAt,
+            visit.endsAt,
+            FIXTURE_KEY,
+            profileId,
+          ]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
+}
+
+async function inspectPlayFixture(client: Client) {
+  const result = await client.query<{
+    quotes: string;
+    jobs: string;
+    visits: string;
+    employee_assignments: string;
+    plant_assignments: string;
+  }>(
+    `
+      WITH play_quotes AS (
+        SELECT id FROM public.quotes WHERE quote_reference = ANY($1::text[])
+      ), play_jobs AS (
+        SELECT id FROM public.schedule_jobs WHERE quote_id IN (SELECT id FROM play_quotes)
+      )
+      SELECT
+        (SELECT COUNT(*)::text FROM play_quotes) AS quotes,
+        (SELECT COUNT(*)::text FROM play_jobs) AS jobs,
+        (SELECT COUNT(*)::text FROM public.schedule_visits
+          WHERE job_id IN (SELECT id FROM play_jobs)) AS visits,
+        (SELECT COUNT(*)::text FROM public.schedule_employee_assignments
+          WHERE job_id IN (SELECT id FROM play_jobs)) AS employee_assignments,
+        (SELECT COUNT(*)::text FROM public.schedule_plant_assignments
+          WHERE job_id IN (SELECT id FROM play_jobs)) AS plant_assignments
+    `,
+    [playSampleReferences()]
+  );
+  return result.rows[0];
+}
+
 async function inspectQueueFixture(client: Client) {
   const result = await client.query<{
     quotes: string;
@@ -1057,12 +1388,17 @@ async function cleanupFixture(
 
 async function main() {
   const mode = (process.argv.find((argument) => argument.startsWith('--mode='))?.split('=')[1] || 'plan') as Mode;
-  if (!['plan', 'apply', 'cleanup', 'queue-plan', 'queue-apply'].includes(mode)) {
+  if (!['plan', 'apply', 'cleanup', 'queue-plan', 'queue-apply', 'play-plan', 'play-apply'].includes(mode)) {
     throw new Error('Invalid mode.');
   }
   const isDryRun = process.argv.includes('--dry-run');
   if (
-    (mode === 'apply' || mode === 'queue-apply' || (mode === 'cleanup' && !isDryRun))
+    (
+      mode === 'apply'
+      || mode === 'queue-apply'
+      || mode === 'play-apply'
+      || (mode === 'cleanup' && !isDryRun)
+    )
     && !process.argv.includes(CONFIRMATION)
   ) {
     throw new Error(`Production confirmation required: ${CONFIRMATION}`);
@@ -1094,9 +1430,12 @@ async function main() {
         employee_assignments: 0,
         plant_assignments: 0,
       };
+      const expectedCountKeys = Object.keys(
+        expectedCounts
+      ) as Array<keyof typeof expectedCounts>;
       if (
-        Object.entries(expectedCounts).some(
-          ([key, value]) => Number(counts[key]) !== value
+        expectedCountKeys.some(
+          (key) => Number(counts[key]) !== expectedCounts[key]
         )
       ) {
         throw new Error(
@@ -1105,6 +1444,43 @@ async function main() {
       }
       console.log('Applied queue fixture counts:', JSON.stringify(counts));
       console.log(`Cleanup: npm run scheduling:sample:cleanup -- ${CONFIRMATION}`);
+      return;
+    }
+    if (mode === 'play-plan') {
+      const manifest = createPlayManifest(environment.projectRef);
+      await assertPlayExtensionReady(client);
+      writePlayManifest(manifest);
+      console.log(JSON.stringify(manifest, null, 2));
+      return;
+    }
+    if (mode === 'play-apply') {
+      const manifest = createPlayManifest(environment.projectRef);
+      await applyPlayFixture(client, manifest);
+      const counts = await inspectPlayFixture(client);
+      const expectedCounts = {
+        quotes: manifest.counts.quotes,
+        jobs: manifest.counts.jobs,
+        visits: manifest.counts.visits,
+        employee_assignments: 0,
+        plant_assignments: 0,
+      };
+      const expectedCountKeys = Object.keys(
+        expectedCounts
+      ) as Array<keyof typeof expectedCounts>;
+      if (
+        expectedCountKeys.some(
+          (key) => Number(counts[key]) !== expectedCounts[key]
+        )
+      ) {
+        throw new Error(
+          `Play fixture verification failed: ${JSON.stringify(counts)}`
+        );
+      }
+      console.log('Applied play fixture counts:', JSON.stringify(counts));
+      console.log(`Cleanup: npm run scheduling:sample:cleanup -- ${CONFIRMATION}`);
+      console.log(
+        'Note: cleanup aborts if any owned SAMPLE visits have resource assignments.'
+      );
       return;
     }
     const manifest = createManifest(environment.projectRef);

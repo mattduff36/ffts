@@ -791,7 +791,6 @@ function AssignmentChip({
   return (
     <div
       ref={ref}
-      onPointerDown={(event) => event.stopPropagation()}
       data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
         'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pr-0.5 text-[11px]',
@@ -865,7 +864,7 @@ interface VisitCardProps {
   onEdit: () => void;
   onReturn: () => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
-  assignmentDragScope?: 'desktop' | 'mobile';
+  dndScope?: 'desktop' | 'mobile';
   cardWidth?: number;
 }
 
@@ -881,12 +880,12 @@ function VisitCard({
   onEdit,
   onReturn,
   onDeleteAssignment,
-  assignmentDragScope = 'desktop',
+  dndScope = 'desktop',
   cardWidth,
 }: VisitCardProps) {
   const workDate = getScheduleVisitDate(visit.starts_at);
   const { ref: dropRef, isDropTarget } = useDroppable({
-    id: isDropEnabled ? `visit:${visit.id}` : `mobile-visit:${visit.id}`,
+    id: `${dndScope}:visit:${visit.id}`,
     type: 'schedule-visit',
     accept: ['schedule-resource', 'schedule-assignment'],
     disabled: !isDropEnabled || visit.status === 'cancelled',
@@ -903,7 +902,7 @@ function VisitCard({
     handleRef: dragHandleRef,
     isDragging,
   } = useDraggable({
-    id: `${assignmentDragScope}:schedule-visit:${visit.id}`,
+    id: `${dndScope}:schedule-visit:${visit.id}`,
     type: 'schedule-board-visit',
     disabled: visit.status !== 'planned',
     data: { visit, job },
@@ -952,7 +951,6 @@ function VisitCard({
       ref={(node) => {
         dropRef(node);
         dragRef(node);
-        dragHandleRef(node);
       }}
       data-schedule-visit-card
       data-testid={`schedule-visit-${visit.id}`}
@@ -968,10 +966,12 @@ function VisitCard({
     >
       <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
         <button
+          ref={dragHandleRef}
           type="button"
           onClick={handleClick}
           onPointerDown={resetDragState}
-          className="min-w-0 flex-1 overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          className="min-w-0 flex-1 touch-none cursor-grab overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          style={{ touchAction: 'none' }}
           aria-label={
             visit.status === 'cancelled'
               ? `Edit cancelled visit ${visit.sequence_number} for ${job.job_reference}`
@@ -1048,7 +1048,7 @@ function VisitCard({
                   key={item.key}
                   assignment={item.assignment}
                   onDelete={onDeleteAssignment}
-                  dragScope={assignmentDragScope}
+                  dragScope={dndScope}
                 />
               ) : (
                 <span
@@ -5844,7 +5844,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     onEdit={() => openVisitEditor(job, date, visit)}
                                     onReturn={() => void prepareVisitReturn({ job, visit })}
                                     onDeleteAssignment={setPendingDeleteAssignment}
-                                    assignmentDragScope="mobile"
+                                    dndScope="mobile"
                                   />
                                 ))}
                               {assignmentsFor(job.id, date).length === 0

@@ -77,6 +77,32 @@ async function readControlContrast(locator: Locator) {
   });
 }
 
+async function dragWithMouse(page: Page, source: Locator, target: Locator) {
+  await expect(source).toBeVisible();
+  await expect(target).toBeVisible();
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+
+  await page.mouse.move(
+    sourceBox!.x + sourceBox!.width / 2,
+    sourceBox!.y + sourceBox!.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sourceBox!.x + sourceBox!.width / 2 + 8,
+    sourceBox!.y + sourceBox!.height / 2,
+    { steps: 4 }
+  );
+  await page.mouse.move(
+    targetBox!.x + targetBox!.width / 2,
+    targetBox!.y + targetBox!.height / 2,
+    { steps: 25 }
+  );
+  await page.mouse.up();
+}
+
 function schedulingFixture() {
   const start = new Date();
   start.setUTCHours(12, 0, 0, 0);
@@ -154,7 +180,14 @@ function schedulingFixture() {
         team_id: null,
         team_name: null,
       }],
-      plant: [],
+      plant: [{
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+        plant_id: 'P-TEST',
+        nickname: 'Test Chipper',
+        make: 'Bandit',
+        model: '12XP',
+        status: 'active',
+      }],
     },
     employee_capacity: [{
       date: formatDate(start),
@@ -174,11 +207,13 @@ async function mockManagerBoard(
   page: Page,
   options: {
     assignmentConflict?: boolean;
+    configureFixture?: (fixture: ReturnType<typeof schedulingFixture>) => void;
     quoteJob?: boolean;
     holdQuoteSchedule?: boolean;
   } = {}
 ) {
   const fixture = schedulingFixture();
+  options.configureFixture?.(fixture);
   let releaseQuoteSchedule = () => {};
   const quoteScheduleGate = options.holdQuoteSchedule
     ? new Promise<void>((resolve) => {
@@ -193,6 +228,7 @@ async function mockManagerBoard(
     });
   }
   const assignmentRequests: Array<Record<string, unknown>> = [];
+  const assignmentMoveRequests: Array<Record<string, unknown>> = [];
   const removeJobRequests: string[] = [];
   const quoteScheduleRequests: Array<Record<string, unknown>> = [];
   const jobPatchRequests: Array<Record<string, unknown>> = [];
@@ -420,14 +456,23 @@ async function mockManagerBoard(
       return;
     }
     const visit = fixture.visits.find((item) => item.id === body.visit_id);
-    fixture.assignments.push({
+    const isEmployee = body.resource_type === 'employee';
+    const createdAssignment = {
       id: `assignment-${assignmentRequests.length}`,
       job_id: String(body.job_id),
       work_date: String(visit?.starts_at.slice(0, 10)),
       visit_id: String(body.visit_id),
-      profile_id: String(body.resource_id),
-      resource_type: 'employee',
-      employee: fixture.resources.employees[0],
+      ...(isEmployee
+        ? {
+            profile_id: String(body.resource_id),
+            resource_type: 'employee',
+            employee: fixture.resources.employees[0],
+          }
+        : {
+            plant_id: String(body.resource_id),
+            resource_type: 'plant',
+            plant: fixture.resources.plant[0],
+          }),
       notes: null,
       conflict_override: false,
       conflict_codes: [],
@@ -438,11 +483,34 @@ async function mockManagerBoard(
       updated_at: new Date().toISOString(),
       conflicts: [],
       visit: visit || null,
-    });
+    };
+    fixture.assignments.push(createdAssignment);
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
-      body: JSON.stringify({ assignments: fixture.assignments }),
+      body: JSON.stringify({ assignments: [createdAssignment] }),
+    });
+  });
+  await page.route('**/api/scheduling/assignments/*', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const assignmentId = route.request().url().split('/').pop() || '';
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    assignmentMoveRequests.push({ assignmentId, ...body });
+    const assignment = fixture.assignments.find((item) => item.id === assignmentId);
+    const visit = fixture.visits.find((item) => item.id === body.visit_id);
+    if (assignment && visit) {
+      assignment.job_id = visit.job_id;
+      assignment.work_date = visit.starts_at.slice(0, 10);
+      assignment.visit_id = visit.id;
+      assignment.visit = visit;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        assignment: assignment || null,
+        employee_capacity: [],
+      }),
     });
   });
   await page.route('**/api/scheduling/jobs/*', async (route) => {
@@ -478,6 +546,7 @@ async function mockManagerBoard(
   return {
     fixture,
     assignmentRequests,
+    assignmentMoveRequests,
     removeJobRequests,
     quoteScheduleRequests,
     jobPatchRequests,
@@ -701,37 +770,23 @@ test.describe('@scheduling Scheduling', () => {
     )).toHaveCount(1);
   });
 
-  test('wide board returns a visit to Jobs by dragging onto Resources', async ({ page }) => {
+  test('DND-RETURN-007 returns a visit to Jobs by dragging onto Resources', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, visitReturnRequests } = await mockManagerBoard(page);
     fixture.visits = fixture.visits.slice(0, 1);
     await page.goto('/scheduling');
 
-    const source = page
+    const sourceCard = page
       .getByTestId(
         'schedule-cell-11111111-1111-4111-8111-111111111111-'
           + fixture.week.start
       )
       .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+    const source = sourceCard.getByRole('button', {
+      name: 'Select visit 1 for TEST-JOB-101',
+    });
     const resources = page.getByTestId('schedule-resources-panel');
-    await expect(source).toBeVisible();
-    await expect(resources).toBeVisible();
-
-    const sourceBox = await source.boundingBox();
-    const resourcesBox = await resources.boundingBox();
-    expect(sourceBox).not.toBeNull();
-    expect(resourcesBox).not.toBeNull();
-    await page.mouse.move(
-      sourceBox!.x + sourceBox!.width / 2,
-      sourceBox!.y + Math.min(20, sourceBox!.height / 2)
-    );
-    await page.mouse.down();
-    await page.mouse.move(
-      resourcesBox!.x + resourcesBox!.width / 2,
-      resourcesBox!.y + 40,
-      { steps: 25 }
-    );
-    await page.mouse.up();
+    await dragWithMouse(page, source, resources);
 
     const confirmation = page.getByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
@@ -788,11 +843,21 @@ test.describe('@scheduling Scheduling', () => {
     expect(formatLondonTime(request.initial_visit!.ends_at)).toBe('09:00');
   });
 
-  test('wide board exposes a touch drag handle and assigns a selected visit without a dialog', async ({ page }) => {
+  test('DND-EMP-002 assigns an employee by dragging onto a Daily timed visit', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
     await page.getByRole('tab', { name: 'Employees' }).click();
+
+    const dateLabel = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'UTC',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(new Date(`${fixture.week.start}T12:00:00.000Z`));
+    await page.getByRole('button', {
+      name: `Open daily schedule for ${dateLabel}`,
+    }).first().click();
 
     const source = page.getByTestId(
       'schedule-resource-employee-22222222-2222-4222-8222-222222222222'
@@ -801,11 +866,8 @@ test.describe('@scheduling Scheduling', () => {
       'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
     );
     const target = page
-      .getByTestId(
-        'schedule-cell-11111111-1111-4111-8111-111111111111-'
-          + fixture.week.start
-      )
-      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444')
+      .filter({ visible: true });
     await expect(source).toBeVisible();
     await expect(dragHandle).toBeVisible();
     await expect(target).toBeVisible();
@@ -825,17 +887,115 @@ test.describe('@scheduling Scheduling', () => {
     );
     await expect(source).toHaveCSS('touch-action', 'none');
 
-    // Native dnd-kit pointer drag is covered by unit tests; Playwright proves the
-    // full-card touch contract plus the no-dialog assignment transition.
-    await page.getByRole('tab', { name: 'Available (1)' }).click();
-    await target.click();
-    await page.getByRole('button', {
-      name: 'Test Scheduler: select resource or drag to a timed visit',
-    }).click();
+    await dragWithMouse(page, dragHandle, target);
 
     await expect.poll(() => assignmentRequests).toHaveLength(1);
+    expect(assignmentRequests[0]).toMatchObject({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '44444444-4444-4444-8444-444444444444',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+    });
+    await expect(
+      target.locator('[data-testid^="schedule-assignment-chip-"]')
+    ).toHaveCount(1);
+    await expect(page.getByText('Drop onto a timed visit.')).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);
-    await expect(source).toHaveCount(0);
+  });
+
+  test('DND-PLANT-003 assigns plant by dragging onto a Weekly timed visit', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, assignmentRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+    await page.getByRole('tab', { name: 'Plant' }).click();
+
+    const source = page.getByTestId(
+      'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab'
+    );
+    const target = page
+      .locator(
+        `[data-testid="schedule-cell-11111111-1111-4111-8111-111111111111-${fixture.week.start}"]:visible`
+      )
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+    await dragWithMouse(page, source, target);
+
+    await expect.poll(() => assignmentRequests).toHaveLength(1);
+    expect(assignmentRequests[0]).toMatchObject({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '44444444-4444-4444-8444-444444444444',
+      resource_type: 'plant',
+      resource_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+    });
+    await expect(target.getByText('Test Chipper')).toBeVisible();
+    await expect(page.getByText('Drop onto a timed visit.')).toHaveCount(0);
+  });
+
+  test('DND-MOVE-004 moves an assignment by dragging it to another visit', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, assignmentMoveRequests } = await mockManagerBoard(page, {
+      configureFixture: (configuredFixture) => {
+        const destinationDate = new Date(
+          `${configuredFixture.week.start}T12:00:00.000Z`
+        );
+        destinationDate.setUTCDate(destinationDate.getUTCDate() + 1);
+        const destinationWorkDate = formatDate(destinationDate);
+        configuredFixture.visits[1].starts_at =
+          `${destinationWorkDate}T13:00:00.000Z`;
+        configuredFixture.visits[1].ends_at =
+          `${destinationWorkDate}T16:00:00.000Z`;
+        configuredFixture.assignments.push({
+          id: 'assignment-existing',
+          job_id: configuredFixture.jobs[0].id,
+          work_date: configuredFixture.week.start,
+          visit_id: configuredFixture.visits[0].id,
+          profile_id: configuredFixture.resources.employees[0].id,
+          resource_type: 'employee',
+          employee: configuredFixture.resources.employees[0],
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: '33333333-3333-4333-8333-333333333333',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          conflicts: [],
+          visit: configuredFixture.visits[0],
+        });
+      },
+    });
+    await page.goto('/scheduling');
+
+    const source = page.getByTestId(
+      'schedule-assignment-drag-handle-assignment-existing'
+    ).filter({ visible: true });
+    const target = page
+      .locator(
+        `[data-testid="schedule-cell-11111111-1111-4111-8111-111111111111-${fixture.visits[1].starts_at.slice(0, 10)}"]:visible`
+      )
+      .getByTestId('schedule-visit-55555555-5555-4555-8555-555555555555');
+    await dragWithMouse(page, source, target);
+
+    await expect.poll(async () => ({
+      moveRequests: assignmentMoveRequests.length,
+      resourceMissToasts: await page.getByText('Drop onto a timed visit.').count(),
+      visitMissToasts: await page.getByText(
+        'Drop this visit anywhere in Resources to return it to Jobs.'
+      ).count(),
+    })).toEqual({
+      moveRequests: 1,
+      resourceMissToasts: 0,
+      visitMissToasts: 0,
+    });
+    expect(assignmentMoveRequests[0]).toMatchObject({
+      assignmentId: 'assignment-existing',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+    });
+    await expect(
+      target.locator('[data-testid^="schedule-assignment-chip-"]')
+    ).toHaveCount(1);
+    await expect(page.getByText('Drop onto a timed visit.')).toHaveCount(0);
   });
 
   test('daily board falls back to a scrollable 5am to 8pm timeline', async ({ page }) => {
@@ -1049,20 +1209,31 @@ test.describe('@scheduling Scheduling', () => {
     await expect(page.getByLabel('Daily schedule timeline')).toBeVisible();
   });
 
-  test('mobile board assigns by selection and tap without drag', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+  test('DND-MOBILE-005 assigns onto the visible mobile visit target', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 2400 });
     const { assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
+    await page.getByRole('tab', { name: 'Weekly' }).click();
+    await page.getByRole('tab', { name: 'Employees' }).click();
 
-    await page.getByRole('button', {
-      name: 'Select visit 1 for TEST-JOB-101',
-      exact: true,
-    }).click();
-    await page.getByRole('button', {
-      name: 'Test Scheduler: select resource or drag to a timed visit',
-    }).click();
+    const source = page.getByTestId(
+      'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
+    );
+    const target = page
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444')
+      .filter({ visible: true });
+    await dragWithMouse(page, source, target);
 
     await expect.poll(() => assignmentRequests).toHaveLength(1);
+    expect(assignmentRequests[0]).toMatchObject({
+      visit_id: '44444444-4444-4444-8444-444444444444',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+    });
+    await expect(
+      target.locator('[data-testid^="schedule-assignment-chip-"]')
+    ).toHaveCount(1);
+    await expect(page.getByText('Drop onto a timed visit.')).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);
     await expect(page.locator('button button')).toHaveCount(0);
   });

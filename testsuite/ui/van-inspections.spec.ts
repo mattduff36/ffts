@@ -11,9 +11,21 @@
  *
  * Auth: employee storage state.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { attachConsoleErrorCapture } from '../helpers/console-error-fixture';
 import { waitForAppReady } from '../helpers/wait-for-app';
+
+/** Navigate to the list page and recover once from an auth bounce to dashboard. */
+async function gotoVanInspectionsList(page: Page): Promise<void> {
+  await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
+  await waitForAppReady(page);
+  if (!/\/van-inspections(?:\/|$|\?)/.test(page.url())) {
+    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
+  }
+  await expect(page).toHaveURL(/\/van-inspections(?:\/|$|\?)/, { timeout: 15_000 });
+  await expect(page.locator('h1')).toContainText(/Van Daily Checks/i, { timeout: 15_000 });
+}
 
 test.describe('Van Daily Checks — Page Loading', () => {
   test('van-inspections list page loads without errors', async ({ page }) => {
@@ -26,10 +38,7 @@ test.describe('Van Daily Checks — Page Loading', () => {
       }
     });
 
-    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
-    await waitForAppReady(page);
-
-    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
+    await gotoVanInspectionsList(page);
     await expect(page.locator('body')).toContainText(/van daily check|daily check|inspection/i);
 
     expect(failedRequests, 'No 500 errors on van-inspections page').toHaveLength(0);
@@ -53,11 +62,7 @@ test.describe('Van Daily Checks — Page Loading', () => {
 
 test.describe('Van Daily Checks — Navigation', () => {
   test('van-inspections page is reachable from navigation', async ({ page }) => {
-    await page.goto('/van-inspections', { waitUntil: 'domcontentloaded' });
-    await waitForAppReady(page);
-
-    await expect(page).toHaveURL(/\/van-inspections/);
-    await expect(page.getByRole('heading', { name: /Van Daily Checks/i })).toBeVisible({ timeout: 15_000 });
+    await gotoVanInspectionsList(page);
   });
 
   test('no 404 on /van-inspections', async ({ page }) => {
@@ -87,8 +92,7 @@ test.describe('Van Daily Checks — Navigation', () => {
 
 test.describe('Van Daily Checks — Renamed Text Verification', () => {
   test('list page shows "Van" not "Vehicle" in headings', async ({ page }) => {
-    await page.goto('/van-inspections');
-    await waitForAppReady(page);
+    await gotoVanInspectionsList(page);
 
     const headings = await page.locator('h1, h2, h3').allInnerTexts();
     const vehicleHeadings = headings.filter(h => /vehicle\s+inspection/i.test(h));
@@ -96,12 +100,7 @@ test.describe('Van Daily Checks — Renamed Text Verification', () => {
   });
 
   test('list page uses daily check terminology', async ({ page }) => {
-    await page.goto('/van-inspections');
-    await waitForAppReady(page);
-    await expect(
-      page.getByRole('heading', { name: /Van Daily Checks/i })
-        .or(page.getByText(/Van Daily Checks/i).first())
-    ).toBeVisible({ timeout: 30_000 });
+    await gotoVanInspectionsList(page);
   });
 
   test('new inspection page exposes workflow actions for human users', async ({ page }) => {

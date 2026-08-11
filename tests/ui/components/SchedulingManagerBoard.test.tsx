@@ -41,6 +41,7 @@ interface DroppableOptions {
   type?: string;
   accept?: string[] | string;
   data?: Record<string, unknown>;
+  disabled?: boolean;
 }
 
 let timelineViewportWidth = 1800;
@@ -1384,6 +1385,77 @@ describe('SchedulingManagerBoard', () => {
     })).toBe('Q-DRAFT is over Tuesday 14 July.');
   });
 
+  it('DND-REG-001 registers distinct desktop and mobile droppables for the same timed visit', async () => {
+    const cancelledVisit = {
+      ...board.visits[0],
+      id: 'visit-cancelled',
+      sequence_number: 2,
+      status: 'cancelled' as const,
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, cancelledVisit],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    dndState.droppableOptions.length = 0;
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    const visitDroppables = dndState.droppableOptions.filter(
+      (options) => options.type === 'schedule-visit'
+    );
+    expect(visitDroppables.map((options) => options.id).sort()).toEqual([
+      'desktop:visit:visit-1',
+      'desktop:visit:visit-cancelled',
+      'mobile:visit:visit-1',
+      'mobile:visit:visit-cancelled',
+    ]);
+    expect(visitDroppables).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'visit:visit-1' }),
+      ])
+    );
+    expect(visitDroppables).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'desktop:visit:visit-1',
+          accept: ['schedule-resource', 'schedule-assignment'],
+          data: expect.objectContaining({
+            jobId: 'job-1',
+            jobReference: 'JOB-101',
+            visitId: 'visit-1',
+            visitSequenceNumber: 1,
+            workDate: '2026-07-14',
+          }),
+          disabled: false,
+        }),
+        expect.objectContaining({
+          id: 'mobile:visit:visit-1',
+          accept: ['schedule-resource', 'schedule-assignment'],
+          data: expect.objectContaining({
+            jobId: 'job-1',
+            jobReference: 'JOB-101',
+            visitId: 'visit-1',
+            visitSequenceNumber: 1,
+            workDate: '2026-07-14',
+          }),
+          disabled: false,
+        }),
+        expect.objectContaining({
+          id: 'desktop:visit:visit-cancelled',
+          disabled: true,
+        }),
+        expect.objectContaining({
+          id: 'mobile:visit:visit-cancelled',
+          disabled: true,
+        }),
+      ])
+    );
+  });
+
   it('switches to daily and persists the user-scoped preference', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
@@ -2224,6 +2296,41 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
   });
 
+  it('assigns plant directly after a valid drag', async () => {
+    mockWideViewport(true);
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-1', label: 'P001 — Loader' },
+            },
+          },
+          target: {
+            data: {
+              jobId: 'job-1',
+              visitId: 'visit-1',
+              workDate: '2026-07-14',
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        job_id: 'job-1',
+        visit_id: 'visit-1',
+        resource_type: 'plant',
+        resource_id: 'plant-1',
+      })
+    );
+  });
+
   it('rolls back optimistic availability and opens override review on conflict', async () => {
     mockCreateAssignment.mockRejectedValueOnce(
       new SchedulingApiError(
@@ -2338,7 +2445,7 @@ describe('SchedulingManagerBoard', () => {
     );
   });
 
-  it('explains a drop that misses an available day', async () => {
+  it('DND-MISS-006 explains a resource drop that misses a timed visit', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
@@ -2359,6 +2466,8 @@ describe('SchedulingManagerBoard', () => {
     expect(mockToastInfo).toHaveBeenCalledWith(
       'Drop onto a timed visit.'
     );
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+    expect(mockMoveAssignment).not.toHaveBeenCalled();
   });
 
   it('directs an empty board to the unified Jobs queue', async () => {

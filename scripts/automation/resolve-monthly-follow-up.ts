@@ -1,12 +1,17 @@
-import { spawnSync } from 'child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
+import { existsSync, readFileSync, renameSync } from 'fs';
 import path from 'path';
 import {
   runMonthlyAutomationFollowUp,
   type MonthlyFollowUpDecision,
   type PendingMonthlyFollowUp,
 } from './monthly-follow-up';
+import {
+  getWorkflowPaths,
+  loadWorkflowReviewState,
+  saveWorkflowReviewState,
+  withWorkflowLock,
+  WORKFLOW_SCRIPT_NAME,
+} from './workflow-events';
 
 interface ResolveOptions {
   pendingPath?: string;
@@ -47,39 +52,28 @@ function parseArgs(argv: string[]): ResolveOptions {
   return { pendingPath, decisions };
 }
 
-function loadPendingFollowUp(pendingPath: string): PendingMonthlyFollowUp {
-  return JSON.parse(readFileSync(pendingPath, 'utf8')) as PendingMonthlyFollowUp;
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '_')
-    .replace(/^_|_$/gu, '')
-    .slice(0, 80);
-}
-
-function writeCursorPlanCopy(planPath: string, pending: PendingMonthlyFollowUp): string {
-  const cursorPlansDirectory = path.join(homedir(), '.cursor', 'plans');
-  const fileName = `${slugify(`${pending.scriptName}_${pending.monthKey}_automation_upgrades`)}_${Date.now()}.plan.md`;
-  const cursorPlanPath = path.join(cursorPlansDirectory, fileName);
-  const planContent = readFileSync(planPath, 'utf8');
-
-  mkdirSync(cursorPlansDirectory, { recursive: true });
-  writeFileSync(cursorPlanPath, planContent, 'utf8');
-  return cursorPlanPath;
-}
-
-function openCursorPlan(cursorPlanPath: string): void {
-  const result = spawnSync('cursor', ['--reuse-window', cursorPlanPath], {
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-  });
-
-  if (result.status !== 0) {
-    const details = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
-    console.warn(`Could not open Cursor plan file automatically.${details ? `\n${details}` : ''}`);
+function deriveRepoRootFromPendingPath(pendingPath: string): string {
+  const absolute = path.resolve(pendingPath);
+  const marker = `${path.sep}docs_private${path.sep}automation${path.sep}follow-ups${path.sep}`;
+  const index = absolute.toLowerCase().indexOf(marker.toLowerCase());
+  if (index >= 0) {
+    return absolute.slice(0, index);
   }
+  return process.cwd();
+}
+
+function loadPendingFollowUp(pendingPath: string): PendingMonthlyFollowUp {
+  const parsed = JSON.parse(readFileSync(pendingPath, 'utf8')) as PendingMonthlyFollowUp;
+  const repoRoot = deriveRepoRootFromPendingPath(pendingPath);
+  const resolveMaybeRelative = (candidate: string): string =>
+    path.isAbsolute(candidate) ? candidate : path.resolve(repoRoot, candidate);
+  return {
+    ...parsed,
+    repoRoot,
+    reviewPath: resolveMaybeRelative(parsed.reviewPath),
+    suggestionsPath: resolveMaybeRelative(parsed.suggestionsPath),
+    knowledgeDirectory: resolveMaybeRelative(parsed.knowledgeDirectory),
+  };
 }
 
 async function main(): Promise<void> {
@@ -94,6 +88,22 @@ async function main(): Promise<void> {
   const pending = loadPendingFollowUp(options.pendingPath);
   const decisionsById = new Map(options.decisions.map((decision) => [decision.suggestionId, decision]));
 
+  const unknownDecisions = options.decisions.filter(
+    (decision) => !pending.suggestions.some((suggestion) => suggestion.id === decision.suggestionId)
+  );
+  if (unknownDecisions.length > 0) {
+    throw new Error(
+      `Unknown suggestion id(s): ${unknownDecisions.map((decision) => decision.suggestionId).join(', ')}`
+    );
+  }
+
+  const duplicateIds = options.decisions
+    .map((decision) => decision.suggestionId)
+    .filter((id, index, all) => all.indexOf(id) !== index);
+  if (duplicateIds.length > 0) {
+    throw new Error(`Duplicate decision id(s): ${[...new Set(duplicateIds)].join(', ')}`);
+  }
+
   const result = await runMonthlyAutomationFollowUp({
     scriptName: pending.scriptName,
     monthKey: pending.monthKey,
@@ -102,17 +112,41 @@ async function main(): Promise<void> {
     suggestions: pending.suggestions,
     knowledgeDirectory: pending.knowledgeDirectory,
     repoRoot: pending.repoRoot,
+    reviewWindowId: pending.reviewWindowId,
+    sourceWorkstreamIds: pending.sourceWorkstreamIds,
     decisionProvider: (suggestion) => decisionsById.get(suggestion.id) ?? {
       suggestionId: suggestion.id,
       action: 'skip',
     },
   });
 
+  if (options.pendingPath && existsSync(options.pendingPath)) {
+    const resolvedPath = `${options.pendingPath}.resolved`;
+    renameSync(options.pendingPath, resolvedPath);
+  }
+
+  if (pending.scriptName === WORKFLOW_SCRIPT_NAME) {
+    const paths = getWorkflowPaths(pending.repoRoot);
+    withWorkflowLock(paths.lockPath, () => {
+      const state = loadWorkflowReviewState(paths.statePath);
+      if (state.pendingFollowUpPath === options.pendingPath || !state.pendingFollowUpPath) {
+        saveWorkflowReviewState(paths.statePath, {
+          ...state,
+          pendingFollowUpPath: null,
+        });
+      }
+    });
+  }
+
   if (result.planPath) {
-    const cursorPlanPath = writeCursorPlanCopy(result.planPath, pending);
-    console.log(`Cursor plan file: ${cursorPlanPath}`);
-    openCursorPlan(cursorPlanPath);
-    console.log('Opened this Cursor plan file for review and the normal Build flow.');
+    const relativePlan = path
+      .relative(pending.repoRoot, result.planPath)
+      .split(path.sep)
+      .join('/');
+    console.log(`Repository-local plan file: ${relativePlan}`);
+    console.log(
+      'Build this plan from the repository-local path. External Cursor plan copies are not written.'
+    );
   }
 }
 

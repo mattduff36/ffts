@@ -59,6 +59,31 @@ maintenance history, scheduling assignments, movements, checks, groups, or other
 dependencies. Follow `docs/guides/FLEET_INVENTORY_SAMPLE_DATA_RUNBOOK.md`. Never run apply or
 destructive cleanup without the exact confirmation token and explicit operator approval.
 
+## TEE V2.2 Workflow Enforcement
+
+FFTS enforces Token-Efficient Engineering V2.2 inside the repository. The global TEE skill remains outside Git and has a separate manual rollback path.
+
+```bash
+npm run workflow-plan:validate -- <plan-path>
+npm run workflow-protocol -- status --workstream <id>
+npm run review:preflight -- --workstream <id> [--plan <path>]
+npm run workflow-review
+```
+
+Canonical private artifact roots (ignored, repository-local):
+
+- `docs_private/automation/plans/`
+- `docs_private/automation/workstreams/`
+- `docs_private/automation/workflow-events/`
+- `docs_private/automation/reviews/`
+- `docs_private/automation/follow-ups/`
+
+Native writers emit lane-based `plan-contract-marker:v2` and V4 completion markers. Readers remain compatible with V1-V3 evidence. Opaque workstream/checkpoint IDs are sanitized before filesystem use. External/sibling plan roots are rejected. The Cursor stop hook is fail-open with `loop_limit: 1`.
+
+Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`, `/finalise-full`, `/createinvoice`, and `/cleancodebase`. None of those commands authorize a push. `/fap`, `/ffap`, and `/fixerrors` are intentionally absent. Until the deferred production-safety workstream is separately approved, use only `npm run fixerrors -- --no-clear` for non-destructive analysis.
+
+Model registry version: `ffts-tee-model-registry-v1`.
+
 ## Automation Artifacts
 
 `fixerrors` creates `docs_private/` when needed and writes the ignored analysis, fix-log, and structured automation-run files there. Use `--no-clear` to generate and validate those artifacts without deleting production error rows.

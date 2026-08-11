@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "node .cursor/hooks/workflow-stop.mjs",
+        "timeout": 30,
+        "loop_limit": 1
+      }
+    ]
+  }
+}

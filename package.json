@@ -75,7 +75,12 @@
     "test:guard:vehicle-inspections": "node scripts/guards/no-vehicle-inspections.mjs",
     "verify:data-safety": "tsx scripts/verification/verify-inspection-data-safety.ts",
     "verify:pwa-head": "tsx scripts/verify-pwa-head.ts",
-    "ci:inspections": "npm run typecheck && npm run lint && npm run test:guard:vehicle-inspections && npm run test:run -- tests/unit/inspections && npm run build"
+    "ci:inspections": "npm run typecheck && npm run lint && npm run test:guard:vehicle-inspections && npm run test:run -- tests/unit/inspections && npm run build",
+    "workflow-review": "tsx scripts/workflow-review.ts diagnostics",
+    "workflow-review:process": "tsx scripts/workflow-review.ts process-json",
+    "workflow-plan:validate": "tsx scripts/workflow-plan-validate.ts",
+    "workflow-protocol": "tsx scripts/workflow-protocol.ts",
+    "review:preflight": "tsx scripts/review-preflight.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",

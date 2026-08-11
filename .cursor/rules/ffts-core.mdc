@@ -1,0 +1,19 @@
+---
+description: Durable FFTS repository safety, Git, stack, and handoff rules.
+alwaysApply: true
+---
+
+# FFTS core
+
+- Stay on the current branch unless the user explicitly instructs otherwise.
+- Commit completed coding tasks locally unless the task is planning/review-only or the user says not to commit.
+- Never push unless the user writes the exact phrase `push to GitHub`, or explicitly requests a push as part of finalisation such as `finalise and push`, `finalise full and push`, or `finalise:push`. Local commands and aliases never authorize a push. State the branch and summary before pushing.
+- Never destructively change production data without explicit permission.
+- Treat database, schema, persistence, migration, auth, permissions/RLS, security, money, concurrency, irreversible operations, and production-data risk as CRITICAL.
+- For database/persistence intent, load `.cursor/rules/database-migrations.mdc` and the migration guide before acting.
+- Use the existing TypeScript, Node.js, Next.js App Router, React, and Tailwind patterns already established in this repository.
+- Keep functions typed and focused; update targeted tests when behavior changes.
+- Do not expose environment values or secrets.
+- Keep all workflows self-contained in FFTS. Do not add runtime, test, script, rule, or configuration dependencies on sibling repositories.
+- `npm run fixerrors -- --no-clear` remains the only explicitly non-destructive fixerrors analysis path until a separately approved production-safety workstream lands. Do not treat broad-clear fixerrors as trusted.
+- Run application builds only when the user authorizes a test build. Project-specific rules override generic TEE when stricter.

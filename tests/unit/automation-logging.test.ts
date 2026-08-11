@@ -352,7 +352,7 @@ describe('automation logging helpers', () => {
       statusReason: 'Worth doing',
       decisionAt: '2026-05-02T00:00:00.000Z',
       decisionReason: 'Human approved this suggestion.',
-      planPath: 'plans/automation/finalise-2026-05-upgrade-plan.md',
+      planPath: 'docs_private/automation/plans/finalise-2026-05-upgrade-plan.md',
       source: 'advisor',
     };
     const memory: AutomationMemory = {
@@ -395,7 +395,7 @@ describe('automation logging helpers', () => {
     expect(updated.suggestions[0].statusReason).toBe('Worth doing');
     expect(updated.suggestions[0].decisionAt).toBe('2026-05-02T00:00:00.000Z');
     expect(updated.suggestions[0].decisionReason).toBe('Human approved this suggestion.');
-    expect(updated.suggestions[0].planPath).toBe('plans/automation/finalise-2026-05-upgrade-plan.md');
+    expect(updated.suggestions[0].planPath).toBe('docs_private/automation/plans/finalise-2026-05-upgrade-plan.md');
     expect(updated.suggestions[0].createdMonth).toBe('2026-05');
     expect(updated.suggestions[0].lastSeenMonth).toBe('2026-06');
     expect(updated.suggestions[0].evidence).toContain('manual review');
@@ -465,14 +465,14 @@ describe('automation logging helpers', () => {
       const persistedSuggestions = readJson<AutomationMemorySuggestion[]>(fixture.suggestionsPath);
       const persistedMemory = readJson<AutomationMemory>(path.join(fixture.knowledgeDirectory, 'finalise-memory.json'));
 
-      expect(result.planPath).toBe(path.join(fixture.root, 'plans', 'automation', 'finalise-2026-06-upgrade-plan.md'));
+      expect(result.planPath).toBe(path.join(fixture.root, 'docs_private', 'automation', 'plans', 'finalise-2026-06-upgrade-plan.md'));
       expect(existsSync(result.planPath!)).toBe(true);
       expect(readFileSync(result.planPath!, 'utf8')).toContain('## Implementation Steps');
       expect(readFileSync(result.planPath!, 'utf8')).toContain('Keep this plan file todo metadata aligned');
       expect(persistedSuggestions[0].status).toBe('approved');
-      expect(persistedSuggestions[0].planPath).toBe('plans/automation/finalise-2026-06-upgrade-plan.md');
+      expect(persistedSuggestions[0].planPath).toBe('docs_private/automation/plans/finalise-2026-06-upgrade-plan.md');
       expect(persistedMemory.suggestions[0].status).toBe('approved');
-      expect(persistedMemory.suggestions[0].planPath).toBe('plans/automation/finalise-2026-06-upgrade-plan.md');
+      expect(persistedMemory.suggestions[0].planPath).toBe('docs_private/automation/plans/finalise-2026-06-upgrade-plan.md');
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -561,7 +561,7 @@ describe('automation logging helpers', () => {
       expect(result.mode).toBe('interactive');
       expect(result.decisions[0]).toMatchObject({ suggestionId: suggestion.id, action: 'approve' });
       expect(persistedSuggestions[0].status).toBe('approved');
-      expect(result.planPath).toBe(path.join(fixture.root, 'plans', 'automation', 'finalise-2026-06-upgrade-plan.md'));
+      expect(result.planPath).toBe(path.join(fixture.root, 'docs_private', 'automation', 'plans', 'finalise-2026-06-upgrade-plan.md'));
       expect(output.getOutput()).toContain('Suggestion 1/1: approve, decline, or skip? [a/d/s]');
     } finally {
       if (originalCi === undefined) {

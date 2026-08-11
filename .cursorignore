@@ -17,3 +17,7 @@ tmp/
 tsconfig.tsbuildinfo
 build-output.log
 build-output.txt
+docs_private/automation/runs/**
+docs_private/automation/workflow-events/**
+docs_private/automation/reviews/*/20*/events.json
+.cursor/debug*.log

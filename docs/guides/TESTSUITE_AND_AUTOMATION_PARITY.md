@@ -248,9 +248,26 @@ These outputs remain local and ignored:
 - `docs_private/automation/runs/**`;
 - `docs_private/automation/reviews/**`;
 - `docs_private/automation/follow-ups/**`;
+- `docs_private/automation/plans/**`;
+- `docs_private/automation/workstreams/**`;
+- `docs_private/automation/workflow-events/**`;
 - generated automation plans and pending-decision artifacts.
 
 No private error payload, stack trace, session state, credential, or production row belongs in public documentation or release history.
+
+### Repository-Enforced TEE Layer
+
+FFTS ports Token-Efficient Engineering V2.2 as a repository-enforced workflow layer. It must remain workspace-independent: no runtime, test, configuration, rule, or artifact dependency on a sibling repository.
+
+- Lane classification uses `fast|standard|guarded|critical`.
+- Native plan writers emit `plan-contract-marker:v2` with exact model IDs from `ffts-tee-model-registry-v1`.
+- Completion markers use V4 writers; V1-V3 readers remain compatible.
+- Protocol state, immutable events, evidence manifests, and follow-up plans stay under ignored `docs_private/automation/**`.
+- The Cursor stop hook fails open and never authorizes a push.
+- Release-metadata preflight, consistency, recovery, and no-push-after-failure behavior in `scripts/finalise-release.ts` remain fail-closed and unchanged by TEE core.
+- Current `fixerrors` stays untrusted until a separately approved production-safety workstream lands; retain `npm run fixerrors -- --no-clear` for analysis.
+
+Verification ledger for the TEE port: `docs/guides/TEE_V2_2_VERIFICATION_LEDGER.md`.
 
 ### Directory Bootstrap
 

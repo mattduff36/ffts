@@ -219,7 +219,6 @@ describe('workflow review protocol', () => {
       command: 'split',
       workstreamId,
       newWorkstreamId: 'ws_protocol_route_child',
-      reason: 'split by contract boundary',
     });
     expect(split.ok).toBe(true);
     expect(split.splitWorkstreamId).toBe('ws_protocol_route_child');

@@ -2,7 +2,11 @@ import type {
   ScheduleAssignment,
   ScheduleDayCapacity,
   ScheduleJob,
+  SchedulePlantUnavailability,
+  ScheduleProjectCandidate,
+  ScheduleQuoteCandidate,
   ScheduleVisit,
+  ScheduleVisitBacklogItem,
   SchedulingBoardPayload,
 } from '@/types/scheduling';
 
@@ -105,10 +109,155 @@ export function patchBoardWithQuickAdd(input: {
   };
 }
 
+export function patchBoardWithJob(
+  board: SchedulingBoardPayload,
+  job: ScheduleJob,
+  replaceId?: string
+): SchedulingBoardPayload {
+  const jobs = board.jobs
+    .filter((item) => item.id !== job.id && item.id !== replaceId);
+  return {
+    ...board,
+    jobs: [...jobs, job].sort((a, b) =>
+      a.start_date.localeCompare(b.start_date)
+      || a.job_reference.localeCompare(b.job_reference)
+    ),
+  };
+}
+
+export function patchBoardRemoveJob(
+  board: SchedulingBoardPayload,
+  jobId: string
+): SchedulingBoardPayload {
+  const removedVisitIds = new Set(
+    board.visits.filter((visit) => visit.job_id === jobId).map((visit) => visit.id)
+  );
+  return {
+    ...board,
+    jobs: board.jobs.filter((job) => job.id !== jobId),
+    visits: board.visits.filter((visit) => visit.job_id !== jobId),
+    assignments: board.assignments.filter(
+      (assignment) =>
+        assignment.job_id !== jobId
+        && (!assignment.visit_id || !removedVisitIds.has(assignment.visit_id))
+    ),
+  };
+}
+
+export function patchBoardWithVisit(
+  board: SchedulingBoardPayload,
+  visit: ScheduleVisit,
+  replaceId?: string
+): SchedulingBoardPayload {
+  const visits = board.visits
+    .filter((item) => item.id !== visit.id && item.id !== replaceId);
+  const nextVisits = [...visits, visit].sort((a, b) =>
+    a.starts_at.localeCompare(b.starts_at) || a.sequence_number - b.sequence_number
+  );
+  const visitById = new Map(nextVisits.map((item) => [item.id, item]));
+  return {
+    ...board,
+    visits: nextVisits,
+    assignments: board.assignments.map((assignment) => {
+      const assignmentVisit = assignment.visit_id
+        ? visitById.get(assignment.visit_id)
+        : undefined;
+      if (!assignmentVisit) return assignment;
+      return {
+        ...assignment,
+        job_id: assignmentVisit.job_id,
+        work_date: assignmentVisit.starts_at.slice(0, 10),
+        visit: assignmentVisit,
+      };
+    }),
+  };
+}
+
+export function patchBoardRemoveVisit(
+  board: SchedulingBoardPayload,
+  visitId: string
+): SchedulingBoardPayload {
+  return {
+    ...board,
+    visits: board.visits.filter((visit) => visit.id !== visitId),
+    assignments: board.assignments.filter((assignment) => assignment.visit_id !== visitId),
+  };
+}
+
+export function patchBoardWithPlantBlock(
+  board: SchedulingBoardPayload,
+  block: SchedulePlantUnavailability,
+  replaceId?: string
+): SchedulingBoardPayload {
+  const blocks = board.plant_unavailability
+    .filter((item) => item.id !== block.id && item.id !== replaceId);
+  return {
+    ...board,
+    plant_unavailability: [...blocks, block].sort((a, b) =>
+      a.start_date.localeCompare(b.start_date)
+    ),
+  };
+}
+
+export function patchBoardRemovePlantBlock(
+  board: SchedulingBoardPayload,
+  blockId: string
+): SchedulingBoardPayload {
+  return {
+    ...board,
+    plant_unavailability: board.plant_unavailability.filter(
+      (block) => block.id !== blockId
+    ),
+  };
+}
+
+export function upsertQuoteCandidate(
+  candidates: ScheduleQuoteCandidate[] | undefined,
+  candidate: ScheduleQuoteCandidate
+): ScheduleQuoteCandidate[] {
+  return [
+    ...(candidates || []).filter((item) => item.id !== candidate.id),
+    candidate,
+  ];
+}
+
+export function removeQuoteCandidate(
+  candidates: ScheduleQuoteCandidate[] | undefined,
+  candidateId: string
+): ScheduleQuoteCandidate[] {
+  return (candidates || []).filter((candidate) => candidate.id !== candidateId);
+}
+
+export function upsertProjectCandidate(
+  candidates: ScheduleProjectCandidate[] | undefined,
+  candidate: ScheduleProjectCandidate
+): ScheduleProjectCandidate[] {
+  return [
+    ...(candidates || []).filter((item) => item.id !== candidate.id),
+    candidate,
+  ];
+}
+
 export function removeProjectCandidateFromQueue(
-  projects: Array<{ id: string }> | undefined,
+  projects: ScheduleProjectCandidate[] | undefined,
   projectNumberId: string
-): Array<{ id: string }> | undefined {
-  if (!projects) return projects;
-  return projects.filter((project) => project.id !== projectNumberId);
+): ScheduleProjectCandidate[] {
+  return (projects || []).filter((project) => project.id !== projectNumberId);
+}
+
+export function upsertVisitBacklogItem(
+  items: ScheduleVisitBacklogItem[] | undefined,
+  item: ScheduleVisitBacklogItem
+): ScheduleVisitBacklogItem[] {
+  return [
+    ...(items || []).filter((current) => current.visit_id !== item.visit_id),
+    item,
+  ].sort((a, b) => a.queued_at.localeCompare(b.queued_at));
+}
+
+export function removeVisitBacklogItem(
+  items: ScheduleVisitBacklogItem[] | undefined,
+  visitId: string
+): ScheduleVisitBacklogItem[] {
+  return (items || []).filter((item) => item.visit_id !== visitId);
 }

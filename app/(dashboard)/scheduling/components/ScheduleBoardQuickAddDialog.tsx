@@ -22,8 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  quickAddScheduleProject,
-  type QuickAddScheduleProjectResult,
+  type QuickAddScheduleProjectInput,
 } from '@/lib/client/scheduling';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { toScheduleLondonDateTimeIso } from '@/lib/utils/scheduling';
@@ -46,8 +45,9 @@ interface ScheduleBoardQuickAddDialogProps {
   defaultDate: string;
   managerOptions: QuoteManagerOption[];
   managerLoadError?: string | null;
+  initialInput?: QuickAddScheduleProjectInput | null;
   onClose: () => void;
-  onCreated: (result: QuickAddScheduleProjectResult) => void | Promise<void>;
+  onSubmit: (input: QuickAddScheduleProjectInput) => void;
 }
 
 interface QuickAddForm {
@@ -79,16 +79,36 @@ export function ScheduleBoardQuickAddDialog({
   defaultDate,
   managerOptions,
   managerLoadError = null,
+  initialInput = null,
   onClose,
-  onCreated,
+  onSubmit,
 }: ScheduleBoardQuickAddDialogProps) {
+  const initialTime = (value: string | undefined, fallback: string) =>
+    value
+      ? new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(new Date(value))
+      : fallback;
   const [form, setForm] = useState<QuickAddForm>({
     ...EMPTY_FORM,
-    work_date: defaultDate,
+    manager_profile_id: initialInput?.manager_profile_id || '',
+    title: initialInput?.project_title || '',
+    description: initialInput?.project_description || '',
+    notes: initialInput?.project_notes || '',
+    customer_id: initialInput?.customer_id || '',
+    site_id: initialInput?.customer_site_id || '',
+    work_date: initialInput?.start_date || defaultDate,
+    start_time: initialTime(initialInput?.initial_visit.starts_at, '08:00'),
+    end_time: initialTime(initialInput?.initial_visit.ends_at, '12:00'),
   });
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [saving, setSaving] = useState(false);
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState(
+    () => initialInput?.request_id || crypto.randomUUID()
+  );
   const activeManagerOptions = managerOptions.filter((option) => option.is_active);
   const sites = useMemo(
     () => customers.find((customer) => customer.id === form.customer_id)?.sites || [],
@@ -102,7 +122,13 @@ export function ScheduleBoardQuickAddDialog({
     return Boolean(value);
   });
 
-  const guard = useDirtyDialogGuard({
+  const {
+    contentRef,
+    discard,
+    handleEscapeKeyDown,
+    handleInteractOutside,
+    handleOpenChange,
+  } = useDirtyDialogGuard({
     isDirty,
     disabled: saving,
     onOpenChange: (nextOpen) => {
@@ -116,10 +142,6 @@ export function ScheduleBoardQuickAddDialog({
 
   useEffect(() => {
     if (!open) return;
-    setForm((current) => ({
-      ...current,
-      work_date: current.work_date || defaultDate,
-    }));
     void fetch('/api/scheduling/jobs')
       .then((response) => response.json())
       .then((payload) =>
@@ -133,7 +155,7 @@ export function ScheduleBoardQuickAddDialog({
       .catch(() => toast.error('Unable to load customers.'));
   }, [defaultDate, open]);
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (
       !form.manager_profile_id
       || !form.title.trim()
@@ -146,42 +168,34 @@ export function ScheduleBoardQuickAddDialog({
       return;
     }
 
-    setSaving(true);
-    try {
-      const result = await quickAddScheduleProject({
-        request_id: requestId,
-        manager_profile_id: form.manager_profile_id,
-        project_title: form.title.trim(),
-        project_description: form.description.trim() || null,
-        project_notes: form.notes.trim() || null,
-        customer_id: form.customer_id,
-        customer_site_id: form.site_id || null,
-        start_date: form.work_date,
-        end_date: form.work_date,
-        initial_visit: {
-          starts_at: toScheduleLondonDateTimeIso(form.work_date, form.start_time),
-          ends_at: toScheduleLondonDateTimeIso(form.work_date, form.end_time),
-        },
-      });
-      toast.success(`${result.project_reference} added to the schedule`);
-      setForm({ ...EMPTY_FORM, work_date: defaultDate });
-      setRequestId(crypto.randomUUID());
-      onClose();
-      await onCreated(result);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to quick add this job.');
-    } finally {
-      setSaving(false);
-    }
+    onSubmit({
+      request_id: requestId,
+      manager_profile_id: form.manager_profile_id,
+      project_title: form.title.trim(),
+      project_description: form.description.trim() || null,
+      project_notes: form.notes.trim() || null,
+      customer_id: form.customer_id,
+      customer_site_id: form.site_id || null,
+      start_date: form.work_date,
+      end_date: form.work_date,
+      initial_visit: {
+        starts_at: toScheduleLondonDateTimeIso(form.work_date, form.start_time),
+        ends_at: toScheduleLondonDateTimeIso(form.work_date, form.end_time),
+      },
+    });
+    setSaving(false);
+    setForm({ ...EMPTY_FORM, work_date: defaultDate });
+    setRequestId(crypto.randomUUID());
+    onClose();
   }
 
   return (
-    <Dialog open={open} onOpenChange={guard.handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        ref={guard.contentRef}
+        ref={contentRef}
         className="max-w-lg border-border"
-        onInteractOutside={guard.handleInteractOutside}
-        onEscapeKeyDown={guard.handleEscapeKeyDown}
+        onInteractOutside={handleInteractOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
       >
         <DialogHeader>
           <DialogTitle>Quick add job</DialogTitle>
@@ -341,7 +355,7 @@ export function ScheduleBoardQuickAddDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button className={schedulingControlStyles.outline} onClick={guard.discard}>
+          <Button className={schedulingControlStyles.outline} onClick={discard}>
             Cancel
           </Button>
           <Button
@@ -353,7 +367,7 @@ export function ScheduleBoardQuickAddDialog({
               || !form.customer_id
               || !form.work_date
             }
-            onClick={() => void handleSubmit()}
+            onClick={handleSubmit}
           >
             {saving ? 'Adding…' : 'Quick add'}
           </Button>

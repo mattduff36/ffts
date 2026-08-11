@@ -1,7 +1,11 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ScheduleVisitBacklogItem } from '@/types/scheduling';
+import type {
+  ScheduleJob,
+  ScheduleVisit,
+  ScheduleVisitBacklogItem,
+} from '@/types/scheduling';
 
 interface DatabaseError {
   code?: string;
@@ -35,11 +39,33 @@ export async function loadScheduleVisitBacklog(
         sequence_number,
         title,
         notes,
+        starts_at,
+        ends_at,
+        status,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at,
         job:schedule_jobs!inner(
           id,
           job_reference,
           title,
+          description,
+          site_address,
+          status,
           source_type,
+          start_date,
+          end_date,
+          estimated_duration_minutes,
+          quote_id,
+          quote_project_number_id,
+          customer_id,
+          customer_site_id,
+          is_drop_on_ready,
+          created_by,
+          updated_by,
+          created_at,
+          updated_at,
           customer:customers(company_name)
         )
       )
@@ -65,6 +91,52 @@ export async function loadScheduleVisitBacklog(
       new Date(originalEndsAt).getTime() - new Date(originalStartsAt).getTime()
     );
     const durationMinutes = Math.max(1, Math.ceil(durationMilliseconds / 60_000));
+    const customerName =
+      typeof customer?.company_name === 'string' ? customer.company_name : null;
+    const authoritativeJob: ScheduleJob = {
+      id: String(job.id),
+      job_reference: String(job.job_reference),
+      title: String(job.title),
+      description: typeof job.description === 'string' ? job.description : null,
+      site_address: typeof job.site_address === 'string' ? job.site_address : null,
+      status: job.status as ScheduleJob['status'],
+      source_type: job.source_type as ScheduleJob['source_type'],
+      start_date: String(job.start_date),
+      end_date: String(job.end_date),
+      estimated_duration_minutes:
+        typeof job.estimated_duration_minutes === 'number'
+          ? job.estimated_duration_minutes
+          : null,
+      quote_id: typeof job.quote_id === 'string' ? job.quote_id : null,
+      quote_project_number_id:
+        typeof job.quote_project_number_id === 'string'
+          ? job.quote_project_number_id
+          : null,
+      customer_id: typeof job.customer_id === 'string' ? job.customer_id : null,
+      customer_site_id:
+        typeof job.customer_site_id === 'string' ? job.customer_site_id : null,
+      customer_name: customerName,
+      is_drop_on_ready: job.is_drop_on_ready === true,
+      tags: [],
+      created_by: typeof job.created_by === 'string' ? job.created_by : null,
+      updated_by: typeof job.updated_by === 'string' ? job.updated_by : null,
+      created_at: String(job.created_at),
+      updated_at: String(job.updated_at),
+    };
+    const authoritativeVisit: ScheduleVisit = {
+      id: String(visit.id),
+      job_id: String(visit.job_id),
+      sequence_number: Number(visit.sequence_number),
+      title: typeof visit.title === 'string' ? visit.title : null,
+      starts_at: String(visit.starts_at),
+      ends_at: String(visit.ends_at),
+      status: visit.status as ScheduleVisit['status'],
+      notes: typeof visit.notes === 'string' ? visit.notes : null,
+      created_by: typeof visit.created_by === 'string' ? visit.created_by : null,
+      updated_by: typeof visit.updated_by === 'string' ? visit.updated_by : null,
+      created_at: String(visit.created_at),
+      updated_at: String(visit.updated_at),
+    };
 
     return [{
       visit_id: String(row.visit_id),
@@ -72,8 +144,7 @@ export async function loadScheduleVisitBacklog(
       job_reference: String(job.job_reference),
       job_title: String(job.title),
       source_type: job.source_type as ScheduleVisitBacklogItem['source_type'],
-      customer_name:
-        typeof customer?.company_name === 'string' ? customer.company_name : null,
+      customer_name: customerName,
       sequence_number: Number(visit.sequence_number),
       title: typeof visit.title === 'string' ? visit.title : null,
       notes: typeof visit.notes === 'string' ? visit.notes : null,
@@ -82,6 +153,8 @@ export async function loadScheduleVisitBacklog(
       duration_milliseconds: durationMilliseconds,
       duration_minutes: durationMinutes,
       queued_at: String(row.queued_at),
+      job: authoritativeJob,
+      visit: authoritativeVisit,
     }];
   });
 }

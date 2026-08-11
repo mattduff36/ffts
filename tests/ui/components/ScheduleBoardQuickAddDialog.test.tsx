@@ -1,21 +1,9 @@
 /** @vitest-environment happy-dom */
 /// <reference types="@testing-library/jest-dom/vitest" />
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ScheduleBoardQuickAddDialog } from '@/app/(dashboard)/scheduling/components/ScheduleBoardQuickAddDialog';
-
-const mockQuickAdd = vi.hoisted(() => vi.fn());
-
-vi.mock('@/lib/client/scheduling', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/client/scheduling')>(
-    '@/lib/client/scheduling'
-  );
-  return {
-    ...actual,
-    quickAddScheduleProject: mockQuickAdd,
-  };
-});
 
 vi.mock('sonner', () => ({
   toast: {
@@ -27,22 +15,6 @@ vi.mock('sonner', () => ({
 describe('ScheduleBoardQuickAddDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockQuickAdd.mockResolvedValue({
-      job: {
-        id: 'job-1',
-        job_reference: '60010-MD',
-        title: 'Emergency works',
-      },
-      visit: {
-        id: 'visit-1',
-        job_id: 'job-1',
-        starts_at: '2026-07-14T08:00:00.000Z',
-        ends_at: '2026-07-14T12:00:00.000Z',
-      },
-      project_number_id: 'project-1',
-      project_reference: '60010-MD',
-      was_project_created: true,
-    });
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -60,8 +32,8 @@ describe('ScheduleBoardQuickAddDialog', () => {
     })));
   });
 
-  it('submits one quick-add request with manager, customer, and timed visit', async () => {
-    const onCreated = vi.fn();
+  it('SCHED-INSTANT-002 emits one quick-add intent without awaiting persistence', async () => {
+    const onSubmit = vi.fn();
     render(
       <ScheduleBoardQuickAddDialog
         open
@@ -73,7 +45,7 @@ describe('ScheduleBoardQuickAddDialog', () => {
           profile: { full_name: 'Manager One' },
         } as never]}
         onClose={vi.fn()}
-        onCreated={onCreated}
+        onSubmit={onSubmit}
       />
     );
 
@@ -91,8 +63,7 @@ describe('ScheduleBoardQuickAddDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
 
-    await waitFor(() =>
-      expect(mockQuickAdd).toHaveBeenCalledWith(expect.objectContaining({
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
         manager_profile_id: 'manager-1',
         project_title: 'Emergency works',
         customer_id: 'customer-1',
@@ -102,8 +73,6 @@ describe('ScheduleBoardQuickAddDialog', () => {
           ends_at: expect.any(String),
         }),
         request_id: expect.any(String),
-      }))
-    );
-    expect(onCreated).toHaveBeenCalled();
+      }));
   });
 });

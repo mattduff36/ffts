@@ -312,15 +312,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const jobResult = await admin
-      .from('schedule_jobs')
-      .select('*')
-      .eq('id', creation.schedule_job_id)
-      .single();
+    const [jobResult, visitResult] = await Promise.all([
+      admin
+        .from('schedule_jobs')
+        .select('*')
+        .eq('id', creation.schedule_job_id)
+        .single(),
+      parsed.data.initial_visit && creation.schedule_visit_id
+        ? admin
+            .from('schedule_visits')
+            .select('*')
+            .eq('id', creation.schedule_visit_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
     if (jobResult.error) throw jobResult.error;
+    if (visitResult.error) throw visitResult.error;
     const tags = await loadTagsForScheduleJob(admin, creation.schedule_job_id);
     return NextResponse.json(
-      { job: { ...jobResult.data, tags }, project_reference: creation.project_reference },
+      {
+        job: { ...jobResult.data, tags },
+        ...(visitResult.data ? { visit: visitResult.data } : {}),
+        project_reference: creation.project_reference,
+      },
       { status: 201 }
     );
   } catch (error) {

@@ -169,7 +169,7 @@ describe('/api/scheduling/quotes', () => {
     expect(mockAppendTimeline).not.toHaveBeenCalled();
   });
 
-  it('uses one atomic RPC when an initial visit is supplied', async () => {
+  it('SCHED-CONTRACT-007 returns authoritative job and visit from the atomic RPC', async () => {
     mockQuote.mockReturnValue({
       ...mockQuote(),
       estimated_duration_minutes: 120,
@@ -194,5 +194,9 @@ describe('/api/scheduling/quotes', () => {
       })
     );
     expect(mockUpdate).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({
+      job: { ...mockScheduleJob(), tags: [] },
+      visit: { id: 'visit-1' },
+    });
   });
 });

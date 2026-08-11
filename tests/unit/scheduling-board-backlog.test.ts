@@ -143,6 +143,35 @@ describe('scheduling board queued visit reads', () => {
     expect(board.assignments.map((assignment) => assignment.id)).toEqual([
       'assignment-visible',
     ]);
+    expect(board.jobs.map((item) => item.id)).toEqual(['job-1']);
+  });
+
+  it('omits the job row when all of its visits have returned to Jobs', async () => {
+    const admin = fakeAdmin({
+      schedule_jobs: [job],
+      schedule_job_tags: [],
+      schedule_visits: [queuedVisit],
+      schedule_visit_backlog: [{ visit_id: queuedVisit.id }],
+      schedule_employee_assignments: [
+        employeeAssignment('assignment-queued', queuedVisit.id, '2026-08-12'),
+      ],
+      schedule_plant_assignments: [],
+      profiles: [employee],
+      plant: [],
+      plant_unavailability: [],
+      employee_absences: [],
+      employee_shifts: [],
+    });
+
+    const board = await loadSchedulingBoard(
+      admin,
+      '2026-08-10',
+      '2026-08-16'
+    );
+
+    expect(board.jobs).toEqual([]);
+    expect(board.visits).toEqual([]);
+    expect(board.assignments).toEqual([]);
   });
 
   it('omits queued visits and inconsistent queued assignments from employee self reads', async () => {

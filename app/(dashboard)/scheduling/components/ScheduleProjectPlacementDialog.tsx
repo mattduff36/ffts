@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createProjectScheduleJob } from '@/lib/client/scheduling';
+import type { CreateProjectScheduleJobInput } from '@/lib/client/scheduling';
 import type { ScheduleProjectCandidate } from '@/types/scheduling';
 import { schedulingControlStyles } from './scheduling-control-styles';
 
@@ -19,20 +19,22 @@ interface ScheduleProjectPlacementDialogProps {
   project: ScheduleProjectCandidate | null;
   date: string;
   initialVisit?: { starts_at: string; ends_at: string };
+  initialInput?: CreateProjectScheduleJobInput | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSubmit: (input: CreateProjectScheduleJobInput) => void;
 }
 
 export function ScheduleProjectPlacementDialog({
   project,
   date,
   initialVisit,
+  initialInput = null,
   onClose,
-  onSaved,
+  onSubmit,
 }: ScheduleProjectPlacementDialogProps) {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
-  const [customerId, setCustomerId] = useState('');
-  const [siteId, setSiteId] = useState('');
+  const [customerId, setCustomerId] = useState(initialInput?.customer_id || '');
+  const [siteId, setSiteId] = useState(initialInput?.customer_site_id || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -45,30 +47,22 @@ export function ScheduleProjectPlacementDialog({
 
   const sites = customers.find((customer) => customer.id === customerId)?.sites || [];
 
-  async function handleSave() {
+  function handleSave() {
     if (!project || !customerId || saving) return;
-    setSaving(true);
-    try {
-      await createProjectScheduleJob({
-        project_number_id: project.id,
-        customer_id: customerId,
-        customer_site_id: siteId || null,
-        status: 'scheduled',
-        start_date: date,
-        end_date: date,
-        estimated_duration_minutes: null,
-        is_drop_on_ready: false,
-        tag_ids: [],
-        ...(initialVisit ? { initial_visit: initialVisit } : {}),
-      });
-      toast.success(`${project.project_reference} scheduled`);
-      onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to schedule Project.');
-    } finally {
-      setSaving(false);
-    }
+    onSubmit({
+      project_number_id: project.id,
+      customer_id: customerId,
+      customer_site_id: siteId || null,
+      status: 'scheduled',
+      start_date: date,
+      end_date: date,
+      estimated_duration_minutes: null,
+      is_drop_on_ready: false,
+      tag_ids: [],
+      ...(initialVisit ? { initial_visit: initialVisit } : {}),
+    });
+    setSaving(false);
+    onClose();
   }
 
   return (
@@ -95,7 +89,7 @@ export function ScheduleProjectPlacementDialog({
         </Select>
         <DialogFooter>
           <Button className={schedulingControlStyles.outline} onClick={onClose}>Cancel</Button>
-          <Button className={schedulingControlStyles.primary} disabled={!customerId || saving} onClick={() => void handleSave()}>
+          <Button className={schedulingControlStyles.primary} disabled={!customerId || saving} onClick={handleSave}>
             {saving ? 'Scheduling…' : 'Schedule Project'}
           </Button>
         </DialogFooter>

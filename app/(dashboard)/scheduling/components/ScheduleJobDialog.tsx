@@ -19,10 +19,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  createProjectScheduleJob,
   createScheduleJobTag,
   fetchScheduleProjectCandidates,
-  saveScheduleJob,
 } from '@/lib/client/scheduling';
 import type {
   ScheduleJob,
@@ -37,8 +35,11 @@ interface ScheduleJobDialogProps {
   onOpenChange: (open: boolean) => void;
   job: ScheduleJob | null;
   defaultDate: string;
-  onSaved: () => void;
+  initialInput?: ScheduleJobUpdateInput | null;
+  onSubmit: (input: ScheduleJobUpdateInput, job: ScheduleJob) => void;
 }
+
+export type ScheduleJobUpdateInput = Partial<ScheduleJob> & { tag_ids?: string[] };
 
 interface CustomerSiteOption {
   id: string;
@@ -83,11 +84,16 @@ export function ScheduleJobDialog({
   onOpenChange,
   job,
   defaultDate,
-  onSaved,
+  initialInput = null,
+  onSubmit,
 }: ScheduleJobDialogProps) {
-  const [reference, setReference] = useState('');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [reference, setReference] = useState(
+    initialInput?.job_reference || job?.job_reference || ''
+  );
+  const [title, setTitle] = useState(initialInput?.title || job?.title || '');
+  const [description, setDescription] = useState(
+    initialInput?.description || job?.description || ''
+  );
   const [projectNotes, setProjectNotes] = useState('');
   const [projectMode, setProjectMode] = useState<'new' | 'existing'>('new');
   const [projectNumberId, setProjectNumberId] = useState('');
@@ -95,20 +101,40 @@ export function ScheduleJobDialog({
   const [projectCandidates, setProjectCandidates] = useState<ScheduleProjectCandidate[]>([]);
   const [managerOptions, setManagerOptions] = useState<QuoteManagerOption[]>([]);
   const [projectOptionsError, setProjectOptionsError] = useState<string | null>(null);
-  const [customerId, setCustomerId] = useState('');
-  const [customerSiteId, setCustomerSiteId] = useState('');
+  const [customerId, setCustomerId] = useState(
+    initialInput?.customer_id || job?.customer_id || ''
+  );
+  const [customerSiteId, setCustomerSiteId] = useState(
+    initialInput?.customer_site_id || job?.customer_site_id || ''
+  );
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [availableTags, setAvailableTags] = useState<ScheduleJobTag[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [isDropOnReady, setIsDropOnReady] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
+    initialInput?.tag_ids || (job?.tags || []).map((tag) => tag.id)
+  );
+  const [isDropOnReady, setIsDropOnReady] = useState(
+    initialInput?.is_drop_on_ready ?? job?.is_drop_on_ready === true
+  );
   const [newTagName, setNewTagName] = useState('');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
-  const [customersLoading, setCustomersLoading] = useState(false);
-  const [siteAddress, setSiteAddress] = useState('');
-  const [status, setStatus] = useState<ScheduleJobStatus>('draft');
-  const [startDate, setStartDate] = useState(defaultDate);
-  const [endDate, setEndDate] = useState(defaultDate);
-  const [estimatedMinutes, setEstimatedMinutes] = useState('');
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [siteAddress, setSiteAddress] = useState(
+    initialInput?.site_address || job?.site_address || ''
+  );
+  const [status, setStatus] = useState<ScheduleJobStatus>(
+    initialInput?.status || job?.status || 'draft'
+  );
+  const [startDate, setStartDate] = useState(
+    initialInput?.start_date || job?.start_date || defaultDate
+  );
+  const [endDate, setEndDate] = useState(
+    initialInput?.end_date || job?.end_date || defaultDate
+  );
+  const [estimatedMinutes, setEstimatedMinutes] = useState(
+    initialInput?.estimated_duration_minutes?.toString()
+      || job?.estimated_duration_minutes?.toString()
+      || ''
+  );
   const [saving, setSaving] = useState(false);
   const isQuoteJob = job?.source_type === 'quote';
   const isProjectJob = job?.source_type === 'manual' && Boolean(job.quote_project_number_id);
@@ -116,30 +142,7 @@ export function ScheduleJobDialog({
 
   useEffect(() => {
     if (!open) return;
-    setReference(job?.job_reference || '');
-    setTitle(job?.title || '');
-    setDescription(job?.description || '');
-    setProjectNotes('');
-    setProjectMode('new');
-    setProjectNumberId('');
-    setManagerProfileId('');
-    setProjectOptionsError(null);
-    setCustomerId(job?.customer_id || '');
-    setCustomerSiteId(job?.customer_site_id || '');
-    setSiteAddress(job?.site_address || '');
-    setStatus(job?.status || 'draft');
-    setStartDate(job?.start_date || defaultDate);
-    setEndDate(job?.end_date || defaultDate);
-    setEstimatedMinutes(job?.estimated_duration_minutes?.toString() || '');
-    setSelectedTagIds((job?.tags || []).map((tag) => tag.id));
-    setIsDropOnReady(job?.is_drop_on_ready === true);
-    setNewTagName('');
-  }, [defaultDate, job, open]);
-
-  useEffect(() => {
-    if (!open) return;
     let isCancelled = false;
-    setCustomersLoading(true);
 
     void fetch('/api/scheduling/jobs')
       .then(async response => {
@@ -230,87 +233,80 @@ export function ScheduleJobDialog({
     if (site) setSiteAddress(formatSiteAddress(site));
   }
 
-  async function handleCreateTag() {
+  function handleCreateTag() {
     const name = newTagName.trim();
     if (!name || isCreatingTag) return;
+    const optimisticId = `optimistic:${crypto.randomUUID()}:job-tag`;
+    const optimisticTag: ScheduleJobTag = {
+      id: optimisticId,
+      name,
+      color: '#64748b',
+      description: null,
+      is_active: true,
+    };
     setIsCreatingTag(true);
-    try {
-      const tag = await createScheduleJobTag({ name });
-      setAvailableTags((current) => [...current, tag].sort((a, b) => a.name.localeCompare(b.name)));
-      setSelectedTagIds((current) => [...new Set([...current, tag.id])]);
-      setNewTagName('');
-      toast.success(`Created ${tag.name} tag`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to create job tag');
-    } finally {
-      setIsCreatingTag(false);
-    }
+    setAvailableTags((current) =>
+      [...current, optimisticTag].sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setSelectedTagIds((current) => [...new Set([...current, optimisticId])]);
+    setNewTagName('');
+    void createScheduleJobTag({ name })
+      .then((tag) => {
+        setAvailableTags((current) =>
+          current
+            .map((item) => item.id === optimisticId ? tag : item)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setSelectedTagIds((current) =>
+          current.map((id) => id === optimisticId ? tag.id : id)
+        );
+        toast.success(`Created ${tag.name} tag`);
+      })
+      .catch((error) => {
+        setAvailableTags((current) =>
+          current.filter((item) => item.id !== optimisticId)
+        );
+        setSelectedTagIds((current) =>
+          current.filter((id) => id !== optimisticId)
+        );
+        setNewTagName(name);
+        toast.error(error instanceof Error ? error.message : 'Unable to create job tag');
+      })
+      .finally(() => setIsCreatingTag(false));
   }
 
-  async function handleSave() {
-    setSaving(true);
-    try {
-      if (!job) {
-        await createProjectScheduleJob({
-          project_number_id: projectMode === 'existing' ? projectNumberId : null,
-          manager_profile_id: projectMode === 'new' ? managerProfileId : null,
-          project_title: projectMode === 'new' ? title : null,
-          project_description: projectMode === 'new' ? description || null : null,
-          project_notes: projectMode === 'new' ? projectNotes || null : null,
-          customer_id: customerId,
-          customer_site_id: customerSiteId || null,
-          site_address: siteAddress || null,
-          status,
-          start_date: startDate,
-          end_date: endDate,
-          estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
-          is_drop_on_ready: isDropOnReady,
-          tag_ids: selectedTagIds,
-        });
-      } else {
-        await saveScheduleJob(
-          isQuoteJob
-            ? {
-                is_drop_on_ready: isDropOnReady,
-                tag_ids: selectedTagIds,
-              }
-            : {
-                ...(isSampleJob
-                  ? {
-                    job_reference: reference,
-                    title,
-                    description: description || null,
-                  }
-                  : {}),
-                customer_id: customerId,
-                customer_site_id: customerSiteId || null,
-                site_address: siteAddress || null,
-                status,
-                start_date: startDate,
-                end_date: endDate,
-                estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
-                is_drop_on_ready: isDropOnReady,
-                tag_ids: selectedTagIds,
-              },
-          job.id
-        );
-      }
-      toast.success(
-        isQuoteJob
-          ? 'Job metadata updated'
-          : job
-            ? 'Job updated'
-            : projectMode === 'new'
-              ? 'Project Number and schedule created'
-              : 'Project scheduled'
-      );
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to save job');
-    } finally {
-      setSaving(false);
+  function handleSave() {
+    if (!job) return;
+    if (isCreatingTag || selectedTagIds.some((id) => id.startsWith('optimistic:'))) {
+      toast.info('Wait for the new tag to finish saving.');
+      return;
     }
+    const input: ScheduleJobUpdateInput = isQuoteJob
+        ? {
+            is_drop_on_ready: isDropOnReady,
+            tag_ids: selectedTagIds,
+          }
+        : {
+            ...(isSampleJob
+              ? {
+                  job_reference: reference,
+                  title,
+                  description: description || null,
+                }
+              : {}),
+            customer_id: customerId,
+            customer_site_id: customerSiteId || null,
+            site_address: siteAddress || null,
+            status,
+            start_date: startDate,
+            end_date: endDate,
+            estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+            is_drop_on_ready: isDropOnReady,
+            tag_ids: selectedTagIds,
+          };
+    onSubmit(input, job);
+    setSaving(false);
+    onOpenChange(false);
   }
 
   if (!job) return null;
@@ -677,6 +673,8 @@ export function ScheduleJobDialog({
                 onClick={() => void handleSave()}
                 disabled={
                   saving
+                  || isCreatingTag
+                  || selectedTagIds.some((id) => id.startsWith('optimistic:'))
                   || (!isQuoteJob && !customerId)
                   || (!job && Boolean(projectOptionsError))
                   || (!job && projectMode === 'new' && (!managerProfileId || !title.trim()))

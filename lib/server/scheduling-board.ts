@@ -293,12 +293,18 @@ export async function loadSchedulingBoard(
   if (visitBacklogResult.error) throw visitBacklogResult.error;
 
   const jobs = ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob);
+  const visitRows = (visitsResult.data || []) as ScheduleVisit[];
   const queuedVisitIds = new Set(
     ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
       (row) => row.visit_id
     )
   );
-  const visits = ((visitsResult.data || []) as ScheduleVisit[]).filter(
+  const queuedJobIds = new Set(
+    visitRows
+      .filter((visit) => queuedVisitIds.has(visit.id))
+      .map((visit) => visit.job_id)
+  );
+  const visits = visitRows.filter(
     (visit) => !queuedVisitIds.has(visit.id)
   );
   const employeeRows = (
@@ -332,6 +338,14 @@ export async function loadSchedulingBoard(
   const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
   const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
+  const visibleJobIds = new Set([
+    ...visits.map((visit) => visit.job_id),
+    ...employeeRows.map((row) => String(row.job_id)),
+    ...plantRows.map((row) => String(row.job_id)),
+  ]);
+  const visibleJobs = jobs.filter(
+    (job) => !queuedJobIds.has(job.id) || visibleJobIds.has(job.id)
+  );
 
   const employeeAssignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
     ...normalizeBaseAssignment(row),
@@ -352,7 +366,7 @@ export async function loadSchedulingBoard(
 
   return {
     week: { start: weekStart, end: weekEnd },
-    jobs,
+    jobs: visibleJobs,
     tags: ((tagsResult.data || []) as Array<Record<string, unknown>>).map(normalizeScheduleJobTag),
     visits,
     assignments: [...employeeAssignments, ...plantAssignments],

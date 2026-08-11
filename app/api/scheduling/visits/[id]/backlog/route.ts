@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
-import { mapScheduleVisitTransitionError } from '@/lib/server/scheduling-visit-backlog';
+import {
+  loadScheduleVisitBacklog,
+  mapScheduleVisitTransitionError,
+} from '@/lib/server/scheduling-visit-backlog';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type {
   EnqueueScheduleVisitResult,
@@ -98,7 +101,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!transition) {
       throw new Error('Visit return did not produce a transition result.');
     }
-    return NextResponse.json({ transition });
+    const backlogItem = (await loadScheduleVisitBacklog(admin))
+      .find((item) => item.visit_id === transition.visit_id);
+    return NextResponse.json({
+      transition: {
+        ...transition,
+        ...(backlogItem ? { backlog_item: backlogItem } : {}),
+      },
+    });
   } catch (error) {
     const mapped = mapScheduleVisitTransitionError(error as { code?: string; message?: string });
     if (mapped) {

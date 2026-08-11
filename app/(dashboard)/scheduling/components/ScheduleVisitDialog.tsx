@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { deleteScheduleVisit, saveScheduleVisit } from '@/lib/client/scheduling';
+import type { SaveScheduleVisitInput } from '@/lib/client/scheduling';
 import type { ScheduleJob, ScheduleVisit, ScheduleVisitStatus } from '@/types/scheduling';
 import { schedulingControlStyles } from './scheduling-control-styles';
 
@@ -36,7 +35,9 @@ interface ScheduleVisitDialogProps {
   job: ScheduleJob | null;
   visit: ScheduleVisit | null;
   defaultDate: string;
-  onSaved: () => void;
+  initialInput?: SaveScheduleVisitInput | null;
+  onSave: (input: SaveScheduleVisitInput, visit: ScheduleVisit | null) => void;
+  onDelete: (visit: ScheduleVisit) => void;
 }
 
 function toLocalDateTime(value: string): string {
@@ -52,64 +53,52 @@ export function ScheduleVisitDialog({
   job,
   visit,
   defaultDate,
-  onSaved,
+  initialInput = null,
+  onSave,
+  onDelete,
 }: ScheduleVisitDialogProps) {
-  const [title, setTitle] = useState('');
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
-  const [notes, setNotes] = useState('');
-  const [status, setStatus] = useState<ScheduleVisitStatus>('planned');
+  const [title, setTitle] = useState(initialInput?.title || visit?.title || '');
+  const [startsAt, setStartsAt] = useState(
+    initialInput
+      ? toLocalDateTime(initialInput.starts_at)
+      : visit
+        ? toLocalDateTime(visit.starts_at)
+        : `${defaultDate}T08:00`
+  );
+  const [endsAt, setEndsAt] = useState(
+    initialInput
+      ? toLocalDateTime(initialInput.ends_at)
+      : visit
+        ? toLocalDateTime(visit.ends_at)
+        : `${defaultDate}T12:00`
+  );
+  const [notes, setNotes] = useState(initialInput?.notes || visit?.notes || '');
+  const [status, setStatus] = useState<ScheduleVisitStatus>(
+    initialInput?.status || visit?.status || 'planned'
+  );
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setTitle(visit?.title || '');
-    setStartsAt(visit ? toLocalDateTime(visit.starts_at) : `${defaultDate}T08:00`);
-    setEndsAt(visit ? toLocalDateTime(visit.ends_at) : `${defaultDate}T12:00`);
-    setNotes(visit?.notes || '');
-    setStatus(visit?.status || 'planned');
-  }, [defaultDate, open, visit]);
-
-  async function handleSave() {
+  function handleSave() {
     if (!job || !startsAt || !endsAt) return;
-    setSaving(true);
-    try {
-      await saveScheduleVisit(
-        {
-          job_id: job.id,
-          title: title || null,
-          starts_at: new Date(startsAt).toISOString(),
-          ends_at: new Date(endsAt).toISOString(),
-          notes: notes || null,
-          status,
-        },
-        visit?.id
-      );
-      toast.success(visit ? 'Visit updated' : 'Visit added');
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to save visit');
-    } finally {
-      setSaving(false);
-    }
+    onSave({
+      job_id: job.id,
+      title: title || null,
+      starts_at: new Date(startsAt).toISOString(),
+      ends_at: new Date(endsAt).toISOString(),
+      notes: notes || null,
+      status,
+    }, visit);
+    setSaving(false);
+    onOpenChange(false);
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!visit) return;
-    setSaving(true);
-    try {
-      await deleteScheduleVisit(visit.id);
-      toast.success('Visit deleted');
-      setDeleteOpen(false);
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to delete visit');
-    } finally {
-      setSaving(false);
-    }
+    onDelete(visit);
+    setSaving(false);
+    setDeleteOpen(false);
+    onOpenChange(false);
   }
 
   return (
@@ -189,8 +178,7 @@ export function ScheduleVisitDialog({
             ) : <span />}
             <div className="flex gap-2">
               <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="button" className={schedulingControlStyles.primary} disabled={saving} onClick={() => void handleSave()}>
-                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button type="button" className={schedulingControlStyles.primary} disabled={saving} onClick={handleSave}>
                 Save visit
               </Button>
             </div>
@@ -209,7 +197,7 @@ export function ScheduleVisitDialog({
           <AlertDialogFooter>
             <AlertDialogCancel className={schedulingControlStyles.outline}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => void handleDelete()}
+              onClick={handleDelete}
               className={schedulingControlStyles.danger}
             >
               Delete visit

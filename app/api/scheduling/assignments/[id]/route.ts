@@ -176,6 +176,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         assigned_by: moved.assigned_by,
         created_at: moved.created_at,
         updated_at: moved.updated_at,
+        resource_type: input.resource_type,
         ...(input.resource_type === 'employee'
           ? { profile_id: moved.profile_id }
           : { plant_id: moved.plant_id }),

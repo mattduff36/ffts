@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,8 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  deletePlantUnavailability,
-  savePlantUnavailability,
+  type SavePlantUnavailabilityInput,
 } from '@/lib/client/scheduling';
 import type { SchedulePlantResource, SchedulePlantUnavailability } from '@/types/scheduling';
 import { schedulingControlStyles } from './scheduling-control-styles';
@@ -39,7 +37,9 @@ interface PlantUnavailabilityDialogProps {
   plant: SchedulePlantResource[];
   blocks: SchedulePlantUnavailability[];
   defaultDate: string;
-  onSaved: () => void;
+  initialInput?: SavePlantUnavailabilityInput | null;
+  onSave: (input: SavePlantUnavailabilityInput) => void;
+  onDelete: (block: SchedulePlantUnavailability) => void;
 }
 
 export function PlantUnavailabilityDialog({
@@ -48,55 +48,36 @@ export function PlantUnavailabilityDialog({
   plant,
   blocks,
   defaultDate,
-  onSaved,
+  initialInput = null,
+  onSave,
+  onDelete,
 }: PlantUnavailabilityDialogProps) {
-  const [showForm, setShowForm] = useState(false);
-  const [plantId, setPlantId] = useState('');
-  const [startDate, setStartDate] = useState(defaultDate);
-  const [endDate, setEndDate] = useState(defaultDate);
-  const [reason, setReason] = useState('');
-  const [notes, setNotes] = useState('');
+  const [showForm, setShowForm] = useState(Boolean(initialInput));
+  const [plantId, setPlantId] = useState(initialInput?.plant_id || '');
+  const [startDate, setStartDate] = useState(initialInput?.start_date || defaultDate);
+  const [endDate, setEndDate] = useState(initialInput?.end_date || defaultDate);
+  const [reason, setReason] = useState(initialInput?.reason || '');
+  const [notes, setNotes] = useState(initialInput?.notes || '');
   const [saving, setSaving] = useState(false);
   const [deleteBlock, setDeleteBlock] = useState<SchedulePlantUnavailability | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
+  function handleSave() {
+    onSave({
+      plant_id: plantId,
+      start_date: startDate,
+      end_date: endDate,
+      reason,
+      notes: notes || null,
+    });
+    setSaving(false);
     setShowForm(false);
-    setStartDate(defaultDate);
-    setEndDate(defaultDate);
-  }, [defaultDate, open]);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await savePlantUnavailability({
-        plant_id: plantId,
-        start_date: startDate,
-        end_date: endDate,
-        reason,
-        notes: notes || null,
-      });
-      toast.success('Plant availability updated');
-      setShowForm(false);
-      setPlantId('');
-      setReason('');
-      setNotes('');
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to save unavailability');
-    } finally {
-      setSaving(false);
-    }
+    setPlantId('');
+    setReason('');
+    setNotes('');
   }
 
-  async function handleDelete(id: string) {
-    try {
-      await deletePlantUnavailability(id);
-      toast.success('Unavailability removed');
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to remove unavailability');
-    }
+  function handleDelete(block: SchedulePlantUnavailability) {
+    onDelete(block);
   }
 
   return (
@@ -192,7 +173,7 @@ export function PlantUnavailabilityDialog({
             <>
               <Button variant="outline" className={schedulingControlStyles.outline} onClick={() => setShowForm(false)}>Back</Button>
               <Button
-                onClick={() => void handleSave()}
+                onClick={handleSave}
                 disabled={saving || !plantId || !reason.trim()}
                 className={schedulingControlStyles.primary}
               >
@@ -220,7 +201,8 @@ export function PlantUnavailabilityDialog({
             className={schedulingControlStyles.danger}
             onClick={() => {
               if (!deleteBlock) return;
-              void handleDelete(deleteBlock.id).finally(() => setDeleteBlock(null));
+              handleDelete(deleteBlock);
+              setDeleteBlock(null);
             }}
           >
             Remove block

@@ -3,6 +3,7 @@ import type {
   ScheduleDayCapacity,
   ScheduleJob,
   ScheduleJobTag,
+  SchedulePlantUnavailability,
   ScheduleProjectCandidate,
   ScheduleQuoteCandidate,
   ScheduleVisit,
@@ -39,6 +40,36 @@ async function readResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
+function assertNoProvisionalIds(
+  value: unknown,
+  path = 'scheduling mutation'
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoProvisionalIds(item, `${path}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    const itemPath = `${path}.${key}`;
+    const isIdentityField =
+      key === 'id'
+      || key === 'tag_ids'
+      || key === 'resource_id'
+      || key.endsWith('_id');
+    if (isIdentityField && typeof item === 'string' && item.startsWith('optimistic:')) {
+      throw new Error(`Wait for ${itemPath} to finish saving.`);
+    }
+    if (isIdentityField && Array.isArray(item)) {
+      for (const id of item) {
+        if (typeof id === 'string' && id.startsWith('optimistic:')) {
+          throw new Error(`Wait for ${itemPath} to finish saving.`);
+        }
+      }
+    }
+    if (item && typeof item === 'object') assertNoProvisionalIds(item, itemPath);
+  }
+}
+
 export async function fetchSchedulingContext(): Promise<SchedulingContext> {
   return readResponse(await fetch('/api/scheduling/context'));
 }
@@ -60,6 +91,7 @@ export async function saveScheduleJob(
     & { tag_ids?: string[] },
   id?: string
 ): Promise<ScheduleJob> {
+  assertNoProvisionalIds({ id, ...input });
   const response = await fetch(id ? `/api/scheduling/jobs/${id}` : '/api/scheduling/jobs', {
     method: id ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -89,15 +121,21 @@ export interface CreateProjectScheduleJobInput {
   };
 }
 
+export interface ScheduleJobMutationResult {
+  job: ScheduleJob;
+  visit?: ScheduleVisit;
+}
+
 export async function createProjectScheduleJob(
   input: CreateProjectScheduleJobInput
-): Promise<ScheduleJob> {
+): Promise<ScheduleJobMutationResult> {
+  assertNoProvisionalIds(input);
   const response = await fetch('/api/scheduling/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return (await readResponse<{ job: ScheduleJob }>(response)).job;
+  return readResponse<ScheduleJobMutationResult>(response);
 }
 
 export interface QuickAddScheduleProjectInput {
@@ -131,6 +169,7 @@ export interface QuickAddScheduleProjectResult {
 export async function quickAddScheduleProject(
   input: QuickAddScheduleProjectInput
 ): Promise<QuickAddScheduleProjectResult> {
+  assertNoProvisionalIds(input);
   const response = await fetch('/api/scheduling/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -145,9 +184,27 @@ export async function quickAddScheduleProject(
   return readResponse<QuickAddScheduleProjectResult>(response);
 }
 
+export interface AssignmentMutationRow {
+  id: string;
+  job_id: string;
+  work_date: string;
+  visit_id: string | null;
+  notes: string | null;
+  conflict_override: boolean;
+  conflict_codes: ScheduleAssignment['conflict_codes'];
+  conflict_override_by: string | null;
+  conflict_override_at: string | null;
+  assigned_by: string | null;
+  created_at: string;
+  updated_at: string;
+  resource_type: 'employee' | 'plant';
+  profile_id?: string | null;
+  plant_id?: string | null;
+}
+
 export interface AssignmentMutationResult {
-  assignments?: Array<Record<string, unknown>>;
-  assignment?: Record<string, unknown>;
+  assignments?: AssignmentMutationRow[];
+  assignment?: AssignmentMutationRow;
   employee_capacity?: ScheduleDayCapacity[];
   success?: boolean;
 }
@@ -157,6 +214,7 @@ export async function createScheduleJobTag(input: {
   color?: string;
   description?: string | null;
 }): Promise<ScheduleJobTag> {
+  assertNoProvisionalIds(input);
   const response = await fetch('/api/scheduling/tags', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -165,8 +223,18 @@ export async function createScheduleJobTag(input: {
   return (await readResponse<{ tag: ScheduleJobTag }>(response)).tag;
 }
 
-export async function deleteScheduleJob(id: string): Promise<void> {
-  await readResponse(await fetch(`/api/scheduling/jobs/${id}`, { method: 'DELETE' }));
+export interface DeleteScheduleJobResult {
+  success: true;
+  source_type: ScheduleJob['source_type'];
+  quote_id: string | null;
+  project_number_id: string | null;
+}
+
+export async function deleteScheduleJob(id: string): Promise<DeleteScheduleJobResult> {
+  assertNoProvisionalIds({ id });
+  return readResponse(
+    await fetch(`/api/scheduling/jobs/${id}`, { method: 'DELETE' })
+  );
 }
 
 export async function fetchScheduleQuoteCandidates(): Promise<ScheduleQuoteCandidate[]> {
@@ -193,6 +261,7 @@ export async function fetchScheduleVisitBacklog(): Promise<ScheduleVisitBacklogI
 export async function previewScheduleVisitBacklog(
   visitId: string
 ): Promise<ScheduleVisitBacklogPreview> {
+  assertNoProvisionalIds({ visit_id: visitId });
   const payload = await readResponse<{ preview: ScheduleVisitBacklogPreview }>(
     await fetch(`/api/scheduling/visits/${visitId}/backlog`)
   );
@@ -204,6 +273,7 @@ export async function enqueueScheduleVisit(input: {
   visit_id: string;
   expected_fingerprint: string;
 }): Promise<EnqueueScheduleVisitResult> {
+  assertNoProvisionalIds(input);
   const payload = await readResponse<{ transition: EnqueueScheduleVisitResult }>(
     await fetch(`/api/scheduling/visits/${input.visit_id}/backlog`, {
       method: 'POST',
@@ -222,6 +292,7 @@ export async function scheduleQueuedVisit(input: {
   visit_id: string;
   starts_at: string;
 }): Promise<ScheduleQueuedVisitResult> {
+  assertNoProvisionalIds(input);
   return readResponse(
     await fetch(`/api/scheduling/visit-backlog/${input.visit_id}/schedule`, {
       method: 'POST',
@@ -234,7 +305,7 @@ export async function scheduleQueuedVisit(input: {
   );
 }
 
-export async function saveQuoteSchedule(input: {
+export interface ScheduleQuoteInput {
   quote_id: string;
   start_date: string;
   end_date: string;
@@ -242,13 +313,18 @@ export async function saveQuoteSchedule(input: {
     starts_at: string;
     ends_at: string;
   };
-}): Promise<ScheduleJob> {
+}
+
+export async function saveQuoteSchedule(
+  input: ScheduleQuoteInput
+): Promise<ScheduleJobMutationResult> {
+  assertNoProvisionalIds(input);
   const response = await fetch('/api/scheduling/quotes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return (await readResponse<{ job: ScheduleJob }>(response)).job;
+  return readResponse<ScheduleJobMutationResult>(response);
 }
 
 export interface CreateAssignmentInput {
@@ -274,6 +350,7 @@ export async function saveScheduleVisit(
   input: SaveScheduleVisitInput,
   id?: string
 ): Promise<ScheduleVisit> {
+  assertNoProvisionalIds({ id, ...input });
   const response = await fetch(
     id ? `/api/scheduling/visits/${id}` : '/api/scheduling/visits',
     {
@@ -286,12 +363,14 @@ export async function saveScheduleVisit(
 }
 
 export async function deleteScheduleVisit(id: string): Promise<void> {
+  assertNoProvisionalIds({ id });
   await readResponse(await fetch(`/api/scheduling/visits/${id}`, { method: 'DELETE' }));
 }
 
 export async function createScheduleAssignment(
   input: CreateAssignmentInput
 ): Promise<AssignmentMutationResult> {
+  assertNoProvisionalIds(input);
   return readResponse(
     await fetch('/api/scheduling/assignments', {
       method: 'POST',
@@ -306,6 +385,7 @@ export async function moveScheduleAssignment(
   visitId: string,
   overrideConflicts = false
 ): Promise<AssignmentMutationResult> {
+  assertNoProvisionalIds({ assignment_id: assignment.id, visit_id: visitId });
   return readResponse(
     await fetch(`/api/scheduling/assignments/${assignment.id}`, {
       method: 'PATCH',
@@ -323,6 +403,7 @@ export async function deleteScheduleAssignment(
   id: string,
   resourceType: 'employee' | 'plant'
 ): Promise<AssignmentMutationResult> {
+  assertNoProvisionalIds({ id });
   return readResponse(
     await fetch(
       `/api/scheduling/assignments/${id}?resource_type=${encodeURIComponent(resourceType)}`,
@@ -331,23 +412,30 @@ export async function deleteScheduleAssignment(
   );
 }
 
-export async function savePlantUnavailability(input: {
+export interface SavePlantUnavailabilityInput {
   plant_id: string;
   start_date: string;
   end_date: string;
   reason: string;
   notes?: string | null;
-}): Promise<void> {
-  await readResponse(
+}
+
+export async function savePlantUnavailability(
+  input: SavePlantUnavailabilityInput
+): Promise<SchedulePlantUnavailability> {
+  assertNoProvisionalIds(input);
+  const payload = await readResponse<{ block: SchedulePlantUnavailability }>(
     await fetch('/api/scheduling/plant-unavailability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     })
   );
+  return payload.block;
 }
 
 export async function deletePlantUnavailability(id: string): Promise<void> {
+  assertNoProvisionalIds({ id });
   await readResponse(
     await fetch(`/api/scheduling/plant-unavailability/${id}`, { method: 'DELETE' })
   );

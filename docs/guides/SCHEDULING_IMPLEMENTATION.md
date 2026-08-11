@@ -10,6 +10,15 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 - Resource cards expose a dedicated drag handle for touch-first drag-and-drop. Selecting a visit and tapping a resource remains supported.
 - Board mutations update the local cache immediately and reconcile with the server in the background.
 
+## Optimistic mutation contract
+
+- The manager board renders each confirmed scheduling action from an in-memory operation ledger before its network request resolves. The ledger projects over React Query's latest server data, so a refetch cannot hide pending work.
+- Board, Jobs queue, resource availability, and plant-unavailability changes are projected together. Numeric employee-capacity totals remain server-authoritative because the board does not contain the complete shift and absence basis needed to calculate exact totals locally.
+- Confirmations remain safety gates. Visit-return dialogs open immediately, but their final action remains disabled until the authoritative fingerprint and assignment count are available.
+- Successful responses replace provisional IDs and fields with authoritative entities. Reconciliation is scoped to the affected week or sidebar query and never blocks the initiating interaction.
+- A rejected or stale request removes only its own operation. Concurrent successful or pending changes are preserved; whole-board snapshot rollback and broad scheduling-board invalidation are prohibited.
+- Cross-tab optimistic state is intentionally not shared. Other tabs converge when their server data is refreshed.
+
 ## Future Enhancements (Deferred)
 
 These ideas are intentionally deferred and must not be treated as current scope:

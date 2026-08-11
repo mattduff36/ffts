@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CalendarPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { saveQuoteSchedule } from '@/lib/client/scheduling';
+import type { ScheduleQuoteInput } from '@/lib/client/scheduling';
 import type { ScheduleJob } from '@/types/scheduling';
 import { schedulingControlStyles } from './scheduling-control-styles';
 
@@ -22,47 +22,39 @@ interface ScheduleQuoteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   job: ScheduleJob;
-  onSaved: () => void;
+  initialInput?: ScheduleQuoteInput | null;
+  onSubmit: (input: ScheduleQuoteInput) => void;
 }
 
 export function ScheduleQuoteDialog({
   open,
   onOpenChange,
   job,
-  onSaved,
+  initialInput = null,
+  onSubmit,
 }: ScheduleQuoteDialogProps) {
-  const [startDate, setStartDate] = useState(job.start_date);
-  const [endDate, setEndDate] = useState(job.end_date);
+  const [startDate, setStartDate] = useState(
+    initialInput?.start_date || job.start_date
+  );
+  const [endDate, setEndDate] = useState(
+    initialInput?.end_date || job.end_date
+  );
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setStartDate(job.start_date);
-    setEndDate(job.end_date);
-  }, [job, open]);
-
-  async function handleSave() {
+  function handleSave() {
     if (!job.quote_id || !startDate || !endDate || isSaving) return;
     if (endDate < startDate) {
       toast.error('End date must be on or after the start date.');
       return;
     }
 
-    setIsSaving(true);
-    try {
-      await saveQuoteSchedule({
-        quote_id: job.quote_id,
-        start_date: startDate,
-        end_date: endDate,
-      });
-      toast.success('Quote schedule updated');
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to schedule Quote');
-    } finally {
-      setIsSaving(false);
-    }
+    onSubmit({
+      quote_id: job.quote_id,
+      start_date: startDate,
+      end_date: endDate,
+    });
+    setIsSaving(false);
+    onOpenChange(false);
   }
 
   return (
@@ -113,7 +105,7 @@ export function ScheduleQuoteDialog({
           </Button>
           <Button
             type="button"
-            onClick={() => void handleSave()}
+            onClick={handleSave}
             disabled={!job.quote_id || !startDate || !endDate || isSaving}
             className={schedulingControlStyles.primary}
           >

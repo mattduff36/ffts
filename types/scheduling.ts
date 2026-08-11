@@ -64,6 +64,7 @@ export interface ScheduleQuoteCandidate {
   end_date: string | null;
   estimated_duration_days: number | null;
   estimated_duration_minutes?: number | null;
+  optimistic?: boolean;
 }
 
 export interface ScheduleProjectCandidate {
@@ -74,6 +75,7 @@ export interface ScheduleProjectCandidate {
   title: string;
   description: string | null;
   status: 'open';
+  optimistic?: boolean;
 }
 
 export type SchedulingQueueItem =
@@ -137,6 +139,8 @@ export interface ScheduleVisitBacklogItem {
   duration_milliseconds: number;
   duration_minutes: number;
   queued_at: string;
+  job?: ScheduleJob;
+  visit?: ScheduleVisit;
 }
 
 export interface ScheduleVisitBacklogPreview {
@@ -154,6 +158,7 @@ export interface EnqueueScheduleVisitResult {
   job_id: string;
   assignment_count: number;
   queued_at: string;
+  backlog_item?: ScheduleVisitBacklogItem;
 }
 
 export interface ScheduleQueuedVisitResult {

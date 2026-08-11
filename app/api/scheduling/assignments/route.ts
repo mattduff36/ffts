@@ -199,6 +199,7 @@ export async function POST(request: NextRequest) {
       assigned_by: created.assigned_by,
       created_at: created.created_at,
       updated_at: created.updated_at,
+      resource_type: input.resource_type,
       ...(input.resource_type === 'employee'
         ? { profile_id: created.profile_id }
         : { plant_id: created.plant_id }),

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { appendQuoteTimelineEvent } from '@/lib/server/quote-workflow';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
+import { loadTagsForScheduleJob } from '@/lib/server/scheduling-tags';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { ScheduleQuoteCandidate } from '@/types/scheduling';
 
@@ -174,7 +175,17 @@ export async function POST(request: NextRequest) {
         p_actor_user_id: access.userId,
       });
       if (rpcResult.error) throw rpcResult.error;
-      return NextResponse.json(rpcResult.data);
+      const payload = rpcResult.data as {
+        job?: Record<string, unknown>;
+        visit?: Record<string, unknown>;
+      };
+      const tags = payload.job?.id
+        ? await loadTagsForScheduleJob(admin, String(payload.job.id))
+        : [];
+      return NextResponse.json({
+        ...payload,
+        ...(payload.job ? { job: { ...payload.job, tags } } : {}),
+      });
     }
     const updateResult = await admin
       .from('quotes')
@@ -220,7 +231,8 @@ export async function POST(request: NextRequest) {
       actorUserId: access.userId,
     });
 
-    return NextResponse.json({ job: jobResult.data });
+    const tags = await loadTagsForScheduleJob(admin, String(jobResult.data.id));
+    return NextResponse.json({ job: { ...jobResult.data, tags } });
   } catch (error) {
     console.error('Error scheduling Quote:', error);
     return NextResponse.json(

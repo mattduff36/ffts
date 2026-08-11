@@ -74,9 +74,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
+  createProjectScheduleJob,
   createScheduleAssignment,
+  deletePlantUnavailability,
   deleteScheduleAssignment,
   deleteScheduleJob,
+  deleteScheduleVisit,
   enqueueScheduleVisit,
   fetchScheduleQuoteCandidates,
   fetchScheduleProjectCandidates,
@@ -84,22 +87,51 @@ import {
   fetchSchedulingBoard,
   moveScheduleAssignment,
   previewScheduleVisitBacklog,
+  quickAddScheduleProject,
   scheduleQueuedVisit,
   saveQuoteSchedule,
+  savePlantUnavailability,
   saveScheduleJob,
   saveScheduleVisit,
   SchedulingApiError,
   type AssignmentMutationResult,
+  type AssignmentMutationRow,
   type CreateAssignmentInput,
-  type QuickAddScheduleProjectResult,
+  type CreateProjectScheduleJobInput,
+  type QuickAddScheduleProjectInput,
+  type ScheduleQuoteInput,
+  type SavePlantUnavailabilityInput,
+  type SaveScheduleVisitInput,
 } from '@/lib/client/scheduling';
 import {
+  patchBoardRemoveJob,
   patchBoardMoveAssignment,
+  patchBoardRemovePlantBlock,
   patchBoardRemoveAssignment,
+  patchBoardRemoveVisit,
+  patchBoardWithJob,
+  patchBoardWithPlantBlock,
   patchBoardWithAssignment,
   patchBoardWithQuickAdd,
+  patchBoardWithVisit,
+  removeProjectCandidateFromQueue,
+  removeQuoteCandidate,
+  removeVisitBacklogItem,
   replaceEmployeeCapacity,
+  upsertProjectCandidate,
+  upsertQuoteCandidate,
+  upsertVisitBacklogItem,
 } from './scheduling-board-cache';
+import {
+  createOptimisticEntityId,
+  isOptimisticEntityId,
+  operationsOverlap,
+  projectSchedulingState,
+  reconcileOptimisticOperations,
+  removeOptimisticOperation,
+  type SchedulingOptimisticOperation,
+  type SchedulingProjection,
+} from './scheduling-optimistic-ledger';
 import { ScheduleBoardQuickAddDialog } from './ScheduleBoardQuickAddDialog';
 import {
   SCHEDULING_BOARD_VIEWS,
@@ -136,7 +168,10 @@ import type {
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
+  SchedulePlantUnavailability,
   ScheduleProjectCandidate,
+  ScheduleQuoteCandidate,
+  ScheduleVisitBacklogItem,
   ScheduleVisitBacklogPreview,
   SchedulingQueueItem,
   ScheduleVisit,
@@ -145,7 +180,10 @@ import type {
 } from '@/types/scheduling';
 import { PlantUnavailabilityDialog } from './PlantUnavailabilityDialog';
 import type { SelectedScheduleResource } from './ScheduleAssignmentDialog';
-import { ScheduleJobDialog } from './ScheduleJobDialog';
+import {
+  ScheduleJobDialog,
+  type ScheduleJobUpdateInput,
+} from './ScheduleJobDialog';
 import { ScheduleQuoteDialog } from './ScheduleQuoteDialog';
 import { ScheduleVisitDialog } from './ScheduleVisitDialog';
 import { ScheduleProjectPlacementDialog } from './ScheduleProjectPlacementDialog';
@@ -562,7 +600,9 @@ function DraggableQuoteCard({
           <span className={cn('mt-1.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
             <span>{durationDays} {durationDays === 1 ? 'day' : 'days'}</span>
             <span className={cn('truncate text-[9px]', selected ? 'text-slate-700' : 'text-slate-400')}>
-              {formatQuoteStatusLabel(quote.status)}
+              {'optimistic' in quote && quote.optimistic
+                ? 'Updating…'
+                : formatQuoteStatusLabel(quote.status)}
             </span>
           </span>
         </span>
@@ -1678,10 +1718,16 @@ interface PendingAssignmentConflict {
 
 interface PendingVisitReturn {
   target: ActiveVisitTarget;
-  preview: ScheduleVisitBacklogPreview;
+  preview: ScheduleVisitBacklogPreview | null;
 }
 
 type DailyTimelineMode = 'fit' | 'scroll';
+
+interface ColdWeekLoadState {
+  epoch: number;
+  status: 'loading' | 'failed' | 'authoritative';
+  error?: string;
+}
 
 interface DailyTimelinePanOperation {
   pointerId: number;
@@ -1743,7 +1789,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   );
   const inFlightMutationKeysRef = useRef<Set<string>>(new Set());
   const mutationEpochByKeyRef = useRef<Map<string, number>>(new Map());
+  const [optimisticOperations, setOptimisticOperations] =
+    useState<SchedulingOptimisticOperation[]>([]);
+  const optimisticOperationsRef = useRef<SchedulingOptimisticOperation[]>([]);
+  const optimisticSequenceRef = useRef(0);
+  const reconciliationTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
+  const reconciliationAttemptsRef = useRef<Map<string, number>>(new Map());
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddDraft, setQuickAddDraft] =
+    useState<QuickAddScheduleProjectInput | null>(null);
   const [pendingCreationKind, setPendingCreationKind] = useState<
     'quote' | 'project' | 'quick_add' | null
   >(null);
@@ -1752,19 +1808,27 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     visit: ScheduleVisit | null;
     date: string;
   } | null>(null);
+  const [visitDraft, setVisitDraft] = useState<SaveScheduleVisitInput | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduleJob | null>(null);
+  const [jobDraft, setJobDraft] = useState<ScheduleJobUpdateInput | null>(null);
   const [schedulingQuoteJob, setSchedulingQuoteJob] = useState<ScheduleJob | null>(null);
+  const [quoteScheduleDraft, setQuoteScheduleDraft] =
+    useState<ScheduleQuoteInput | null>(null);
   const [projectPlacement, setProjectPlacement] = useState<{
     project: ScheduleProjectCandidate;
     date: string;
     initialVisit?: { starts_at: string; ends_at: string };
   } | null>(null);
+  const [projectPlacementDraft, setProjectPlacementDraft] =
+    useState<CreateProjectScheduleJobInput | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
+  const [plantBlockDraft, setPlantBlockDraft] =
+    useState<SavePlantUnavailabilityInput | null>(null);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
   const [pendingRemoveJob, setPendingRemoveJob] = useState<ScheduleJob | null>(null);
   const [isRemovingJob, setIsRemovingJob] = useState(false);
-  const [isSchedulingQuote, setIsSchedulingQuote] = useState(false);
+  const isSchedulingQuote = false;
   const [pendingCrewOfferJobIds, setPendingCrewOfferJobIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -1773,6 +1837,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [dailyTimelineViewportWidth, setDailyTimelineViewportWidth] =
     useState<number | null>(null);
   const [isDailyTimelinePanning, setIsDailyTimelinePanning] = useState(false);
+  const [coldWeekStates, setColdWeekStates] =
+    useState<Map<string, ColdWeekLoadState>>(() => new Map());
+  const coldWeekEpochsRef = useRef<Map<string, number>>(new Map());
   const [quoteCreationOpen, setQuoteCreationOpen] = useState(false);
   const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
@@ -1811,6 +1878,32 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     queryKey: ['scheduling-visit-backlog'],
     queryFn: fetchScheduleVisitBacklog,
   });
+  const projectedState = useMemo(
+    () => projectSchedulingState(
+      {
+        board: boardQuery.data,
+        quoteCandidates: quoteCandidatesQuery.data,
+        projectCandidates: projectCandidatesQuery.data,
+        visitBacklog: visitBacklogQuery.data,
+      },
+      optimisticOperations,
+      `board:${weekStart}`
+    ),
+    [
+      boardQuery.data,
+      optimisticOperations,
+      projectCandidatesQuery.data,
+      quoteCandidatesQuery.data,
+      visitBacklogQuery.data,
+      weekStart,
+    ]
+  );
+  useEffect(() => () => {
+    for (const timer of reconciliationTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    reconciliationTimersRef.current.clear();
+  }, []);
   useEffect(() => {
     if (!canCreateQuotes || !quotesSensitiveAccess.canAccess) {
       setQuoteManagerOptions([]);
@@ -1865,6 +1958,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [quotesSensitiveAccess.canAccess]);
 
   function requestCreation(kind: 'quote' | 'project' | 'quick_add') {
+    if (kind === 'quick_add') setQuickAddDraft(null);
     if (!quotesSensitiveAccess.canAccess) {
       setPendingCreationKind(kind);
       return;
@@ -1894,14 +1988,269 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return mutationEpochByKeyRef.current.get(key) === epoch;
   }
 
+  function syncOptimisticOperations(next: SchedulingOptimisticOperation[]) {
+    optimisticOperationsRef.current = next;
+    setOptimisticOperations(next);
+    for (const attemptKey of reconciliationAttemptsRef.current.keys()) {
+      if (!next.some((operation) => attemptKey.startsWith(`${operation.id}:`))) {
+        reconciliationAttemptsRef.current.delete(attemptKey);
+      }
+    }
+  }
+
+  function registerOptimisticOperation(input: {
+    id?: string;
+    kind: string;
+    lockKeys: string[];
+    queryKeys: string[];
+    proofs?: SchedulingOptimisticOperation['proofs'];
+    apply: SchedulingOptimisticOperation['apply'];
+  }): SchedulingOptimisticOperation | null {
+    if (operationsOverlap(input, optimisticOperationsRef.current)) return null;
+    const operation: SchedulingOptimisticOperation = {
+      id: input.id || crypto.randomUUID(),
+      sequence: ++optimisticSequenceRef.current,
+      kind: input.kind,
+      status: 'pending',
+      lockKeys: input.lockKeys,
+      queryKeys: input.queryKeys,
+      reconciledKeys: [],
+      proofs: input.proofs || {},
+      apply: input.apply,
+    };
+    syncOptimisticOperations([...optimisticOperationsRef.current, operation]);
+    for (const key of operation.queryKeys) {
+      const queryKey = queryKeyFromOptimisticKey(key);
+      if (queryKey) {
+        void queryClient.cancelQueries({ queryKey, exact: true });
+      }
+    }
+    return operation;
+  }
+
+  function queryKeyFromOptimisticKey(key: string): readonly unknown[] | null {
+    if (key.startsWith('board:')) return ['scheduling-board', key.slice('board:'.length)];
+    if (key === 'quotes') return ['scheduling-quote-candidates'];
+    if (key === 'projects') return ['scheduling-project-candidates'];
+    if (key === 'backlog') return ['scheduling-visit-backlog'];
+    return null;
+  }
+
+  function setColdWeekStateIfCurrent(
+    targetWeekStart: string,
+    epoch: number,
+    nextState: Omit<ColdWeekLoadState, 'epoch'>
+  ) {
+    if (coldWeekEpochsRef.current.get(targetWeekStart) !== epoch) return;
+    setColdWeekStates((current) => {
+      const next = new Map(current);
+      next.set(targetWeekStart, { epoch, ...nextState });
+      return next;
+    });
+  }
+
+  function beginColdWeekEpoch(
+    targetWeekStart: string,
+    status: ColdWeekLoadState['status'] = 'loading'
+  ): number {
+    const epoch = (coldWeekEpochsRef.current.get(targetWeekStart) || 0) + 1;
+    coldWeekEpochsRef.current.set(targetWeekStart, epoch);
+    setColdWeekStates((current) => {
+      const next = new Map(current);
+      next.set(targetWeekStart, { epoch, status });
+      return next;
+    });
+    return epoch;
+  }
+
+  function fetchColdWeekInBackground(targetWeekStart: string) {
+    const targetKey = ['scheduling-board', targetWeekStart] as const;
+    const epoch = beginColdWeekEpoch(targetWeekStart);
+    void queryClient.cancelQueries({ queryKey: targetKey, exact: true })
+      .then(() =>
+        queryClient.invalidateQueries({
+          queryKey: targetKey,
+          exact: true,
+          refetchType: 'none',
+        })
+      )
+      .then(() =>
+        queryClient.fetchQuery({
+          queryKey: targetKey,
+          queryFn: () => fetchSchedulingBoard(targetWeekStart),
+          staleTime: 0,
+        })
+      )
+      .then(() => {
+        setColdWeekStateIfCurrent(targetWeekStart, epoch, {
+          status: 'authoritative',
+        });
+      })
+      .catch(() => {
+        setColdWeekStateIfCurrent(targetWeekStart, epoch, {
+          status: 'failed',
+          error: 'Unable to load the remaining details for this week.',
+        });
+      });
+  }
+
+  function reconcileOptimisticKeysInBackground(keys: string[], delayMs = 0) {
+    for (const key of new Set(keys)) {
+      const existing = reconciliationTimersRef.current.get(key);
+      if (existing) clearTimeout(existing);
+      const timer = setTimeout(() => {
+        reconciliationTimersRef.current.delete(key);
+        if (
+          optimisticOperationsRef.current.some(
+            (operation) =>
+              operation.queryKeys.includes(key)
+              && operation.status === 'pending'
+          )
+        ) {
+          return;
+        }
+        const queryKey = queryKeyFromOptimisticKey(key);
+        if (!queryKey) return;
+        const boardWeek = key.startsWith('board:')
+          ? key.slice('board:'.length)
+          : null;
+        const eligibleOperationIds = new Set(
+          optimisticOperationsRef.current
+            .filter(
+              (operation) =>
+                operation.status !== 'pending'
+                && operation.queryKeys.includes(key)
+                && (reconciliationAttemptsRef.current.get(
+                  `${operation.id}:${key}`
+                ) || 0) < 3
+            )
+            .map((operation) => operation.id)
+        );
+        if (eligibleOperationIds.size === 0) return;
+        const coldEpoch =
+          boardWeek && coldWeekEpochsRef.current.has(boardWeek)
+            ? beginColdWeekEpoch(boardWeek)
+            : null;
+        for (const operationId of eligibleOperationIds) {
+          const attemptKey = `${operationId}:${key}`;
+          reconciliationAttemptsRef.current.set(
+            attemptKey,
+            (reconciliationAttemptsRef.current.get(attemptKey) || 0) + 1
+          );
+        }
+        void queryClient.refetchQueries(
+          { queryKey, exact: true, type: 'all' },
+          { throwOnError: true, cancelRefetch: true }
+        )
+          .then(() => {
+            const proofBoardWeek = boardWeek || weekStart;
+            const base: SchedulingProjection = {
+              board: queryClient.getQueryData(['scheduling-board', proofBoardWeek]),
+              quoteCandidates: queryClient.getQueryData(['scheduling-quote-candidates']),
+              projectCandidates: queryClient.getQueryData(['scheduling-project-candidates']),
+              visitBacklog: queryClient.getQueryData(['scheduling-visit-backlog']),
+            };
+            const updated = reconcileOptimisticOperations(
+              optimisticOperationsRef.current,
+              key,
+              base,
+              eligibleOperationIds
+            );
+            for (const operation of updated) {
+              if (
+                eligibleOperationIds.has(operation.id)
+                && operation.reconciledKeys.includes(key)
+              ) {
+                reconciliationAttemptsRef.current.delete(`${operation.id}:${key}`);
+              }
+            }
+            syncOptimisticOperations(updated);
+            if (boardWeek && coldEpoch !== null) {
+              setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
+                status: 'authoritative',
+              });
+            }
+            const needsRetry = updated.some(
+              (operation) =>
+                eligibleOperationIds.has(operation.id)
+                && !operation.reconciledKeys.includes(key)
+                && (reconciliationAttemptsRef.current.get(
+                  `${operation.id}:${key}`
+                ) || 0) < 3
+            );
+            if (needsRetry) reconcileOptimisticKeysInBackground([key], 100);
+          })
+          .catch(() => {
+            // A failed read never proves or retires an optimistic operation.
+            if (boardWeek && coldEpoch !== null) {
+              setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
+                status: 'failed',
+                error: 'Unable to reconcile the latest schedule for this week.',
+              });
+            }
+            const needsRetry = optimisticOperationsRef.current.some(
+              (operation) =>
+                eligibleOperationIds.has(operation.id)
+                && (reconciliationAttemptsRef.current.get(
+                  `${operation.id}:${key}`
+                ) || 0) < 3
+            );
+            if (needsRetry) reconcileOptimisticKeysInBackground([key], 100);
+          });
+      }, delayMs);
+      reconciliationTimersRef.current.set(key, timer);
+    }
+  }
+
+  function settleOptimisticOperation(
+    operationId: string,
+    outcome: 'success' | 'failure' = 'success',
+    error?: unknown,
+    acknowledgement?: {
+      proofs?: SchedulingOptimisticOperation['proofs'];
+      apply?: SchedulingOptimisticOperation['apply'];
+    }
+  ) {
+    const operation = optimisticOperationsRef.current.find(
+      (current) => current.id === operationId
+    );
+    if (!operation) return;
+    const isAmbiguous =
+      outcome === 'failure'
+      && (
+        error instanceof TypeError
+        || (error instanceof SchedulingApiError && error.status >= 500)
+      );
+    if (outcome === 'failure' && !isAmbiguous) {
+      syncOptimisticOperations(
+        removeOptimisticOperation(optimisticOperationsRef.current, operationId)
+      );
+      reconcileOptimisticKeysInBackground(operation.queryKeys);
+      return;
+    }
+    syncOptimisticOperations(
+      optimisticOperationsRef.current.map((current) =>
+        current.id === operationId
+          ? {
+              ...current,
+              status: isAmbiguous ? 'uncertain' : 'acknowledged',
+              proofs: acknowledgement?.proofs || current.proofs,
+              apply: acknowledgement?.apply || current.apply,
+            }
+          : current
+      )
+    );
+    reconcileOptimisticKeysInBackground(operation.queryKeys);
+  }
+
   function assignmentMutationKey(assignmentId: string): string {
     return `assignment:${assignmentId}`;
   }
 
-  function reconcileBoardInBackground() {
-    void queryClient.invalidateQueries({ queryKey: ['scheduling-board'] });
-  }
-  const board = boardQuery.data;
+  const board = projectedState.board;
+  const coldWeekState = coldWeekStates.get(weekStart);
+  const isTentativeWeek =
+    coldWeekState?.status === 'loading' || coldWeekState?.status === 'failed';
   const weekDates = useMemo(
     () => {
       if (!board) return [];
@@ -1998,13 +2347,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return Array.from(values.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [board]);
   const unscheduledQuotes = useMemo<SchedulingQueueItem[]>(
-    () => (quoteCandidatesQuery.data || []).filter(
-      (quote) => !quote.start_date && getScheduleQuoteStage(quote.status) !== null
+    () => (projectedState.quoteCandidates || []).filter(
+      (quote) =>
+        !quote.start_date
+        && (quote.optimistic || getScheduleQuoteStage(quote.status) !== null)
     ).map((quote) => ({ ...quote, kind: 'quote' as const })),
-    [quoteCandidatesQuery.data]
+    [projectedState.quoteCandidates]
   );
   const unscheduledProjects = useMemo<SchedulingQueueItem[]>(
-    () => (quotesSensitiveAccess.canAccess ? projectCandidatesQuery.data || [] : []).map((project) => ({
+    () => (quotesSensitiveAccess.canAccess ? projectedState.projectCandidates || [] : []).map((project) => ({
       kind: 'project' as const,
       id: project.id,
       quote_reference: project.project_reference,
@@ -2018,10 +2369,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       estimated_duration_minutes: 180 as const,
       project,
     })),
-    [projectCandidatesQuery.data, quotesSensitiveAccess.canAccess]
+    [projectedState.projectCandidates, quotesSensitiveAccess.canAccess]
   );
   const returnedVisits = useMemo<SchedulingQueueItem[]>(
-    () => (visitBacklogQuery.data || []).map((item) => ({
+    () => (projectedState.visitBacklog || []).map((item) => ({
       kind: 'returned_visit' as const,
       id: item.visit_id,
       quote_reference: item.job_reference,
@@ -2035,7 +2386,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       estimated_duration_minutes: item.duration_minutes,
       returned_visit: item,
     })),
-    [visitBacklogQuery.data]
+    [projectedState.visitBacklog]
   );
   const quoteStageCounts = useMemo(() => {
     const counts: Record<ScheduleQuoteStage, number> = {
@@ -2170,10 +2521,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return assignmentsByCell.get(`${jobId}:${date}`) || [];
   }
 
-  async function refresh() {
-    reconcileBoardInBackground();
-  }
-
   function applyCapacity(
     boardData: SchedulingBoardPayload,
     capacity?: ScheduleDayCapacity[]
@@ -2184,7 +2531,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   function assignmentFromMutationRow(
-    row: Record<string, unknown>,
+    row: AssignmentMutationRow,
     resource: SelectedScheduleResource | null,
     visit: ScheduleVisit | null
   ): ScheduleAssignment {
@@ -2229,27 +2576,46 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   async function toggleCrewOffer(job: ScheduleJob) {
+    if (isOptimisticEntityId(job.id)) {
+      toast.info('Wait for this new job to finish saving.');
+      return;
+    }
     if (pendingCrewOfferJobIds.has(job.id)) return;
-    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
-      'scheduling-board',
-      weekStart,
-    ]);
     const nextValue = !job.is_drop_on_ready;
+    const operation = registerOptimisticOperation({
+      kind: 'toggle-crew-offer',
+      lockKeys: [`job:${job.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.jobs.some(
+            (item) => item.id === job.id && item.is_drop_on_ready === nextValue
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithJob(state.board, { ...job, is_drop_on_ready: nextValue })
+          : state.board,
+      }),
+    });
+    if (!operation) return;
     setPendingCrewOfferJobIds((current) => new Set(current).add(job.id));
-    setBoardData((current) => ({
-      ...current,
-      jobs: current.jobs.map((item) =>
-        item.id === job.id ? { ...item, is_drop_on_ready: nextValue } : item
-      ),
-    }));
     try {
-      await saveScheduleJob({ is_drop_on_ready: nextValue }, job.id);
+      const authoritative = await saveScheduleJob({ is_drop_on_ready: nextValue }, job.id);
+      setBoardBaseData((current) => patchBoardWithJob(current, authoritative));
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: { [`board:${weekStart}`]: provesJob(authoritative) },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardWithJob(state.board, authoritative)
+            : state.board,
+        }),
+      });
       toast.success(nextValue ? 'Crew offer enabled' : 'Crew offer disabled');
-      await refresh();
     } catch (error) {
-      if (previous) {
-        queryClient.setQueryData(['scheduling-board', weekStart], previous);
-      }
+      settleOptimisticOperation(operation.id, 'failure', error);
       toast.error(error instanceof Error ? error.message : 'Unable to update crew offer');
     } finally {
       setPendingCrewOfferJobIds((current) => {
@@ -2265,7 +2631,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     startDate: string,
     initialVisit?: { starts_at: string; ends_at: string }
   ) {
-    if (isSchedulingQuote) return;
     if (quote.kind === 'returned_visit') {
       const startsAt =
         initialVisit?.starts_at
@@ -2282,30 +2647,151 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         return;
       }
 
-      setIsSchedulingQuote(true);
+      const operationId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const fallbackJob: ScheduleJob = {
+        id: quote.returned_visit.job_id,
+        job_reference: quote.returned_visit.job_reference,
+        title: quote.returned_visit.job_title,
+        description: null,
+        site_address: null,
+        status: 'scheduled',
+        source_type: quote.returned_visit.source_type,
+        start_date: startDate,
+        end_date: startDate,
+        estimated_duration_minutes: quote.returned_visit.duration_minutes,
+        quote_id: null,
+        quote_project_number_id: null,
+        customer_id: null,
+        customer_site_id: null,
+        customer_name: quote.returned_visit.customer_name,
+        is_drop_on_ready: false,
+        tags: [],
+        created_by: null,
+        updated_by: userId,
+        created_at: now,
+        updated_at: now,
+      };
+      const optimisticJob: ScheduleJob = quote.returned_visit.job
+        ? {
+            ...quote.returned_visit.job,
+            start_date: startDate,
+            end_date: startDate,
+            updated_by: userId,
+            updated_at: now,
+          }
+        : fallbackJob;
+      const fallbackVisit: ScheduleVisit = {
+        id: quote.returned_visit.visit_id,
+        job_id: optimisticJob.id,
+        sequence_number: quote.returned_visit.sequence_number,
+        title: quote.returned_visit.title,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        status: 'planned',
+        notes: quote.returned_visit.notes,
+        created_by: null,
+        updated_by: userId,
+        created_at: now,
+        updated_at: now,
+      };
+      const optimisticVisit: ScheduleVisit = quote.returned_visit.visit
+        ? {
+            ...quote.returned_visit.visit,
+            job_id: optimisticJob.id,
+            starts_at: startsAt,
+            ends_at: endsAt,
+            updated_by: userId,
+            updated_at: now,
+          }
+        : fallbackVisit;
+      const operation = registerOptimisticOperation({
+        id: operationId,
+        kind: 'schedule-backlog-visit',
+        lockKeys: [
+          `job-tree:${optimisticJob.id}`,
+          `backlog-visit:${optimisticVisit.id}`,
+          `visit-tree:${optimisticVisit.id}`,
+        ],
+        queryKeys: [`board:${weekStart}`, 'backlog'],
+        proofs: {
+          [`board:${weekStart}`]: (state) =>
+            state.board?.visits.some(
+              (visit) =>
+                visit.id === optimisticVisit.id
+                && visit.starts_at === startsAt
+            ) === true,
+          backlog: (state) =>
+            state.visitBacklog?.every(
+              (item) => item.visit_id !== optimisticVisit.id
+            ) === true,
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardWithVisit(
+                patchBoardWithJob(state.board, optimisticJob),
+                optimisticVisit
+              )
+            : state.board,
+          visitBacklog: removeVisitBacklogItem(state.visitBacklog, optimisticVisit.id),
+        }),
+      });
+      if (!operation) return;
+      setSelectedQuote(null);
       try {
-        await scheduleQueuedVisit({
+        const result = await scheduleQueuedVisit({
           request_id: crypto.randomUUID(),
           visit_id: quote.returned_visit.visit_id,
           starts_at: startsAt,
         });
-        setSelectedQuote(null);
+        setBoardBaseData((current) =>
+          patchBoardWithVisit(
+            patchBoardWithJob(current, result.job),
+            result.visit
+          )
+        );
+        queryClient.setQueryData(
+          ['scheduling-visit-backlog'],
+          (current: ScheduleVisitBacklogItem[] | undefined) =>
+            removeVisitBacklogItem(current, result.visit.id)
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${weekStart}`]: (state) =>
+              provesJob(result.job)(state) && provesVisit(result.visit)(state),
+            backlog: (state) =>
+              state.visitBacklog?.every(
+                (item) => item.visit_id !== result.visit.id
+              ) === true,
+          },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithVisit(
+                  patchBoardWithJob(state.board, result.job),
+                  result.visit
+                )
+              : state.board,
+            visitBacklog: removeVisitBacklogItem(
+              state.visitBacklog,
+              result.visit.id
+            ),
+          }),
+        });
         toast.success(`${quote.base_quote_reference} returned to the schedule`);
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
-          queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
-        ]);
       } catch (error) {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setSelectedQuote(quote);
         toast.error(
           error instanceof Error ? error.message : 'Unable to schedule this returned visit'
         );
-      } finally {
-        setIsSchedulingQuote(false);
       }
       return;
     }
     if (quote.kind === 'project') {
       if (!quotesSensitiveAccess.canAccess) return;
+      setProjectPlacementDraft(null);
       setProjectPlacement({ project: quote.project, date: startDate, initialVisit });
       return;
     }
@@ -2313,42 +2799,542 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       startDate,
       quote.estimated_duration_days
     );
-    setIsSchedulingQuote(true);
+    const operationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const optimisticJob: ScheduleJob = {
+      id: createOptimisticEntityId(operationId, 'job'),
+      job_reference: quote.base_quote_reference,
+      title: quote.title,
+      description: null,
+      site_address: null,
+      status: 'scheduled',
+      source_type: 'quote',
+      start_date: startDate,
+      end_date: endDate,
+      estimated_duration_minutes: quote.estimated_duration_minutes || null,
+      quote_id: quote.id,
+      quote_project_number_id: null,
+      customer_id: null,
+      customer_site_id: null,
+      customer_name: quote.customer_name,
+      is_drop_on_ready: false,
+      tags: [],
+      created_by: null,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    };
+    const optimisticVisit = initialVisit
+      ? {
+          id: createOptimisticEntityId(operationId, 'visit'),
+          job_id: optimisticJob.id,
+          sequence_number: 1,
+          title: null,
+          starts_at: initialVisit.starts_at,
+          ends_at: initialVisit.ends_at,
+          status: 'planned' as const,
+          notes: null,
+          created_by: null,
+          updated_by: userId,
+          created_at: now,
+          updated_at: now,
+        }
+      : null;
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'schedule-quote',
+      lockKeys: [`quote:${quote.id}`],
+      queryKeys: [`board:${weekStart}`, 'quotes'],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.jobs.some(
+            (job) =>
+              job.quote_id === quote.id
+              && job.start_date === startDate
+              && job.end_date === endDate
+          ) === true,
+        quotes: (state) =>
+          state.quoteCandidates?.every((candidate) => candidate.id !== quote.id) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? optimisticVisit
+            ? patchBoardWithVisit(
+                patchBoardWithJob(state.board, optimisticJob),
+                optimisticVisit
+              )
+            : patchBoardWithJob(state.board, optimisticJob)
+          : state.board,
+        quoteCandidates: removeQuoteCandidate(state.quoteCandidates, quote.id),
+      }),
+    });
+    if (!operation) return;
+    setSelectedQuote(null);
     try {
-      await saveQuoteSchedule({
+      const result = await saveQuoteSchedule({
         quote_id: quote.id,
         start_date: startDate,
         end_date: endDate,
         ...(initialVisit ? { initial_visit: initialVisit } : {}),
       });
-      setSelectedQuote(null);
+      setBoardBaseData((current) => {
+        const withJob = patchBoardWithJob(current, result.job);
+        return result.visit ? patchBoardWithVisit(withJob, result.visit) : withJob;
+      });
+      queryClient.setQueryData(
+        ['scheduling-quote-candidates'],
+        (current: ScheduleQuoteCandidate[] | undefined) =>
+          removeQuoteCandidate(current, quote.id)
+      );
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: (state) =>
+            provesJob(result.job)(state)
+            && (!result.visit || provesVisit(result.visit)(state)),
+          quotes: (state) =>
+            state.quoteCandidates?.every(
+              (candidate) => candidate.id !== quote.id
+            ) === true,
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? result.visit
+              ? patchBoardWithVisit(
+                  patchBoardWithJob(state.board, result.job),
+                  result.visit
+                )
+              : patchBoardWithJob(state.board, result.job)
+            : state.board,
+          quoteCandidates: removeQuoteCandidate(state.quoteCandidates, quote.id),
+        }),
+      });
       toast.success(
         `${quote.base_quote_reference} scheduled ${startDate === endDate ? `for ${startDate}` : `from ${startDate} to ${endDate}`}`
       );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
-        queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
-      ]);
     } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      setSelectedQuote(quote);
       toast.error(error instanceof Error ? error.message : 'Unable to schedule this Quote');
-    } finally {
-      setIsSchedulingQuote(false);
     }
   }
 
+  function handleProjectPlacementSubmit(input: CreateProjectScheduleJobInput) {
+    if (!projectPlacement) return;
+    setProjectPlacementDraft(input);
+    const project = projectPlacement.project;
+    const operationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const optimisticJob: ScheduleJob = {
+      id: createOptimisticEntityId(operationId, 'job'),
+      job_reference: project.project_reference,
+      title: project.title,
+      description: project.description,
+      site_address: input.site_address || null,
+      status: input.status,
+      source_type: 'manual',
+      start_date: input.start_date,
+      end_date: input.end_date,
+      estimated_duration_minutes: input.estimated_duration_minutes || null,
+      quote_id: null,
+      quote_project_number_id: project.id,
+      customer_id: input.customer_id,
+      customer_site_id: input.customer_site_id || null,
+      is_drop_on_ready: input.is_drop_on_ready,
+      tags: [],
+      created_by: userId,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    };
+    const optimisticVisit = input.initial_visit
+      ? {
+          id: createOptimisticEntityId(operationId, 'visit'),
+          job_id: optimisticJob.id,
+          sequence_number: 1,
+          title: null,
+          starts_at: input.initial_visit.starts_at,
+          ends_at: input.initial_visit.ends_at,
+          status: 'planned' as const,
+          notes: null,
+          created_by: userId,
+          updated_by: userId,
+          created_at: now,
+          updated_at: now,
+        }
+      : null;
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'schedule-project',
+      lockKeys: [`project:${project.id}`],
+      queryKeys: [`board:${weekStart}`, 'projects'],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.jobs.some(
+            (job) =>
+              job.quote_project_number_id === project.id
+              && job.start_date === input.start_date
+          ) === true,
+        projects: (state) =>
+          state.projectCandidates?.every(
+            (candidate) => candidate.id !== project.id
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? optimisticVisit
+            ? patchBoardWithVisit(
+                patchBoardWithJob(state.board, optimisticJob),
+                optimisticVisit
+              )
+            : patchBoardWithJob(state.board, optimisticJob)
+          : state.board,
+        projectCandidates: removeProjectCandidateFromQueue(
+          state.projectCandidates,
+          project.id
+        ),
+      }),
+    });
+    if (!operation) return;
+    setSelectedQuote(null);
+    if (optimisticVisit) activateVisit(optimisticJob, optimisticVisit);
+    void createProjectScheduleJob(input)
+      .then((result) => {
+        setBoardBaseData((current) => {
+          const withJob = patchBoardWithJob(current, result.job);
+          return result.visit ? patchBoardWithVisit(withJob, result.visit) : withJob;
+        });
+        queryClient.setQueryData(
+          ['scheduling-project-candidates'],
+          (current: ScheduleProjectCandidate[] | undefined) =>
+            removeProjectCandidateFromQueue(current, project.id)
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${weekStart}`]: (state) =>
+              provesJob(result.job)(state)
+              && (!result.visit || provesVisit(result.visit)(state)),
+            projects: (state) =>
+              state.projectCandidates?.every(
+                (candidate) => candidate.id !== project.id
+              ) === true,
+          },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? result.visit
+                ? patchBoardWithVisit(
+                    patchBoardWithJob(state.board, result.job),
+                    result.visit
+                  )
+                : patchBoardWithJob(state.board, result.job)
+              : state.board,
+            projectCandidates: removeProjectCandidateFromQueue(
+              state.projectCandidates,
+              project.id
+            ),
+          }),
+        });
+        setProjectPlacementDraft(null);
+        const authoritativeVisit = result.visit;
+        if (authoritativeVisit) {
+          setActiveVisitTarget((current) =>
+            current?.visit.id === optimisticVisit?.id
+              ? { job: result.job, visit: authoritativeVisit }
+              : current
+          );
+        }
+        toast.success(`${project.project_reference} scheduled`);
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setProjectPlacement({
+          project,
+          date: input.start_date,
+          initialVisit: input.initial_visit,
+        });
+        toast.error(error instanceof Error ? error.message : 'Unable to schedule Project.');
+      });
+  }
+
+  function handleQuoteReschedule(input: ScheduleQuoteInput) {
+    const job = schedulingQuoteJob;
+    if (!job) return;
+    if (isOptimisticEntityId(job.id)) {
+      toast.info('Wait for this new job to finish saving.');
+      return;
+    }
+    setQuoteScheduleDraft(input);
+    const optimisticJob: ScheduleJob = {
+      ...job,
+      start_date: input.start_date,
+      end_date: input.end_date,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    };
+    const operation = registerOptimisticOperation({
+      kind: 'reschedule-quote',
+      lockKeys: [`job:${job.id}`, `quote:${input.quote_id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.jobs.some(
+            (item) =>
+              item.id === job.id
+              && item.start_date === input.start_date
+              && item.end_date === input.end_date
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithJob(state.board, optimisticJob)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      setSchedulingQuoteJob(job);
+      return;
+    }
+    void saveQuoteSchedule(input)
+      .then((result) => {
+        setBoardBaseData((current) => {
+          const withJob = patchBoardWithJob(current, result.job);
+          return result.visit ? patchBoardWithVisit(withJob, result.visit) : withJob;
+        });
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesJob(result.job) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? result.visit
+                ? patchBoardWithVisit(
+                    patchBoardWithJob(state.board, result.job),
+                    result.visit
+                  )
+                : patchBoardWithJob(state.board, result.job)
+              : state.board,
+          }),
+        });
+        setQuoteScheduleDraft(null);
+        toast.success('Quote schedule updated');
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setSchedulingQuoteJob(job);
+        toast.error(error instanceof Error ? error.message : 'Unable to schedule Quote');
+      });
+  }
+
+  function handleJobUpdate(input: ScheduleJobUpdateInput, job: ScheduleJob) {
+    if (isOptimisticEntityId(job.id)) {
+      toast.info('Wait for this new job to finish saving.');
+      return;
+    }
+    if (input.tag_ids?.some(isOptimisticEntityId)) {
+      toast.info('Wait for new tags to finish saving.');
+      return;
+    }
+    setJobDraft(input);
+    const { tag_ids: tagIds, ...jobFields } = input;
+    const optimisticJob: ScheduleJob = {
+      ...job,
+      ...jobFields,
+      ...(tagIds
+        ? {
+            tags: (board?.tags || []).filter((tag) => tagIds.includes(tag.id)),
+          }
+        : {}),
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    };
+    const operation = registerOptimisticOperation({
+      kind: 'update-job',
+      lockKeys: [`job:${job.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.jobs.some((item) =>
+            item.id === job.id
+            && Object.entries(jobFields).every(
+              ([key, value]) =>
+                item[key as keyof ScheduleJob] === value
+            )
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithJob(state.board, optimisticJob)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      setEditingJob(job);
+      setJobDialogOpen(true);
+      return;
+    }
+    void saveScheduleJob(input, job.id)
+      .then((authoritative) => {
+        setBoardBaseData((current) => patchBoardWithJob(current, authoritative));
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesJob(authoritative) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithJob(state.board, authoritative)
+              : state.board,
+          }),
+        });
+        setJobDraft(null);
+        toast.success(
+          job.source_type === 'quote' ? 'Job metadata updated' : 'Job updated'
+        );
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setEditingJob(job);
+        setJobDialogOpen(true);
+        toast.error(error instanceof Error ? error.message : 'Unable to save job');
+      });
+  }
+
+  function handlePlantBlockSave(input: SavePlantUnavailabilityInput) {
+    setPlantBlockDraft(input);
+    const operationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const optimisticBlock: SchedulePlantUnavailability = {
+      id: createOptimisticEntityId(operationId, 'plant-block'),
+      plant_id: input.plant_id,
+      start_date: input.start_date,
+      end_date: input.end_date,
+      reason: input.reason,
+      notes: input.notes || null,
+      created_by: userId,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+      plant: board?.resources.plant.find((plant) => plant.id === input.plant_id) || null,
+    };
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'create-plant-block',
+      lockKeys: [`plant-block-range:${input.plant_id}:${input.start_date}:${input.end_date}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.plant_unavailability.some(
+            (block) =>
+              block.plant_id === input.plant_id
+              && block.start_date === input.start_date
+              && block.end_date === input.end_date
+              && block.reason === input.reason
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithPlantBlock(state.board, optimisticBlock)
+          : state.board,
+      }),
+    });
+    if (!operation) return;
+    setUnavailabilityOpen(false);
+    void savePlantUnavailability(input)
+      .then((authoritative) => {
+        setBoardBaseData((current) =>
+          patchBoardWithPlantBlock(current, {
+            ...authoritative,
+            plant: optimisticBlock.plant,
+          })
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesPlantBlock(authoritative) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithPlantBlock(state.board, {
+                  ...authoritative,
+                  plant: optimisticBlock.plant,
+                })
+              : state.board,
+          }),
+        });
+        setPlantBlockDraft(null);
+        toast.success('Plant availability updated');
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setUnavailabilityOpen(true);
+        toast.error(error instanceof Error ? error.message : 'Unable to save unavailability');
+      });
+  }
+
+  function handlePlantBlockDelete(block: SchedulePlantUnavailability) {
+    if (isOptimisticEntityId(block.id)) {
+      toast.info('Wait for this availability change to finish saving.');
+      return;
+    }
+    const operation = registerOptimisticOperation({
+      kind: 'delete-plant-block',
+      lockKeys: [`plant-block:${block.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: provesBoardEntityAbsent('plant-block', block.id),
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardRemovePlantBlock(state.board, block.id)
+          : state.board,
+      }),
+    });
+    if (!operation) return;
+    void deletePlantUnavailability(block.id)
+      .then(() => {
+        setBoardBaseData((current) =>
+          patchBoardRemovePlantBlock(current, block.id)
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${weekStart}`]: provesBoardEntityAbsent('plant-block', block.id),
+          },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardRemovePlantBlock(state.board, block.id)
+              : state.board,
+          }),
+        });
+        toast.success('Unavailability removed');
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        toast.error(error instanceof Error ? error.message : 'Unable to remove unavailability');
+      });
+  }
+
   async function prepareVisitReturn(target: ActiveVisitTarget) {
+    if (isOptimisticEntityId(target.job.id) || isOptimisticEntityId(target.visit.id)) {
+      toast.info('Wait for this new visit to finish saving.');
+      return;
+    }
+    setPendingVisitReturn({ target, preview: null });
     try {
       const preview = await previewScheduleVisitBacklog(target.visit.id);
       if (preview.already_queued) {
         toast.info('This visit is already in the Jobs queue.');
-        void Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
-          queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
-        ]);
+        setPendingVisitReturn(null);
+        reconcileOptimisticKeysInBackground([`board:${weekStart}`, 'backlog']);
         return;
       }
-      setPendingVisitReturn({ target, preview });
+      setPendingVisitReturn((current) =>
+        current?.target.visit.id === target.visit.id ? { target, preview } : current
+      );
     } catch (error) {
+      setPendingVisitReturn(null);
       toast.error(
         error instanceof Error
           ? error.message
@@ -2358,39 +3344,149 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   async function confirmVisitReturn() {
-    if (!pendingVisitReturn || isReturningVisit) return;
+    if (!pendingVisitReturn?.preview || isReturningVisit) return;
     const { target, preview } = pendingVisitReturn;
+    const queuedAt = new Date().toISOString();
+    const backlogItem: ScheduleVisitBacklogItem = {
+      visit_id: target.visit.id,
+      job_id: target.job.id,
+      job_reference: target.job.job_reference,
+      job_title: target.job.title,
+      source_type: target.job.source_type,
+      customer_name: target.job.customer_name || null,
+      sequence_number: target.visit.sequence_number,
+      title: target.visit.title,
+      notes: target.visit.notes,
+      original_starts_at: target.visit.starts_at,
+      original_ends_at: target.visit.ends_at,
+      duration_milliseconds:
+        parseISO(target.visit.ends_at).getTime() - parseISO(target.visit.starts_at).getTime(),
+      duration_minutes: Math.round(
+        (parseISO(target.visit.ends_at).getTime() - parseISO(target.visit.starts_at).getTime())
+        / 60_000
+      ),
+      queued_at: queuedAt,
+    };
+    const operation = registerOptimisticOperation({
+      kind: 'return-visit-to-backlog',
+      lockKeys: [
+        `job-tree:${target.job.id}`,
+        `visit-tree:${target.visit.id}`,
+        `backlog-visit:${target.visit.id}`,
+      ],
+      queryKeys: [`board:${weekStart}`, 'backlog'],
+      proofs: {
+        [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
+        backlog: (state) =>
+          state.visitBacklog?.some(
+            (item) => item.visit_id === target.visit.id
+          ) === true,
+      },
+      apply: (state) => {
+        if (!state.board) {
+          return {
+            ...state,
+            visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
+          };
+        }
+        const otherVisits = state.board.visits.filter(
+          (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+        );
+        const nextBoard = otherVisits.length > 0
+          ? patchBoardRemoveVisit(state.board, target.visit.id)
+          : patchBoardRemoveJob(state.board, target.job.id);
+        return {
+          ...state,
+          board: nextBoard,
+          visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
+        };
+      },
+    });
+    if (!operation) return;
     setIsReturningVisit(true);
+    setPendingVisitReturn(null);
+    setActiveVisitTarget((current) =>
+      current?.visit.id === target.visit.id ? null : current
+    );
+    setVisitTarget((current) =>
+      current?.visit?.id === target.visit.id ? null : current
+    );
+    setSelectedResource(null);
+    setSelectedQuote(null);
+    setSidebarTab('jobs');
+    setQuoteStage('all');
     try {
-      await enqueueScheduleVisit({
+      const result = await enqueueScheduleVisit({
         request_id: crypto.randomUUID(),
         visit_id: target.visit.id,
         expected_fingerprint: preview.fingerprint,
       });
-      setPendingVisitReturn(null);
-      setActiveVisitTarget((current) =>
-        current?.visit.id === target.visit.id ? null : current
+      setBoardBaseData((current) => {
+        const otherVisits = current.visits.filter(
+          (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+        );
+        return otherVisits.length > 0
+          ? patchBoardRemoveVisit(current, target.visit.id)
+          : patchBoardRemoveJob(current, target.job.id);
+      });
+      queryClient.setQueryData(
+        ['scheduling-visit-backlog'],
+        (current: ScheduleVisitBacklogItem[] | undefined) =>
+          upsertVisitBacklogItem(current, {
+            ...(result.backlog_item || backlogItem),
+            queued_at: result.backlog_item?.queued_at || result.queued_at,
+          })
       );
-      setVisitTarget((current) =>
-        current?.visit?.id === target.visit.id ? null : current
-      );
-      setSelectedResource(null);
-      setSelectedQuote(null);
-      setSidebarTab('jobs');
-      setQuoteStage('all');
+      const authoritativeBacklogItem = result.backlog_item || {
+        ...backlogItem,
+        queued_at: result.queued_at,
+      };
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
+          backlog: (state) =>
+            state.visitBacklog?.some(
+              (item) =>
+                item.visit_id === target.visit.id
+                && item.queued_at === authoritativeBacklogItem.queued_at
+            ) === true,
+        },
+        apply: (state) => {
+          if (!state.board) {
+            return {
+              ...state,
+              visitBacklog: upsertVisitBacklogItem(
+                state.visitBacklog,
+                authoritativeBacklogItem
+              ),
+            };
+          }
+          const otherVisits = state.board.visits.filter(
+            (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+          );
+          return {
+            ...state,
+            board: otherVisits.length > 0
+              ? patchBoardRemoveVisit(state.board, target.visit.id)
+              : patchBoardRemoveJob(state.board, target.job.id),
+            visitBacklog: upsertVisitBacklogItem(
+              state.visitBacklog,
+              authoritativeBacklogItem
+            ),
+          };
+        },
+      });
       toast.success(
         `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
       );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
-        queryClient.invalidateQueries({ queryKey: ['scheduling-visit-backlog'] }),
-      ]);
     } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
       if (
         error instanceof SchedulingApiError
         && error.payload.code === 'stale_visit_preview'
       ) {
-        setPendingVisitReturn(null);
+        setPendingVisitReturn({ target, preview: null });
+        void prepareVisitReturn(target);
       }
       toast.error(
         error instanceof Error ? error.message : 'Unable to return this visit to Jobs'
@@ -2400,7 +3496,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
-  function setBoardData(
+  function setBoardBaseData(
     updater: (current: SchedulingBoardPayload) => SchedulingBoardPayload
   ) {
     queryClient.setQueryData<SchedulingBoardPayload>(
@@ -2409,22 +3505,229 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     );
   }
 
+  function provesJob(expected: ScheduleJob) {
+    return (state: SchedulingProjection) =>
+      state.board?.jobs.some(
+        (job) => job.id === expected.id && job.updated_at === expected.updated_at
+      ) === true;
+  }
+
+  function provesVisit(expected: ScheduleVisit) {
+    return (state: SchedulingProjection) =>
+      state.board?.visits.some(
+        (visit) =>
+          visit.id === expected.id
+          && visit.updated_at === expected.updated_at
+          && visit.starts_at === expected.starts_at
+          && visit.ends_at === expected.ends_at
+      ) === true;
+  }
+
+  function provesAssignment(expected: ScheduleAssignment) {
+    return (state: SchedulingProjection) =>
+      state.board?.assignments.some(
+        (assignment) =>
+          assignment.id === expected.id
+          && assignment.updated_at === expected.updated_at
+          && assignment.visit_id === expected.visit_id
+      ) === true;
+  }
+
+  function provesPlantBlock(expected: SchedulePlantUnavailability) {
+    return (state: SchedulingProjection) =>
+      state.board?.plant_unavailability.some(
+        (block) => block.id === expected.id && block.updated_at === expected.updated_at
+      ) === true;
+  }
+
+  function provesBoardEntityAbsent(
+    kind: 'job' | 'visit' | 'assignment' | 'plant-block',
+    id: string
+  ) {
+    return (state: SchedulingProjection) => {
+      if (!state.board) return false;
+      if (kind === 'job') return state.board.jobs.every((job) => job.id !== id);
+      if (kind === 'visit') return state.board.visits.every((visit) => visit.id !== id);
+      if (kind === 'assignment') {
+        return state.board.assignments.every((assignment) => assignment.id !== id);
+      }
+      return state.board.plant_unavailability.every((block) => block.id !== id);
+    };
+  }
+
+  function handleVisitSave(
+    input: SaveScheduleVisitInput,
+    existingVisit: ScheduleVisit | null
+  ) {
+    if (isOptimisticEntityId(input.job_id) || isOptimisticEntityId(existingVisit?.id)) {
+      toast.info('Wait for this new schedule item to finish saving.');
+      return;
+    }
+    const operationId = crypto.randomUUID();
+    setVisitDraft(input);
+    const now = new Date().toISOString();
+    const job = board?.jobs.find((item) => item.id === input.job_id);
+    if (!job) return;
+    const optimisticVisit: ScheduleVisit = existingVisit
+      ? { ...existingVisit, ...input, updated_by: userId, updated_at: now }
+      : {
+          id: createOptimisticEntityId(operationId, 'visit'),
+          job_id: input.job_id,
+          sequence_number:
+            Math.max(
+              0,
+              ...(board?.visits
+                .filter((visit) => visit.job_id === input.job_id)
+                .map((visit) => visit.sequence_number) || [])
+            ) + 1,
+          title: input.title || null,
+          starts_at: input.starts_at,
+          ends_at: input.ends_at,
+          status: input.status || 'planned',
+          notes: input.notes || null,
+          created_by: userId,
+          updated_by: userId,
+          created_at: now,
+          updated_at: now,
+        };
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: existingVisit ? 'update-visit' : 'create-visit',
+      lockKeys: existingVisit
+        ? [`job-tree:${input.job_id}`, `visit:${existingVisit.id}`]
+        : [`job-tree:${input.job_id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.visits.some(
+            (visit) =>
+              visit.job_id === input.job_id
+              && (!existingVisit || visit.id === existingVisit.id)
+              && visit.starts_at === input.starts_at
+              && visit.ends_at === input.ends_at
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithVisit(state.board, optimisticVisit)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      setVisitTarget({
+        job,
+        visit: existingVisit,
+        date: getScheduleVisitDate(input.starts_at),
+      });
+      return;
+    }
+    void saveScheduleVisit(input, existingVisit?.id)
+      .then((authoritative) => {
+        setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithVisit(state.board, authoritative)
+              : state.board,
+          }),
+        });
+        setVisitDraft(null);
+        toast.success(existingVisit ? 'Visit updated' : 'Visit added');
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setVisitTarget({
+          job,
+          visit: existingVisit,
+          date: getScheduleVisitDate(input.starts_at),
+        });
+        toast.error(error instanceof Error ? error.message : 'Unable to save visit');
+      });
+  }
+
+  function handleVisitDelete(visit: ScheduleVisit) {
+    if (isOptimisticEntityId(visit.id) || isOptimisticEntityId(visit.job_id)) {
+      toast.info('Wait for this new visit to finish saving.');
+      return;
+    }
+    const job = board?.jobs.find((item) => item.id === visit.job_id);
+    if (!job) return;
+    const operation = registerOptimisticOperation({
+      kind: 'delete-visit',
+      lockKeys: [`job-tree:${visit.job_id}`, `visit-tree:${visit.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: provesBoardEntityAbsent('visit', visit.id),
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardRemoveVisit(state.board, visit.id)
+          : state.board,
+      }),
+    });
+    if (!operation) return;
+    void deleteScheduleVisit(visit.id)
+      .then(() => {
+        setBoardBaseData((current) => patchBoardRemoveVisit(current, visit.id));
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${weekStart}`]: provesBoardEntityAbsent('visit', visit.id),
+          },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardRemoveVisit(state.board, visit.id)
+              : state.board,
+          }),
+        });
+        toast.success('Visit deleted');
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setVisitTarget({
+          job,
+          visit,
+          date: getScheduleVisitDate(visit.starts_at),
+        });
+        toast.error(error instanceof Error ? error.message : 'Unable to delete visit');
+      });
+  }
+
   async function resizeVisit(
     visit: ScheduleVisit,
     startsAt: string,
     endsAt: string
   ) {
-    const previous = queryClient.getQueryData<SchedulingBoardPayload>([
-      'scheduling-board',
-      weekStart,
-    ]);
+    if (isOptimisticEntityId(visit.id) || isOptimisticEntityId(visit.job_id)) {
+      toast.info('Wait for this new visit to finish saving.');
+      return;
+    }
     const resizedVisit = { ...visit, starts_at: startsAt, ends_at: endsAt };
-    setBoardData((current) => ({
-      ...current,
-      visits: current.visits.map((item) =>
-        item.id === visit.id ? resizedVisit : item
-      ),
-    }));
+    const operation = registerOptimisticOperation({
+      kind: 'resize-visit',
+      lockKeys: [`job-tree:${visit.job_id}`, `visit:${visit.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.visits.some(
+            (item) =>
+              item.id === visit.id
+              && item.starts_at === startsAt
+              && item.ends_at === endsAt
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithVisit(state.board, resizedVisit)
+          : state.board,
+      }),
+    });
+    if (!operation) return;
     setActiveVisitTarget((current) =>
       current?.visit.id === visit.id
         ? { ...current, visit: resizedVisit }
@@ -2432,7 +3735,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     );
 
     try {
-      await saveScheduleVisit({
+      const authoritative = await saveScheduleVisit({
         job_id: visit.job_id,
         title: visit.title,
         starts_at: startsAt,
@@ -2440,31 +3743,34 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         status: visit.status,
         notes: visit.notes,
       }, visit.id);
+      setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardWithVisit(state.board, authoritative)
+            : state.board,
+        }),
+      });
       toast.success('Visit times updated');
-      await refresh();
     } catch (error) {
-      if (previous) {
-        queryClient.setQueryData(['scheduling-board', weekStart], previous);
-        const previousVisit = previous.visits.find((item) => item.id === visit.id);
-        if (previousVisit) {
-          setActiveVisitTarget((current) =>
-            current?.visit.id === visit.id
-              ? { ...current, visit: previousVisit }
-              : current
-          );
-        }
-      }
+      settleOptimisticOperation(operation.id, 'failure', error);
+      setActiveVisitTarget((current) =>
+        current?.visit.id === visit.id ? { ...current, visit } : current
+      );
       toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
     }
   }
 
   function createOptimisticAssignment(
     target: ActiveVisitTarget,
-    resource: SelectedScheduleResource
+    resource: SelectedScheduleResource,
+    operationId: string
   ): ScheduleAssignment {
     const now = new Date().toISOString();
     const base = {
-      id: `optimistic-${resource.type}-${resource.id}-${target.visit.id}`,
+      id: createOptimisticEntityId(operationId, 'assignment'),
       job_id: target.job.id,
       work_date: getScheduleVisitDate(target.visit.starts_at),
       visit_id: target.visit.id,
@@ -2502,6 +3808,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     target: ActiveVisitTarget,
     resource: SelectedScheduleResource
   ) {
+    if (
+      isOptimisticEntityId(target.job.id)
+      || isOptimisticEntityId(target.visit.id)
+    ) {
+      toast.info('Wait for this new visit to finish saving before assigning resources.');
+      return;
+    }
     const mutationKey = `assign:${resource.type}:${resource.id}:${target.visit.id}`;
     const mutationEpoch = beginMutation(mutationKey);
     if (mutationEpoch == null) return;
@@ -2511,10 +3824,43 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       resource_type: resource.type,
       resource_id: resource.id,
     };
-    const optimisticAssignment = createOptimisticAssignment(target, resource);
-    setBoardData((current) =>
-      patchBoardWithAssignment(current, optimisticAssignment)
+    const operationId = crypto.randomUUID();
+    const optimisticAssignment = createOptimisticAssignment(
+      target,
+      resource,
+      operationId
     );
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'create-assignment',
+      lockKeys: [
+        `job-tree:${target.job.id}`,
+        `assignment-slot:${resource.type}:${resource.id}:${target.visit.id}`,
+      ],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.assignments.some(
+            (assignment) =>
+              assignment.visit_id === target.visit.id
+              && (
+                resource.type === 'employee'
+                  ? 'profile_id' in assignment && assignment.profile_id === resource.id
+                  : 'plant_id' in assignment && assignment.plant_id === resource.id
+              )
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithAssignment(state.board, optimisticAssignment)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
     setSelectedResource(null);
     activateVisit(target.job, target.visit);
 
@@ -2528,24 +3874,34 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           resource,
           target.visit
         );
-        setBoardData((current) =>
+        setBoardBaseData((current) =>
           applyCapacity(
-            patchBoardWithAssignment(current, authoritative, {
-              replaceOptimisticId: optimisticAssignment.id,
-            }),
+            patchBoardWithAssignment(current, authoritative),
             result.employee_capacity
           )
         );
       }
-      toast.success(`${resource.label} assigned`);
-      reconcileBoardInBackground();
-    } catch (error) {
-      // Reverse only this mutation's optimistic row when it is still the current epoch.
-      if (isCurrentMutation(mutationKey, mutationEpoch)) {
-        setBoardData((current) =>
-          patchBoardRemoveAssignment(current, optimisticAssignment.id)
+      if (createdRow) {
+        const authoritative = assignmentFromMutationRow(
+          createdRow,
+          resource,
+          target.visit
         );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesAssignment(authoritative) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithAssignment(state.board, authoritative)
+              : state.board,
+          }),
+        });
+      } else {
+        settleOptimisticOperation(operation.id);
       }
+      toast.success(`${resource.label} assigned`);
+    } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
       if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
         setPendingConflict({
           input,
@@ -2563,20 +3919,51 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     assignment: ScheduleAssignment,
     target: ActiveVisitTarget
   ) {
+    if (
+      isOptimisticEntityId(assignment.id)
+      || isOptimisticEntityId(target.visit.id)
+    ) {
+      toast.info('Wait for pending schedule changes to finish saving.');
+      return;
+    }
     if (assignment.visit_id === target.visit.id) return;
     const mutationKey = assignmentMutationKey(assignment.id);
     const mutationEpoch = beginMutation(mutationKey);
     if (mutationEpoch == null) return;
-    const previousAssignment = assignment;
-    setBoardData((current) =>
-      patchBoardMoveAssignment(current, assignment.id, (item) => ({
-        ...item,
-        job_id: target.job.id,
-        work_date: getScheduleVisitDate(target.visit.starts_at),
-        visit_id: target.visit.id,
-        visit: target.visit,
-      }))
-    );
+    const operation = registerOptimisticOperation({
+      kind: 'move-assignment',
+      lockKeys: [
+        `job-tree:${assignment.job_id}`,
+        `job-tree:${target.job.id}`,
+        `assignment:${assignment.id}`,
+        `visit-tree:${target.visit.id}`,
+      ],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.assignments.some(
+            (item) =>
+              item.id === assignment.id
+              && item.visit_id === target.visit.id
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardMoveAssignment(state.board, assignment.id, (item) => ({
+              ...item,
+              job_id: target.job.id,
+              work_date: getScheduleVisitDate(target.visit.starts_at),
+              visit_id: target.visit.id,
+              visit: target.visit,
+            }))
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
     activateVisit(target.job, target.visit);
 
     try {
@@ -2588,27 +3975,36 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           null,
           target.visit
         );
-        setBoardData((current) =>
+        setBoardBaseData((current) =>
           applyCapacity(
-            patchBoardWithAssignment(current, authoritative, {
-              replaceOptimisticId: assignment.id,
-            }),
+            patchBoardWithAssignment(current, authoritative),
             result.employee_capacity
           )
         );
       } else if (result.employee_capacity) {
-        setBoardData((current) => applyCapacity(current, result.employee_capacity));
+        setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+      }
+      if (result.assignment) {
+        const authoritative = assignmentFromMutationRow(
+          result.assignment,
+          null,
+          target.visit
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: { [`board:${weekStart}`]: provesAssignment(authoritative) },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? patchBoardWithAssignment(state.board, authoritative)
+              : state.board,
+          }),
+        });
+      } else {
+        settleOptimisticOperation(operation.id);
       }
       toast.success('Assignment moved');
-      reconcileBoardInBackground();
     } catch (error) {
-      if (isCurrentMutation(mutationKey, mutationEpoch)) {
-        setBoardData((current) =>
-          patchBoardWithAssignment(current, previousAssignment, {
-            replaceOptimisticId: assignment.id,
-          })
-        );
-      }
+      settleOptimisticOperation(operation.id, 'failure', error);
       if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
         setPendingConflict({
           assignment,
@@ -2645,6 +4041,84 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const targetJob = conflict.input.job_id
       ? board?.jobs.find((job) => job.id === conflict.input.job_id) || null
       : null;
+    if (!targetVisit) {
+      endMutation(mutationKey);
+      return;
+    }
+    const operationId = crypto.randomUUID();
+    const overrideResource: SelectedScheduleResource = {
+      type: conflict.input.resource_type,
+      id: conflict.input.resource_id,
+      label: conflict.input.resource_type,
+    };
+    const optimisticOverride = conflict.assignment
+      ? null
+      : createOptimisticAssignment(targetJob
+        ? { job: targetJob, visit: targetVisit }
+        : { job: { id: conflict.input.job_id } as ScheduleJob, visit: targetVisit },
+      overrideResource,
+      operationId);
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'override-assignment-conflict',
+      lockKeys: conflict.assignment
+        ? [
+            `job-tree:${conflict.assignment.job_id}`,
+            `job-tree:${conflict.input.job_id}`,
+            `assignment:${conflict.assignment.id}`,
+          ]
+        : [
+            `job-tree:${conflict.input.job_id}`,
+            `assignment-slot:${conflict.input.resource_type}:${conflict.input.resource_id}:${targetVisit.id}`,
+          ],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.assignments.some(
+            (assignment) =>
+              (conflict.assignment
+                ? assignment.id === conflict.assignment.id
+                  && assignment.visit_id === targetVisit.id
+                : assignment.visit_id === targetVisit.id
+                  && (
+                    conflict.input.resource_type === 'employee'
+                      ? 'profile_id' in assignment
+                        && assignment.profile_id === conflict.input.resource_id
+                      : 'plant_id' in assignment
+                        && assignment.plant_id === conflict.input.resource_id
+                  ))
+              && assignment.conflict_override
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: !state.board
+          ? state.board
+          : conflict.assignment
+            ? patchBoardMoveAssignment(
+                state.board,
+                conflict.assignment.id,
+                (item) => ({
+                  ...item,
+                  job_id: conflict.input.job_id,
+                  visit_id: targetVisit.id,
+                  work_date: getScheduleVisitDate(targetVisit.starts_at),
+                  visit: targetVisit,
+                  conflict_override: true,
+                })
+              )
+            : optimisticOverride
+              ? patchBoardWithAssignment(state.board, {
+                  ...optimisticOverride,
+                  conflict_override: true,
+                })
+              : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
     try {
       let result: AssignmentMutationResult;
       if (conflict.assignment && conflict.input.visit_id) {
@@ -2660,16 +4134,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             null,
             targetVisit
           );
-          setBoardData((current) =>
+          setBoardBaseData((current) =>
             applyCapacity(
-              patchBoardWithAssignment(current, authoritative, {
-                replaceOptimisticId: conflict.assignment?.id,
-              }),
+              patchBoardWithAssignment(current, authoritative),
               result.employee_capacity
             )
           );
         } else if (result.employee_capacity) {
-          setBoardData((current) => applyCapacity(current, result.employee_capacity));
+          setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
         }
         if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
         toast.success('Assignment moved with conflict override');
@@ -2690,22 +4162,23 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             },
             targetVisit
           );
-          setBoardData((current) =>
+          setBoardBaseData((current) =>
             applyCapacity(
               patchBoardWithAssignment(current, authoritative),
               result.employee_capacity
             )
           );
         } else if (result.employee_capacity) {
-          setBoardData((current) => applyCapacity(current, result.employee_capacity));
+          setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
         }
         if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
         toast.success('Resource assigned with conflict override');
       }
+      settleOptimisticOperation(operation.id);
       setPendingConflict(null);
       setSelectedResource(null);
-      reconcileBoardInBackground();
     } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
       toast.error(error instanceof Error ? error.message : 'Unable to override conflict');
     } finally {
       endMutation(mutationKey);
@@ -2713,20 +4186,103 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   async function handleDeleteAssignment(assignment: ScheduleAssignment) {
+    if (isOptimisticEntityId(assignment.id) || isOptimisticEntityId(assignment.job_id)) {
+      toast.info('Wait for this assignment to finish saving.');
+      return;
+    }
     const mutationKey = assignmentMutationKey(assignment.id);
     const mutationEpoch = beginMutation(mutationKey);
     if (mutationEpoch == null) return;
-    setBoardData((current) => patchBoardRemoveAssignment(current, assignment.id));
+    const operation = registerOptimisticOperation({
+      kind: 'delete-assignment',
+      lockKeys: [`job-tree:${assignment.job_id}`, `assignment:${assignment.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: provesBoardEntityAbsent('assignment', assignment.id),
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardRemoveAssignment(state.board, assignment.id)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
     try {
       const result = await deleteScheduleAssignment(assignment.id, assignment.resource_type);
       if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
       if (result.employee_capacity) {
-        setBoardData((current) => applyCapacity(current, result.employee_capacity));
+        setBoardBaseData((current) =>
+          applyCapacity(
+            patchBoardRemoveAssignment(current, assignment.id),
+            result.employee_capacity
+          )
+        );
+      } else {
+        setBoardBaseData((current) =>
+          patchBoardRemoveAssignment(current, assignment.id)
+        );
       }
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: provesBoardEntityAbsent('assignment', assignment.id),
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardRemoveAssignment(state.board, assignment.id)
+            : state.board,
+        }),
+      });
       toast.success('Assignment removed', {
         action: {
           label: 'Undo',
           onClick: () => {
+            const restoreOperationId = crypto.randomUUID();
+            const optimisticRestore: ScheduleAssignment = {
+              ...assignment,
+              id: createOptimisticEntityId(restoreOperationId, 'assignment'),
+            };
+            const restoreOperation = registerOptimisticOperation({
+              id: restoreOperationId,
+              kind: 'restore-assignment',
+              lockKeys: [
+                `job-tree:${assignment.job_id}`,
+                `assignment-slot:${assignment.resource_type}:${
+                  assignment.resource_type === 'employee'
+                    ? assignment.profile_id
+                    : assignment.plant_id
+                }:${assignment.visit_id || assignment.work_date}`,
+              ],
+              queryKeys: [`board:${weekStart}`],
+              proofs: {
+                [`board:${weekStart}`]: (state) =>
+                  state.board?.assignments.some(
+                    (item) =>
+                      item.job_id === assignment.job_id
+                      && item.visit_id === assignment.visit_id
+                      && (
+                        assignment.resource_type === 'employee'
+                          ? 'profile_id' in item
+                            && 'profile_id' in assignment
+                            && item.profile_id === assignment.profile_id
+                          : 'plant_id' in item
+                            && 'plant_id' in assignment
+                            && item.plant_id === assignment.plant_id
+                      )
+                  ) === true,
+              },
+              apply: (state) => ({
+                ...state,
+                board: state.board
+                  ? patchBoardWithAssignment(state.board, optimisticRestore)
+                  : state.board,
+              }),
+            });
+            if (!restoreOperation) return;
             void createScheduleAssignment({
               job_id: assignment.job_id,
               visit_id: assignment.visit_id || undefined,
@@ -2742,7 +4298,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               .then((restoreResult) => {
                 const restored = restoreResult.assignments?.[0];
                 if (restored) {
-                  setBoardData((current) =>
+                  setBoardBaseData((current) =>
                     applyCapacity(
                       patchBoardWithAssignment(
                         current,
@@ -2752,80 +4308,292 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     )
                   );
                 } else if (restoreResult.employee_capacity) {
-                  setBoardData((current) =>
+                  setBoardBaseData((current) =>
                     applyCapacity(current, restoreResult.employee_capacity)
                   );
                 }
-                reconcileBoardInBackground();
+                settleOptimisticOperation(restoreOperation.id);
               })
               .then(() => toast.success('Assignment restored'))
-              .catch((error) =>
-                toast.error(error instanceof Error ? error.message : 'Unable to restore assignment')
-              );
+              .catch((error) => {
+                settleOptimisticOperation(restoreOperation.id, 'failure', error);
+                toast.error(error instanceof Error ? error.message : 'Unable to restore assignment');
+              });
           },
         },
       });
-      reconcileBoardInBackground();
     } catch (error) {
-      if (isCurrentMutation(mutationKey, mutationEpoch)) {
-        setBoardData((current) => patchBoardWithAssignment(current, assignment));
-      }
+      settleOptimisticOperation(operation.id, 'failure', error);
       toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
     } finally {
       endMutation(mutationKey);
     }
   }
 
-  async function handleQuickAddCreated(result: QuickAddScheduleProjectResult) {
-    const visitDate = getScheduleVisitDate(result.visit.starts_at);
+  function handleQuickAddSubmit(input: QuickAddScheduleProjectInput) {
+    setQuickAddDraft(input);
+    const visitDate = getScheduleVisitDate(input.initial_visit.starts_at);
     const targetWeekStart = getSchedulingWeek(visitDate).start;
+    const operationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const optimisticJob: ScheduleJob = {
+      id: createOptimisticEntityId(operationId, 'job'),
+      job_reference: 'Creating project…',
+      title: input.project_title,
+      description: input.project_description || null,
+      site_address: input.site_address || null,
+      status: 'scheduled',
+      source_type: 'manual',
+      start_date: input.start_date,
+      end_date: input.end_date || input.start_date,
+      estimated_duration_minutes: input.estimated_duration_minutes || null,
+      quote_id: null,
+      quote_project_number_id: null,
+      customer_id: input.customer_id,
+      customer_site_id: input.customer_site_id || null,
+      is_drop_on_ready: input.is_drop_on_ready || false,
+      tags: [],
+      created_by: userId,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    };
+    const optimisticVisit: ScheduleVisit = {
+      id: createOptimisticEntityId(operationId, 'visit'),
+      job_id: optimisticJob.id,
+      sequence_number: 1,
+      title: null,
+      starts_at: input.initial_visit.starts_at,
+      ends_at: input.initial_visit.ends_at,
+      status: 'planned',
+      notes: null,
+      created_by: userId,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    };
     const applyQuickAdd = (current: SchedulingBoardPayload) =>
       patchBoardWithQuickAdd({
         board: current,
-        job: result.job,
-        visit: result.visit,
+        job: optimisticJob,
+        visit: optimisticVisit,
       });
-
-    if (targetWeekStart === weekStart) {
-      setBoardData(applyQuickAdd);
-    } else {
-      const cached = queryClient.getQueryData<SchedulingBoardPayload>([
-        'scheduling-board',
-        targetWeekStart,
-      ]);
-      if (cached) {
-        queryClient.setQueryData(['scheduling-board', targetWeekStart], applyQuickAdd(cached));
-      } else {
-        const fresh = await fetchSchedulingBoard(targetWeekStart);
-        queryClient.setQueryData(['scheduling-board', targetWeekStart], applyQuickAdd(fresh));
-      }
+    const targetKey = ['scheduling-board', targetWeekStart] as const;
+    const cached = queryClient.getQueryData<SchedulingBoardPayload>(targetKey);
+    if (!cached && board) {
+      const targetWeek = getSchedulingWeek(visitDate);
+      queryClient.setQueryData<SchedulingBoardPayload>(targetKey, {
+        week: targetWeek,
+        jobs: [],
+        tags: board.tags,
+        visits: [],
+        assignments: [],
+        resources: board.resources,
+        employee_capacity: [],
+        plant_unavailability: [],
+      });
+      fetchColdWeekInBackground(targetWeekStart);
     }
-
+    const operation = registerOptimisticOperation({
+      id: operationId,
+      kind: 'quick-add',
+      lockKeys: [`quick-add:${input.request_id}`],
+      queryKeys: [`board:${targetWeekStart}`, 'projects'],
+      proofs: {
+        [`board:${targetWeekStart}`]: (state) =>
+          state.board?.jobs.some(
+            (job) =>
+              job.title === input.project_title
+              && job.customer_id === input.customer_id
+              && job.start_date === input.start_date
+          ) === true,
+        projects: () => true,
+      },
+      apply: (state) => ({
+        ...state,
+        board:
+          state.board?.week.start === targetWeekStart
+            ? applyQuickAdd(state.board)
+            : state.board,
+      }),
+    });
+    if (!operation) {
+      setQuickAddOpen(true);
+      return;
+    }
     setSelectedDate(visitDate);
-    activateVisit(result.job, result.visit);
-    reconcileBoardInBackground();
-    void queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
+    activateVisit(optimisticJob, optimisticVisit);
+    void quickAddScheduleProject(input)
+      .then((result) => {
+        queryClient.setQueryData<SchedulingBoardPayload>(
+          targetKey,
+          (current) => current
+            ? patchBoardWithQuickAdd({
+                board: current,
+                job: result.job,
+                visit: result.visit,
+              })
+            : current
+        );
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${targetWeekStart}`]: (state) =>
+              provesJob(result.job)(state) && provesVisit(result.visit)(state),
+            projects: () => true,
+          },
+          apply: (state) => ({
+            ...state,
+            board:
+              state.board?.week.start === targetWeekStart
+                ? patchBoardWithQuickAdd({
+                    board: state.board,
+                    job: result.job,
+                    visit: result.visit,
+                  })
+                : state.board,
+          }),
+        });
+        setQuickAddDraft(null);
+        setActiveVisitTarget((current) =>
+          current?.visit.id === optimisticVisit.id
+            ? { job: result.job, visit: result.visit }
+            : current
+        );
+        toast.success(`${result.project_reference} added to the schedule`);
+      })
+      .catch((error) => {
+        settleOptimisticOperation(operation.id, 'failure', error);
+        setQuickAddOpen(true);
+        toast.error(error instanceof Error ? error.message : 'Unable to quick add this job.');
+      });
   }
 
   async function handleRemoveJob() {
     if (!pendingRemoveJob || isRemovingJob) return;
     const job = pendingRemoveJob;
+    if (isOptimisticEntityId(job.id)) {
+      setPendingRemoveJob(null);
+      toast.info('Wait for this new job to finish saving.');
+      return;
+    }
+    const quoteCandidate: ScheduleQuoteCandidate | null =
+      job.source_type === 'quote' && job.quote_id
+        ? {
+            id: job.quote_id,
+            quote_reference: job.job_reference,
+            base_quote_reference: job.job_reference,
+            title: job.title,
+            customer_name: job.customer_name || null,
+            status: null,
+            start_date: null,
+            end_date: null,
+            estimated_duration_days: Math.max(
+              1,
+              enumerateScheduleDates(job.start_date, job.end_date).length
+            ),
+            estimated_duration_minutes: job.estimated_duration_minutes,
+            optimistic: true,
+          }
+        : null;
+    const projectCandidate: ScheduleProjectCandidate | null =
+      job.source_type === 'manual' && job.quote_project_number_id
+        ? {
+            id: job.quote_project_number_id,
+            project_reference: job.job_reference,
+            manager_profile_id: '',
+            requester_initials: '',
+            title: job.title,
+            description: job.description,
+            status: 'open',
+            optimistic: true,
+          }
+        : null;
+    const queryKeys = [
+      `board:${weekStart}`,
+      ...(quoteCandidate ? ['quotes'] : []),
+      ...(projectCandidate ? ['projects'] : []),
+    ];
+    const operation = registerOptimisticOperation({
+      kind: 'remove-job',
+      lockKeys: [`job-tree:${job.id}`],
+      queryKeys,
+      proofs: {
+        [`board:${weekStart}`]: provesBoardEntityAbsent('job', job.id),
+        ...(quoteCandidate
+          ? {
+              quotes: (state: SchedulingProjection) =>
+                state.quoteCandidates?.some(
+                  (candidate) => candidate.id === quoteCandidate.id
+                ) === true,
+            }
+          : {}),
+        ...(projectCandidate
+          ? {
+              projects: (state: SchedulingProjection) =>
+                state.projectCandidates?.some(
+                  (candidate) => candidate.id === projectCandidate.id
+                ) === true,
+            }
+          : {}),
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board ? patchBoardRemoveJob(state.board, job.id) : state.board,
+        quoteCandidates: quoteCandidate
+          ? upsertQuoteCandidate(state.quoteCandidates, quoteCandidate)
+          : state.quoteCandidates,
+        projectCandidates: projectCandidate
+          ? upsertProjectCandidate(state.projectCandidates, projectCandidate)
+          : state.projectCandidates,
+      }),
+    });
+    if (!operation) return;
     setIsRemovingJob(true);
+    setPendingRemoveJob(null);
+    setActiveVisitTarget((current) => current?.job.id === job.id ? null : current);
+    setVisitTarget((current) => current?.job.id === job.id ? null : current);
     try {
       await deleteScheduleJob(job.id);
-      setPendingRemoveJob(null);
-      setActiveVisitTarget((current) => current?.job.id === job.id ? null : current);
-      setVisitTarget((current) => current?.job.id === job.id ? null : current);
+      setBoardBaseData((current) => patchBoardRemoveJob(current, job.id));
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: provesBoardEntityAbsent('job', job.id),
+          ...(quoteCandidate
+            ? {
+                quotes: (state: SchedulingProjection) =>
+                  state.quoteCandidates?.some(
+                    (candidate) => candidate.id === quoteCandidate.id
+                  ) === true,
+              }
+            : {}),
+          ...(projectCandidate
+            ? {
+                projects: (state: SchedulingProjection) =>
+                  state.projectCandidates?.some(
+                    (candidate) => candidate.id === projectCandidate.id
+                  ) === true,
+              }
+            : {}),
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board ? patchBoardRemoveJob(state.board, job.id) : state.board,
+          quoteCandidates: quoteCandidate
+            ? upsertQuoteCandidate(state.quoteCandidates, quoteCandidate)
+            : state.quoteCandidates,
+          projectCandidates: projectCandidate
+            ? upsertProjectCandidate(state.projectCandidates, projectCandidate)
+            : state.projectCandidates,
+        }),
+      });
       toast.success(
         job.source_type === 'quote'
           ? `${job.job_reference} returned to the Jobs queue`
           : `${job.job_reference} schedule removed`
       );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['scheduling-board'] }),
-        queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
-      ]);
     } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      setPendingRemoveJob(job);
       toast.error(error instanceof Error ? error.message : 'Unable to remove job');
     } finally {
       setIsRemovingJob(false);
@@ -2843,6 +4611,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   function handleResourceSelect(resource: SelectedScheduleResource) {
     if (activeVisitTarget) {
+      if (
+        isOptimisticEntityId(activeVisitTarget.job.id)
+        || isOptimisticEntityId(activeVisitTarget.visit.id)
+      ) {
+        toast.info('Wait for this new visit to finish saving before assigning resources.');
+        return;
+      }
       void assignResource(activeVisitTarget, resource);
       return;
     }
@@ -2912,6 +4687,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   function openVisitEditor(job: ScheduleJob, date: string, visit: ScheduleVisit | null = null) {
+    setVisitDraft(null);
     setVisitTarget({ job, visit, date });
   }
 
@@ -2927,11 +4703,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   function openQuoteScheduler(job: ScheduleJob) {
+    setQuoteScheduleDraft(null);
     setSchedulingQuoteJob(job);
   }
 
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
-  if (boardQuery.isError || !board) {
+  if (!board) {
     return (
       <Card className="border-red-500/30">
         <CardContent className="py-10 text-center">
@@ -3157,7 +4934,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             onViewChange={handleViewChange}
           />
           <div className="flex flex-wrap gap-2">
-            <Button className={schedulingControlStyles.outline} variant="outline" onClick={() => setUnavailabilityOpen(true)}>
+            <Button
+              className={schedulingControlStyles.outline}
+              variant="outline"
+              onClick={() => {
+                setPlantBlockDraft(null);
+                setUnavailabilityOpen(true);
+              }}
+            >
               <CalendarOff className="mr-2 h-4 w-4" />
               Plant availability
             </Button>
@@ -3872,6 +5656,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             }
                             onAddVisit={() => openVisitEditor(job, selectedDate)}
                             onEdit={() => {
+                              setJobDraft(null);
                               setEditingJob(job);
                               setJobDialogOpen(true);
                             }}
@@ -3989,6 +5774,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           isCrewOfferPending={pendingCrewOfferJobIds.has(job.id)}
                           onAddVisit={() => openVisitEditor(job, selectedDate)}
                           onEdit={() => {
+                            setJobDraft(null);
                             setEditingJob(job);
                             setJobDialogOpen(true);
                           }}
@@ -4073,7 +5859,31 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 ))}
               </div>
 
-              {filteredJobs.length === 0 ? (
+              {isTentativeWeek ? (
+                <div
+                  className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
+                  role="status"
+                >
+                  {coldWeekState?.status === 'failed' ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {coldWeekState.error || 'Unable to load the remaining week details.'}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className={schedulingControlStyles.outline}
+                        onClick={() => fetchColdWeekInBackground(weekStart)}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    'Loading the remaining schedule, capacity and plant availability for this week…'
+                  )}
+                </div>
+              ) : null}
+              {filteredJobs.length === 0 && !isTentativeWeek ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
                   <div>
                     <p className="font-medium text-foreground">
@@ -4129,21 +5939,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         ) : null}
       </DragOverlay>
 
-      <ScheduleVisitDialog
-        open={visitTarget !== null}
-        onOpenChange={(open) => !open && setVisitTarget(null)}
-        job={visitTarget?.job || null}
-        visit={visitTarget?.visit || null}
-        defaultDate={visitTarget?.date || board.week.start}
-        onSaved={() => void refresh()}
-      />
-      <ScheduleJobDialog
-        open={jobDialogOpen}
-        onOpenChange={setJobDialogOpen}
-        job={editingJob}
-        defaultDate={weekDates[0] || board.week.start}
-        onSaved={() => void refresh()}
-      />
+      {visitTarget ? (
+        <ScheduleVisitDialog
+          open
+          onOpenChange={(open) => !open && setVisitTarget(null)}
+          job={visitTarget.job}
+          visit={visitTarget.visit}
+          defaultDate={visitTarget.date}
+          initialInput={visitDraft}
+          onSave={handleVisitSave}
+          onDelete={handleVisitDelete}
+        />
+      ) : null}
+      {jobDialogOpen && editingJob ? (
+        <ScheduleJobDialog
+          open
+          onOpenChange={setJobDialogOpen}
+          job={editingJob}
+          defaultDate={weekDates[0] || board.week.start}
+          initialInput={jobDraft}
+          onSubmit={handleJobUpdate}
+        />
+      ) : null}
       {schedulingQuoteJob ? (
         <ScheduleQuoteDialog
           open
@@ -4151,12 +5968,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             if (!open) setSchedulingQuoteJob(null);
           }}
           job={schedulingQuoteJob}
-          onSaved={() => {
-            void Promise.all([
-              refresh(),
-              queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] }),
-            ]);
-          }}
+          initialInput={quoteScheduleDraft}
+          onSubmit={handleQuoteReschedule}
         />
       ) : null}
       {quotesSensitiveAccess.canAccess ? (
@@ -4165,23 +5978,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             project={projectPlacement?.project || null}
             date={projectPlacement?.date || selectedDate}
             initialVisit={projectPlacement?.initialVisit}
+            initialInput={projectPlacementDraft}
             onClose={() => setProjectPlacement(null)}
-            onSaved={() => {
-              setSelectedQuote(null);
-              void Promise.all([
-                refresh(),
-                queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] }),
-              ]);
-            }}
+            onSubmit={handleProjectPlacementSubmit}
           />
           <QuoteCreationHost
             open={quoteCreationOpen}
             onClose={() => setQuoteCreationOpen(false)}
-            onCreated={async (quote) => {
-              await queryClient.invalidateQueries({ queryKey: ['scheduling-quote-candidates'] });
-              setQuoteStage(SCHEDULE_QUOTE_STAGES.draft);
-              setSelectedQuote({
-                kind: 'quote',
+            onCreated={(quote) => {
+              const candidate: ScheduleQuoteCandidate = {
                 id: quote.id,
                 quote_reference: quote.quote_reference,
                 base_quote_reference: quote.base_quote_reference || quote.quote_reference,
@@ -4192,6 +5997,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 end_date: null,
                 estimated_duration_days: quote.estimated_duration_days || null,
                 estimated_duration_minutes: null,
+              };
+              queryClient.setQueryData(
+                ['scheduling-quote-candidates'],
+                (current: ScheduleQuoteCandidate[] | undefined) =>
+                  upsertQuoteCandidate(current, candidate)
+              );
+              reconcileOptimisticKeysInBackground(['quotes']);
+              setQuoteStage(SCHEDULE_QUOTE_STAGES.draft);
+              setSelectedQuote({
+                kind: 'quote',
+                ...candidate,
               });
             }}
           />
@@ -4212,8 +6028,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             managerOptions={quoteManagerOptions}
             managerLoadError={quoteManagerOptionsError}
             onClose={() => setProjectCreationOpen(false)}
-            onCreated={async (project: QuoteProjectNumber) => {
-              await queryClient.invalidateQueries({ queryKey: ['scheduling-project-candidates'] });
+            onCreated={(project: QuoteProjectNumber) => {
+              const candidate: ScheduleProjectCandidate = {
+                id: project.id,
+                project_reference: project.project_reference,
+                manager_profile_id: project.manager_profile_id,
+                requester_initials: project.requester_initials,
+                title: project.title,
+                description: project.description,
+                status: 'open',
+              };
+              queryClient.setQueryData(
+                ['scheduling-project-candidates'],
+                (current: ScheduleProjectCandidate[] | undefined) =>
+                  upsertProjectCandidate(current, candidate)
+              );
+              reconcileOptimisticKeysInBackground(['projects']);
               setQuoteStage('projects');
               setSelectedQuote({
                 kind: 'project',
@@ -4227,36 +6057,35 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 end_date: null,
                 estimated_duration_days: 1,
                 estimated_duration_minutes: 180,
-                project: {
-                  id: project.id,
-                  project_reference: project.project_reference,
-                  manager_profile_id: project.manager_profile_id,
-                  requester_initials: project.requester_initials,
-                  title: project.title,
-                  description: project.description,
-                  status: 'open',
-                },
+                project: candidate,
               });
             }}
           />
-          <ScheduleBoardQuickAddDialog
-            open={quickAddOpen}
-            defaultDate={selectedDate}
-            managerOptions={quoteManagerOptions}
-            managerLoadError={quoteManagerOptionsError}
-            onClose={() => setQuickAddOpen(false)}
-            onCreated={handleQuickAddCreated}
-          />
+          {quickAddOpen ? (
+            <ScheduleBoardQuickAddDialog
+              open
+              defaultDate={selectedDate}
+              managerOptions={quoteManagerOptions}
+              managerLoadError={quoteManagerOptionsError}
+              initialInput={quickAddDraft}
+              onClose={() => setQuickAddOpen(false)}
+              onSubmit={handleQuickAddSubmit}
+            />
+          ) : null}
         </>
       ) : null}
-      <PlantUnavailabilityDialog
-        open={unavailabilityOpen}
-        onOpenChange={setUnavailabilityOpen}
-        plant={board.resources.plant}
-        blocks={board.plant_unavailability}
-        defaultDate={weekDates[0] || board.week.start}
-        onSaved={() => void refresh()}
-      />
+      {unavailabilityOpen ? (
+        <PlantUnavailabilityDialog
+          open
+          onOpenChange={setUnavailabilityOpen}
+          plant={board.resources.plant}
+          blocks={board.plant_unavailability}
+          defaultDate={weekDates[0] || board.week.start}
+          initialInput={plantBlockDraft}
+          onSave={handlePlantBlockSave}
+          onDelete={handlePlantBlockDelete}
+        />
+      ) : null}
       <AlertDialog
         open={pendingConflict !== null}
         onOpenChange={(open) => !open && setPendingConflict(null)}
@@ -4302,9 +6131,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             <AlertDialogTitle>Return this visit to Jobs?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingVisitReturn
-                ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${pendingVisitReturn.preview.assignment_count === 0
-                  ? 'It has no resource assignments.'
-                  : `${pendingVisitReturn.preview.assignment_count} ${pendingVisitReturn.preview.assignment_count === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
+                ? pendingVisitReturn.preview
+                  ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${pendingVisitReturn.preview.assignment_count === 0
+                    ? 'It has no resource assignments.'
+                    : `${pendingVisitReturn.preview.assignment_count} ${pendingVisitReturn.preview.assignment_count === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
+                  : `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number}. Checking assignments before this visit can be returned…`
                 : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -4318,9 +6149,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             <AlertDialogAction
               className={schedulingControlStyles.warning}
               onClick={() => void confirmVisitReturn()}
-              disabled={isReturningVisit}
+              disabled={isReturningVisit || !pendingVisitReturn?.preview}
             >
-              {isReturningVisit ? 'Returning...' : 'Return visit to Jobs'}
+              {isReturningVisit
+                ? 'Returning...'
+                : pendingVisitReturn?.preview
+                  ? 'Return visit to Jobs'
+                  : 'Checking…'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -477,8 +477,13 @@ describe('SchedulingManagerBoard', () => {
         employees: [],
       }],
     });
-    mockCreateProjectJob.mockResolvedValue(undefined);
-    mockDeleteJob.mockResolvedValue(undefined);
+    mockCreateProjectJob.mockResolvedValue({ job: board.jobs[0] });
+    mockDeleteJob.mockResolvedValue({
+      success: true,
+      source_type: 'manual',
+      quote_id: null,
+      project_number_id: 'project-1',
+    });
     mockEnqueueVisit.mockResolvedValue({
       visit_id: 'visit-1',
       job_id: 'job-1',
@@ -524,13 +529,13 @@ describe('SchedulingManagerBoard', () => {
       end_date: null,
       estimated_duration_days: null,
     }]);
-    mockSaveQuoteSchedule.mockResolvedValue({});
+    mockSaveQuoteSchedule.mockResolvedValue({ job: board.jobs[0] });
     mockScheduleQueuedVisit.mockResolvedValue({
       visit: board.visits[0],
       job: board.jobs[0],
     });
-    mockSaveScheduleJob.mockResolvedValue({});
-    mockSaveVisit.mockResolvedValue(undefined);
+    mockSaveScheduleJob.mockResolvedValue(board.jobs[0]);
+    mockSaveVisit.mockResolvedValue(board.visits[0]);
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes('/api/quotes/metadata')) {
@@ -772,7 +777,16 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByRole('button', { name: 'Add Project job' })).not.toBeInTheDocument();
   });
 
-  it('removes a Project schedule only after destructive confirmation', async () => {
+  it('FOLLOWUP-RECON-001 keeps acknowledged removal visible when exact refetch fails', async () => {
+    let resolveDelete!: (value: {
+      success: true;
+      source_type: 'manual';
+      quote_id: null;
+      project_number_id: string;
+    }) => void;
+    mockDeleteJob.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDelete = resolve;
+    }));
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
@@ -787,9 +801,38 @@ describe('SchedulingManagerBoard', () => {
       .toHaveClass('bg-[#b91c1c]', 'text-[#ffffff]');
 
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
-    await waitFor(() => expect(mockDeleteJob).toHaveBeenCalledWith('job-1'));
-    await waitFor(() => expect(mockFetchQuoteCandidates.mock.calls.length).toBeGreaterThan(1));
+    expect(mockDeleteJob).toHaveBeenCalledWith('job-1');
+    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+    expect(mockFetchBoard).toHaveBeenCalledTimes(1);
+    mockFetchBoard.mockRejectedValueOnce(new Error('reconciliation failed'));
+    resolveDelete({
+      success: true,
+      source_type: 'manual',
+      quote_id: null,
+      project_number_id: 'project-1',
+    });
     await waitFor(() => expect(mockFetchBoard.mock.calls.length).toBeGreaterThan(1));
+    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+  });
+
+  it('FOLLOWUP-UNCERTAIN-002 keeps an ambiguous removal projected over a stale refetch', async () => {
+    let rejectDelete!: (error: Error) => void;
+    mockDeleteJob.mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectDelete = reject;
+    }));
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+    const confirmation = await screen.findByRole('alertdialog', {
+      name: 'Remove Project job from the schedule?',
+    });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
+    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+
+    rejectDelete(new TypeError('network interrupted after write'));
+    await waitFor(() => expect(mockFetchBoard.mock.calls.length).toBeGreaterThan(1));
+    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
   });
 
   it('explains that removing a Quote job preserves and requeues its Quote', async () => {
@@ -927,7 +970,19 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByText('Q-DRAFT')).not.toBeInTheDocument();
   });
 
-  it('confirms an authoritative assignment count before returning one visit to Jobs', async () => {
+  it('OPT-SAFETY-001 opens return confirmation before authoritative preview resolves', async () => {
+    let resolvePreview!: (value: {
+      visit_id: string;
+      job_id: string;
+      job_reference: string;
+      sequence_number: number;
+      assignment_count: number;
+      fingerprint: string;
+      already_queued: boolean;
+    }) => void;
+    mockPreviewVisitBacklog.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePreview = resolve;
+    }));
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
@@ -955,7 +1010,21 @@ describe('SchedulingManagerBoard', () => {
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
     });
-    expect(confirmation).toHaveTextContent('1 assignment will be permanently removed');
+    expect(confirmation).toHaveTextContent('Checking assignments');
+    expect(within(confirmation).getByRole('button', { name: 'Checking…' }))
+      .toBeDisabled();
+    resolvePreview({
+      visit_id: 'visit-1',
+      job_id: 'job-1',
+      job_reference: 'JOB-101',
+      sequence_number: 1,
+      assignment_count: 1,
+      fingerprint: 'preview-hash',
+      already_queued: false,
+    });
+    await waitFor(() =>
+      expect(confirmation).toHaveTextContent('1 assignment will be permanently removed')
+    );
     expect(confirmation).toHaveTextContent('Other visits for this job will stay scheduled');
     expect(mockEnqueueVisit).not.toHaveBeenCalled();
 
@@ -1088,6 +1157,10 @@ describe('SchedulingManagerBoard', () => {
       end_date: null,
       estimated_duration_days: 3,
     };
+    let resolveQuote!: (value: { job: typeof board.jobs[number] }) => void;
+    mockSaveQuoteSchedule.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveQuote = resolve;
+    }));
     mockFetchQuoteCandidates.mockResolvedValue([quote]);
     renderBoard();
     expect(await screen.findByRole('button', {
@@ -1105,12 +1178,28 @@ describe('SchedulingManagerBoard', () => {
       });
     });
 
-    await waitFor(() =>
-      expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+    expect(mockSaveQuoteSchedule).toHaveBeenCalledWith({
+      quote_id: 'quote-draft',
+      start_date: '2026-07-14',
+      end_date: '2026-07-16',
+    });
+    expect(screen.queryByRole('button', {
+      name: 'Q-DRAFT: select job or drag to a calendar date',
+    })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Q-DRAFT').length).toBeGreaterThan(0);
+    resolveQuote({
+      job: {
+        ...board.jobs[0],
+        id: 'job-quote-draft',
+        job_reference: 'Q-DRAFT',
+        source_type: 'quote',
         quote_id: 'quote-draft',
         start_date: '2026-07-14',
         end_date: '2026-07-16',
-      })
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getAllByText('Q-DRAFT').length).toBeGreaterThan(0)
     );
   });
 
@@ -2018,7 +2107,14 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByRole('tab', { name: 'Available (2)' })).toBeInTheDocument();
   });
 
-  it('selects a visit, removes overlapping resources, and assigns with one tap', async () => {
+  it('OPT-NEXT-001 assigns and updates availability before persistence resolves', async () => {
+    let resolveAssignment!: (value: {
+      assignments: Array<Record<string, unknown>>;
+      employee_capacity: never[];
+    }) => void;
+    mockCreateAssignment.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAssignment = resolve;
+    }));
     const { container } = renderBoard();
 
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
@@ -2053,17 +2149,41 @@ describe('SchedulingManagerBoard', () => {
       name: 'Bob Jones: select resource or drag to a timed visit',
     }));
 
-    await waitFor(() =>
-      expect(mockCreateAssignment).toHaveBeenCalledWith({
-        job_id: 'job-1',
-        visit_id: 'visit-1',
-        resource_type: 'employee',
-        resource_id: 'employee-2',
-      })
-    );
+    expect(mockCreateAssignment).toHaveBeenCalledWith({
+      job_id: 'job-1',
+      visit_id: 'visit-1',
+      resource_type: 'employee',
+      resource_id: 'employee-2',
+    });
+    expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-"]'))
+      .toHaveLength(4);
+    expect(screen.queryByTestId('schedule-resource-employee-employee-2'))
+      .not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear selected visit' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
     expect(container.querySelector('button button')).toBeNull();
+    resolveAssignment({
+      assignments: [{
+        id: 'assignment-new',
+        job_id: 'job-1',
+        work_date: '2026-07-14',
+        visit_id: 'visit-1',
+        profile_id: 'employee-2',
+        resource_type: 'employee',
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: 'manager-1',
+        notes: null,
+        created_at: '2026-07-14T08:00:00.000Z',
+        updated_at: '2026-07-14T08:00:00.000Z',
+      }],
+      employee_capacity: [],
+    });
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid*="optimistic:"]')).toBeNull()
+    );
   });
 
   it('assigns directly after a valid drag', async () => {
@@ -2361,19 +2481,37 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByRole('tab', { name: 'Employees' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('patches the destination week cache when Quick add targets another week', async () => {
-    const nextWeekBoard = {
+  it('FOLLOWUP-COLD-005 exits loading on failure and retries the cold week', async () => {
+    const nextWeekBoard: SchedulingBoardPayload = {
       ...board,
       week: { start: '2026-07-20', end: '2026-07-26' },
       jobs: [],
       visits: [],
       assignments: [],
     };
+    const staleNextWeekBoard: SchedulingBoardPayload = {
+      ...nextWeekBoard,
+      jobs: [],
+      visits: [],
+    };
+    let resolveStaleNextWeek!: () => void;
+    const staleNextWeekGate = new Promise<void>((resolve) => {
+      resolveStaleNextWeek = resolve;
+    });
+    let nextWeekFetchCount = 0;
     mockFetchBoard.mockImplementation(async (weekStart?: string) => {
-      if (weekStart === '2026-07-20') return nextWeekBoard;
+      if (weekStart === '2026-07-20') {
+        nextWeekFetchCount += 1;
+        if (nextWeekFetchCount === 1) {
+          await staleNextWeekGate;
+          return staleNextWeekBoard;
+        }
+        if (nextWeekFetchCount === 2) throw new Error('cold week failed');
+        return nextWeekBoard;
+      }
       return board;
     });
-    mockQuickAdd.mockResolvedValue({
+    const quickAddResult = {
       job: {
         ...board.jobs[0],
         id: 'job-quick-next',
@@ -2392,6 +2530,11 @@ describe('SchedulingManagerBoard', () => {
       project_number_id: 'project-quick-next',
       project_reference: '60011-MD',
       was_project_created: true,
+    };
+    mockQuickAdd.mockImplementation(async () => {
+      nextWeekBoard.jobs.push(quickAddResult.job);
+      nextWeekBoard.visits.push(quickAddResult.visit);
+      return quickAddResult;
     });
 
     renderBoard();
@@ -2415,6 +2558,62 @@ describe('SchedulingManagerBoard', () => {
     expect(await screen.findByText(/60011-MD · Visit/i)).toBeInTheDocument();
     expect(screen.getByText(/20 Jul – 26 Jul 2026/i)).toBeInTheDocument();
     expect(mockFetchBoard).toHaveBeenCalledWith('2026-07-20');
+    expect(await screen.findByText(/Unable to .*week/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Loading the remaining schedule/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' }))
+      .not.toBeInTheDocument());
+    expect(screen.getAllByText('Next-week emergency').length).toBeGreaterThan(0);
+    resolveStaleNextWeek();
+    await waitFor(() =>
+      expect(screen.getAllByText('Next-week emergency').length).toBeGreaterThan(0)
+    );
+  });
+
+  it('FOLLOWUP-COLD-006 lets the original cold fetch settle after a definitive mutation failure', async () => {
+    const nextWeekBoard: SchedulingBoardPayload = {
+      ...board,
+      week: { start: '2026-07-20', end: '2026-07-26' },
+      jobs: [],
+      visits: [],
+      assignments: [],
+    };
+    let resolveNextWeek!: () => void;
+    const nextWeekGate = new Promise<void>((resolve) => {
+      resolveNextWeek = resolve;
+    });
+    mockFetchBoard.mockImplementation(async (weekStart?: string) => {
+      if (weekStart === '2026-07-20') {
+        await nextWeekGate;
+        return nextWeekBoard;
+      }
+      return board;
+    });
+    mockQuickAdd.mockRejectedValueOnce(new Error('Validation failed'));
+
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Invalid next-week job' },
+    });
+    fireEvent.change(screen.getByLabelText('Date *'), {
+      target: { value: '2026-07-21' },
+    });
+    fireEvent.click(screen.getAllByRole('combobox')[0]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Manager One' }));
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Example Customer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
+
+    await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
+    expect(screen.getByText(/Loading the remaining schedule/i)).toBeInTheDocument();
+    resolveNextWeek();
+    await waitFor(() =>
+      expect(screen.queryByText(/Loading the remaining schedule/i)).not.toBeInTheDocument()
+    );
+    expect(screen.getByText('No jobs scheduled for this week')).toBeInTheDocument();
   });
 
   it('keeps an employee available for a non-overlapping same-day visit', async () => {

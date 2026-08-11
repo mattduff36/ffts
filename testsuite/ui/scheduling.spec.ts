@@ -172,9 +172,19 @@ function schedulingFixture() {
 
 async function mockManagerBoard(
   page: Page,
-  options: { assignmentConflict?: boolean; quoteJob?: boolean } = {}
+  options: {
+    assignmentConflict?: boolean;
+    quoteJob?: boolean;
+    holdQuoteSchedule?: boolean;
+  } = {}
 ) {
   const fixture = schedulingFixture();
+  let releaseQuoteSchedule = () => {};
+  const quoteScheduleGate = options.holdQuoteSchedule
+    ? new Promise<void>((resolve) => {
+        releaseQuoteSchedule = resolve;
+      })
+    : Promise.resolve();
   if (options.quoteJob) {
     Object.assign(fixture.jobs[0] as unknown as Record<string, unknown>, {
       source_type: 'quote',
@@ -244,6 +254,7 @@ async function mockManagerBoard(
     }
     const body = route.request().postDataJSON() as Record<string, unknown>;
     quoteScheduleRequests.push(body);
+    await quoteScheduleGate;
     quoteCandidates[0].start_date = String(body.start_date);
     quoteCandidates[0].end_date = String(body.end_date);
     await route.fulfill({
@@ -269,7 +280,8 @@ async function mockManagerBoard(
   await page.route('**/api/scheduling/visits/*/backlog', async (route) => {
     const visitId = route.request().url().split('/').at(-2) || '';
     const visit = fixture.visits.find((item) => item.id === visitId);
-    if (!visit) {
+    const job = fixture.jobs.find((item) => item.id === visit?.job_id);
+    if (!visit || !job) {
       await route.fulfill({
         status: 404,
         contentType: 'application/json',
@@ -288,7 +300,7 @@ async function mockManagerBoard(
           preview: {
             visit_id: visit.id,
             job_id: visit.job_id,
-            job_reference: fixture.jobs[0].job_reference,
+            job_reference: job.job_reference,
             sequence_number: visit.sequence_number,
             assignment_count: assignmentCount,
             fingerprint: 'playwright-preview',
@@ -310,9 +322,9 @@ async function mockManagerBoard(
     returnedVisits.push({
       visit_id: visit.id,
       job_id: visit.job_id,
-      job_reference: fixture.jobs[0].job_reference,
-      job_title: fixture.jobs[0].title,
-      source_type: fixture.jobs[0].source_type,
+      job_reference: job.job_reference,
+      job_title: job.title,
+      source_type: job.source_type,
       customer_name: null,
       sequence_number: visit.sequence_number,
       title: visit.title,
@@ -325,6 +337,12 @@ async function mockManagerBoard(
         (new Date(visit.ends_at).getTime() - new Date(visit.starts_at).getTime()) / 60_000,
       queued_at: new Date().toISOString(),
     });
+    const hasRemainingSchedule = fixture.visits.some(
+      (item) => item.job_id === job.id
+    ) || fixture.assignments.some((assignment) => assignment.job_id === job.id);
+    if (!hasRemainingSchedule) {
+      fixture.jobs = fixture.jobs.filter((item) => item.id !== job.id);
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -467,6 +485,7 @@ async function mockManagerBoard(
     visitReturnRequests,
     returnedVisits,
     projectScheduleRequests,
+    releaseQuoteSchedule,
   };
 }
 
@@ -590,7 +609,11 @@ test.describe('@scheduling Scheduling', () => {
 
   test('wide board schedules a queued job by dragging it onto a date', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    const { fixture, quoteScheduleRequests } = await mockManagerBoard(page);
+    const {
+      fixture,
+      quoteScheduleRequests,
+      releaseQuoteSchedule,
+    } = await mockManagerBoard(page, { holdQuoteSchedule: true });
     await page.goto('/scheduling');
 
     const source = page.getByTestId(
@@ -629,6 +652,9 @@ test.describe('@scheduling Scheduling', () => {
         new Date(new Date(`${fixture.week.start}T12:00:00.000Z`).getTime() + 86_400_000)
       ),
     }]);
+    await expect(source).toHaveCount(0);
+    await expect(page.getByText('TEST-QUOTE-101').first()).toBeVisible();
+    releaseQuoteSchedule();
   });
 
   test('wide board exposes visit return and confirms one visit back to Jobs', async ({ page }) => {
@@ -670,11 +696,15 @@ test.describe('@scheduling Scheduling', () => {
     await expect(page.getByRole('button', {
       name: 'TEST-JOB-101 · Visit 1: select job or drag to a calendar date',
     })).toBeVisible();
+    await expect(page.getByTestId(
+      'schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111'
+    )).toHaveCount(1);
   });
 
   test('wide board returns a visit to Jobs by dragging onto Resources', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, visitReturnRequests } = await mockManagerBoard(page);
+    fixture.visits = fixture.visits.slice(0, 1);
     await page.goto('/scheduling');
 
     const source = page
@@ -713,6 +743,9 @@ test.describe('@scheduling Scheduling', () => {
     await confirmation.getByRole('button', { name: 'Return visit to Jobs' }).click();
 
     await expect.poll(() => visitReturnRequests).toHaveLength(1);
+    await expect(page.getByTestId(
+      'schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111'
+    )).toHaveCount(0);
     expect(visitReturnRequests[0]).toMatchObject({
       expected_fingerprint: 'playwright-preview',
     });

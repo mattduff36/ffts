@@ -274,7 +274,7 @@ describe('POST /api/scheduling/assignments', () => {
     expect(payload.assignments).toHaveLength(2);
   });
 
-  it('rejects writes from non-managers', async () => {
+  it('OPT-SECURITY-001 rejects assignment writes from non-managers', async () => {
     mockAccess.mockResolvedValue({ allowed: false, status: 403, error: 'Manager required' });
     const { POST } = await import('@/app/api/scheduling/assignments/route');
     const response = await POST(request({}));

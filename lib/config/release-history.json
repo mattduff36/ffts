@@ -1,5 +1,28 @@
 [
   {
+    "version": "0826.11.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Actions, and Help and FAQ.",
+    "summary": "Updated Quotes, Actions, and Help and FAQ.",
+    "details": [
+      "Updated Quotes, Actions, and Help and FAQ, with changes to background routes, app screens, automated tests, and documentation.",
+      "Updated actions, with changes to app screens and automated tests.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Quotes",
+      "Actions",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "quotes",
+      "actions"
+    ],
+    "pushedAt": "2026-08-24T09:52:36.603Z"
+  },
+  {
     "version": "0826.10.0",
     "updateKind": "major",
     "title": "Quotes update",

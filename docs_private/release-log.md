@@ -2,6 +2,25 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.11.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Actions, and Help and FAQ`
+
+**PUSHED AT**
+2026-08-24T09:52:36.603Z
+
+**WHAT CHANGED**
+Update Quotes, Actions, and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes, Actions, and Help and FAQ, with changes to background routes, app screens, automated tests, and documentation.
+- Updated actions, with changes to app screens and automated tests.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Actions, and Help and FAQ`
+
 ## 0826.10.0
 
 **GIT COMMIT MESSAGE**

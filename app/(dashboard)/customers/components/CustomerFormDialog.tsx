@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Copy, Loader2, MapPin, Plus, Power, Trash2 } from 'lucide-react';
+import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import type {
   Customer,
@@ -223,7 +224,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
         onInteractOutside={handleInteractOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onKeyDown={handleEnterAdvancesFields}>
           <DialogHeader>
             <DialogTitle className="text-white">
               {isEditing ? 'Edit Customer' : 'Add Customer'}

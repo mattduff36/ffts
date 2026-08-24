@@ -254,4 +254,24 @@ describe('LegacyQuotesTable', () => {
     expect(within(tableBody as HTMLElement).getByText('4002-EX')).toBeInTheDocument();
     expect(within(tableBody as HTMLElement).queryByText('4003-EX')).not.toBeInTheDocument();
   });
+
+  it('moves focus to the next field on Enter instead of submitting a legacy quote edit', () => {
+    const onLegacyQuoteUpdate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LegacyQuotesTable
+        legacyQuotes={[buildLegacyQuote({ id: 'editable', quote_reference: '4001-EX' })]}
+        canEditLegacyQuotes
+        onLegacyQuoteUpdate={onLegacyQuoteUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/ }));
+    const jobNumber = screen.getByLabelText('Job Number');
+    const date = screen.getByLabelText('Date');
+    jobNumber.focus();
+    fireEvent.keyDown(jobNumber, { key: 'Enter' });
+
+    expect(onLegacyQuoteUpdate).not.toHaveBeenCalled();
+    expect(date).toHaveFocus();
+  });
 });

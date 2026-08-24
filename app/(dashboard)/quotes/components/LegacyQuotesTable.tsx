@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { Textarea } from '@/components/ui/textarea';
+import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
 import { cn } from '@/lib/utils';
 import type { LegacyQuote } from '../types';
@@ -271,6 +272,7 @@ function LegacyQuoteEditDialog({
             event.preventDefault();
             void onSubmit();
           }}
+          onKeyDown={handleEnterAdvancesFields}
         >
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-300">Job Number</span>

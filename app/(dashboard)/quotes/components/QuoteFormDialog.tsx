@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertTriangle, ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Sparkles, Trash2, GripVertical, Upload, X } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { cn } from '@/lib/utils/cn';
 import { getQuoteRichPasteText } from '@/lib/quotes/quote-rich-text';
@@ -218,8 +219,6 @@ export function QuoteFormDialog({
 }: QuoteFormDialogProps) {
   const { profile } = useAuth();
   const isEditing = !!quote;
-  const wasOpenRef = useRef(false);
-  const lastDialogKeyRef = useRef<string | null>(null);
   const customerSelectRef = useRef<HTMLDivElement>(null);
 
   const defaultManager = managerOptions.find(option => option.profile_id === profile?.id) || managerOptions[0];
@@ -273,12 +272,14 @@ export function QuoteFormDialog({
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
+  const [initializedDialogKey, setInitializedDialogKey] = useState<string | null>(null);
   const currentDirtySnapshot = buildQuoteFormDirtySnapshot(form, attachmentFiles, quoteAssistEmail, quoteAssistDraft);
   const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
   const {
     contentRef,
     handleOpenChange,
     handleInteractOutside,
+    handlePointerDownOutside,
     handleEscapeKeyDown,
     discard,
   } = useDirtyDialogGuard({
@@ -453,12 +454,11 @@ export function QuoteFormDialog({
 
   useEffect(() => {
     if (!open) {
-      wasOpenRef.current = false;
+      setInitializedDialogKey(null);
       return;
     }
 
-    const shouldInitialize = !wasOpenRef.current || lastDialogKeyRef.current !== dialogKey;
-    if (!shouldInitialize) {
+    if (initializedDialogKey === dialogKey) {
       return;
     }
 
@@ -549,10 +549,9 @@ export function QuoteFormDialog({
       setForm(next);
       setInitialDirtySnapshot(buildQuoteFormDirtySnapshot(next, [], '', null));
     }
-    wasOpenRef.current = true;
-    lastDialogKeyRef.current = dialogKey;
+    setInitializedDialogKey(dialogKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote, open, profile, defaultManager, initialCustomerId, customers, dialogKey]);
+  }, [quote, open, profile, defaultManager, initialCustomerId, customers, dialogKey, initializedDialogKey]);
 
   function updateField<K extends keyof QuoteFormData>(key: K, value: QuoteFormData[K]) {
     clearFieldError(String(key));
@@ -903,9 +902,10 @@ export function QuoteFormDialog({
         ref={contentRef}
         className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
         onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate onKeyDown={handleEnterAdvancesFields}>
           <DialogHeader>
             <DialogTitle className="text-white">
               {isEditing ? 'Edit Quote' : 'New Quote'}

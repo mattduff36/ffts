@@ -496,4 +496,24 @@ describe('QuoteFormDialog', () => {
     expect(screen.getByText('Replace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
   });
+
+  it('moves focus to the next field on Enter instead of submitting', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuoteFormDialog {...baseProps} onSubmit={onSubmit} />);
+
+    const title = screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories');
+    const summary = screen.getByPlaceholderText('Brief customer-facing summary');
+    title.focus();
+    fireEvent.keyDown(title, { key: 'Enter' });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(summary).toHaveFocus();
+  });
 });

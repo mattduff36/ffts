@@ -153,6 +153,26 @@ describe('CustomerFormDialog', () => {
     });
   });
 
+  it('moves focus to the next field on Enter instead of submitting', () => {
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(
+      <CustomerFormDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+
+    const companyName = screen.getByLabelText('Company Name *');
+    const shortName = screen.getByLabelText('Short Name');
+    companyName.focus();
+    fireEvent.keyDown(companyName, { key: 'Enter' });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(shortName).toHaveFocus();
+  });
+
   it('hides the copy-address button once a second site is added', () => {
     render(
       <CustomerFormDialog

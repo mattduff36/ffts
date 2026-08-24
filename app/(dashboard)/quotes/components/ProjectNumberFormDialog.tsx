@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import type { QuoteManagerOption, QuoteProjectNumber } from '../types';
 
@@ -85,7 +86,7 @@ export function ProjectNumberFormDialog({
         onEscapeKeyDown={guard.handleEscapeKeyDown}
       >
         <DialogHeader><DialogTitle>Create Project Number</DialogTitle></DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4" onKeyDown={handleEnterAdvancesFields}>
           <div className="space-y-2">
             <Label>Manager *</Label>
             <Select

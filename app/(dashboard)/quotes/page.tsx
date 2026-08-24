@@ -777,7 +777,12 @@ export default function QuotesPage() {
     }
   }
 
-  if (permissionLoading || customerPermissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
+  if (
+    (permissionLoading || customerPermissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading))
+    && !formOpen
+    && !customerFormOpen
+    && !detailQuoteId
+  ) {
     return <PageLoader message="Loading quotes..." />;
   }
 

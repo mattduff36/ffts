@@ -105,7 +105,10 @@ export default function CustomerHistoryPage({ params }: PageProps) {
     await fetchCustomer();
   }
 
-  if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
+  if (
+    (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading))
+    && !editOpen
+  ) {
     return <PageLoader message="Loading customer history..." />;
   }
 

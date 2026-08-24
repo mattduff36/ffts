@@ -96,7 +96,11 @@ export default function CustomersPage() {
     router.push(`/customers/${customer.id}/history`);
   }
 
-  if (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading)) {
+  if (
+    (permissionLoading || sensitiveAccess.loading || (sensitiveAccess.canAccess && loading))
+    && !formOpen
+    && !editingCustomer
+  ) {
     return <PageLoader message="Loading customers..." />;
   }
 

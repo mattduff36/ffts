@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -55,7 +55,9 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
     contentRef,
     handleOpenChange,
     handleInteractOutside,
+    handlePointerDownOutside,
     handleEscapeKeyDown,
+    handleFocusOutside,
     discard,
   } = useDirtyDialogGuard({
     isDirty: isFormDirty,
@@ -64,8 +66,19 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
       if (!isOpen && !saving) onClose();
     },
   });
+  const customerHydrateKey = customer?.id ?? 'new';
+  const hydratedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!open) {
+      hydratedKeyRef.current = null;
+      return;
+    }
+
+    if (hydratedKeyRef.current === customerHydrateKey) {
+      return;
+    }
+
     if (customer) {
       const nextForm: CustomerFormData = {
         company_name: customer.company_name,
@@ -110,7 +123,8 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
       setForm(nextForm);
       setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     }
-  }, [customer, open]);
+    hydratedKeyRef.current = customerHydrateKey;
+  }, [customer, customerHydrateKey, open]);
 
   function updateField<K extends keyof CustomerFormData>(key: K, value: CustomerFormData[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -222,6 +236,8 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
         ref={contentRef}
         className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
         onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
+        onFocusOutside={handleFocusOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
         <form onSubmit={handleSubmit} onKeyDown={handleEnterAdvancesFields}>

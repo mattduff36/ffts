@@ -264,6 +264,7 @@ function LegacyQuoteEditDialog({
     handleInteractOutside,
     handlePointerDownOutside,
     handleEscapeKeyDown,
+    handleFocusOutside,
     discard,
   } = useDirtyDialogGuard({
     isDirty: isFormDirty,
@@ -280,6 +281,7 @@ function LegacyQuoteEditDialog({
         className="max-w-2xl border border-slate-700 bg-slate-950 text-white"
         onInteractOutside={handleInteractOutside}
         onPointerDownOutside={handlePointerDownOutside}
+        onFocusOutside={handleFocusOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
         <DialogHeader>

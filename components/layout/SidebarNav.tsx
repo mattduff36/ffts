@@ -22,6 +22,7 @@ import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { usePendingAbsenceCount } from '@/lib/hooks/useNavMetrics';
 import { managerNavItems, adminNavItems, getFilteredNavByPermissions } from '@/lib/config/navigation';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
+import { hasDesktopSidebarAccess } from '@/components/layout/desktop-sidebar';
 import {
   clearViewAsSelection,
   getViewAsSelection,
@@ -291,7 +292,9 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   const draftTeam = allTeams.find((team) => team.id === draftTeamId) ?? null;
   
   // Show sidebar for managers/admins or superadmins (who need View As feature)
-  if (!isManager && !isAdmin && !isSuperAdmin) return null;
+  if (!hasDesktopSidebarAccess({ isManager, isAdmin, isActualSuperAdmin })) {
+    return null;
+  }
 
   const managerLinks = getFilteredNavByPermissions(managerNavItems, userPermissions, isAdmin);
   const sidebarManagerLinks = managerLinks.filter((link) => link.href !== '/absence/manage');

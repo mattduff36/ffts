@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
+import { shouldReserveDesktopSidebarSpace } from '@/components/layout/desktop-sidebar';
 import { useEffect, useState } from 'react';
 import {
   APP_WIDESCREEN_CHANGED_EVENT,
@@ -14,7 +15,7 @@ interface DashboardContentProps {
 }
 
 export function DashboardContent({ children, isFullWidth = false }: DashboardContentProps) {
-  const { isManager, isActualSuperAdmin } = useAuth();
+  const { isManager, isAdmin, isActualSuperAdmin } = useAuth();
   const { tabletModeEnabled } = useTabletMode();
   const [appWidescreenEnabled, setAppWidescreenEnabled] = useState(false);
 
@@ -41,7 +42,12 @@ export function DashboardContent({ children, isFullWidth = false }: DashboardCon
     return () => document.body.classList.remove('app-widescreen-enabled');
   }, [appWidescreenEnabled]);
 
-  const shouldApplySidebarOffset = !tabletModeEnabled && (isManager || isActualSuperAdmin);
+  const shouldApplySidebarOffset = shouldReserveDesktopSidebarSpace({
+    tabletModeEnabled,
+    isManager,
+    isAdmin,
+    isActualSuperAdmin,
+  });
   const contentWidthClassName = appWidescreenEnabled
     ? 'max-w-none mx-0'
     : isFullWidth

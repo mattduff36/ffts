@@ -85,6 +85,7 @@ export function ProjectNumberFormDialog({
         className="max-w-2xl"
         onInteractOutside={guard.handleInteractOutside}
         onPointerDownOutside={guard.handlePointerDownOutside}
+        onFocusOutside={guard.handleFocusOutside}
         onEscapeKeyDown={guard.handleEscapeKeyDown}
       >
         <DialogHeader><DialogTitle>Create Project Number</DialogTitle></DialogHeader>

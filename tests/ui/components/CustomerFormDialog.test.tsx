@@ -188,4 +188,68 @@ describe('CustomerFormDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add Site' }));
     expect(screen.queryByRole('button', { name: /copy customer address/i })).not.toBeInTheDocument();
   });
+
+  it('keeps dirty customer values after tab hide, a customer refetch, and discard is required', () => {
+    const onClose = vi.fn();
+    const customer = {
+      id: 'customer-1',
+      company_name: 'Acme Ltd',
+      short_name: 'Acme',
+      contact_name: 'Alice',
+      contact_email: 'alice@example.com',
+      contact_phone: '',
+      contact_job_title: '',
+      address_line_1: '',
+      address_line_2: '',
+      city: '',
+      county: '',
+      postcode: '',
+      payment_terms_days: 30,
+      default_validity_days: 30,
+      status: 'active' as const,
+      notes: '',
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-01T00:00:00.000Z',
+      created_by: null,
+      updated_by: null,
+      secondary_contacts: [],
+      sites: [],
+    };
+
+    const { rerender } = render(
+      <CustomerFormDialog
+        open
+        onClose={onClose}
+        onSubmit={vi.fn(async () => undefined)}
+        customer={customer}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Company Name *'), {
+      target: { value: 'Acme Holdings' },
+    });
+
+    rerender(
+      <CustomerFormDialog
+        open
+        onClose={onClose}
+        onSubmit={vi.fn(async () => undefined)}
+        customer={{ ...customer }}
+      />
+    );
+
+    expect((screen.getByLabelText('Company Name *') as HTMLInputElement).value).toBe('Acme Holdings');
+    expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Company Name *') as HTMLInputElement).value).toBe('Acme Holdings');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

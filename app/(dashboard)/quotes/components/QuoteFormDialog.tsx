@@ -281,6 +281,7 @@ export function QuoteFormDialog({
     handleInteractOutside,
     handlePointerDownOutside,
     handleEscapeKeyDown,
+    handleFocusOutside,
     discard,
   } = useDirtyDialogGuard({
     isDirty: isFormDirty,
@@ -913,6 +914,7 @@ export function QuoteFormDialog({
         className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
         onInteractOutside={handleInteractOutside}
         onPointerDownOutside={handlePointerDownOutside}
+        onFocusOutside={handleFocusOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
         <form onSubmit={handleSubmit} noValidate onKeyDown={handleEnterAdvancesFields}>

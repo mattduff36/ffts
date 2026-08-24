@@ -610,4 +610,41 @@ describe('QuoteFormDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps dirty quote values after tab hide, return, and a close request', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+    const onClose = vi.fn();
+
+    render(<QuoteFormDialog {...baseProps} onClose={onClose} />);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories'), {
+      target: { value: 'Fence panels for rear compound' },
+    });
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      (screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories') as HTMLInputElement).value
+    ).toBe('Fence panels for rear compound');
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

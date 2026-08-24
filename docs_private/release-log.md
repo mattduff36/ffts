@@ -2,6 +2,26 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.12.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Customers, and Projects`
+
+**PUSHED AT**
+2026-08-24T10:05:54.505Z
+
+**WHAT CHANGED**
+Update Quotes, Customers, and Projects.
+
+**VERSION HISTORY DETAILS**
+- Updated navigation, with changes to interface components and automated tests.
+- Updated Quotes, Customers, and Projects, with changes to app screens and automated tests.
+- Updated customers, with changes to app screens and automated tests.
+- Updated projects, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Customers, and Projects`
+
 ## 0826.11.0
 
 **GIT COMMIT MESSAGE**

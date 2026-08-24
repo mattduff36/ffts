@@ -1,5 +1,29 @@
 [
   {
+    "version": "0826.12.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Customers, and Projects.",
+    "summary": "Updated Quotes, Customers, and Projects.",
+    "details": [
+      "Updated navigation, with changes to interface components and automated tests.",
+      "Updated Quotes, Customers, and Projects, with changes to app screens and automated tests.",
+      "Updated customers, with changes to app screens and automated tests.",
+      "Updated projects, with changes to app screens."
+    ],
+    "areas": [
+      "Quotes",
+      "Customers",
+      "Projects"
+    ],
+    "areaKeys": [
+      "quotes",
+      "customers",
+      "projects"
+    ],
+    "pushedAt": "2026-08-24T10:05:54.505Z"
+  },
+  {
     "version": "0826.11.0",
     "updateKind": "major",
     "title": "Quotes update",

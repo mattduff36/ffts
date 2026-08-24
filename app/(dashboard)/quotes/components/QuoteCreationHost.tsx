@@ -3,8 +3,8 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import { toast } from 'sonner';
 import { QuoteFormDialog } from './QuoteFormDialog';
-import type { Quote, QuoteFormData } from '../types';
-import { createQuoteWithAttachments } from '../quote-creation-client';
+import type { Quote, QuoteFormData, QuoteFormSubmitIntent } from '../types';
+import { createQuoteWithAttachments, markQuoteAsSent } from '../quote-creation-client';
 
 interface QuoteCreationHostProps {
   open: boolean;
@@ -32,9 +32,19 @@ export function QuoteCreationHost({ open, onClose, onCreated }: QuoteCreationHos
       .catch((error) => toast.error(error instanceof Error ? error.message : 'Unable to load Quote metadata.'));
   }, [open]);
 
-  async function handleSubmit(data: QuoteFormData) {
+  async function handleSubmit(data: QuoteFormData, _isEdit: boolean, intent: QuoteFormSubmitIntent = 'save') {
     const quote = await createQuoteWithAttachments(data);
-    await onCreated(quote);
+    if (intent === 'mark_as_sent') {
+      try {
+        const sentQuote = await markQuoteAsSent(quote.id);
+        await onCreated(sentQuote);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Quote saved, but it could not be marked as sent.');
+        await onCreated(quote);
+      }
+    } else {
+      await onCreated(quote);
+    }
     onClose();
   }
 

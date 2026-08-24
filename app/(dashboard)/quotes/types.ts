@@ -451,6 +451,8 @@ export function getQuoteStatusConfig(status: string) {
   return QUOTE_STATUS_CONFIG[status as QuoteStatus] || FALLBACK_QUOTE_STATUS_CONFIG;
 }
 
+export type QuoteFormSubmitIntent = 'save' | 'mark_as_sent';
+
 export interface QuoteFormData {
   customer_id: string;
   customer_site_id: string;

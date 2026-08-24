@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createQuoteWithAttachments } from '@/app/(dashboard)/quotes/quote-creation-client';
+import { createQuoteWithAttachments, markQuoteAsSent } from '@/app/(dashboard)/quotes/quote-creation-client';
 
 const mockUpload = vi.hoisted(() => vi.fn());
 
@@ -34,5 +34,16 @@ describe('createQuoteWithAttachments', () => {
       isClientVisible: true,
       attachmentPurpose: 'client_pricing',
     }));
+  });
+
+  it('marks a quote as sent without creating or emailing again', async () => {
+    await markQuoteAsSent('quote-1');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith('/api/quotes/quote-1', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'mark_as_sent' }),
+    }));
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 });

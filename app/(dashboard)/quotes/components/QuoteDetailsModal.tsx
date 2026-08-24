@@ -165,6 +165,7 @@ function getTimelineEventMeta(eventType: string) {
       };
     case 'approved_and_sent':
     case 'confirmed_and_sent':
+    case 'marked_as_sent':
       return {
         icon: Mail,
         iconClassName: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
@@ -1192,13 +1193,13 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 <div className="rounded-md border border-brand-yellow/30 bg-brand-yellow/10 px-3 py-3 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                      <p className="font-medium text-brand-yellow">Next step: Confirm And Send</p>
+                      <p className="font-medium text-brand-yellow">Next step: Mark as Sent</p>
                       <p className="text-slate-300">
-                        Open the Workflow tab to confirm this quote and email the customer. Status will update to Confirmed.
+                        Open the Workflow tab to mark this quote as sent. This does not email the customer. Status will update to Confirmed.
                       </p>
                       {!recipientEmail ? (
                         <p className="text-amber-300">
-                          Add a primary customer contact email before confirming and sending this quote.
+                          Add a primary customer contact email before marking this quote as sent.
                         </p>
                       ) : null}
                     </div>
@@ -1539,11 +1540,11 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                   <div className="flex flex-wrap gap-2">
                     {isLatestVersion && ['draft', 'changes_requested', 'pending_internal_approval'].includes(quote.status) && (
                       <Button
-                        onClick={() => callAction('confirm_and_send')}
+                        onClick={() => callAction('mark_as_sent')}
                         disabled={actionLoading || !recipientEmail}
                         className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                       >
-                        <Send className="mr-2 h-4 w-4" /> Confirm And Send
+                        <Send className="mr-2 h-4 w-4" /> Mark as Sent
                       </Button>
                     )}
                     {canEditPoDetails && (
@@ -1624,7 +1625,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
 
                   {['draft', 'changes_requested', 'pending_internal_approval'].includes(quote.status) && !recipientEmail && (
                     <p className="text-sm text-amber-300">
-                      Add a primary customer contact email before confirming and sending this quote.
+                      Add a primary customer contact email before marking this quote as sent.
                     </p>
                   )}
 

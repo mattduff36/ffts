@@ -17,9 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { QuotesTable } from './components/QuotesTable';
 import type { QuoteSettingsSubTab } from './components/settings/QuoteSettingsTab';
-import { buildQuoteCreatePayload, uploadClientQuoteAttachments } from './quote-creation-client';
+import { buildQuoteCreatePayload, markQuoteAsSent, uploadClientQuoteAttachments } from './quote-creation-client';
 import { getQuoteManagerNameFilterValue, normalizeQuoteManagerName } from './types';
-import type { LegacyQuote, Quote, QuoteFormData, QuoteManagerOption, QuoteProjectNumber } from './types';
+import type { LegacyQuote, Quote, QuoteFormData, QuoteFormSubmitIntent, QuoteManagerOption, QuoteProjectNumber } from './types';
 import type { LegacyQuoteEditForm } from './components/LegacyQuotesTable';
 import type { CustomerFormData } from '../customers/types';
 
@@ -549,7 +549,7 @@ export default function QuotesPage() {
     setDetailQuoteId(quoteIdFromQuery);
   }, [quoteIdFromQuery]);
 
-  async function handleCreate(data: QuoteFormData) {
+  async function handleCreate(data: QuoteFormData, intent: QuoteFormSubmitIntent = 'save') {
     const res = await fetch('/api/quotes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -561,11 +561,22 @@ export default function QuotesPage() {
     }
     const payload = await res.json();
     await uploadClientQuoteAttachments(payload.quote.id, data.attachment_files);
-    toast.success('Quote created');
+    if (intent === 'mark_as_sent') {
+      try {
+        await markQuoteAsSent(payload.quote.id);
+        toast.success('Quote marked as sent');
+      } catch (error) {
+        setEditingQuote(payload.quote);
+        await fetchData();
+        throw error;
+      }
+    } else {
+      toast.success('Quote created');
+    }
     await fetchData();
   }
 
-  async function handleUpdate(data: QuoteFormData) {
+  async function handleUpdate(data: QuoteFormData, intent: QuoteFormSubmitIntent = 'save') {
     if (!editingQuote) return;
     const res = await fetch(`/api/quotes/${editingQuote.id}`, {
       method: 'PATCH',
@@ -577,7 +588,12 @@ export default function QuotesPage() {
       throw buildFormRequestError(err, 'Failed to update quote');
     }
     await uploadClientQuoteAttachments(editingQuote.id, data.attachment_files);
-    toast.success('Quote updated');
+    if (intent === 'mark_as_sent') {
+      await markQuoteAsSent(editingQuote.id);
+      toast.success('Quote marked as sent');
+    } else {
+      toast.success('Quote updated');
+    }
     setEditingQuote(null);
     await fetchData();
   }
@@ -636,11 +652,11 @@ export default function QuotesPage() {
     return payload.quote;
   }
 
-  async function handleSubmit(data: QuoteFormData, isEdit: boolean) {
+  async function handleSubmit(data: QuoteFormData, isEdit: boolean, intent: QuoteFormSubmitIntent = 'save') {
     if (isEdit) {
-      await handleUpdate(data);
+      await handleUpdate(data, intent);
     } else {
-      await handleCreate(data);
+      await handleCreate(data, intent);
     }
   }
 

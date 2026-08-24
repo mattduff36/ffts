@@ -307,6 +307,106 @@ describe('PATCH /api/quotes/[id]', () => {
     }));
   });
 
+  it('marks a draft quote as sent without emailing the customer', async () => {
+    const { PATCH } = await import('@/app/api/quotes/[id]/route');
+    mockFetchQuoteBundle.mockResolvedValue({
+      quote: {
+        id: 'quote-1',
+        status: 'draft',
+        is_latest_version: true,
+        quote_reference: 'Q-001',
+        subject_line: 'Fence repairs',
+        pricing_mode: 'itemized',
+        manager_email: 'manager@example.com',
+        attention_email: 'alex@example.com',
+        customer: {
+          id: 'customer-1',
+          company_name: 'Acme Ltd',
+          contact_email: 'alex@example.com',
+          contact_name: 'Alex',
+          short_name: 'Acme',
+        },
+      },
+      lineItems: [],
+      attachments: [],
+      invoices: [],
+      versions: [],
+      selectedSecondaryContacts: [],
+      invoiceSummary: {
+        invoicedTotal: 0,
+        remainingBalance: 0,
+        lastInvoiceAt: null,
+        status: 'not_invoiced',
+      },
+    });
+
+    const request = new NextRequest('http://localhost/api/quotes/quote-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'mark_as_sent' }),
+    });
+
+    const response = await PATCH(request, { params: Promise.resolve({ id: 'quote-1' }) });
+
+    expect(response.status).toBe(200);
+    expect(mockSendQuoteToCustomerEmail).not.toHaveBeenCalled();
+    expect(mockGetQuoteEmailCcEmails).not.toHaveBeenCalled();
+    expect(mockQuoteUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'sent',
+      approved_by: 'user-1',
+      customer_sent_by: 'user-1',
+    }));
+    expect(mockAppendQuoteTimelineEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      eventType: 'marked_as_sent',
+      title: 'Marked as sent',
+      toStatus: 'sent',
+    }));
+  });
+
+  it('returns a validation error when mark_as_sent has no customer email', async () => {
+    const { PATCH } = await import('@/app/api/quotes/[id]/route');
+    mockFetchQuoteBundle.mockResolvedValue({
+      quote: {
+        id: 'quote-1',
+        is_latest_version: true,
+        quote_reference: 'Q-001',
+        subject_line: 'Fence repairs',
+        manager_email: 'manager@example.com',
+        attention_email: null,
+        customer: {
+          id: 'customer-1',
+          company_name: 'Acme Ltd',
+          contact_email: null,
+          contact_name: 'Alex',
+          short_name: 'Acme',
+        },
+      },
+      lineItems: [],
+      attachments: [],
+      invoices: [],
+      versions: [],
+      selectedSecondaryContacts: [],
+      invoiceSummary: {
+        invoicedTotal: 0,
+        remainingBalance: 0,
+        lastInvoiceAt: null,
+        status: 'not_invoiced',
+      },
+    });
+
+    const request = new NextRequest('http://localhost/api/quotes/quote-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'mark_as_sent' }),
+    });
+
+    const response = await PATCH(request, { params: Promise.resolve({ id: 'quote-1' }) });
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe('Add a primary customer contact email before marking this quote as sent.');
+    expect(mockSendQuoteToCustomerEmail).not.toHaveBeenCalled();
+    expect(mockQuoteUpdate).not.toHaveBeenCalled();
+  });
+
   it('still marks a quote as sent when customer emails are disabled', async () => {
     const { PATCH } = await import('@/app/api/quotes/[id]/route');
     mockSendQuoteToCustomerEmail.mockResolvedValue({ success: true, suppressed: true });

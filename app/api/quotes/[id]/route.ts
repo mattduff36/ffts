@@ -210,36 +210,50 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const pricingMode = quoteUpdates.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
     const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
 
-    if (action === 'submit_for_approval' || action === 'confirm_and_send') {
+    if (action === 'submit_for_approval' || action === 'confirm_and_send' || action === 'mark_as_sent') {
+      const skipCustomerEmail = action === 'mark_as_sent';
       const customerEmail = current.quote.attention_email?.trim() || current.quote.customer?.contact_email?.trim() || '';
       if (!customerEmail) {
         return NextResponse.json(
-          { error: 'Add a primary customer contact email before confirming this quote.' },
+          {
+            error: skipCustomerEmail
+              ? 'Add a primary customer contact email before marking this quote as sent.'
+              : 'Add a primary customer contact email before confirming this quote.',
+          },
           { status: 400 }
         );
       }
 
       if (current.quote.pricing_mode === 'attachments_only' && !current.attachments.some(attachment => attachment.is_client_visible)) {
         return NextResponse.json(
-          { error: 'Add at least one client-visible attachment before confirming this quote.' },
+          {
+            error: skipCustomerEmail
+              ? 'Add at least one client-visible attachment before marking this quote as sent.'
+              : 'Add at least one client-visible attachment before confirming this quote.',
+          },
           { status: 400 }
         );
       }
 
-      const quoteCopyEmails = await getQuoteEmailCcEmails(
-        admin,
-        'quote_customer_email_copy',
-        getQuoteCustomerCopyExclusionIds(current.quote.requester_id)
-      );
-      const emailResult = await sendQuoteToCustomerEmail(current, [
-        current.quote.manager_email || '',
-        ...quoteCopyEmails,
-      ], user.email);
+      let recipientDescription = '';
+      let customerEmailSuppressed = false;
+      if (!skipCustomerEmail) {
+        const quoteCopyEmails = await getQuoteEmailCcEmails(
+          admin,
+          'quote_customer_email_copy',
+          getQuoteCustomerCopyExclusionIds(current.quote.requester_id)
+        );
+        const emailResult = await sendQuoteToCustomerEmail(current, [
+          current.quote.manager_email || '',
+          ...quoteCopyEmails,
+        ], user.email);
 
-      if (!emailResult.success) {
-        return NextResponse.json({ error: emailResult.error || 'Failed to send quote email' }, { status: 500 });
+        if (!emailResult.success) {
+          return NextResponse.json({ error: emailResult.error || 'Failed to send quote email' }, { status: 500 });
+        }
+        customerEmailSuppressed = emailResult.suppressed === true;
+        recipientDescription = getCustomerRecipientDescription(customerEmail, current.selectedSecondaryContacts);
       }
-      const recipientDescription = getCustomerRecipientDescription(customerEmail, current.selectedSecondaryContacts);
 
       const now = new Date().toISOString();
       const { error } = await supabase
@@ -260,12 +274,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         quoteId: id,
         quoteThreadId: current.quote.quote_thread_id,
         quoteReference: current.quote.quote_reference,
-        eventType: 'confirmed_and_sent',
-        title: 'Confirmed and sent',
-        description: quoteCustomerEmailTimelineDescription({
-          suppressed: emailResult.suppressed,
-          emailedDescription: `Quote emailed to customer recipient(s): ${recipientDescription}.`,
-        }),
+        eventType: skipCustomerEmail ? 'marked_as_sent' : 'confirmed_and_sent',
+        title: skipCustomerEmail ? 'Marked as sent' : 'Confirmed and sent',
+        description: skipCustomerEmail
+          ? 'Quote marked as sent without emailing the customer.'
+          : quoteCustomerEmailTimelineDescription({
+            suppressed: customerEmailSuppressed,
+            emailedDescription: `Quote emailed to customer recipient(s): ${recipientDescription}.`,
+          }),
         fromStatus: current.quote.status,
         toStatus: 'sent',
         actorUserId: user.id,

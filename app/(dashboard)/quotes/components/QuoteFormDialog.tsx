@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertTriangle, ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Sparkles, Trash2, GripVertical, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Send, Sparkles, Trash2, GripVertical, Upload, X } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
@@ -34,7 +34,7 @@ import {
   getQuoteAttachmentUrl,
   replaceQuoteAttachment,
 } from '../quote-attachment-client';
-import type { Quote, QuoteAttachment, QuoteFormData, QuoteLineItem, QuoteManagerOption } from '../types';
+import type { Quote, QuoteAttachment, QuoteFormData, QuoteFormSubmitIntent, QuoteLineItem, QuoteManagerOption } from '../types';
 
 interface Customer {
   id: string;
@@ -87,7 +87,7 @@ interface QuoteAssistDraft {
 interface QuoteFormDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: QuoteFormData, isEdit: boolean) => Promise<void>;
+  onSubmit: (data: QuoteFormData, isEdit: boolean, intent?: QuoteFormSubmitIntent) => Promise<void>;
   onAttachmentsChange?: (quoteId: string) => Promise<Quote | void>;
   quote?: Quote | null;
   customers: Customer[];
@@ -863,8 +863,13 @@ export function QuoteFormDialog({
   const areCustomerDependentFieldsDisabled = !form.customer_id;
   const customerDependentContactEmailDisplay = areCustomerDependentFieldsDisabled ? '' : contactEmailDisplay;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const canMarkAsSent = !quote || (
+    quote.is_latest_version !== false
+    && ['draft', 'changes_requested', 'pending_internal_approval', 'approved'].includes(quote.status)
+  );
+  const markAsSentRecipientEmail = (form.attention_email || selectedCustomer?.contact_email || '').trim();
+
+  async function persistQuote(intent: QuoteFormSubmitIntent) {
     const validationErrors = validateForm(form);
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
@@ -880,7 +885,7 @@ export function QuoteFormDialog({
         ...form,
         customer_site_id: normalizeQuoteSiteId(form.customer_site_id),
         attachment_files: attachmentFiles,
-      }, isEditing);
+      }, isEditing, intent);
       onClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save quote';
@@ -894,6 +899,11 @@ export function QuoteFormDialog({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await persistQuote('save');
   }
 
   return (
@@ -1631,8 +1641,18 @@ export function QuoteFormDialog({
               disabled={saving}
               className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90 font-semibold"
             >
-              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : isEditing ? 'Update Quote' : 'Create Quote'}
+              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : 'Save'}
             </Button>
+            {canMarkAsSent ? (
+              <Button
+                type="button"
+                disabled={saving || !markAsSentRecipientEmail}
+                onClick={() => void persistQuote('mark_as_sent')}
+                className="border-slate-600 bg-slate-800 text-white hover:bg-slate-700 font-semibold"
+              >
+                {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : <><Send className="mr-2 h-4 w-4" /> Mark as Sent</>}
+              </Button>
+            ) : null}
           </DialogFooter>
         </form>
       </DialogContent>

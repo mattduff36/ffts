@@ -408,7 +408,7 @@ describe('QuoteFormDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /select customer/i }));
     fireEvent.click(screen.getByText('Acme Ltd'));
-    fireEvent.click(screen.getByRole('button', { name: /create quote/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText('Enter the site address for this quote.')).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -439,7 +439,7 @@ describe('QuoteFormDialog', () => {
       target: { value: 'Replace broken bays and clear waste.' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /create quote/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(
@@ -447,9 +447,68 @@ describe('QuoteFormDialog', () => {
           customer_site_id: '',
           secondary_contact_ids: ['contact-1'],
         }),
-        false
+        false,
+        'save'
       );
     });
+  });
+
+  it('saves without progressing when Save is clicked', async () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuoteFormDialog {...baseProps} initialCustomerId="customer-1" onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories'), {
+      target: { value: 'Fence repairs' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Brief customer-facing summary'), {
+      target: { value: 'Repair damaged fence panels.' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Describe the included scope of works'), {
+      target: { value: 'Replace broken bays and clear waste.' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), false, 'save');
+    });
+    expect(onSubmit).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'mark_as_sent');
+  });
+
+  it('progresses without a separate email action when Mark as Sent is clicked', async () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuoteFormDialog {...baseProps} initialCustomerId="customer-1" onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories'), {
+      target: { value: 'Fence repairs' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Brief customer-facing summary'), {
+      target: { value: 'Repair damaged fence panels.' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Describe the included scope of works'), {
+      target: { value: 'Replace broken bays and clear waste.' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as Sent' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), false, 'mark_as_sent');
+    });
+    expect(onSubmit).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'save');
   });
 
   it('shows open, replace, and remove controls for saved client attachments', () => {

@@ -2,6 +2,31 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.9.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): add admin toggle to disable customer quote emails`
+
+**PUSHED AT**
+2026-08-24T09:27:49.058Z
+
+**WHAT CHANGED**
+Update repository files. Keep dirty quote and similar dialogs until save or discard. Make Enter move to the next form field. Keep quote timeline honest when customer emails are disabled. Add admin toggle to disable customer quote emails.
+
+**VERSION HISTORY DETAILS**
+- Keep dirty quote and similar dialogs until save or discard, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.
+- Updated customers, with changes to app screens, automation scripts, automated tests, and data storage.
+- Updated data storage, with changes to shared typing, automation scripts, and data storage.
+- Updated inventory, with changes to app screens and automated tests.
+- Updated projects, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `chore(repo): update repository files`
+- `fix(quotes): keep dirty quote and similar dialogs until save or discard`
+- `fix(quotes): make Enter move to the next form field`
+- `fix(quotes): keep quote timeline honest when customer emails are disabled`
+- `feat(quotes): add admin toggle to disable customer quote emails`
+
 ## 0826.8.0
 
 **GIT COMMIT MESSAGE**

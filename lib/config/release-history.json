@@ -1,5 +1,27 @@
 [
   {
+    "version": "0826.9.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated general app maintenance. Keep dirty quote and similar dialogs until save or discard. Make Enter move to the next form field. Keep quote timeline honest when customer emails are disabled. Add admin toggle to disable customer quote emails.",
+    "summary": "Updated general app maintenance. Keep dirty quote and similar dialogs until save or discard. Make Enter move to the next form field. Keep quote timeline honest when customer emails are disabled. Add admin toggle to disable customer quote emails.",
+    "details": [
+      "Keep dirty quote and similar dialogs until save or discard, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.",
+      "Updated customers, with changes to app screens, automation scripts, automated tests, and data storage.",
+      "Updated data storage, with changes to shared typing, automation scripts, and data storage.",
+      "Updated inventory, with changes to app screens and automated tests.",
+      "Updated projects, with changes to app screens."
+    ],
+    "areas": [
+      "Quotes",
+      "General app maintenance. Keep dirty quote"
+    ],
+    "areaKeys": [
+      "quotes"
+    ],
+    "pushedAt": "2026-08-24T09:27:49.058Z"
+  },
+  {
     "version": "0826.8.0",
     "updateKind": "major",
     "title": "Quotes update",

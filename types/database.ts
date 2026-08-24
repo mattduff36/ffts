@@ -5260,6 +5260,7 @@ export type Database = {
           id: boolean
           default_start_alert_days: number | null
           default_estimated_duration_days: number | null
+          customer_emails_disabled: boolean
           updated_by: string | null
           created_at: string
           updated_at: string
@@ -5268,6 +5269,7 @@ export type Database = {
           id?: boolean
           default_start_alert_days?: number | null
           default_estimated_duration_days?: number | null
+          customer_emails_disabled?: boolean
           updated_by?: string | null
           created_at?: string
           updated_at?: string
@@ -5276,6 +5278,7 @@ export type Database = {
           id?: boolean
           default_start_alert_days?: number | null
           default_estimated_duration_days?: number | null
+          customer_emails_disabled?: boolean
           updated_by?: string | null
           created_at?: string
           updated_at?: string

@@ -88,7 +88,17 @@ export const QUOTE_INVOICE_NOTIFICATION_TYPES: QuoteInvoiceNotificationType[] = 
 export interface QuoteModuleSettings {
   default_start_alert_days: number | null;
   default_estimated_duration_days: number | null;
+  customer_emails_disabled: boolean;
 }
+
+export interface QuoteEmailSendResult {
+  success: boolean;
+  suppressed?: boolean;
+  error?: string;
+}
+
+export const QUOTE_CUSTOMER_EMAILS_DISABLED_MESSAGE =
+  'Customer emails are disabled in Quotes settings. No email was sent to the customer.';
 
 interface QuoteManagerOption {
   profile_id: string;
@@ -471,7 +481,38 @@ interface EmailAttachment {
   content: string;
 }
 
+export async function areQuoteCustomerEmailsDisabled(
+  supabase: ReturnType<typeof createAdminClient> = createAdminClient()
+): Promise<boolean> {
+  try {
+    const settings = await loadQuoteModuleSettings(supabase);
+    return settings.customer_emails_disabled === true;
+  } catch (error) {
+    console.error('Unable to read quote customer-email disable setting; allowing send.', error);
+    return false;
+  }
+}
+
+async function suppressCustomerFacingQuoteEmailIfDisabled(
+  context?: Record<string, string>
+): Promise<QuoteEmailSendResult | null> {
+  if (!(await areQuoteCustomerEmailsDisabled())) {
+    return null;
+  }
+
+  console.info('Quote customer email suppressed by admin setting (customer_emails_disabled).', context);
+  return { success: true, suppressed: true };
+}
+
+export function quoteCustomerEmailTimelineDescription(params: {
+  suppressed?: boolean;
+  emailedDescription: string;
+}): string {
+  return params.suppressed ? QUOTE_CUSTOMER_EMAILS_DISABLED_MESSAGE : params.emailedDescription;
+}
+
 async function sendEmail(params: {
+  audience: 'customer' | 'internal';
   from?: string;
   to: string[];
   cc?: string[];
@@ -479,7 +520,16 @@ async function sendEmail(params: {
   subject: string;
   html: string;
   attachments?: EmailAttachment[];
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<QuoteEmailSendResult> {
+  if (params.audience === 'customer') {
+    const suppressed = await suppressCustomerFacingQuoteEmailIfDisabled({
+      subject: params.subject,
+    });
+    if (suppressed) {
+      return suppressed;
+    }
+  }
+
   const { apiKey, fromEmail } = getQuoteResendEmailConfig();
   if (!apiKey) {
     return { success: false, error: 'Email service not configured' };
@@ -648,6 +698,14 @@ export async function sendQuoteToCustomerEmail(
   cc: string[],
   senderEmail?: string | null
 ) {
+  const suppressed = await suppressCustomerFacingQuoteEmailIfDisabled({
+    quote_reference: bundle.quote.quote_reference,
+    kind: 'customer_quote',
+  });
+  if (suppressed) {
+    return suppressed;
+  }
+
   const replyToEmail = normalizeEmailAddress(senderEmail) || normalizeEmailAddress(bundle.quote.manager_email);
   const quotePdfAttachment = await renderQuotePdfAttachment(bundle, replyToEmail);
   const clientAttachments = await renderClientVisibleQuoteAttachments(bundle);
@@ -678,6 +736,7 @@ export async function sendQuoteToCustomerEmail(
   });
 
   return sendEmail({
+    audience: 'customer',
     from: getDefaultFromEmail(),
     to: toEmails,
     cc: ccEmails,
@@ -695,6 +754,14 @@ export async function sendQuotePoRequestEmail(params: {
   senderEmail?: string | null;
   senderName?: string | null;
 }) {
+  const suppressed = await suppressCustomerFacingQuoteEmailIfDisabled({
+    quote_reference: params.bundle.quote.quote_reference,
+    kind: 'po_request',
+  });
+  if (suppressed) {
+    return suppressed;
+  }
+
   const replyToEmail = normalizeEmailAddress(params.senderEmail) || normalizeEmailAddress(params.bundle.quote.manager_email);
   const quotePdfAttachment = await renderQuotePdfAttachment(params.bundle, replyToEmail);
   const toEmails = uniqueEmailAddresses(params.recipientEmails);
@@ -717,6 +784,7 @@ export async function sendQuotePoRequestEmail(params: {
   });
 
   return sendEmail({
+    audience: 'customer',
     from: getDefaultFromEmail(),
     to: toEmails,
     cc: params.cc,
@@ -743,6 +811,7 @@ export async function sendQuoteApprovalRequestEmail(params: {
   });
 
   return sendEmail({
+    audience: 'internal',
     to: [params.approverEmail],
     subject: template.subject,
     html: renderQuoteWorkflowEmailHtml(template.bodyHtml, 'Quote approval required'),
@@ -792,6 +861,7 @@ export async function sendQuoteRamsRequestEmail(params: {
   });
 
   return sendEmail({
+    audience: 'internal',
     to: [process.env.QUOTE_RAMS_REQUEST_EMAIL?.trim() || getTemplateEmailConfig().adminEmail],
     cc: params.cc,
     subject: template.subject,
@@ -818,6 +888,7 @@ export async function sendQuoteStartAlertEmail(params: {
   });
 
   return sendEmail({
+    audience: 'internal',
     to: [params.to],
     cc: params.cc,
     subject: template.subject,
@@ -915,6 +986,7 @@ export async function createQuoteNotification(params: {
   }
 
   const emailResult = await sendEmail({
+    audience: 'internal',
     to: emailTo,
     cc: params.emailCcType
       ? await getQuoteEmailCcEmails(admin, params.emailCcType, [params.senderId, ...emailRecipientIds])
@@ -1116,7 +1188,7 @@ export async function loadQuoteModuleSettings(
 ): Promise<QuoteModuleSettings> {
   const { data, error } = await supabase
     .from('quote_module_settings')
-    .select('default_start_alert_days, default_estimated_duration_days')
+    .select('default_start_alert_days, default_estimated_duration_days, customer_emails_disabled')
     .eq('id', true)
     .maybeSingle();
 
@@ -1125,6 +1197,7 @@ export async function loadQuoteModuleSettings(
   return {
     default_start_alert_days: data?.default_start_alert_days ?? null,
     default_estimated_duration_days: data?.default_estimated_duration_days ?? null,
+    customer_emails_disabled: data?.customer_emails_disabled === true,
   };
 }
 
@@ -1139,9 +1212,10 @@ export async function upsertQuoteModuleSettings(
       id: true,
       default_start_alert_days: settings.default_start_alert_days,
       default_estimated_duration_days: settings.default_estimated_duration_days,
+      customer_emails_disabled: settings.customer_emails_disabled === true,
       updated_by: actorUserId,
     })
-    .select('default_start_alert_days, default_estimated_duration_days')
+    .select('default_start_alert_days, default_estimated_duration_days, customer_emails_disabled')
     .single();
 
   if (error) throw error;
@@ -1149,6 +1223,7 @@ export async function upsertQuoteModuleSettings(
   return {
     default_start_alert_days: data.default_start_alert_days ?? null,
     default_estimated_duration_days: data.default_estimated_duration_days ?? null,
+    customer_emails_disabled: data.customer_emails_disabled === true,
   };
 }
 

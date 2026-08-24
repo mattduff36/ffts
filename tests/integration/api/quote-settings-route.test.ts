@@ -83,6 +83,7 @@ describe('/api/quotes/settings', () => {
     mockLoadQuoteModuleSettings.mockResolvedValue({
       default_start_alert_days: 7,
       default_estimated_duration_days: 3,
+      customer_emails_disabled: false,
     });
     mockListQuoteUserNotificationRecipientOptions.mockResolvedValue([
       { id: 'user-1', full_name: 'User One', employee_id: 'U1', team_id: 'ops' },
@@ -103,6 +104,7 @@ describe('/api/quotes/settings', () => {
     mockUpsertQuoteModuleSettings.mockResolvedValue({
       default_start_alert_days: 10,
       default_estimated_duration_days: 4,
+      customer_emails_disabled: false,
     });
   });
 
@@ -116,6 +118,7 @@ describe('/api/quotes/settings', () => {
     expect(payload.settings).toEqual({
       default_start_alert_days: 7,
       default_estimated_duration_days: 3,
+      customer_emails_disabled: false,
     });
     expect(payload.selected_notifications.quote_customer_email_copy).toEqual(['user-1']);
   });
@@ -157,6 +160,35 @@ describe('/api/quotes/settings', () => {
     expect(mockUpsertQuoteModuleSettings).toHaveBeenCalledWith(admin, {
       default_start_alert_days: 10,
       default_estimated_duration_days: 4,
+      customer_emails_disabled: false,
     }, 'admin-1');
+  });
+
+  it('saves the customer-email disable flag without changing schedule defaults', async () => {
+    const { PATCH } = await import('@/app/api/quotes/settings/route');
+    mockUpsertQuoteModuleSettings.mockResolvedValue({
+      default_start_alert_days: 7,
+      default_estimated_duration_days: 3,
+      customer_emails_disabled: true,
+    });
+
+    const response = await PATCH(new NextRequest('http://localhost/api/quotes/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        settings: {
+          customer_emails_disabled: true,
+        },
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockUpsertQuoteModuleSettings).toHaveBeenCalledWith(expect.anything(), {
+      default_start_alert_days: 7,
+      default_estimated_duration_days: 3,
+      customer_emails_disabled: true,
+    }, 'admin-1');
+    expect(payload.settings.customer_emails_disabled).toBe(true);
   });
 });

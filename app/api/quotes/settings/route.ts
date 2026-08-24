@@ -148,6 +148,7 @@ export async function PATCH(request: NextRequest) {
       settings?: {
         default_start_alert_days?: unknown;
         default_estimated_duration_days?: unknown;
+        customer_emails_disabled?: unknown;
       };
       selected_notifications?: unknown;
       apply_empty_defaults?: unknown;
@@ -162,6 +163,9 @@ export async function PATCH(request: NextRequest) {
       default_estimated_duration_days: Object.prototype.hasOwnProperty.call(body.settings || {}, 'default_estimated_duration_days')
         ? normalizeNullableInteger(body.settings?.default_estimated_duration_days)
         : currentSettings.default_estimated_duration_days,
+      customer_emails_disabled: Object.prototype.hasOwnProperty.call(body.settings || {}, 'customer_emails_disabled')
+        ? body.settings?.customer_emails_disabled === true
+        : currentSettings.customer_emails_disabled,
     };
 
     if (

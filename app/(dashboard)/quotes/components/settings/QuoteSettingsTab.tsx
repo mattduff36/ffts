@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bell, CalendarClock, Loader2, Mail, Plus, Save, Send, Trash2, UserCog, Wrench } from 'lucide-react';
+import { Bell, CalendarClock, Loader2, Mail, Plus, Save, Send, ShieldAlert, Trash2, UserCog, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,6 +62,7 @@ interface ApproverOption {
 interface QuoteModuleSettings {
   default_start_alert_days: number | null;
   default_estimated_duration_days: number | null;
+  customer_emails_disabled: boolean;
 }
 
 interface QuoteSettingsPayload {
@@ -216,6 +217,7 @@ export function QuoteSettingsTab({
   const [moduleSettings, setModuleSettings] = useState<QuoteModuleSettings>({
     default_start_alert_days: null,
     default_estimated_duration_days: null,
+    customer_emails_disabled: false,
   });
   const [managerRows, setManagerRows] = useState<ReturnType<typeof normalizeManagerRows>>([]);
   const [templateRows, setTemplateRows] = useState<QuoteEmailTemplate[]>([]);
@@ -770,6 +772,44 @@ export function QuoteSettingsTab({
     }, {});
 
     return (
+      <>
+      <Card className="border-amber-500/40 bg-amber-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-white">
+            <ShieldAlert className="h-5 w-5 text-amber-400" />
+            Disable customer emails
+          </CardTitle>
+          <CardDescription>
+            Use this while testing with live customer data. Quote and PO-request emails will not be sent to customer addresses. Quotes can still be created and moved through the workflow. Internal staff emails are unchanged.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="disable-customer-emails" className="text-sm font-medium text-slate-100">
+                Do not send quote emails to real customers
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {moduleSettings.customer_emails_disabled
+                  ? 'Customer quote and PO-request emails are currently blocked.'
+                  : 'Customer quote and PO-request emails will send as normal.'}
+              </p>
+            </div>
+            <Switch
+              id="disable-customer-emails"
+              checked={moduleSettings.customer_emails_disabled}
+              disabled={!settingsPayload?.can_manage || Boolean(saving)}
+              onCheckedChange={(checked) => void saveModuleSettings({
+                settings: { customer_emails_disabled: checked },
+                successMessage: checked
+                  ? 'Customer quote emails disabled. No emails will be sent to real customers.'
+                  : 'Customer quote emails re-enabled.',
+                savingKey: 'customer-emails',
+              })}
+            />
+          </div>
+        </CardContent>
+      </Card>
       <Card className="border-slate-700 bg-slate-900/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
@@ -862,6 +902,7 @@ export function QuoteSettingsTab({
           </div>
         </CardContent>
       </Card>
+      </>
     );
   }
 

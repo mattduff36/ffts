@@ -122,6 +122,23 @@ beforeEach(() => {
       })),
     },
     from: vi.fn((table: string) => {
+      if (table === 'quote_module_settings') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  default_start_alert_days: null,
+                  default_estimated_duration_days: null,
+                  customer_emails_disabled: false,
+                },
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }
+
       if (table === 'quote_email_templates') {
         return {
           select: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -279,6 +296,23 @@ describe('sendQuoteToCustomerEmail', () => {
         })),
       },
       from: vi.fn((table: string) => {
+        if (table === 'quote_module_settings') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    default_start_alert_days: null,
+                    default_estimated_duration_days: null,
+                    customer_emails_disabled: false,
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
         if (table === 'quote_email_templates') {
           return {
             select: vi.fn().mockResolvedValue({
@@ -325,6 +359,95 @@ describe('sendQuoteToCustomerEmail', () => {
         filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
       }),
     ]);
+  });
+});
+
+describe('quote customer email disable setting', () => {
+  function mockQuoteModuleSettings(customerEmailsDisabled: boolean) {
+    mockCreateAdminClient.mockReturnValue({
+      storage: {
+        from: vi.fn(() => ({
+          download: vi.fn(),
+        })),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quote_module_settings') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    default_start_alert_days: null,
+                    default_estimated_duration_days: null,
+                    customer_emails_disabled: customerEmailsDisabled,
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        if (table === 'quote_email_templates') {
+          return {
+            select: vi.fn().mockResolvedValue({ data: [], error: null }),
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    });
+  }
+
+  it('suppresses customer quote emails without calling Resend', async () => {
+    mockQuoteModuleSettings(true);
+    const { sendQuoteToCustomerEmail } = await import('@/lib/server/quote-workflow');
+
+    const result = await sendQuoteToCustomerEmail(buildQuoteBundle(), ['manager-copy@example.test'], 'sender@example.test');
+
+    expect(result).toEqual({ success: true, suppressed: true });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockQuotePDF).not.toHaveBeenCalled();
+  });
+
+  it('suppresses PO request emails without calling Resend', async () => {
+    mockQuoteModuleSettings(true);
+    const { sendQuotePoRequestEmail } = await import('@/lib/server/quote-workflow');
+
+    const result = await sendQuotePoRequestEmail({
+      bundle: buildQuoteBundle(),
+      recipientEmails: ['alex@example.com'],
+      senderEmail: 'sender@example.test',
+    });
+
+    expect(result).toEqual({ success: true, suppressed: true });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockQuotePDF).not.toHaveBeenCalled();
+  });
+
+  it('still sends internal RAMS emails when customer emails are disabled', async () => {
+    mockQuoteModuleSettings(true);
+    const { sendQuoteRamsRequestEmail } = await import('@/lib/server/quote-workflow');
+
+    const result = await sendQuoteRamsRequestEmail({
+      quoteReference: 'Q-001',
+      customerName: 'Acme Ltd',
+      subjectLine: 'Concrete repairs',
+      poNumber: 'PO-123',
+      managerName: 'Example Manager',
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('describes a suppressed customer email honestly', async () => {
+    const { quoteCustomerEmailTimelineDescription } = await import('@/lib/server/quote-workflow');
+
+    expect(quoteCustomerEmailTimelineDescription({
+      suppressed: true,
+      emailedDescription: 'Quote emailed to customer recipient(s): alex@example.com.',
+    })).toBe('Customer emails are disabled in Quotes settings. No email was sent to the customer.');
   });
 });
 

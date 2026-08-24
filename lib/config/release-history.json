@@ -1,5 +1,22 @@
 [
   {
+    "version": "0826.10.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated quotes.",
+    "summary": "Updated quotes.",
+    "details": [
+      "Updated quotes, with changes to background routes, app screens, and automated tests."
+    ],
+    "areas": [
+      "Quotes"
+    ],
+    "areaKeys": [
+      "quotes"
+    ],
+    "pushedAt": "2026-08-24T09:33:49.085Z"
+  },
+  {
     "version": "0826.9.0",
     "updateKind": "major",
     "title": "Quotes update",

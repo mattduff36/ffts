@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0826.10.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update quotes`
+
+**PUSHED AT**
+2026-08-24T09:33:49.085Z
+
+**WHAT CHANGED**
+Update quotes.
+
+**VERSION HISTORY DETAILS**
+- Updated quotes, with changes to background routes, app screens, and automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update quotes`
+
 ## 0826.9.0
 
 **GIT COMMIT MESSAGE**

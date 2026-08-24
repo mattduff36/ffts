@@ -34,6 +34,7 @@ import {
   isInventoryUnknownLocation,
 } from '../utils';
 import { toast } from 'sonner';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { InventoryLocationSelect } from './InventoryLocationSelect';
 
 interface InventoryItemDialogProps {
@@ -54,6 +55,7 @@ export function InventoryItemDialog({
   const [form, setForm] = useState<InventoryItemFormData>(EMPTY_INVENTORY_ITEM_FORM);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
   const selectedLocation = locations.find((location) => location.id === form.location_id) || null;
   const hasSpecialCheckStatus = isInventoryCheckExempt({
     category: form.category,
@@ -64,11 +66,29 @@ export function InventoryItemDialog({
 
   useEffect(() => {
     setSubmitError('');
-    setForm({
+    const nextForm = {
       ...EMPTY_INVENTORY_ITEM_FORM,
       category: categories[0]?.slug || EMPTY_INVENTORY_ITEM_FORM.category,
-    });
+    };
+    setForm(nextForm);
+    setInitialDirtySnapshot(JSON.stringify(nextForm));
   }, [categories, open]);
+
+  const isFormDirty = open && Boolean(initialDirtySnapshot) && JSON.stringify(form) !== initialDirtySnapshot;
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handlePointerDownOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: saving,
+    onOpenChange: (isOpen) => {
+      if (!isOpen && !saving) onClose();
+    },
+  });
 
   const categoryOptions = categories.length > 0
     ? [...categories]
@@ -101,8 +121,14 @@ export function InventoryItemDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !saving) onClose(); }}>
-      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto bg-slate-900 text-white border-slate-700">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto bg-slate-900 text-white border-slate-700"
+        onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add Inventory Item</DialogTitle>
@@ -210,8 +236,8 @@ export function InventoryItemDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-              Cancel
+            <Button type="button" variant="outline" onClick={discard} disabled={saving}>
+              {isFormDirty ? 'Discard Changes' : 'Cancel'}
             </Button>
             <Button type="submit" className="bg-inventory text-white hover:bg-inventory-dark" disabled={saving || !form.location_id}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

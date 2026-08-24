@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ScheduleQuoteInput } from '@/lib/client/scheduling';
 import type { ScheduleJob } from '@/types/scheduling';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { schedulingControlStyles } from './scheduling-control-styles';
 
 interface ScheduleQuoteDialogProps {
@@ -33,13 +34,33 @@ export function ScheduleQuoteDialog({
   initialInput = null,
   onSubmit,
 }: ScheduleQuoteDialogProps) {
-  const [startDate, setStartDate] = useState(
-    initialInput?.start_date || job.start_date
-  );
-  const [endDate, setEndDate] = useState(
-    initialInput?.end_date || job.end_date
-  );
+  const baselineStartDate = initialInput?.start_date || job.start_date;
+  const baselineEndDate = initialInput?.end_date || job.end_date;
+  const dialogSessionKey = `${open ? 'open' : 'closed'}:${job.id}:${baselineStartDate}:${baselineEndDate}`;
+  const [draftSessionKey, setDraftSessionKey] = useState(dialogSessionKey);
+  const [startDate, setStartDate] = useState(baselineStartDate);
+  const [endDate, setEndDate] = useState(baselineEndDate);
   const [isSaving, setIsSaving] = useState(false);
+
+  if (draftSessionKey !== dialogSessionKey) {
+    setDraftSessionKey(dialogSessionKey);
+    setStartDate(baselineStartDate);
+    setEndDate(baselineEndDate);
+  }
+
+  const isFormDirty = startDate !== baselineStartDate || endDate !== baselineEndDate;
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handlePointerDownOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: isSaving,
+    onOpenChange,
+  });
 
   function handleSave() {
     if (!job.quote_id || !startDate || !endDate || isSaving) return;
@@ -58,8 +79,14 @@ export function ScheduleQuoteDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border"
+        onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <DialogHeader>
           <DialogTitle>Reschedule Quote job</DialogTitle>
           <DialogDescription>
@@ -100,8 +127,8 @@ export function ScheduleQuoteDialog({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>
-            Cancel
+          <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={discard}>
+            {isFormDirty ? 'Discard Changes' : 'Cancel'}
           </Button>
           <Button
             type="button"

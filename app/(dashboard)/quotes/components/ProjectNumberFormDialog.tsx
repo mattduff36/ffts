@@ -44,8 +44,9 @@ export function ProjectNumberFormDialog({
   const [form, setForm] = useState<ProjectNumberForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const activeManagerOptions = managerOptions.filter((option) => option.is_active);
+  const isFormDirty = Object.values(form).some(Boolean);
   const guard = useDirtyDialogGuard({
-    isDirty: Object.values(form).some(Boolean),
+    isDirty: isFormDirty,
     disabled: saving,
     onOpenChange: (nextOpen) => {
       if (!nextOpen) {
@@ -83,6 +84,7 @@ export function ProjectNumberFormDialog({
         ref={guard.contentRef}
         className="max-w-2xl"
         onInteractOutside={guard.handleInteractOutside}
+        onPointerDownOutside={guard.handlePointerDownOutside}
         onEscapeKeyDown={guard.handleEscapeKeyDown}
       >
         <DialogHeader><DialogTitle>Create Project Number</DialogTitle></DialogHeader>
@@ -124,7 +126,9 @@ export function ProjectNumberFormDialog({
             <Textarea id="project-number-notes" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={guard.discard}>Cancel</Button>
+            <Button variant="outline" onClick={guard.discard}>
+              {isFormDirty ? 'Discard Changes' : 'Cancel'}
+            </Button>
             <Button disabled={saving || !form.manager_profile_id || !form.title.trim()} onClick={() => void handleSubmit()}>
               {saving ? 'Creating…' : 'Reserve Number'}
             </Button>

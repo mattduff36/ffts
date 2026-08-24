@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { Textarea } from '@/components/ui/textarea';
 import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
+import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
 import { cn } from '@/lib/utils';
 import type { LegacyQuote } from '../types';
@@ -256,9 +257,31 @@ function LegacyQuoteEditDialog({
   onFormChange,
   onSubmit,
 }: LegacyQuoteEditDialogProps) {
+  const isFormDirty = quote != null && JSON.stringify(form) !== JSON.stringify(buildLegacyQuoteEditForm(quote));
+  const {
+    contentRef,
+    handleOpenChange,
+    handleInteractOutside,
+    handlePointerDownOutside,
+    handleEscapeKeyDown,
+    discard,
+  } = useDirtyDialogGuard({
+    isDirty: isFormDirty,
+    disabled: isSaving,
+    onOpenChange: (isOpen) => {
+      if (!isOpen) onOpenChange(false);
+    },
+  });
+
   return (
-    <Dialog open={Boolean(quote)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl border border-slate-700 bg-slate-950 text-white">
+    <Dialog open={Boolean(quote)} onOpenChange={handleOpenChange}>
+      <DialogContent
+        ref={contentRef}
+        className="max-w-2xl border border-slate-700 bg-slate-950 text-white"
+        onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <DialogHeader>
           <DialogTitle>Edit Legacy Quote</DialogTitle>
           <DialogDescription>
@@ -349,11 +372,11 @@ function LegacyQuoteEditDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={discard}
               disabled={isSaving}
               className="border-slate-700 text-slate-200 hover:bg-slate-800"
             >
-              Cancel
+              {isFormDirty ? 'Discard Changes' : 'Cancel'}
             </Button>
             <Button
               type="submit"

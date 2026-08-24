@@ -230,6 +230,31 @@ describe('LegacyQuotesTable', () => {
     });
   });
 
+  it('keeps dirty legacy quote edits and requires discard after an outside close', () => {
+    const onLegacyQuoteUpdate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LegacyQuotesTable
+        legacyQuotes={[buildLegacyQuote({ id: 'editable', quote_reference: '4001-EX' })]}
+        canEditLegacyQuotes
+        onLegacyQuoteUpdate={onLegacyQuoteUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/ }));
+    fireEvent.change(screen.getByLabelText('Customer'), { target: { value: 'Updated Customer' } });
+
+    expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer')).toHaveValue('Updated Customer');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onLegacyQuoteUpdate).not.toHaveBeenCalled();
+  });
+
   it('filters legacy quotes by date range with overview-style filter controls', () => {
     const { container } = render(
       <LegacyQuotesTable

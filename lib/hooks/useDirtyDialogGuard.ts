@@ -48,6 +48,7 @@ export function useDirtyDialogGuard({
     contentRef,
     handleOpenChange,
     handleInteractOutside: handleBlockedCloseEvent,
+    handlePointerDownOutside: handleBlockedCloseEvent,
     handleEscapeKeyDown: handleBlockedCloseEvent,
     discard,
     shake,

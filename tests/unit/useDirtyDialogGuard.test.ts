@@ -42,6 +42,14 @@ describe('useDirtyDialogGuard', () => {
     expect(outsideEvent.preventDefault).toHaveBeenCalled();
     expect(triggerShakeAnimation).toHaveBeenCalledTimes(2);
 
+    const pointerDownEvent = { preventDefault: vi.fn() };
+    act(() => {
+      result.current.handlePointerDownOutside(pointerDownEvent);
+    });
+
+    expect(pointerDownEvent.preventDefault).toHaveBeenCalled();
+    expect(triggerShakeAnimation).toHaveBeenCalledTimes(3);
+
     act(() => {
       result.current.discard();
     });

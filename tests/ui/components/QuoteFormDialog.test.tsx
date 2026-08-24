@@ -1,4 +1,5 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -515,5 +516,39 @@ describe('QuoteFormDialog', () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(summary).toHaveFocus();
+  });
+
+  it('keeps dirty new-quote values and requires discard after an outside close', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+    const onClose = vi.fn();
+
+    render(
+      <StrictMode>
+        <QuoteFormDialog {...baseProps} onClose={onClose} />
+      </StrictMode>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /select customer/i }));
+    fireEvent.click(screen.getByText('Acme Ltd'));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories'), {
+      target: { value: 'Fence panels for rear compound' },
+    });
+
+    expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      (screen.getByPlaceholderText('e.g. Supply of Fence Panels & Accessories') as HTMLInputElement).value
+    ).toBe('Fence panels for rear compound');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

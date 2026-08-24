@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils/cn';
 import { ArrowRight, CalendarDays, Clock, Coins, FileSearch, Receipt, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { QuoteOverviewItem, QuoteOverviewPayload, QuoteOverviewSummary } from '../overview-types';
+import type { Quote } from '../types';
+import type { QuoteQuickWorkflowAction } from '../quote-quick-actions';
+import { QuoteQuickActionsMenu } from './QuoteQuickActionsMenu';
 
 function formatCurrency(value: number): string {
   return `£${Number(value || 0).toLocaleString('en-GB', {
@@ -96,24 +99,46 @@ function SummaryTile({ label, value, helper, icon, accent = 'slate' }: SummaryTi
 
 interface RecentItemCardProps {
   item: QuoteOverviewItem;
+  quote: Quote | null;
   estimatedRate: number;
+  actionLoading: boolean;
+  onOpenQuote?: (quoteId: string) => void;
+  onEditQuote?: (quote: Quote) => void;
+  onWorkflowAction?: (quote: Quote, action: QuoteQuickWorkflowAction) => void;
 }
 
-function RecentItemCard({ item, estimatedRate }: RecentItemCardProps) {
+function RecentItemCard({
+  item,
+  quote,
+  estimatedRate,
+  actionLoading,
+  onOpenQuote,
+  onEditQuote,
+  onWorkflowAction,
+}: RecentItemCardProps) {
   return (
-    <Link
-      href={item.href}
-      className="group flex h-full min-h-[134px] flex-col rounded-lg border border-slate-700 bg-slate-950/60 p-3 transition hover:border-brand-yellow/50 hover:bg-slate-900"
-    >
+    <div className="group relative flex h-full min-h-[134px] flex-col rounded-lg border border-slate-700 bg-slate-950/60 p-3 transition hover:border-brand-yellow/50 hover:bg-slate-900">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <Link href={item.href} className="min-w-0 flex-1">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{getRecordTypeLabel(item)}</p>
           <h3 className="mt-0.5 truncate text-base font-semibold text-white">{item.reference}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-300">{item.title}</p>
+        </Link>
+        <div className="flex shrink-0 items-start gap-1">
+          <QuoteQuickActionsMenu
+            quote={quote}
+            overviewItem={item}
+            actionLoading={actionLoading}
+            onViewDetails={onOpenQuote}
+            onEdit={onEditQuote}
+            onWorkflowAction={onWorkflowAction}
+          />
+          <Link href={item.href} aria-hidden="true" tabIndex={-1} className="mt-1.5">
+            <ArrowRight className="h-4 w-4 text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-brand-yellow" />
+          </Link>
         </div>
-        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-brand-yellow" />
       </div>
-      <div className="mt-auto grid grid-cols-3 gap-2 pt-3 text-sm">
+      <Link href={item.href} className="mt-auto grid grid-cols-3 gap-2 pt-3 text-sm">
         <div>
           <p className="text-xs text-slate-500">Quoted</p>
           <p className="font-semibold text-brand-yellow">{formatCurrency(item.quote_total)}</p>
@@ -126,13 +151,13 @@ function RecentItemCard({ item, estimatedRate }: RecentItemCardProps) {
           <p className="text-xs text-slate-500">Hours</p>
           <p className="font-semibold text-blue-200">{formatHours(item.worked_hours)}</p>
         </div>
-      </div>
+      </Link>
       {estimatedRate > 0 ? (
-        <p className="mt-2 truncate text-xs text-slate-400">
+        <Link href={item.href} className="mt-2 truncate text-xs text-slate-400">
           Estimated labour: {formatCurrency(getEstimatedValue(item.worked_hours, estimatedRate))}
-        </p>
+        </Link>
       ) : null}
-    </Link>
+    </div>
   );
 }
 
@@ -249,7 +274,21 @@ function DateRangeSummary({ summary, estimatedRate }: DateRangeSummaryProps) {
   );
 }
 
-export function QuotesOverviewTab() {
+interface QuotesOverviewTabProps {
+  quotes?: Quote[];
+  onOpenQuote?: (quoteId: string) => void;
+  onEditQuote?: (quote: Quote) => void;
+  onWorkflowAction?: (quote: Quote, action: QuoteQuickWorkflowAction) => void;
+  actionQuoteId?: string | null;
+}
+
+export function QuotesOverviewTab({
+  quotes = [],
+  onOpenQuote,
+  onEditQuote,
+  onWorkflowAction,
+  actionQuoteId = null,
+}: QuotesOverviewTabProps) {
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const [payload, setPayload] = useState<QuoteOverviewPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -324,6 +363,21 @@ export function QuotesOverviewTab() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [searchDropdownOpen]);
+
+  const quotesById = useMemo(() => {
+    const map = new Map<string, Quote>();
+    quotes.forEach((quote) => {
+      map.set(quote.id, quote);
+    });
+    return map;
+  }, [quotes]);
+
+  function resolveQuote(item: QuoteOverviewItem): Quote | null {
+    if (item.quote_id && quotesById.has(item.quote_id)) {
+      return quotesById.get(item.quote_id) || null;
+    }
+    return quotes.find((quote) => quote.quote_reference === item.reference) || null;
+  }
 
   const summary = payload?.summary;
   const dateRangeSummary = payload?.date_range_summary;
@@ -446,7 +500,16 @@ export function QuotesOverviewTab() {
           </CardHeader>
           <CardContent className="grid gap-2 p-4 pt-0 md:grid-cols-2 lg:grid-cols-4">
             {recentItems.length > 0 ? recentItems.map(item => (
-              <RecentItemCard key={`${item.kind}-${item.reference}`} item={item} estimatedRate={estimatedRate} />
+              <RecentItemCard
+                key={`${item.kind}-${item.reference}`}
+                item={item}
+                quote={resolveQuote(item)}
+                estimatedRate={estimatedRate}
+                actionLoading={Boolean(item.quote_id && actionQuoteId === item.quote_id)}
+                onOpenQuote={onOpenQuote}
+                onEditQuote={onEditQuote}
+                onWorkflowAction={onWorkflowAction}
+              />
             )) : (
               <p className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
                 No recent quote or job activity found.

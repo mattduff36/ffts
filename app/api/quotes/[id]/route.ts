@@ -498,6 +498,30 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         actorUserId: user.id,
         createdAt: now,
       });
+    } else if (action === 'mark_as_accepted') {
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('quotes')
+        .update({
+          status: 'po_received',
+          updated_by: user.id,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      await appendQuoteTimelineEvent(admin, {
+        quoteId: id,
+        quoteThreadId: current.quote.quote_thread_id,
+        quoteReference: current.quote.quote_reference,
+        eventType: 'quote_accepted',
+        title: 'Quote accepted',
+        description: 'Status changed to Accepted.',
+        fromStatus: current.quote.status,
+        toStatus: 'po_received',
+        actorUserId: user.id,
+        createdAt: now,
+      });
     } else if (action === 'trigger_rams') {
       const now = new Date().toISOString();
 

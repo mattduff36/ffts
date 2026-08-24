@@ -39,7 +39,7 @@ function buildQuote(overrides: Partial<Quote>): Quote {
     requester_initials: overrides.requester_initials ?? 'LC',
     quote_date: overrides.quote_date || '2026-06-12',
     attention_name: null,
-    attention_email: null,
+    attention_email: overrides.attention_email ?? null,
     subject_line: overrides.subject_line || null,
     project_description: overrides.project_description || 'Drainage works',
     scope: null,
@@ -226,7 +226,7 @@ describe('QuotesTable filters', () => {
     );
 
     expect(screen.queryByRole('columnheader', { name: /PO Number/i })).not.toBeInTheDocument();
-    expect(container.querySelectorAll('thead th')).toHaveLength(7);
+    expect(container.querySelectorAll('thead th')).toHaveLength(8);
     const poLabels = screen.getAllByText('PO# PO-123456');
     expect(poLabels).toHaveLength(2);
     poLabels.forEach((poLabel) => {
@@ -491,5 +491,32 @@ describe('QuotesTable filters', () => {
     const filterRow = screen.getByRole('button', { name: /Reset Filters/ }).parentElement;
     expect(filterRow?.children[0]).toHaveTextContent('Reset Filters');
     expect(filterRow?.children[1]).toHaveTextContent('2026-06-10 to 2026-06-20');
+  });
+
+  it('exposes a per-quote quick actions menu without selecting the row', () => {
+    const onRowClick = vi.fn();
+    const onWorkflowAction = vi.fn();
+    const quotes = [buildQuote({
+      id: 'draft',
+      quote_reference: '50001-LC',
+      status: 'draft',
+      attention_email: 'alex@example.com',
+    })];
+    const { container } = render(
+      <QuotesTable
+        quotes={quotes}
+        statusCounts={buildStatusCounts(quotes)}
+        onRowClick={onRowClick}
+        onWorkflowAction={onWorkflowAction}
+      />
+    );
+
+    const tableBody = container.querySelector('tbody');
+    expect(tableBody).not.toBeNull();
+    const quickActions = within(tableBody as HTMLElement).getByRole('button', { name: 'Quick actions for 50001-LC' });
+    fireEvent.click(quickActions);
+    fireEvent.pointerDown(quickActions);
+    expect(onRowClick).not.toHaveBeenCalled();
+    expect(onWorkflowAction).not.toHaveBeenCalled();
   });
 });

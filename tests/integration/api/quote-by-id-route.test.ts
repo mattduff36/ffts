@@ -926,6 +926,69 @@ describe('PATCH /api/quotes/[id]', () => {
     );
   });
 
+  it('marks sent quotes as accepted without sending a RAMS email', async () => {
+    const { PATCH } = await import('@/app/api/quotes/[id]/route');
+    mockFetchQuoteBundle.mockResolvedValue({
+      quote: {
+        id: 'quote-1',
+        status: 'sent',
+        is_latest_version: true,
+        quote_reference: 'Q-001',
+        subject_line: 'Fence repairs',
+        manager_name: 'Manager',
+        manager_email: 'manager@example.com',
+        po_number: null,
+        po_value: null,
+        po_received_at: null,
+        customer: {
+          id: 'customer-1',
+          company_name: 'Acme Ltd',
+          contact_email: 'alex@example.com',
+          contact_name: 'Alex',
+          short_name: 'Acme',
+        },
+      },
+      lineItems: [],
+      attachments: [],
+      invoices: [],
+      versions: [],
+      invoiceSummary: {
+        invoicedTotal: 0,
+        remainingBalance: 0,
+        lastInvoiceAt: null,
+        status: 'not_invoiced',
+      },
+    });
+
+    const request = new NextRequest('http://localhost/api/quotes/quote-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'mark_as_accepted' }),
+    });
+
+    const response = await PATCH(request, { params: Promise.resolve({ id: 'quote-1' }) });
+
+    expect(response.status).toBe(200);
+    expect(mockQuoteUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'po_received',
+        updated_by: 'user-1',
+      })
+    );
+    expect(mockQuoteUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        rams_requested_at: expect.anything(),
+      })
+    );
+    expect(mockSendQuoteRamsRequestEmail).not.toHaveBeenCalled();
+    expect(mockAppendQuoteTimelineEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: 'quote_accepted',
+        toStatus: 'po_received',
+      })
+    );
+  });
+
   it('rejects the removed legacy mark_po_received action', async () => {
     const { PATCH } = await import('@/app/api/quotes/[id]/route');
     mockFetchQuoteBundle.mockResolvedValue({

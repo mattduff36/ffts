@@ -20,11 +20,16 @@ import { cn } from '@/lib/utils';
 import { getQuoteManagerNameFilterValue, isQuoteManagerNameFilterValue } from '../types';
 import type { Quote, QuoteListSummary, QuoteSageStatus, QuoteStatus } from '../types';
 import { ACTIVE_QUOTE_STATUS_ORDER, getQuoteStatusConfig } from '../types';
+import { QuoteQuickActionsMenu } from './QuoteQuickActionsMenu';
+import type { QuoteQuickWorkflowAction } from '../quote-quick-actions';
 
 interface QuotesTableProps {
   quotes: Quote[];
   statusCounts?: QuoteListSummary['status_counts'];
   onRowClick: (quote: Quote) => void;
+  onEditQuote?: (quote: Quote) => void;
+  onWorkflowAction?: (quote: Quote, action: QuoteQuickWorkflowAction) => void;
+  actionQuoteId?: string | null;
   managerFilter?: string;
   emptyMessage?: string;
   emptySearchMessage?: string;
@@ -322,10 +327,42 @@ function DateRangeFilter({
   );
 }
 
+function QuoteActionsCell({
+  quote,
+  onRowClick,
+  onEditQuote,
+  onWorkflowAction,
+  actionLoading,
+}: {
+  quote: Quote;
+  onRowClick: (quote: Quote) => void;
+  onEditQuote?: (quote: Quote) => void;
+  onWorkflowAction?: (quote: Quote, action: QuoteQuickWorkflowAction) => void;
+  actionLoading: boolean;
+}) {
+  return (
+    <div
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <QuoteQuickActionsMenu
+        quote={quote}
+        actionLoading={actionLoading}
+        onViewDetails={() => onRowClick(quote)}
+        onEdit={onEditQuote}
+        onWorkflowAction={onWorkflowAction}
+      />
+    </div>
+  );
+}
+
 export function QuotesTable({
   quotes,
   statusCounts: providedStatusCounts,
   onRowClick,
+  onEditQuote,
+  onWorkflowAction,
+  actionQuoteId = null,
   managerFilter = 'all',
   emptyMessage = 'No quotes yet. Create your first quote to get started.',
   emptySearchMessage = 'No quotes match your search.',
@@ -633,12 +670,15 @@ export function QuotesTable({
                 Status {renderSortIcon('status')}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Invoiced</th>
+              <th className="px-3 py-3 text-right font-semibold text-muted-foreground">
+                <span className="sr-only">Quick actions</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/50">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                <td colSpan={8} className="text-center py-12 text-muted-foreground">
                   {search ? emptySearchMessage : emptyMessage}
                 </td>
               </tr>
@@ -698,6 +738,15 @@ export function QuotesTable({
                       <td className="px-4 py-3 text-xs text-slate-300">
                         <InvoiceProgressCell quote={quote} />
                       </td>
+                      <td className="px-3 py-3 text-right">
+                        <QuoteActionsCell
+                          quote={quote}
+                          onRowClick={onRowClick}
+                          onEditQuote={onEditQuote}
+                          onWorkflowAction={onWorkflowAction}
+                          actionLoading={actionQuoteId === quote.id}
+                        />
+                      </td>
                     </tr>
                     {isExpanded ? previousVersions.map(version => {
                       const versionCfg = getQuoteStatusConfig(version.status);
@@ -737,6 +786,15 @@ export function QuotesTable({
                           <td className="px-4 py-3 text-xs">
                             <InvoiceProgressCell quote={version} />
                           </td>
+                          <td className="px-3 py-3 text-right">
+                            <QuoteActionsCell
+                              quote={version}
+                              onRowClick={onRowClick}
+                              onEditQuote={onEditQuote}
+                              onWorkflowAction={onWorkflowAction}
+                              actionLoading={actionQuoteId === version.id}
+                            />
+                          </td>
                         </tr>
                       );
                     }) : null}
@@ -767,7 +825,7 @@ export function QuotesTable({
                 onClick={() => onRowClick(quote)}
                 className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-2 cursor-pointer hover:bg-slate-800 transition-colors"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     {previousVersions.length > 0 ? (
                       <button
@@ -791,6 +849,13 @@ export function QuotesTable({
                     {quote.commercial_status === 'closed' && (
                       <Badge variant="outline" className={cn(STATUS_COLUMN_BADGE_CLASS, 'border-slate-300/30 text-slate-200 bg-slate-400/10')}>Archived</Badge>
                     )}
+                    <QuoteActionsCell
+                      quote={quote}
+                      onRowClick={onRowClick}
+                      onEditQuote={onEditQuote}
+                      onWorkflowAction={onWorkflowAction}
+                      actionLoading={actionQuoteId === quote.id}
+                    />
                   </div>
                 </div>
                 <div className="text-xs text-slate-400">{quote.version_label || 'Original'}</div>

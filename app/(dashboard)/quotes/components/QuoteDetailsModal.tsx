@@ -63,16 +63,16 @@ import {
 import { FormattedQuoteText } from './FormattedQuoteText';
 import type { Quote, QuoteAttachment, QuoteCompletionStatus, QuoteManagerOption, QuoteRevisionType } from '../types';
 import { getQuoteStatusConfig } from '../types';
-
-const PO_EDITABLE_STATUSES = new Set([
-  'sent',
-  'po_received',
-  'in_progress',
-  'completed_part',
-  'completed_full',
-  'partially_invoiced',
-  'invoiced',
-]);
+import {
+  canDeleteQuoteDraft,
+  canEditQuote as canEditLatestQuote,
+  canEditQuotePoDetails,
+  canManageQuoteSchedule,
+  canRequestQuotePo,
+  canMarkQuoteAsAccepted,
+  getQuoteRecipientEmail,
+} from '../quote-quick-actions';
+import { QuoteMarkAsAcceptedDialog } from './QuoteMarkAsAcceptedDialog';
 
 interface QuoteDetailsModalProps {
   open: boolean;
@@ -184,6 +184,11 @@ function getTimelineEventMeta(eventType: string) {
       return {
         icon: Mail,
         iconClassName: 'text-violet-300 bg-violet-500/10 border-violet-500/20',
+      };
+    case 'quote_accepted':
+      return {
+        icon: CheckCircle2,
+        iconClassName: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
       };
     case 'rams_triggered':
       return {
@@ -306,8 +311,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   const [duplicateManagerProfileId, setDuplicateManagerProfileId] = useState('');
   const [poRequestDialogOpen, setPoRequestDialogOpen] = useState(false);
   const [poRequestRecipientEmails, setPoRequestRecipientEmails] = useState<string[]>([]);
-  const [ramsComments, setRamsComments] = useState('');
-  const [ramsDialogOpen, setRamsDialogOpen] = useState(false);
+  const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -323,25 +327,24 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
   const [detailsBaselineSnapshot, setDetailsBaselineSnapshot] = useState('');
   const [poRequestBaselineSnapshot, setPoRequestBaselineSnapshot] = useState('');
   const [duplicateBaselineSnapshot, setDuplicateBaselineSnapshot] = useState('');
-  const [ramsBaselineSnapshot, setRamsBaselineSnapshot] = useState('');
   const fetchRequestIdRef = useRef(0);
   const activeFetchAbortRef = useRef<AbortController | null>(null);
   const activeQuoteId = currentQuoteId || quoteId || quote?.id || null;
-  const recipientEmail = quote?.attention_email || quote?.customer?.contact_email || '';
+  const recipientEmail = quote ? getQuoteRecipientEmail(quote) : '';
   const customerToContacts = quote?.selected_secondary_contacts || [];
   const quoteDisplayName = quote ? buildQuoteDisplayName(quote) : '';
   const isLatestVersion = Boolean(quote?.is_latest_version);
   const isHistoricalVersion = Boolean(quote && !quote.is_latest_version);
-  const canEditPoDetails = quote ? isLatestVersion && PO_EDITABLE_STATUSES.has(quote.status) : false;
-  const canTriggerRams = Boolean(isLatestVersion && quote?.status === 'sent');
-  const canManageSchedule = Boolean(isLatestVersion && quote && ['po_received', 'in_progress'].includes(quote.status));
-  const canEditQuote = Boolean(isLatestVersion && quote && ['draft', 'changes_requested', 'pending_internal_approval'].includes(quote.status));
-  const canDeleteDraft = Boolean(isLatestVersion && quote?.status === 'draft');
+  const canEditPoDetails = quote ? canEditQuotePoDetails(quote) : false;
+  const canMarkAccepted = quote ? canMarkQuoteAsAccepted(quote) : false;
+  const canManageSchedule = quote ? canManageQuoteSchedule(quote) : false;
+  const canEditQuote = quote ? canEditLatestQuote(quote) : false;
+  const canDeleteDraft = quote ? canDeleteQuoteDraft(quote) : false;
   const canManageInvoices = isLatestVersion;
   const canManageAttachments = isLatestVersion;
   const canCreateVersions = isLatestVersion;
   const canManageSage = Boolean(quote?.can_manage_sage);
-  const canRequestPo = Boolean(isLatestVersion && quote && !quote.po_number && recipientEmail && (quote.sent_at || quote.customer_sent_at || quote.status === 'sent'));
+  const canRequestPo = quote ? canRequestQuotePo(quote) : false;
   const hasMultipleVersions = (quote?.versions?.length ?? 0) > 1;
   const availableToRequest = Number(quote?.invoice_summary?.availableToRequest ?? quote?.invoice_summary?.remainingBalance ?? quote?.total ?? 0);
   const suggestedInvoiceAmount = Number(quote?.invoice_summary?.remainingBalance ?? quote?.total ?? 0);
@@ -403,8 +406,6 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     && buildEmailSelectionSnapshot(poRequestRecipientEmails) !== poRequestBaselineSnapshot;
   const isDuplicateDialogDirty = duplicateDialogOpen
     && duplicateManagerProfileId !== duplicateBaselineSnapshot;
-  const isRamsDialogDirty = ramsDialogOpen
-    && ramsComments !== ramsBaselineSnapshot;
   const {
     contentRef: detailsDialogContentRef,
     handleOpenChange: handleDetailsDialogOpenChange,
@@ -449,23 +450,6 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       if (!isOpen) {
         setDuplicateManagerProfileId('');
         setDuplicateBaselineSnapshot('');
-      }
-    },
-  });
-  const {
-    contentRef: ramsDialogContentRef,
-    handleOpenChange: handleRamsDialogOpenChange,
-    handleInteractOutside: handleRamsDialogInteractOutside,
-    handleEscapeKeyDown: handleRamsDialogEscapeKeyDown,
-    discard: discardRamsDialog,
-  } = useDirtyDialogGuard({
-    isDirty: isRamsDialogDirty,
-    disabled: actionLoading,
-    onOpenChange: (isOpen) => {
-      setRamsDialogOpen(isOpen);
-      if (!isOpen) {
-        setRamsComments('');
-        setRamsBaselineSnapshot('');
       }
     },
   });
@@ -765,8 +749,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       setDeleteError(null);
       setRemovingAttachmentId(null);
       setReplacingAttachmentId(null);
-      setRamsDialogOpen(false);
-      setRamsComments('');
+      setAcceptDialogOpen(false);
       setDuplicateDialogOpen(false);
       setDuplicateManagerProfileId('');
       setPoRequestDialogOpen(false);
@@ -774,7 +757,6 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       setDetailsBaselineSnapshot('');
       setPoRequestBaselineSnapshot('');
       setDuplicateBaselineSnapshot('');
-      setRamsBaselineSnapshot('');
     }
   }, [open]);
 
@@ -857,11 +839,10 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     }
   }
 
-  async function handleTriggerRams() {
-    const ok = await callAction('trigger_rams', { rams_comments: ramsComments.trim() || null });
+  async function handleAcceptWithoutRams() {
+    const ok = await callAction('mark_as_accepted');
     if (ok) {
-      setRamsDialogOpen(false);
-      setRamsComments('');
+      setAcceptDialogOpen(false);
     }
   }
 
@@ -1575,17 +1556,13 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                         <Mail className="mr-2 h-4 w-4" /> Request PO
                       </Button>
                     )}
-                    {canTriggerRams && (
+                    {canMarkAccepted && (
                       <Button
-                        onClick={() => {
-                          setRamsComments('');
-                          setRamsBaselineSnapshot('');
-                          setRamsDialogOpen(true);
-                        }}
+                        onClick={() => setAcceptDialogOpen(true)}
                         disabled={actionLoading}
                         className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90"
                       >
-                        <FolderKanban className="mr-2 h-4 w-4" /> Trigger RAMS
+                        <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as Accepted
                       </Button>
                     )}
                     {canManageSchedule && (
@@ -2443,36 +2420,12 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    <Dialog open={ramsDialogOpen} onOpenChange={handleRamsDialogOpenChange}>
-      <DialogContent
-        ref={ramsDialogContentRef}
-        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto bg-slate-900 border-slate-700 text-white"
-        onInteractOutside={handleRamsDialogInteractOutside}
-        onEscapeKeyDown={handleRamsDialogEscapeKeyDown}
-      >
-        <DialogHeader>
-          <DialogTitle>Trigger RAMS</DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            Add any extra internal comments to include with the RAMS request email.
-          </DialogDescription>
-        </DialogHeader>
-        <Textarea
-          value={ramsComments}
-          onChange={event => setRamsComments(event.target.value)}
-          rows={4}
-          placeholder="Additional RAMS notes, constraints, site details, or handover context..."
-          className="bg-slate-800 border-slate-600"
-        />
-        <DialogFooter>
-          <Button variant="outline" onClick={discardRamsDialog} className="border-slate-600 text-muted-foreground">
-            {isRamsDialogDirty ? 'Discard Changes' : 'Cancel'}
-          </Button>
-          <Button onClick={() => void handleTriggerRams()} disabled={actionLoading} className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow/90">
-            {actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</> : 'Send RAMS Request'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <QuoteMarkAsAcceptedDialog
+      open={acceptDialogOpen}
+      onOpenChange={setAcceptDialogOpen}
+      actionLoading={actionLoading}
+      onAcceptWithoutRams={handleAcceptWithoutRams}
+    />
     </>
   );
 }

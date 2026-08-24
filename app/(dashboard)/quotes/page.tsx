@@ -17,7 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { QuotesTable } from './components/QuotesTable';
 import type { QuoteSettingsSubTab } from './components/settings/QuoteSettingsTab';
-import { buildQuoteCreatePayload, markQuoteAsSent, uploadClientQuoteAttachments } from './quote-creation-client';
+import { buildQuoteCreatePayload, markQuoteAsSent, runQuoteWorkflowAction, uploadClientQuoteAttachments } from './quote-creation-client';
+import type { QuoteQuickWorkflowAction } from './quote-quick-actions';
+import { QuoteMarkAsAcceptedDialog } from './components/QuoteMarkAsAcceptedDialog';
 import { getQuoteManagerNameFilterValue, normalizeQuoteManagerName } from './types';
 import type { LegacyQuote, Quote, QuoteFormData, QuoteFormSubmitIntent, QuoteManagerOption, QuoteProjectNumber } from './types';
 import type { LegacyQuoteEditForm } from './components/LegacyQuotesTable';
@@ -323,6 +325,8 @@ export default function QuotesPage() {
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [customerFormOpen, setCustomerFormOpen] = useState(false);
   const [createdQuoteCustomerId, setCreatedQuoteCustomerId] = useState<string | null>(null);
+  const [quickActionQuoteId, setQuickActionQuoteId] = useState<string | null>(null);
+  const [acceptQuote, setAcceptQuote] = useState<Quote | null>(null);
 
   const customerId = searchParams.get('customer_id');
   const quoteIdFromQuery = searchParams.get('quote_id');
@@ -683,6 +687,48 @@ export default function QuotesPage() {
     setFormOpen(true);
   }
 
+  async function handleQuoteWorkflowAction(quote: Quote, action: QuoteQuickWorkflowAction) {
+    if (action === 'mark_as_accepted') {
+      setAcceptQuote(quote);
+      return;
+    }
+
+    if (action === 'request_po' || action === 'schedule' || action === 'mark_complete') {
+      handleOpenQuoteDetails(quote.id);
+      return;
+    }
+
+    setQuickActionQuoteId(quote.id);
+    try {
+      await runQuoteWorkflowAction(quote.id, action);
+      if (action === 'mark_as_sent') toast.success('Quote marked as sent');
+      if (action === 'toggle_closed') {
+        toast.success(quote.commercial_status === 'closed' ? 'Quote restored' : 'Quote archived');
+      }
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update this quote right now.');
+    } finally {
+      setQuickActionQuoteId(null);
+    }
+  }
+
+  async function handleAcceptWithoutRams() {
+    if (!acceptQuote) return;
+
+    setQuickActionQuoteId(acceptQuote.id);
+    try {
+      await runQuoteWorkflowAction(acceptQuote.id, 'mark_as_accepted');
+      toast.success('Quote marked as accepted');
+      setAcceptQuote(null);
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update this quote right now.');
+    } finally {
+      setQuickActionQuoteId(null);
+    }
+  }
+
   function handlePageTabChange(nextTab: QuotePageTab) {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set('tab', nextTab);
@@ -859,19 +905,31 @@ export default function QuotesPage() {
           <QuotesTable
             quotes={currentQuotes}
             onRowClick={handleRowClick}
+            onEditQuote={handleEditFromModal}
+            onWorkflowAction={handleQuoteWorkflowAction}
+            actionQuoteId={quickActionQuoteId}
             managerFilter={currentManagerFilter}
             emptyMessage="No current quotes yet. Create your first quote to get started."
           />
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-6 mt-0">
-          <QuotesOverviewTab />
+          <QuotesOverviewTab
+            quotes={quotes}
+            onOpenQuote={handleOpenQuoteDetails}
+            onEditQuote={handleEditFromModal}
+            onWorkflowAction={handleQuoteWorkflowAction}
+            actionQuoteId={quickActionQuoteId}
+          />
         </TabsContent>
 
         <TabsContent value="archived" className="space-y-6 mt-0">
           <QuotesTable
             quotes={archivedQuotes}
             onRowClick={handleRowClick}
+            onEditQuote={handleEditFromModal}
+            onWorkflowAction={handleQuoteWorkflowAction}
+            actionQuoteId={quickActionQuoteId}
             managerFilter={archivedManagerFilter}
             emptyMessage="No archived quotes yet."
           />
@@ -953,6 +1011,15 @@ export default function QuotesPage() {
           onSubmit={handleCreateCustomerFromQuote}
         />
       ) : null}
+
+      <QuoteMarkAsAcceptedDialog
+        open={Boolean(acceptQuote)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setAcceptQuote(null);
+        }}
+        actionLoading={Boolean(acceptQuote && quickActionQuoteId === acceptQuote.id)}
+        onAcceptWithoutRams={handleAcceptWithoutRams}
+      />
     </AppPageShell>
   );
 }

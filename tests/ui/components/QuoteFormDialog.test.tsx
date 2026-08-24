@@ -294,6 +294,91 @@ describe('QuoteFormDialog', () => {
     expect(onAddCustomer).toHaveBeenCalledTimes(1);
   });
 
+  const customerWithDefaultSite = {
+    ...baseProps.customers[0],
+    sites: [
+      {
+        id: 'site-default',
+        customer_id: 'customer-1',
+        site_name: 'Main Yard',
+        address_line_1: '9 Site Road',
+        address_line_2: null,
+        city: 'Newark',
+        county: 'Nottinghamshire',
+        postcode: 'NG24 1AA',
+        is_active: true,
+        is_default: true,
+        notes: null,
+      },
+    ],
+  };
+
+  it('does not preselect a default saved site when creating a new quote', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+
+    render(
+      <QuoteFormDialog
+        {...baseProps}
+        customers={[customerWithDefaultSite]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /select customer/i }));
+    fireEvent.click(screen.getByText('Acme Ltd'));
+
+    expect(screen.getByRole('combobox', { name: /saved site/i })).toHaveTextContent('Choose site');
+    expect(screen.getByRole('combobox', { name: /saved site/i })).not.toHaveTextContent('Main Yard');
+    expect(screen.getByRole('textbox', { name: /site address/i })).toHaveValue(
+      '1 Example Street\nNottingham, Nottinghamshire\nNG1 1AA'
+    );
+  });
+
+  it('does not preselect a default saved site when a customer is prefilled', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+
+    render(
+      <QuoteFormDialog
+        {...baseProps}
+        customers={[customerWithDefaultSite]}
+        initialCustomerId="customer-1"
+      />
+    );
+
+    expect(screen.getByRole('combobox', { name: /saved site/i })).toHaveTextContent('Choose site');
+    expect(screen.getByRole('combobox', { name: /saved site/i })).not.toHaveTextContent('Main Yard');
+  });
+
+  it('does not preselect a default saved site after adding a customer from the quote form', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+
+    render(
+      <QuoteFormDialog
+        {...baseProps}
+        customers={[customerWithDefaultSite]}
+        createdCustomerId="customer-1"
+        onCreatedCustomerApplied={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('combobox', { name: /saved site/i })).toHaveTextContent('Choose site');
+    expect(screen.getByRole('combobox', { name: /saved site/i })).not.toHaveTextContent('Main Yard');
+  });
+
   it('requires a site address before submitting a new quote', async () => {
     mockUseAuth.mockReturnValue({
       profile: {
@@ -358,6 +443,7 @@ describe('QuoteFormDialog', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
+          customer_site_id: '',
           secondary_contact_ids: ['contact-1'],
         }),
         false

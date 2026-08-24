@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, MapPin, Plus, Power, Trash2 } from 'lucide-react';
+import { Copy, Loader2, MapPin, Plus, Power, Trash2 } from 'lucide-react';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import type {
   Customer,
@@ -47,6 +47,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
   const [saving, setSaving] = useState(false);
   const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
   const isEditing = !!customer;
+  const isSingleSiteCustomer = form.sites.length === 1;
   const currentDirtySnapshot = buildCustomerFormDirtySnapshot(form);
   const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
   const {
@@ -183,6 +184,24 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
         },
       ],
     }));
+  }
+
+  function copyCustomerAddressToSingleSite() {
+    setForm(prev => {
+      if (prev.sites.length !== 1) return prev;
+      const [site] = prev.sites;
+      return {
+        ...prev,
+        sites: [{
+          ...site,
+          address_line_1: prev.address_line_1,
+          address_line_2: prev.address_line_2,
+          city: prev.city,
+          county: prev.county,
+          postcode: prev.postcode,
+        }],
+      };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -472,6 +491,18 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
                           ) : null}
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          {isSingleSiteCustomer ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={copyCustomerAddressToSingleSite}
+                              className="border-slate-600 text-muted-foreground"
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy customer address
+                            </Button>
+                          ) : null}
                           {site.is_active && !site.is_default ? (
                             <Button
                               type="button"

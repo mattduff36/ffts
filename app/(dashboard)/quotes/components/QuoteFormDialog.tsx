@@ -107,6 +107,12 @@ const EMPTY_LINE_ITEM: QuoteLineItem = {
   sort_order: 0,
 };
 
+const QUOTE_SITE_CUSTOM_VALUE = 'custom';
+
+function normalizeQuoteSiteId(customerSiteId: string): string {
+  return !customerSiteId || customerSiteId === QUOTE_SITE_CUSTOM_VALUE ? '' : customerSiteId;
+}
+
 type QuoteFieldErrors = Record<string, string>;
 
 function getAttachmentFileSignature(file: File) {
@@ -468,7 +474,7 @@ export function QuoteFormDialog({
     if (quote) {
       const nextForm: QuoteFormData = {
         customer_id: quote.customer_id,
-        customer_site_id: quote.customer_site_id || '',
+        customer_site_id: quote.customer_site_id || QUOTE_SITE_CUSTOM_VALUE,
         manager_profile_id: quote.requester_id || '',
         requester_initials: quote.requester_initials || '',
         quote_date: quote.quote_date,
@@ -530,15 +536,13 @@ export function QuoteFormDialog({
 
       if (initialCustomerId) {
         const customer = customers.find(item => item.id === initialCustomerId);
-        const site = customer?.sites?.find(item => item.is_active && item.is_default)
-          || customer?.sites?.find(item => item.is_active);
         next.customer_id = initialCustomerId;
-        next.customer_site_id = site?.id || '';
+        next.customer_site_id = '';
         next.attention_name = customer?.contact_name || '';
         next.attention_email = customer?.contact_email || '';
         next.salutation = customer?.contact_name ? `Dear ${customer.contact_name.split(' ')[0]},` : '';
         next.validity_days = customer?.default_validity_days || 30;
-        next.site_address = buildAddress(site || customer);
+        next.site_address = buildAddress(customer);
         next.secondary_contact_ids = [];
       }
 
@@ -598,17 +602,15 @@ export function QuoteFormDialog({
     clearFieldError('site_address');
     setSubmitError(null);
     const customer = customers.find(c => c.id === customerId);
-    const site = customer?.sites?.find(item => item.is_active && item.is_default)
-      || customer?.sites?.find(item => item.is_active);
     setCustomerDropdownOpen(false);
     setCustomerSearch('');
     setForm(prev => ({
       ...prev,
       customer_id: customerId,
-      customer_site_id: site?.id || '',
+      customer_site_id: '',
       attention_name: customer?.contact_name || '',
       attention_email: customer?.contact_email || '',
-      site_address: buildAddress(site || customer),
+      site_address: buildAddress(customer),
       validity_days: customer?.default_validity_days || prev.validity_days,
       salutation: customer?.contact_name ? `Dear ${customer.contact_name.split(' ')[0]},` : '',
       secondary_contact_ids: [],
@@ -622,7 +624,7 @@ export function QuoteFormDialog({
     const site = selectedCustomer?.sites?.find(item => item.id === customerSiteId);
     setForm(prev => ({
       ...prev,
-      customer_site_id: site?.id || '',
+      customer_site_id: site?.id || QUOTE_SITE_CUSTOM_VALUE,
       site_address: site ? buildAddress(site) : prev.site_address,
     }));
   }
@@ -631,8 +633,6 @@ export function QuoteFormDialog({
     if (!open || isEditing || !createdCustomerId) return;
     const customer = customers.find(item => item.id === createdCustomerId);
     if (!customer) return;
-    const site = customer.sites?.find(item => item.is_active && item.is_default)
-      || customer.sites?.find(item => item.is_active);
     setFieldErrors(prev => {
       const next = { ...prev };
       delete next.customer_id;
@@ -645,10 +645,10 @@ export function QuoteFormDialog({
     setForm(prev => ({
       ...prev,
       customer_id: createdCustomerId,
-      customer_site_id: site?.id || '',
+      customer_site_id: '',
       attention_name: customer.contact_name || '',
       attention_email: customer.contact_email || '',
-      site_address: buildAddress(site || customer),
+      site_address: buildAddress(customer),
       validity_days: customer.default_validity_days || prev.validity_days,
       salutation: customer.contact_name ? `Dear ${customer.contact_name.split(' ')[0]},` : '',
       secondary_contact_ids: [],
@@ -877,7 +877,11 @@ export function QuoteFormDialog({
     setSaving(true);
     setSubmitError(null);
     try {
-      await onSubmit({ ...form, attachment_files: attachmentFiles }, isEditing);
+      await onSubmit({
+        ...form,
+        customer_site_id: normalizeQuoteSiteId(form.customer_site_id),
+        attachment_files: attachmentFiles,
+      }, isEditing);
       onClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save quote';
@@ -1128,15 +1132,16 @@ export function QuoteFormDialog({
                 <div className="space-y-2">
                   <Label>Saved Site</Label>
                   <Select
-                    value={form.customer_site_id || 'custom'}
-                    onValueChange={value => handleSiteChange(value === 'custom' ? '' : value)}
+                    value={form.customer_site_id || undefined}
+                    onValueChange={handleSiteChange}
                     disabled={areCustomerDependentFieldsDisabled}
                   >
                     <SelectTrigger
                       className={getSelectClassName('customer_site_id')}
+                      aria-label="Saved site"
                       aria-invalid={!!fieldErrors.customer_site_id}
                     >
-                      <SelectValue placeholder="Select site" />
+                      <SelectValue placeholder="Choose site" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="custom">Custom / snapshot only</SelectItem>

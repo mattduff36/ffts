@@ -95,4 +95,77 @@ describe('CustomerFormDialog', () => {
       }));
     });
   });
+
+  it('copies the customer address into the only site address', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(
+      <CustomerFormDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /copy customer address/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Company Name *'), {
+      target: { value: 'Acme Ltd' },
+    });
+    fireEvent.change(screen.getByLabelText('Address Line 1'), {
+      target: { value: '12 Correspondence Row' },
+    });
+    fireEvent.change(screen.getByLabelText('Address Line 2'), {
+      target: { value: 'Unit 4' },
+    });
+    fireEvent.change(screen.getByLabelText('City'), {
+      target: { value: 'Leeds' },
+    });
+    fireEvent.change(screen.getByLabelText('County'), {
+      target: { value: 'West Yorkshire' },
+    });
+    fireEvent.change(screen.getByLabelText('Postcode'), {
+      target: { value: 'LS1 1AA' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Site' }));
+    fireEvent.change(screen.getByLabelText('Site Name *'), {
+      target: { value: 'Main site' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /copy customer address/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add customer/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        address_line_1: '12 Correspondence Row',
+        sites: [
+          expect.objectContaining({
+            site_name: 'Main site',
+            address_line_1: '12 Correspondence Row',
+            address_line_2: 'Unit 4',
+            city: 'Leeds',
+            county: 'West Yorkshire',
+            postcode: 'LS1 1AA',
+          }),
+        ],
+      }));
+    });
+  });
+
+  it('hides the copy-address button once a second site is added', () => {
+    render(
+      <CustomerFormDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn(async () => undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Site' }));
+    expect(screen.getByRole('button', { name: /copy customer address/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Site' }));
+    expect(screen.queryByRole('button', { name: /copy customer address/i })).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,23 @@
 [
   {
+    "version": "0826.8.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated quotes.",
+    "summary": "Updated quotes.",
+    "details": [
+      "Updated quotes, with changes to app screens and automated tests.",
+      "Updated customers, with changes to app screens and automated tests."
+    ],
+    "areas": [
+      "Quotes"
+    ],
+    "areaKeys": [
+      "quotes"
+    ],
+    "pushedAt": "2026-08-24T08:56:59.848Z"
+  },
+  {
     "version": "0826.7.0",
     "updateKind": "major",
     "title": "Daily Tasks update",

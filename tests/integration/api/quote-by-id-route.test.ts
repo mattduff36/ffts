@@ -307,6 +307,58 @@ describe('PATCH /api/quotes/[id]', () => {
     }));
   });
 
+  it('still marks a quote as sent when customer emails are disabled', async () => {
+    const { PATCH } = await import('@/app/api/quotes/[id]/route');
+    mockSendQuoteToCustomerEmail.mockResolvedValue({ success: true, suppressed: true });
+    mockFetchQuoteBundle.mockResolvedValue({
+      quote: {
+        id: 'quote-1',
+        status: 'draft',
+        is_latest_version: true,
+        quote_reference: 'Q-001',
+        subject_line: 'Fence repairs',
+        pricing_mode: 'itemized',
+        manager_email: 'manager@example.com',
+        attention_email: 'alex@example.com',
+        customer: {
+          id: 'customer-1',
+          company_name: 'Acme Ltd',
+          contact_email: 'alex@example.com',
+          contact_name: 'Alex',
+          short_name: 'Acme',
+        },
+      },
+      lineItems: [],
+      attachments: [],
+      invoices: [],
+      versions: [],
+      selectedSecondaryContacts: [],
+      invoiceSummary: {
+        invoicedTotal: 0,
+        remainingBalance: 0,
+        lastInvoiceAt: null,
+        status: 'not_invoiced',
+      },
+    });
+
+    const request = new NextRequest('http://localhost/api/quotes/quote-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'confirm_and_send' }),
+    });
+
+    const response = await PATCH(request, { params: Promise.resolve({ id: 'quote-1' }) });
+
+    expect(response.status).toBe(200);
+    expect(mockQuoteUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'sent',
+    }));
+    expect(mockAppendQuoteTimelineEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      eventType: 'confirmed_and_sent',
+      toStatus: 'sent',
+      description: 'Customer emails are disabled in Quotes settings. No email was sent to the customer.',
+    }));
+  });
+
   it.each(['confirm_and_send', 'approve_and_send'])(
     'keeps the sender eligible for customer email copies when sending on behalf via %s',
     async (action) => {

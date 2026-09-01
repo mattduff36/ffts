@@ -5405,16 +5405,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         </div>
 
         <div
-          className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]"
+          className="grid min-h-0 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[350px_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)]"
           data-testid="schedule-manager-layout"
         >
           <ResourcesReturnDropCard>
-            <CardHeader className="pb-3">
+            <CardHeader className="shrink-0 pb-3">
               <CardTitle className="text-base">Resources</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <Tabs
                 value={sidebarTab}
+                className="shrink-0"
                 onValueChange={(value) => {
                   setSidebarTab(value as 'jobs' | 'employee' | 'plant');
                   setSelectedQuote(null);
@@ -5432,6 +5433,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </Tabs>
               {sidebarTab === 'jobs' ? (
                 <>
+                  <div className="shrink-0 space-y-3">
                   <p className={RESOURCE_GUIDANCE_CLASS}>
                     Drag a queued job onto a date. Drag a scheduled visit back anywhere into Resources to return it here.
                   </p>
@@ -5513,7 +5515,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </Button>
                     </div>
                   ) : null}
-                  <ScrollArea className="h-[420px] pr-3" data-mobile-scroll-lock="true">
+                  </div>
+                  <ScrollArea
+                    className="h-[420px] min-h-0 pr-3 xl:h-0 xl:flex-1"
+                    data-mobile-scroll-lock="true"
+                    data-testid="schedule-jobs-scroll-area"
+                  >
                     <div className="space-y-2">
                         {quoteCandidatesQuery.isLoading
                           && projectCandidatesQuery.isLoading
@@ -5544,6 +5551,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 </>
               ) : (
                 <>
+                  <div className="shrink-0 space-y-3">
                   {activeVisitTarget ? (
                     <div className="rounded-md border border-scheduling/40 bg-scheduling-soft p-3 text-xs">
                       <div className="flex items-start justify-between gap-2">
@@ -5632,8 +5640,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </Button>
                     </div>
                   ) : null}
+                  </div>
                   <ScrollArea
-                    className="h-[420px] pr-3"
+                    className="h-[420px] min-h-0 pr-3 xl:h-0 xl:flex-1"
                     data-mobile-scroll-lock="true"
                     data-testid="schedule-resource-scroll-area"
                   >
@@ -5723,8 +5732,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             </CardContent>
           </ResourcesReturnDropCard>
 
-          <Card className="min-w-0 border-border">
-            <CardHeader className="gap-3">
+          <Card
+            className="flex min-h-0 min-w-0 flex-col border-border xl:h-full xl:overflow-hidden"
+            data-testid="schedule-board-panel"
+          >
+            <CardHeader className="shrink-0 gap-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle>
                   {getScheduleBoardTitle(
@@ -5881,11 +5893,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 ) : null}
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:block',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:block xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily

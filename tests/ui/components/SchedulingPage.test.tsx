@@ -74,6 +74,12 @@ describe('SchedulingPage access states', () => {
     expect(
       await screen.findByText('Manager scheduling board for manager-1')
     ).toBeInTheDocument();
+    expect(screen.getByTestId('scheduling-page-shell')).toHaveClass(
+      'xl:h-[calc(100dvh-var(--top-nav-h,68px)-4rem)]',
+      'xl:min-h-0',
+      'xl:flex-col',
+      'xl:overflow-hidden'
+    );
   });
 
   it('shows a retryable error when scheduling context fails', async () => {

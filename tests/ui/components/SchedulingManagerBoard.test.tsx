@@ -1279,6 +1279,23 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
       'xl:grid-cols-[350px_minmax(0,1fr)]'
     );
+    expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
+      'xl:flex-1',
+      'xl:grid-rows-[minmax(0,1fr)]'
+    );
+    expect(screen.getByTestId('schedule-resources-panel')).toHaveClass(
+      'xl:h-full',
+      'xl:overflow-hidden'
+    );
+    expect(screen.getByTestId('schedule-board-panel')).toHaveClass(
+      'xl:h-full',
+      'xl:overflow-hidden'
+    );
+    expect(screen.getByTestId('schedule-jobs-scroll-area')).toHaveClass(
+      'min-h-0',
+      'xl:h-0',
+      'xl:flex-1'
+    );
     expect(screen.getByTestId('schedule-resources-panel')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-resource-tabs')).toHaveClass(
       'grid',

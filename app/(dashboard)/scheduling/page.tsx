@@ -100,15 +100,22 @@ export default function SchedulingPage() {
   }
 
   return (
-    <AppPageShell width="full">
+    <AppPageShell
+      width="full"
+      className="xl:flex xl:h-[calc(100dvh-var(--top-nav-h,68px)-4rem)] xl:min-h-0 xl:flex-col xl:gap-4 xl:overflow-hidden xl:space-y-0"
+      data-testid="scheduling-page-shell"
+    >
       <AppPageHeader
         title="Job Scheduling"
         description="Plan work across the week and allocate employees and plant with clear availability warnings."
         icon={<CalendarDays className="h-5 w-5" />}
+        className="shrink-0"
       />
       {contextQuery.data?.is_manager_or_admin ? (
         <NuqsClientAdapter>
-          <SchedulingManagerBoard userId={contextQuery.data.user_id} />
+          <div className="xl:flex xl:h-full xl:min-h-0 xl:flex-1 xl:flex-col">
+            <SchedulingManagerBoard userId={contextQuery.data.user_id} />
+          </div>
         </NuqsClientAdapter>
       ) : (
         <Card className="border-border">

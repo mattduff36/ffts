@@ -1,5 +1,23 @@
 [
   {
+    "version": "0926.1.0",
+    "updateKind": "major",
+    "title": "App screens update",
+    "description": "Updated App screens and Background services. Stabilise rapid visit interactions. Coordinate assignment mutations without silent drops.",
+    "summary": "Updated App screens and Background services. Stabilise rapid visit interactions. Coordinate assignment mutations without silent drops.",
+    "details": [
+      "Updated data storage, with changes to automated tests and data storage.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "App screens"
+    ],
+    "areaKeys": [
+      "app-screens"
+    ],
+    "pushedAt": "2026-09-01T23:38:16.922Z"
+  },
+  {
     "version": "0926.0.0",
     "updateKind": "minor",
     "title": "Scheduling update",

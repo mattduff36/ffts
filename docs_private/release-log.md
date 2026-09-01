@@ -2,6 +2,26 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.1.0
+
+**GIT COMMIT MESSAGE**
+`feat(components): update App screens and Background services`
+
+**PUSHED AT**
+2026-09-01T23:38:16.922Z
+
+**WHAT CHANGED**
+Update App screens and Background services. Stabilise rapid visit interactions. Coordinate assignment mutations without silent drops.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to automated tests and data storage.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(components): update App screens and Background services`
+- `fix(scheduling): stabilise rapid visit interactions`
+- `feat(scheduling): coordinate assignment mutations without silent drops`
+
 ## 0926.0.0
 
 **GIT COMMIT MESSAGE**

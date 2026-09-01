@@ -6,6 +6,7 @@ import {
 import type {
   ScheduleDayCapacity,
   ScheduleEmployeeAssignment,
+  ScheduleEmployeeDaySession,
   ScheduleEmployeeResource,
 } from '@/types/scheduling';
 
@@ -145,6 +146,34 @@ function getBookingIntervals(
   });
 
   return { hasUntimedAssignment: false, intervals };
+}
+
+export function buildEmployeeDaySessions({
+  dates,
+  employees,
+  absences,
+  shifts,
+}: Omit<BuildEmployeeCapacityInput, 'assignments'>): ScheduleEmployeeDaySession[] {
+  return dates.flatMap((date) =>
+    employees.map((employee) => {
+      const scheduled = getScheduledSessions(date, shifts.get(employee.id));
+      const absence = getAbsenceSessions(absences, employee.id, date);
+      return {
+        profile_id: employee.id,
+        date,
+        am: absence.hasFullDay || absence.hasAm
+          ? 'absent'
+          : scheduled.hasAm
+            ? 'working'
+            : 'off_shift',
+        pm: absence.hasFullDay || absence.hasPm
+          ? 'absent'
+          : scheduled.hasPm
+            ? 'working'
+            : 'off_shift',
+      };
+    })
+  );
 }
 
 export function buildEmployeeCapacity({

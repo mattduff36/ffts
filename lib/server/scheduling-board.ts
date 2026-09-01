@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildEmployeeCapacity } from '@/lib/server/scheduling-capacity';
+import { buildEmployeeCapacity, buildEmployeeDaySessions } from '@/lib/server/scheduling-capacity';
 import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { loadScheduleDayTeams } from '@/lib/server/scheduling-day-teams';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
@@ -339,6 +339,7 @@ export async function loadSchedulingBoard(
   const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
   const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
+  const weekDates = enumerateScheduleDates(weekStart, weekEnd);
   const visibleJobIds = new Set([
     ...visits.map((visit) => visit.job_id),
     ...employeeRows.map((row) => String(row.job_id)),
@@ -373,9 +374,15 @@ export async function loadSchedulingBoard(
     assignments: [...employeeAssignments, ...plantAssignments],
     resources: { employees, plant: plants },
     employee_capacity: buildEmployeeCapacity({
-      dates: enumerateScheduleDates(weekStart, weekEnd),
+      dates: weekDates,
       employees,
       assignments: employeeAssignments,
+      absences,
+      shifts,
+    }),
+    employee_day_sessions: buildEmployeeDaySessions({
+      dates: weekDates,
+      employees,
       absences,
       shifts,
     }),

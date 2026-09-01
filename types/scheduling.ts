@@ -274,6 +274,7 @@ export interface SchedulingBoardPayload {
     plant: SchedulePlantResource[];
   };
   employee_capacity: ScheduleDayCapacity[];
+  employee_day_sessions?: ScheduleEmployeeDaySession[];
   plant_unavailability: SchedulePlantUnavailability[];
   day_teams: ScheduleDayTeams[];
 }
@@ -289,6 +290,22 @@ export interface ScheduleDayCapacity {
   available_employee_count: number;
   total_available_minutes: number;
   employees: ScheduleEmployeeCapacity[];
+}
+
+export type ScheduleDaySessionState = 'working' | 'off_shift' | 'absent';
+export type ScheduleOccupancyState = 'available' | 'booked' | 'unavailable';
+
+export interface ScheduleEmployeeDaySession {
+  profile_id: string;
+  date: string;
+  am: ScheduleDaySessionState;
+  pm: ScheduleDaySessionState;
+}
+
+export interface ScheduleOccupancySegment {
+  startMinutes: number;
+  endMinutes: number;
+  state: ScheduleOccupancyState;
 }
 
 export interface SchedulingSelfPayload {

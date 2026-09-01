@@ -1515,6 +1515,41 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-day-team-buckets-mobile')).toBeInTheDocument();
   });
 
+  it('occupancy-strip-daily-employees shows occupancy on Daily employee cards only', async () => {
+    prepareDailyBoard();
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.getByTestId('schedule-resource-occupancy-legend')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-occupancy-employee-2')).toBeInTheDocument();
+    expect(screen.getByRole('button', {
+      name: /Bob Jones: select resource or drag to a timed visit\. Available 07:00–17:30/,
+    })).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.queryByTestId('schedule-resource-occupancy-legend')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-occupancy-employee-2')).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Weekly' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.queryByTestId('schedule-resource-occupancy-employee-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-occupancy-legend')).not.toBeInTheDocument();
+  });
+
   it('SCH-TEAM-UI-002 adds an employee to a bucket and assigns a filled team to a visit', async () => {
     const today = prepareDailyBoard();
     mockAssignDayTeam.mockResolvedValue({

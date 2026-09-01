@@ -153,7 +153,15 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
 import { slotsForScheduleDate } from '@/lib/utils/scheduling-day-teams';
+import {
+  buildEmployeeOccupancySegments,
+  formatOccupancySummary,
+} from '@/lib/utils/scheduling-occupancy';
 import { ScheduleDayTeamBuckets, type ScheduleDayTeamDragData } from './ScheduleDayTeamBuckets';
+import {
+  ResourceOccupancyLegend,
+  ResourceOccupancyStrip,
+} from './ResourceOccupancyStrip';
 import {
   buildScheduleBoardRows,
   filterHiddenBoardAssignments,
@@ -191,6 +199,7 @@ import type {
   ScheduleAssignment,
   ScheduleDayCapacity,
   ScheduleDayTeamSlotIndex,
+  ScheduleOccupancySegment,
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
@@ -226,6 +235,7 @@ interface ResourceCardProps {
   selected: boolean;
   dragEnabled: boolean;
   warning?: string;
+  occupancySegments?: ScheduleOccupancySegment[];
   onSelect: () => void;
 }
 
@@ -418,7 +428,7 @@ function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
     <Card
       ref={ref}
       className={cn(
-        'h-fit border-border transition xl:sticky xl:top-4',
+        'flex min-h-0 flex-col border-border transition xl:h-full xl:overflow-hidden',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
       data-testid="schedule-resources-panel"
@@ -442,6 +452,7 @@ function ResourceCard({
   selected,
   dragEnabled,
   warning,
+  occupancySegments,
   onSelect,
 }: ResourceCardProps) {
   if (dragEnabled) {
@@ -452,20 +463,26 @@ function ResourceCard({
         metadata={metadata}
         selected={selected}
         warning={warning}
+        occupancySegments={occupancySegments}
         onSelect={onSelect}
       />
     );
   }
+
+  const occupancyLabel = occupancySegments
+    ? formatOccupancySummary(occupancySegments)
+    : undefined;
 
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}`}
+      aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}${occupancyLabel ? `. ${occupancyLabel}` : ''}`}
+      title={occupancyLabel}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'flex w-full items-center gap-2 rounded-lg p-2 text-left transition',
+        'relative flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left transition',
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type)
@@ -484,6 +501,9 @@ function ResourceCard({
         </span>
       </span>
       {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
+      {occupancySegments ? (
+        <ResourceOccupancyStrip resourceId={resource.id} segments={occupancySegments} />
+      ) : null}
     </button>
   );
 }
@@ -494,6 +514,7 @@ function DraggableResourceCard({
   metadata,
   selected,
   warning,
+  occupancySegments,
   onSelect,
 }: Omit<ResourceCardProps, 'dragEnabled'>) {
   const { ref, handleRef, isDragging } = useDraggable({
@@ -502,6 +523,9 @@ function DraggableResourceCard({
     data: { resource },
   });
   const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
+  const occupancyLabel = occupancySegments
+    ? formatOccupancySummary(occupancySegments)
+    : undefined;
 
   return (
     <button
@@ -519,11 +543,11 @@ function DraggableResourceCard({
         if (event.key === 'Enter' || event.key === ' ') resetDragState();
       }}
       aria-pressed={selected}
-      aria-label={`${resource.label}: select resource or drag to a timed visit`}
-      title="Tap to assign, or drag to a timed visit"
+      aria-label={`${resource.label}: select resource or drag to a timed visit${occupancyLabel ? `. ${occupancyLabel}` : ''}`}
+      title={occupancyLabel || 'Tap to assign, or drag to a timed visit'}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg text-left transition active:cursor-grabbing',
+        'relative flex min-h-11 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition active:cursor-grabbing',
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type),
@@ -553,6 +577,9 @@ function DraggableResourceCard({
         </span>
         {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
       </span>
+      {occupancySegments ? (
+        <ResourceOccupancyStrip resourceId={resource.id} segments={occupancySegments} />
+      ) : null}
     </button>
   );
 }
@@ -5313,13 +5340,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       }}
     >
       <div
-        className="space-y-4"
+        className="flex min-h-0 flex-col gap-4 xl:flex-1 xl:overflow-hidden"
         onClick={handleBoardClick}
         onPointerMoveCapture={(event) => {
           latestPointerClientX.current = event.clientX;
         }}
       >
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/70 p-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 rounded-xl border border-border bg-card/70 p-4 xl:flex-row xl:items-center xl:justify-between">
           <SchedulingDateRangeControls
             selectedDate={selectedDate}
             view={view}
@@ -5586,6 +5613,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       className="pl-9"
                     />
                   </div>
+                  {view === SCHEDULING_BOARD_VIEWS.daily && sidebarTab === 'employee' ? (
+                    <ResourceOccupancyLegend />
+                  ) : null}
                   {selectedResource ? (
                     <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
                       <span className="truncate text-foreground">
@@ -5631,6 +5661,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                   employee.employee_id,
                                 ].filter(Boolean).join(' · ')}
                                 warning={isUnavailable ? 'Already assigned during this visit' : undefined}
+                                occupancySegments={
+                                  view === SCHEDULING_BOARD_VIEWS.daily
+                                    ? buildEmployeeOccupancySegments({
+                                        profileId: employee.id,
+                                        workDate: selectedDate,
+                                        assignments: board.assignments,
+                                        sessions: board.employee_day_sessions,
+                                      })
+                                    : undefined
+                                }
                                 selected={selectedResource?.type === 'employee' && selectedResource.id === employee.id}
                                 dragEnabled
                                 onSelect={() => handleResourceSelect(resource)}

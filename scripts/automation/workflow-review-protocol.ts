@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import path from 'path';
 import type {
   WorkflowActiveFinaliseContext,
@@ -631,7 +631,11 @@ export function reduceReviewStart(params: {
   }
 
   if (params.pass === 'delta') {
-    if (current.phase !== 'review_closed' && current.phase !== 'finalise_ready') {
+    if (
+      current.phase !== 'review_closed' &&
+      current.phase !== 'finalise_ready' &&
+      current.phase !== 'fix_recorded'
+    ) {
       return fail(`delta review-start requires review_closed (have ${current.phase})`, current);
     }
     const token = createToken('rev_delta');
@@ -639,6 +643,7 @@ export function reduceReviewStart(params: {
       pass: 'delta',
       token,
       startedAt: nowIso(params.now),
+      headCommit: runGit(params.repoRoot, ['rev-parse', 'HEAD']),
     };
     const next: WorkflowProtocolRecord = {
       ...current,
@@ -701,6 +706,7 @@ export function reduceReviewStart(params: {
     pass: params.pass,
     token,
     startedAt: nowIso(params.now),
+    headCommit: runGit(params.repoRoot, ['rev-parse', 'HEAD']),
   };
   const next: WorkflowProtocolRecord = {
     ...current,
@@ -734,6 +740,15 @@ export function reduceReviewRecord(params: {
   }
   if (!current.activeReviewPass) {
     return fail('active review pass missing', current);
+  }
+  const startedAttempt = current.reviewAttempts.find((attempt) => attempt.token === params.token);
+  const startedHead = startedAttempt?.headCommit ?? null;
+  const recordHead = runGit(params.repoRoot, ['rev-parse', 'HEAD']);
+  if (startedHead && recordHead && startedHead !== recordHead) {
+    return fail(
+      `HEAD moved during review (started ${startedHead}, now ${recordHead}); re-run review-start. Do not rewrite review metadata to the current HEAD.`,
+      current
+    );
   }
 
   const families = [...new Set((params.blockerFamilies ?? []).map((v) => v.trim()).filter(Boolean))];
@@ -769,10 +784,7 @@ export function reduceReviewRecord(params: {
   let message = `review ${params.result}`;
 
   if (params.result === 'passed') {
-    if (
-      (current.activeReviewPass === 'closure' || current.activeReviewPass === 'delta') &&
-      current.openBlockerIds.length > 0
-    ) {
+    if (current.activeReviewPass === 'closure' && current.openBlockerIds.length > 0) {
       return fail(
         `closure pass cannot pass while open blockers remain: ${current.openBlockerIds.join(', ')}`,
         current
@@ -788,9 +800,9 @@ export function reduceReviewRecord(params: {
     nextAction = 'finalise_start';
     message = 'review closed';
   } else if (current.activeReviewPass === 'delta') {
-    phase = 'fix_sweep_required';
-    nextAction = 'consolidated_fix_record';
-    message = 'delta review failed; consolidated fix sweep required';
+    phase = 'review_closed';
+    nextAction = 'review_start_delta';
+    message = 'delta review failed; retry review-start --pass delta after addressing blockers';
   } else {
     failedCount += 1;
     if (failedCount >= 2) {
@@ -806,7 +818,7 @@ export function reduceReviewRecord(params: {
   }
 
   const reviewedHead =
-    params.result === 'passed' ? runGit(params.repoRoot, ['rev-parse', 'HEAD']) : null;
+    params.result === 'passed' ? recordHead ?? runGit(params.repoRoot, ['rev-parse', 'HEAD']) : null;
   const next: WorkflowProtocolRecord = {
     ...current,
     phase,
@@ -1149,51 +1161,77 @@ function persistParentAndOptionalChildUnlocked(params: {
   activateFinalise?: boolean;
 }): void {
   const paths = getWorkflowPaths(params.repoRoot);
-  writeProtocolRecord(params.repoRoot, params.parent);
-  if (params.child) {
-    writeProtocolRecord(params.repoRoot, params.child);
-  }
-  let state = loadWorkflowReviewState(paths.statePath);
-  state = upsertProtocolInState(state, params.parent);
-  if (params.child) {
-    state = upsertProtocolInState(state, params.child);
-  }
-  if (
-    state.activeFinaliseContext?.workstreamId === params.parent.workstreamId &&
-    params.parent.phase !== 'finalise_ready'
-  ) {
-    state = setActiveFinaliseContext(state, null);
-  }
-  state = upsertWorkstreamRecord(state, {
-    workstreamId: params.parent.workstreamId,
-    branchName: params.parent.branchName,
-    headCommit: params.parent.headCommit,
-    taskIds: [],
-    eventIds: [],
-    status: params.parent.phase === 'finalised' ? 'finalised' : 'open',
-    sourceWorkstreamIds: params.parent.sourceWorkstreamIds,
-    updatedAt: params.parent.updatedAt,
-  });
-  if (params.child) {
+  const previousParent = readProtocolRecord(params.repoRoot, params.parent.workstreamId);
+  const previousChild = params.child
+    ? readProtocolRecord(params.repoRoot, params.child.workstreamId)
+    : null;
+  const previousState = loadWorkflowReviewState(paths.statePath);
+  const childWasNew = Boolean(params.child && !previousChild);
+  try {
+    writeProtocolRecord(params.repoRoot, params.parent);
+    if (params.child) {
+      writeProtocolRecord(params.repoRoot, params.child);
+    }
+    let state = previousState;
+    state = upsertProtocolInState(state, params.parent);
+    if (params.child) {
+      state = upsertProtocolInState(state, params.child);
+    }
+    if (
+      state.activeFinaliseContext?.workstreamId === params.parent.workstreamId &&
+      params.parent.phase !== 'finalise_ready'
+    ) {
+      state = setActiveFinaliseContext(state, null);
+    }
     state = upsertWorkstreamRecord(state, {
-      workstreamId: params.child.workstreamId,
-      branchName: params.child.branchName,
-      headCommit: params.child.headCommit,
+      workstreamId: params.parent.workstreamId,
+      branchName: params.parent.branchName,
+      headCommit: params.parent.headCommit,
       taskIds: [],
       eventIds: [],
-      status: 'open',
-      sourceWorkstreamIds: params.child.sourceWorkstreamIds,
-      updatedAt: params.child.updatedAt,
+      status: params.parent.phase === 'finalised' ? 'finalised' : 'open',
+      sourceWorkstreamIds: params.parent.sourceWorkstreamIds,
+      updatedAt: params.parent.updatedAt,
     });
+    if (params.child) {
+      state = upsertWorkstreamRecord(state, {
+        workstreamId: params.child.workstreamId,
+        branchName: params.child.branchName,
+        headCommit: params.child.headCommit,
+        taskIds: [],
+        eventIds: [],
+        status: 'open',
+        sourceWorkstreamIds: params.child.sourceWorkstreamIds,
+        updatedAt: params.child.updatedAt,
+      });
+    }
+    if (params.activateFinalise && params.parent.activeCheckpointId) {
+      state = setActiveFinaliseContext(state, {
+        workstreamId: params.parent.workstreamId,
+        checkpointId: params.parent.activeCheckpointId,
+        activatedAt: params.parent.updatedAt,
+      });
+    }
+    saveWorkflowReviewState(paths.statePath, state);
+  } catch (error) {
+    if (previousParent) {
+      writeProtocolRecord(params.repoRoot, previousParent);
+    }
+    if (previousChild) {
+      writeProtocolRecord(params.repoRoot, previousChild);
+    } else if (params.child && childWasNew) {
+      const childPath = getProtocolRecordPath(params.repoRoot, params.child.workstreamId);
+      if (existsSync(childPath)) {
+        unlinkSync(childPath);
+      }
+    }
+    try {
+      saveWorkflowReviewState(paths.statePath, previousState);
+    } catch {
+      // Best-effort restore; original error is rethrown.
+    }
+    throw error;
   }
-  if (params.activateFinalise && params.parent.activeCheckpointId) {
-    state = setActiveFinaliseContext(state, {
-      workstreamId: params.parent.workstreamId,
-      checkpointId: params.parent.activeCheckpointId,
-      activatedAt: params.parent.updatedAt,
-    });
-  }
-  saveWorkflowReviewState(paths.statePath, state);
 }
 
 function applyProtocolTransitionUnlocked(params: {

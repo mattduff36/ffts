@@ -558,6 +558,7 @@ export interface WorkflowProtocolReviewAttempt {
   pass: WorkflowProtocolReviewPass;
   token: string;
   startedAt: string;
+  headCommit?: string | null;
   result?: 'passed' | 'failed';
   blockerFamilies?: string[];
   blockerIds?: string[];

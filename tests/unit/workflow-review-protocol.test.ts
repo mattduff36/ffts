@@ -403,6 +403,102 @@ describe('workflow review protocol', () => {
     expect(started.record?.headCommit).toBe(secondHead);
   });
 
+  it('TEE-PROTO-002: review-record cannot bind a newer HEAD than review-start captured', () => {
+    const repoRoot = makeTempRoot('review-toctou');
+    const firstHead = initGitRepo(repoRoot);
+    const workstreamId = 'ws_review_toctou';
+    const record = createEmptyProtocolRecord({
+      workstreamId,
+      baseCommit: firstHead,
+      headCommit: firstHead,
+    });
+    record.phase = 'review_closed';
+    record.nextAction = 'finalise_start';
+    writeProtocolRecord(repoRoot, record);
+
+    const deltaStart = applyProtocolTransition({
+      repoRoot,
+      command: 'review-start',
+      workstreamId,
+      pass: 'delta',
+    });
+    expect(deltaStart.ok).toBe(true);
+
+    writeFileSync(path.join(repoRoot, 'during-review.ts'), 'export const n = 1;\n', 'utf8');
+    spawnSync('git', ['add', '.'], { cwd: repoRoot });
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'during-review'],
+      { cwd: repoRoot }
+    );
+
+    const recorded = applyProtocolTransition({
+      repoRoot,
+      command: 'review-record',
+      workstreamId,
+      token: deltaStart.reviewToken!,
+      result: 'passed',
+    });
+    expect(recorded.ok).toBe(false);
+    expect(recorded.message).toMatch(/HEAD moved during review/i);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.headCommit).toBe(firstHead);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.phase).toBe('delta_review');
+  });
+
+  it('TEE-PROTO-002: failed delta remains retryable without exhausting the two-pass budget', () => {
+    const repoRoot = makeTempRoot('delta-retry');
+    const firstHead = initGitRepo(repoRoot);
+    const workstreamId = 'ws_delta_retry';
+    const record = createEmptyProtocolRecord({
+      workstreamId,
+      baseCommit: firstHead,
+      headCommit: firstHead,
+    });
+    record.phase = 'review_closed';
+    record.nextAction = 'finalise_start';
+    record.failedPremiumReviewCount = 3;
+    writeProtocolRecord(repoRoot, record);
+
+    const firstDelta = applyProtocolTransition({
+      repoRoot,
+      command: 'review-start',
+      workstreamId,
+      pass: 'delta',
+    });
+    const failed = applyProtocolTransition({
+      repoRoot,
+      command: 'review-record',
+      workstreamId,
+      token: firstDelta.reviewToken!,
+      result: 'failed',
+      blockerFamilies: ['head-drift'],
+      blockerIds: ['BLK-DELTA'],
+      siblingSurfaces: ['workflow-protocol'],
+    });
+    expect(failed.ok).toBe(true);
+    expect(failed.record?.phase).toBe('review_closed');
+    expect(failed.record?.headCommit).toBe(firstHead);
+    expect(failed.record?.failedPremiumReviewCount).toBe(3);
+
+    const retry = applyProtocolTransition({
+      repoRoot,
+      command: 'review-start',
+      workstreamId,
+      pass: 'delta',
+    });
+    expect(retry.ok).toBe(true);
+    const passed = applyProtocolTransition({
+      repoRoot,
+      command: 'review-record',
+      workstreamId,
+      token: retry.reviewToken!,
+      result: 'passed',
+    });
+    expect(passed.ok).toBe(true);
+    expect(passed.record?.phase).toBe('review_closed');
+    expect(passed.record?.headCommit).toBe(firstHead);
+  });
+
   it('TEE-PROTO-001: null transcript remains unknown without inferred identity', async () => {
     const repoRoot = makeTempRoot('telemetry');
     const event = await buildWorkflowStopEvent(

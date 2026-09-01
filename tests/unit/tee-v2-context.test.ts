@@ -31,6 +31,8 @@ describe('TEE V2.2 FFTS project context', () => {
     );
     expect(fap).toMatch(/does \*\*not\*\* authorize pushing/iu);
     expect(ffap).toMatch(/does \*\*not\*\* authorize pushing/iu);
+    expect(ffap).toMatch(/status --blocking/);
+    expect(ffap).toMatch(/review-start --pass delta/);
     expect(fap).toMatch(/explicit push phrase/iu);
     expect(ffap).toMatch(/explicit push phrase/iu);
     expect(finalise).toMatch(/not push/iu);

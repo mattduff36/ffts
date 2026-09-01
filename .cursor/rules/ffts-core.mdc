@@ -17,3 +17,5 @@ alwaysApply: true
 - Keep all workflows self-contained in FFTS. Do not add runtime, test, script, rule, or configuration dependencies on sibling repositories.
 - `npm run fixerrors` (and `--no-clear`) is the non-destructive export/analysis path. Trusted cleanup uses only the exact printed bound command under `fixerrors-exact-snapshot-v1`. Debug UI / `clear-all-error-logs` clears remain untrusted.
 - Run application builds only when the user authorizes a test build. Project-specific rules override generic TEE when stricter.
+- Local commit is not release-ready, and release-ready is not a push. Do not hand-edit workflow protocol JSON.
+- Once unresolved CRITICAL implementation is committed to the current release branch, do not start unrelated implementation on that branch. Finish CRITICAL first or use a separate explicitly-authorised branch/worktree.

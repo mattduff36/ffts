@@ -12,6 +12,7 @@ import type {
   EnqueueScheduleVisitResult,
   ScheduleQueuedVisitResult,
   SchedulingBoardPayload,
+  SchedulingConflict,
   SchedulingContext,
   SchedulingSelfPayload,
 } from '@/types/scheduling';
@@ -373,6 +374,69 @@ export async function createScheduleAssignment(
   assertNoProvisionalIds(input);
   return readResponse(
     await fetch('/api/scheduling/assignments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
+export async function addScheduleDayTeamMember(input: {
+  work_date: string;
+  slot_index: 1 | 2 | 3;
+  profile_id: string;
+}): Promise<{ member: Record<string, unknown> }> {
+  assertNoProvisionalIds(input);
+  return readResponse(
+    await fetch('/api/scheduling/day-teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
+export async function removeScheduleDayTeamMember(input: {
+  work_date: string;
+  slot_index: 1 | 2 | 3;
+  profile_id: string;
+}): Promise<{ success: boolean }> {
+  assertNoProvisionalIds(input);
+  const params = new URLSearchParams({
+    work_date: input.work_date,
+    slot_index: String(input.slot_index),
+    profile_id: input.profile_id,
+  });
+  return readResponse(
+    await fetch(`/api/scheduling/day-teams?${params.toString()}`, {
+      method: 'DELETE',
+    })
+  );
+}
+
+export interface DayTeamAssignSkippedMember {
+  profile_id: string;
+  full_name: string;
+  reason: 'conflict' | 'overlap';
+  conflicts: SchedulingConflict[];
+}
+
+export interface DayTeamAssignResult {
+  assignments: AssignmentMutationRow[];
+  skipped: DayTeamAssignSkippedMember[];
+  already_assigned_count: number;
+  employee_capacity?: ScheduleDayCapacity[];
+  error?: string;
+  partial?: boolean;
+}
+
+export async function assignScheduleDayTeam(input: {
+  visit_id: string;
+  slot_index: 1 | 2 | 3;
+}): Promise<DayTeamAssignResult> {
+  assertNoProvisionalIds(input);
+  return readResponse(
+    await fetch('/api/scheduling/assignments/team', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),

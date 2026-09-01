@@ -32,6 +32,7 @@
     "permissions:migrate:team-matrix": "tsx scripts/run-team-permission-matrix-migration.ts",
     "scheduling:migrate": "tsx scripts/migrations/run-scheduling-module-migration.ts",
     "scheduling:migrate:visits": "tsx scripts/migrations/run-quote-scheduling-visits-migration.ts",
+    "scheduling:migrate:day-teams": "tsx scripts/migrations/run-schedule-day-teams-migration.ts",
     "scheduling:sample:plan": "tsx scripts/testing/scheduling-sample.ts --mode=plan",
     "scheduling:sample:apply": "tsx scripts/testing/scheduling-sample.ts --mode=apply",
     "scheduling:sample:queue:plan": "tsx scripts/testing/scheduling-sample.ts --mode=queue-plan",

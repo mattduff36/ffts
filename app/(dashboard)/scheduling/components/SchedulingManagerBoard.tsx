@@ -74,6 +74,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
+  addScheduleDayTeamMember,
+  assignScheduleDayTeam,
   createProjectScheduleJob,
   createScheduleAssignment,
   deletePlantUnavailability,
@@ -88,6 +90,7 @@ import {
   moveScheduleAssignment,
   previewScheduleVisitBacklog,
   quickAddScheduleProject,
+  removeScheduleDayTeamMember,
   scheduleQueuedVisit,
   saveQuoteSchedule,
   savePlantUnavailability,
@@ -112,6 +115,8 @@ import {
   patchBoardWithJob,
   patchBoardWithPlantBlock,
   patchBoardWithAssignment,
+  patchBoardWithDayTeamMember,
+  patchBoardRemoveDayTeamMember,
   patchBoardWithQuickAdd,
   patchBoardWithVisit,
   removeProjectCandidateFromQueue,
@@ -147,6 +152,8 @@ import {
 } from '@/lib/config/scheduling-view-preference';
 import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
+import { slotsForScheduleDate } from '@/lib/utils/scheduling-day-teams';
+import { ScheduleDayTeamBuckets, type ScheduleDayTeamDragData } from './ScheduleDayTeamBuckets';
 import {
   buildScheduleBoardRows,
   filterHiddenBoardAssignments,
@@ -183,6 +190,7 @@ import {
 import type {
   ScheduleAssignment,
   ScheduleDayCapacity,
+  ScheduleDayTeamSlotIndex,
   ScheduleEmployeeResource,
   ScheduleJob,
   SchedulePlantResource,
@@ -924,7 +932,7 @@ function VisitCard({
   const { ref: dropRef, isDropTarget } = useDroppable({
     id: visitDroppableId,
     type: 'schedule-visit',
-    accept: ['schedule-resource', 'schedule-assignment'],
+    accept: ['schedule-resource', 'schedule-assignment', 'schedule-day-team'],
     disabled: !isDropEnabled || visit.status === 'cancelled',
     data: {
       jobId: job.id,
@@ -1919,6 +1927,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [draggedAssignment, setDraggedAssignment] = useState<ScheduleAssignment | null>(null);
   const [draggedQuote, setDraggedQuote] = useState<SchedulingQueueItem | null>(null);
   const [draggedVisit, setDraggedVisit] = useState<ActiveVisitTarget | null>(null);
+  const [draggedDayTeam, setDraggedDayTeam] = useState<ScheduleDayTeamDragData | null>(null);
   const [activeVisitTarget, setActiveVisitTarget] = useState<ActiveVisitTarget | null>(null);
   const [resourceAvailabilityView, setResourceAvailabilityView] =
     useState<'available' | 'unavailable' | 'all'>('all');
@@ -4056,6 +4065,219 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
+  async function addEmployeeToDayTeam(
+    workDate: string,
+    slotIndex: ScheduleDayTeamSlotIndex,
+    resource: SelectedScheduleResource
+  ) {
+    if (resource.type !== 'employee') {
+      toast.info('Day teams only accept employees.');
+      return;
+    }
+    const employee = board?.resources.employees.find((item) => item.id === resource.id);
+    if (!employee) {
+      toast.error('That employee is no longer available.');
+      return;
+    }
+    const mutationKey = `day-team:${workDate}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const member = {
+      work_date: workDate,
+      slot_index: slotIndex,
+      profile_id: resource.id,
+      employee,
+      added_by: userId,
+      created_at: new Date().toISOString(),
+    };
+    const operation = registerOptimisticOperation({
+      kind: 'day-team-add',
+      lockKeys: [`day-team:${workDate}`, `day-team-profile:${workDate}:${resource.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.day_teams.some((entry) =>
+            entry.date === workDate
+            && entry.slots.some(
+              (slot) =>
+                slot.slot_index === slotIndex
+                && slot.members.some((item) => item.profile_id === resource.id)
+            )
+          ) === true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardWithDayTeamMember(state.board, member)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
+    try {
+      const result = await addScheduleDayTeamMember({
+        work_date: workDate,
+        slot_index: slotIndex,
+        profile_id: resource.id,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      const createdAt = typeof result.member?.created_at === 'string'
+        ? result.member.created_at
+        : member.created_at;
+      const addedBy = typeof result.member?.added_by === 'string'
+        ? result.member.added_by
+        : member.added_by;
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: (state) =>
+            state.board?.day_teams.some((entry) =>
+              entry.date === workDate
+              && entry.slots.some(
+                (slot) =>
+                  slot.slot_index === slotIndex
+                  && slot.members.some((item) => item.profile_id === resource.id)
+              )
+            ) === true,
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardWithDayTeamMember(state.board, {
+                ...member,
+                added_by: addedBy,
+                created_at: createdAt,
+              })
+            : state.board,
+        }),
+      });
+    } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update this team');
+    } finally {
+      endMutation(mutationKey);
+    }
+  }
+
+  async function removeEmployeeFromDayTeam(
+    slotIndex: ScheduleDayTeamSlotIndex,
+    profileId: string
+  ) {
+    const workDate = selectedDate;
+    const mutationKey = `day-team:${workDate}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const operation = registerOptimisticOperation({
+      kind: 'day-team-remove',
+      lockKeys: [`day-team:${workDate}`, `day-team-profile:${workDate}:${profileId}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.day_teams.some((entry) =>
+            entry.date === workDate
+            && entry.slots.some(
+              (slot) =>
+                slot.slot_index === slotIndex
+                && slot.members.some((item) => item.profile_id === profileId)
+            )
+          ) !== true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? patchBoardRemoveDayTeamMember(state.board, workDate, slotIndex, profileId)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
+    try {
+      await removeScheduleDayTeamMember({
+        work_date: workDate,
+        slot_index: slotIndex,
+        profile_id: profileId,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      settleOptimisticOperation(operation.id);
+    } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update this team');
+    } finally {
+      endMutation(mutationKey);
+    }
+  }
+
+  async function assignDayTeamToBoardVisit(
+    target: ActiveVisitTarget,
+    slotIndex: ScheduleDayTeamSlotIndex
+  ) {
+    if (
+      isOptimisticEntityId(target.job.id)
+      || isOptimisticEntityId(target.visit.id)
+    ) {
+      toast.info('Wait for this new visit to finish saving before assigning a team.');
+      return;
+    }
+    const members = slotsForScheduleDate(board?.day_teams, selectedDate)
+      .find((slot) => slot.slot_index === slotIndex)
+      ?.members || [];
+    if (members.length === 0) {
+      toast.info('Add employees to this team first.');
+      return;
+    }
+    const mutationKey = `day-team-assign:${target.visit.id}:${slotIndex}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    try {
+      const result = await assignScheduleDayTeam({
+        visit_id: target.visit.id,
+        slot_index: slotIndex,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      if (result.assignments.length > 0) {
+        setBoardBaseData((current) => {
+          let next = applyCapacity(current, result.employee_capacity);
+          for (const row of result.assignments) {
+            next = patchBoardWithAssignment(
+              next,
+              assignmentFromMutationRow(row, null, target.visit)
+            );
+          }
+          return next;
+        });
+      } else if (result.employee_capacity) {
+        setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+      }
+      const skipSummary = result.skipped
+        .map((item) => `${item.full_name} (${item.conflicts[0]?.message || item.reason})`)
+        .join('; ');
+      if (result.partial) {
+        toast.error(result.error || 'Some team members were assigned before this request failed.');
+      } else if (result.assignments.length > 0 && result.skipped.length > 0) {
+        toast.success(`Assigned ${result.assignments.length}. Skipped: ${skipSummary}`);
+      } else if (result.assignments.length > 0) {
+        toast.success(
+          result.assignments.length === 1
+            ? 'Team member assigned'
+            : `${result.assignments.length} team members assigned`
+        );
+      } else if (result.skipped.length > 0) {
+        toast.info(`Nobody was assigned. ${skipSummary}`);
+      } else if (result.already_assigned_count > 0) {
+        toast.info('Those employees are already on this visit.');
+      } else {
+        toast.info('Add employees to this team first.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to assign this team');
+    } finally {
+      endMutation(mutationKey);
+    }
+  }
+
   async function moveAssignmentToVisit(
     assignment: ScheduleAssignment,
     target: ActiveVisitTarget
@@ -4532,6 +4754,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         resources: board.resources,
         employee_capacity: [],
         plant_unavailability: [],
+        day_teams: [],
       });
       fetchColdWeekInBackground(targetWeekStart);
     }
@@ -4951,10 +5174,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const quote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
         const visit = event.operation.source?.data?.visit as ScheduleVisit | undefined;
         const job = event.operation.source?.data?.job as ScheduleJob | undefined;
+        const dayTeam = event.operation.source?.data?.dayTeam as ScheduleDayTeamDragData | undefined;
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
         setDraggedQuote(quote || null);
         setDraggedVisit(visit && job ? { visit, job } : null);
+        setDraggedDayTeam(dayTeam || null);
       }}
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
@@ -4962,11 +5187,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const sourceQuote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
         const sourceVisit = event.operation.source?.data?.visit as ScheduleVisit | undefined;
         const sourceVisitJob = event.operation.source?.data?.job as ScheduleJob | undefined;
+        const sourceDayTeam = event.operation.source?.data?.dayTeam as ScheduleDayTeamDragData | undefined;
         const targetData = event.operation.target?.data as {
           jobId?: string;
           returnToResources?: boolean;
           visitId?: string;
           workDate?: string;
+          dayTeamSlotIndex?: ScheduleDayTeamSlotIndex;
         } | undefined;
         const operationPosition = (
           event.operation as unknown as {
@@ -4981,6 +5208,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         setDraggedAssignment(null);
         setDraggedQuote(null);
         setDraggedVisit(null);
+        setDraggedDayTeam(null);
         if (event.canceled) return;
         if (sourceVisit && sourceVisitJob) {
           if (!targetData?.returnToResources) {
@@ -5042,6 +5270,29 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             return;
           }
           void scheduleQuoteFromDate(sourceQuote, targetData.workDate);
+          return;
+        }
+        if (sourceDayTeam) {
+          if (!targetData?.jobId || !targetData.visitId) {
+            toast.info('Drop onto a timed visit.');
+            return;
+          }
+          const job = board.jobs.find((item) => item.id === targetData.jobId);
+          const visit = board.visits.find((item) => item.id === targetData.visitId);
+          if (job && visit) {
+            activateVisit(job, visit);
+            void assignDayTeamToBoardVisit({ job, visit }, sourceDayTeam.slotIndex);
+          } else {
+            toast.error('That job is no longer available. Refresh the board and try again.');
+          }
+          return;
+        }
+        if (sourceResource && targetData?.dayTeamSlotIndex) {
+          void addEmployeeToDayTeam(
+            targetData.workDate || selectedDate,
+            targetData.dayTeamSlotIndex,
+            sourceResource
+          );
           return;
         }
         if (!sourceResource && !sourceAssignment) return;
@@ -5451,6 +5702,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   />
                 </div>
               </div>
+              {view === SCHEDULING_BOARD_VIEWS.daily ? (
+                <div className="hidden md:block">
+                  <ScheduleDayTeamBuckets
+                    workDate={selectedDate}
+                    slots={slotsForScheduleDate(board.day_teams, selectedDate)}
+                    dndScope="desktop"
+                    onRemoveMember={removeEmployeeFromDayTeam}
+                  />
+                </div>
+              ) : null}
               <div
                 className="flex min-h-7 items-center justify-between gap-3"
                 data-testid={
@@ -5842,6 +6103,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </div>
 
               <div className="space-y-3 md:hidden" data-mobile-scroll-lock="true">
+                {view === SCHEDULING_BOARD_VIEWS.daily ? (
+                  <ScheduleDayTeamBuckets
+                    workDate={selectedDate}
+                    slots={slotsForScheduleDate(board.day_teams, selectedDate)}
+                    dndScope="mobile"
+                    onRemoveMember={removeEmployeeFromDayTeam}
+                  />
+                ) : null}
                 <div
                   className={cn(
                     'grid overflow-hidden rounded-lg border border-border',
@@ -6070,6 +6339,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             <p className="truncate text-xs text-muted-foreground">
               {visibleDraggedQuote.title}
             </p>
+          </div>
+        ) : draggedDayTeam ? (
+          <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">
+            Team {draggedDayTeam.slotIndex}
           </div>
         ) : draggedResource ? (
           <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">

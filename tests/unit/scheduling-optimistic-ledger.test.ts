@@ -146,6 +146,7 @@ describe('scheduling optimistic ledger', () => {
       resources: { employees: [], plant: [] },
       employee_capacity: [],
       plant_unavailability: [],
+      day_teams: [],
     };
     const weekAOperation = {
       ...operation('week-a', 1, ['job:one'], (state) => ({

@@ -39,9 +39,11 @@ describe('schedule board quick-add migration', () => {
     expect(migration).not.toMatch(/v_row\.plant_id/);
   });
 
-  it('documents deferred team-based booking', () => {
+  it('SCH-TEAM-DOCS-001 documents current day-team buckets and keeps templates deferred', () => {
     expect(docs).toContain('Future Enhancements (Deferred)');
-    expect(docs).toContain('Team-based booking');
-    expect(docs).not.toContain('implemented team booking UI');
+    expect(docs).toContain('Team 1–3');
+    expect(docs).toContain('Saved team templates');
+    expect(docs).toContain('Weekly-view team buckets');
+    expect(docs).not.toContain('Team-based booking: compose a day team once');
   });
 });

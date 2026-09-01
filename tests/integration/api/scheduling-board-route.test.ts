@@ -34,6 +34,7 @@ describe('GET /api/scheduling/board', () => {
       assignments: [],
       resources: { employees: [], plant: [] },
       plant_unavailability: [],
+      day_teams: [],
     });
   });
 

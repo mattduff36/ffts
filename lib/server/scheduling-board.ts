@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildEmployeeCapacity } from '@/lib/server/scheduling-capacity';
 import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
+import { loadScheduleDayTeams } from '@/lib/server/scheduling-day-teams';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import {
   enumerateScheduleDates,
@@ -379,6 +380,7 @@ export async function loadSchedulingBoard(
       shifts,
     }),
     plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
+    day_teams: await loadScheduleDayTeams(admin, weekStart, weekEnd, employeesById),
   };
 }
 

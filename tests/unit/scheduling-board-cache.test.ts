@@ -32,6 +32,7 @@ function boardFixture(): SchedulingBoardPayload {
       ],
     }],
     plant_unavailability: [],
+    day_teams: [],
   };
 }
 

@@ -200,6 +200,7 @@ function schedulingFixture() {
       }],
     }],
     plant_unavailability: [],
+    day_teams: [],
   };
 }
 

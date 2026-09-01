@@ -1,6 +1,8 @@
 import type {
   ScheduleAssignment,
   ScheduleDayCapacity,
+  ScheduleDayTeamMember,
+  ScheduleDayTeamSlotIndex,
   ScheduleJob,
   SchedulePlantUnavailability,
   ScheduleProjectCandidate,
@@ -9,6 +11,10 @@ import type {
   ScheduleVisitBacklogItem,
   SchedulingBoardPayload,
 } from '@/types/scheduling';
+import {
+  removeScheduleDayTeamMember as removeDayTeamMemberFromBoard,
+  upsertScheduleDayTeamMember,
+} from '@/lib/utils/scheduling-day-teams';
 
 export function snapshotBoard(
   board: SchedulingBoardPayload | undefined
@@ -59,6 +65,22 @@ export function patchBoardWithAssignment(
   return options?.capacityDays
     ? replaceEmployeeCapacity(next, options.capacityDays)
     : next;
+}
+
+export function patchBoardWithDayTeamMember(
+  board: SchedulingBoardPayload,
+  member: ScheduleDayTeamMember
+): SchedulingBoardPayload {
+  return upsertScheduleDayTeamMember(board, member);
+}
+
+export function patchBoardRemoveDayTeamMember(
+  board: SchedulingBoardPayload,
+  workDate: string,
+  slotIndex: ScheduleDayTeamSlotIndex,
+  profileId: string
+): SchedulingBoardPayload {
+  return removeDayTeamMemberFromBoard(board, workDate, slotIndex, profileId);
 }
 
 export function patchBoardMoveAssignment(

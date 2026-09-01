@@ -4,6 +4,11 @@ import {
   applyProtocolTransition,
   type WorkflowProtocolCommand,
 } from './automation/workflow-review-protocol';
+import {
+  formatFinaliseProtocolReadinessReport,
+  getFinaliseProtocolReadiness,
+} from './automation/workflow-finalise-correlation';
+import type { WorkflowProtocolReviewPass } from './automation/types';
 
 function printUsage(): void {
   process.stdout.write(`Usage:
@@ -12,13 +17,14 @@ function printUsage(): void {
 Commands:
   init --workstream <id> [--plan <path>] [--base-commit <sha>]
   preflight-record --workstream <id> --manifest <path>
-  review-start --workstream <id> --pass first|closure
+  review-start --workstream <id> --pass first|closure|delta
   review-record --workstream <id> --token <token> --result passed|failed \\
     [--blocker-families a,b] [--blocker-ids a,b] [--sibling-surfaces a,b]
   fix-record --workstream <id> --manifest <path> [--closed-blocker-ids a,b]
   split --workstream <id> --new-workstream <id> [--narrower-partition] [--has-fix-delta]
   finalise-start --workstream <id>
   status --workstream <id>
+  status --blocking [--json]
 
 Exit codes:
   0 success
@@ -54,6 +60,16 @@ async function main(): Promise<void> {
   }
 
   const repoRoot = readFlag(args, '--repo-root') ?? process.cwd();
+  if (command === 'status' && hasFlag(args, '--blocking')) {
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    if (hasFlag(args, '--json')) {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+    } else {
+      process.stdout.write(`${formatFinaliseProtocolReadinessReport(readiness)}\n`);
+    }
+    process.exit(readiness.allowed ? 0 : 1);
+  }
+
   const result = applyProtocolTransition({
     repoRoot,
     command,
@@ -61,7 +77,7 @@ async function main(): Promise<void> {
     planPath: readFlag(args, '--plan'),
     baseCommit: readFlag(args, '--base-commit'),
     manifestPath: readFlag(args, '--manifest'),
-    pass: readFlag(args, '--pass') as 'first' | 'closure' | undefined,
+    pass: readFlag(args, '--pass') as WorkflowProtocolReviewPass | undefined,
     token: readFlag(args, '--token'),
     result: readFlag(args, '--result') as 'passed' | 'failed' | undefined,
     blockerFamilies: splitCsv(readFlag(args, '--blocker-families')),

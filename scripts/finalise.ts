@@ -17,7 +17,7 @@ import {
   clearFinaliseRepairClosureArtifacts,
   writeFinaliseFailureArtifact,
 } from './automation/finalise-failure';
-import { assertFinaliseAllowedForProtocol } from './automation/workflow-finalise-correlation';
+import { assertFinaliseAllowedForProtocol, formatFinaliseProtocolReadinessReport, getFinaliseProtocolReadiness } from './automation/workflow-finalise-correlation';
 import { checkFinaliseBlockingActivity, formatBlockingActivity } from './finalise-activity-guard';
 import {
   getSkippableFinaliseTasks,
@@ -987,9 +987,17 @@ async function main(): Promise<void> {
       throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
     }
 
-    await run.step('Validate protocol finalise gate', () => {
-      assertFinaliseAllowedForProtocol(REPO_ROOT);
-    });
+    const protocolReadiness = getFinaliseProtocolReadiness(REPO_ROOT);
+    if (!options.dryRun) {
+      await run.step('Validate protocol finalise gate', () => {
+        assertFinaliseAllowedForProtocol(REPO_ROOT);
+      });
+    } else {
+      await run.step('Inspect protocol finalise readiness', () => {
+        console.log('\n==> Protocol readiness');
+        console.log(formatFinaliseProtocolReadinessReport(protocolReadiness));
+      });
+    }
 
     await run.step('Validate release metadata tracking', () => {
       assertReleaseMetadataTracking(REPO_ROOT);
@@ -1065,6 +1073,9 @@ async function main(): Promise<void> {
       );
       console.log('Release version: would update locally before push if a bump is due');
       console.log(`Push: ${options.push ? 'would push current branch' : 'skipped'}`);
+      if (!protocolReadiness.allowed) {
+        throw new Error(formatFinaliseProtocolReadinessReport(protocolReadiness));
+      }
       await run.finish('passed');
       return;
     }

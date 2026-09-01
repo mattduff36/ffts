@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import type {
   WorkflowActiveFinaliseContext,
   WorkflowProtocolPhase,
   WorkflowProtocolRecord,
   WorkflowProtocolReviewAttempt,
+  WorkflowProtocolReviewPass,
   WorkflowReviewState,
 } from './types';
 import {
@@ -615,7 +616,7 @@ export function reducePreflightRecord(params: {
 export function reduceReviewStart(params: {
   repoRoot: string;
   workstreamId: string;
-  pass: 'first' | 'closure';
+  pass: WorkflowProtocolReviewPass;
   now?: () => Date;
 }): WorkflowProtocolTransitionResult {
   const current = readProtocolRecord(params.repoRoot, params.workstreamId);
@@ -627,6 +628,29 @@ export function reduceReviewStart(params: {
       current,
       WORKFLOW_ROUTING_REQUIRED_EXIT_CODE
     );
+  }
+
+  if (params.pass === 'delta') {
+    if (current.phase !== 'review_closed' && current.phase !== 'finalise_ready') {
+      return fail(`delta review-start requires review_closed (have ${current.phase})`, current);
+    }
+    const token = createToken('rev_delta');
+    const attempt: WorkflowProtocolReviewAttempt = {
+      pass: 'delta',
+      token,
+      startedAt: nowIso(params.now),
+    };
+    const next: WorkflowProtocolRecord = {
+      ...current,
+      phase: 'delta_review',
+      nextAction: 'review_record',
+      activeReviewToken: token,
+      activeReviewPass: 'delta',
+      activeCheckpointId: null,
+      reviewAttempts: [...current.reviewAttempts, attempt],
+      updatedAt: nowIso(params.now),
+    };
+    return succeed('delta review token issued', next, { reviewToken: token });
   }
 
   if (params.pass === 'first') {
@@ -702,7 +726,7 @@ export function reduceReviewRecord(params: {
 }): WorkflowProtocolTransitionResult {
   const current = readProtocolRecord(params.repoRoot, params.workstreamId);
   if (!current) return fail('protocol record missing; run init first');
-  if (current.phase !== 'first_review' && current.phase !== 'closure_review') {
+  if (current.phase !== 'first_review' && current.phase !== 'closure_review' && current.phase !== 'delta_review') {
     return fail(`review-record not allowed in phase ${current.phase}`, current);
   }
   if (!current.activeReviewToken || current.activeReviewToken !== params.token) {
@@ -745,18 +769,28 @@ export function reduceReviewRecord(params: {
   let message = `review ${params.result}`;
 
   if (params.result === 'passed') {
-    if (current.activeReviewPass === 'closure' && current.openBlockerIds.length > 0) {
+    if (
+      (current.activeReviewPass === 'closure' || current.activeReviewPass === 'delta') &&
+      current.openBlockerIds.length > 0
+    ) {
       return fail(
         `closure pass cannot pass while open blockers remain: ${current.openBlockerIds.join(', ')}`,
         current
       );
     }
-    if (current.activeReviewPass === 'closure' && blockers.length > 0) {
+    if (
+      (current.activeReviewPass === 'closure' || current.activeReviewPass === 'delta') &&
+      blockers.length > 0
+    ) {
       return fail('closure pass=passed must not introduce open blockerIds', current);
     }
     phase = 'review_closed';
     nextAction = 'finalise_start';
     message = 'review closed';
+  } else if (current.activeReviewPass === 'delta') {
+    phase = 'fix_sweep_required';
+    nextAction = 'consolidated_fix_record';
+    message = 'delta review failed; consolidated fix sweep required';
   } else {
     failedCount += 1;
     if (failedCount >= 2) {
@@ -771,6 +805,8 @@ export function reduceReviewRecord(params: {
     }
   }
 
+  const reviewedHead =
+    params.result === 'passed' ? runGit(params.repoRoot, ['rev-parse', 'HEAD']) : null;
   const next: WorkflowProtocolRecord = {
     ...current,
     phase,
@@ -781,6 +817,7 @@ export function reduceReviewRecord(params: {
     reviewAttempts: attempts,
     blockerFamilies: [...new Set([...current.blockerFamilies, ...families])],
     openBlockerIds: params.result === 'passed' ? [] : blockers,
+    headCommit: reviewedHead ?? current.headCommit,
     updatedAt: nowIso(params.now),
   };
 
@@ -879,29 +916,18 @@ export function reduceSplit(params: {
   if (!params.newWorkstreamId.trim()) {
     return fail('newWorkstreamId required', current);
   }
-  if (readProtocolRecord(params.repoRoot, params.newWorkstreamId)) {
+  const childId = params.newWorkstreamId.trim();
+  if (childId === current.workstreamId) {
+    return fail('split child cannot be the parent', current);
+  }
+  if ((current.sourceWorkstreamIds ?? []).includes(childId)) {
+    return fail('split would create a lineage cycle', current);
+  }
+  if (readProtocolRecord(params.repoRoot, childId)) {
     return fail('newWorkstreamId already exists', current);
   }
-
-  const inheritBudget =
-    params.narrowerPartition || params.hasFixDelta
-      ? current.failedPremiumReviewCount
-      : Math.max(current.failedPremiumReviewCount, 2);
-
-  const child = createEmptyProtocolRecord({
-    workstreamId: params.newWorkstreamId.trim(),
-    baseCommit: current.baseCommit,
-    branchName: current.branchName,
-    headCommit: current.headCommit,
-    planPath: current.planPath,
-    sourceWorkstreamIds: [current.workstreamId, ...(current.sourceWorkstreamIds ?? [])],
-    inheritedFailedReviewCount: inheritBudget,
-    now: params.now,
-  });
-
-  if (!params.narrowerPartition && !params.hasFixDelta) {
-    child.phase = 'routing_required';
-    child.nextAction = 'premium_fix_routing_or_split';
+  if (listImmediateChildWorkstreamIds(params.repoRoot, current.workstreamId).length > 0) {
+    return fail('split already has a continuation child', current);
   }
 
   const parent: WorkflowProtocolRecord = {
@@ -916,7 +942,7 @@ export function reduceSplit(params: {
     exitCode: 0,
     record: parent,
     message: 'workstream split recorded',
-    splitWorkstreamId: child.workstreamId,
+    splitWorkstreamId: childId,
     // Attach child via message channel; persistProtocolTransition writes both.
   };
 }
@@ -930,6 +956,31 @@ export function reduceFinaliseStart(params: {
   if (!current) return fail('protocol record missing; run init first');
   if (current.phase !== 'review_closed' && current.phase !== 'finalise_ready') {
     return fail(`finalise-start requires review_closed (have ${current.phase})`, current);
+  }
+  const currentHead = runGit(params.repoRoot, ['rev-parse', 'HEAD']);
+  if (!currentHead) {
+    return fail('finalise-start requires a readable git HEAD', current);
+  }
+  if (!current.headCommit) {
+    return fail('finalise-start requires a reviewed headCommit bound by a successful review', current);
+  }
+  if (currentHead !== current.headCommit) {
+    const extraOutput = runGit(params.repoRoot, [
+      'log',
+      '--format=%H',
+      `${current.headCommit}..${currentHead}`,
+    ]);
+    const extra = extraOutput
+      ? extraOutput
+          .split(/\r?\n/u)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join(', ')
+      : 'unable to list';
+    return fail(
+      `HEAD has moved since the reviewed commit ${current.headCommit}; current HEAD is ${currentHead}; extra commits: ${extra}. Run npx tsx scripts/workflow-protocol.ts review-start --workstream ${current.workstreamId} --pass delta to refresh the final-diff review. Do not rewrite review metadata to the current HEAD.`,
+      current
+    );
   }
   // Reuse the bound checkpoint when already finalise_ready so repair evidence stays valid.
   const checkpointId =
@@ -1044,6 +1095,53 @@ export function commitFinaliseCorrelationStateAndProtocols(params: {
   }
 }
 
+function listImmediateChildWorkstreamIds(repoRoot: string, parentId: string): string[] {
+  const root = path.join(repoRoot, 'docs_private', 'automation', 'workstreams');
+  if (!existsSync(root)) return [];
+  const ids: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const child = readProtocolRecord(repoRoot, entry.name);
+    if (child?.sourceWorkstreamIds?.[0] === parentId) {
+      ids.push(child.workstreamId);
+    }
+  }
+  return ids;
+}
+
+function createSplitChildRecord(params: {
+  parent: WorkflowProtocolRecord;
+  newWorkstreamId: string;
+  narrowerPartition: boolean;
+  hasFixDelta: boolean;
+  failedPremiumReviewCount: number;
+  openBlockerIds: string[];
+  blockerFamilies: string[];
+  now?: () => Date;
+}): WorkflowProtocolRecord {
+  const inheritBudget =
+    params.narrowerPartition || params.hasFixDelta
+      ? params.failedPremiumReviewCount
+      : Math.max(params.failedPremiumReviewCount, 2);
+  const child = createEmptyProtocolRecord({
+    workstreamId: params.newWorkstreamId,
+    baseCommit: params.parent.baseCommit,
+    branchName: params.parent.branchName,
+    headCommit: params.parent.headCommit,
+    planPath: params.parent.planPath,
+    sourceWorkstreamIds: [params.parent.workstreamId, ...(params.parent.sourceWorkstreamIds ?? [])],
+    inheritedFailedReviewCount: inheritBudget,
+    now: params.now,
+  });
+  child.openBlockerIds = [...params.openBlockerIds];
+  child.blockerFamilies = [...params.blockerFamilies];
+  if (!params.narrowerPartition && !params.hasFixDelta) {
+    child.phase = 'routing_required';
+    child.nextAction = 'premium_fix_routing_or_split';
+  }
+  return child;
+}
+
 function persistParentAndOptionalChildUnlocked(params: {
   repoRoot: string;
   parent: WorkflowProtocolRecord;
@@ -1059,6 +1157,12 @@ function persistParentAndOptionalChildUnlocked(params: {
   state = upsertProtocolInState(state, params.parent);
   if (params.child) {
     state = upsertProtocolInState(state, params.child);
+  }
+  if (
+    state.activeFinaliseContext?.workstreamId === params.parent.workstreamId &&
+    params.parent.phase !== 'finalise_ready'
+  ) {
+    state = setActiveFinaliseContext(state, null);
   }
   state = upsertWorkstreamRecord(state, {
     workstreamId: params.parent.workstreamId,
@@ -1099,7 +1203,7 @@ function applyProtocolTransitionUnlocked(params: {
   planPath?: string;
   baseCommit?: string;
   manifestPath?: string;
-  pass?: 'first' | 'closure';
+  pass?: WorkflowProtocolReviewPass;
   token?: string;
   result?: 'passed' | 'failed';
   blockerFamilies?: string[];
@@ -1153,8 +1257,8 @@ function applyProtocolTransitionUnlocked(params: {
   }
 
   if (params.command === 'review-start') {
-    if (params.pass !== 'first' && params.pass !== 'closure') {
-      return fail('pass must be first|closure');
+    if (params.pass !== 'first' && params.pass !== 'closure' && params.pass !== 'delta') {
+      return fail('pass must be first|closure|delta');
     }
     const result = reduceReviewStart({
       repoRoot: params.repoRoot,
@@ -1222,26 +1326,16 @@ function applyProtocolTransitionUnlocked(params: {
       now: params.now,
     });
     if (result.ok && result.record && result.splitWorkstreamId) {
-      const child = createEmptyProtocolRecord({
-        workstreamId: result.splitWorkstreamId,
-        baseCommit: result.record.baseCommit,
-        branchName: result.record.branchName,
-        headCommit: result.record.headCommit,
-        planPath: result.record.planPath,
-        sourceWorkstreamIds: [
-          result.record.workstreamId,
-          ...(result.record.sourceWorkstreamIds ?? []),
-        ],
-        inheritedFailedReviewCount:
-          params.narrowerPartition || params.hasFixDelta
-            ? parentBefore?.failedPremiumReviewCount ?? 0
-            : Math.max(parentBefore?.failedPremiumReviewCount ?? 0, 2),
+      const child = createSplitChildRecord({
+        parent: result.record,
+        newWorkstreamId: result.splitWorkstreamId,
+        narrowerPartition: Boolean(params.narrowerPartition),
+        hasFixDelta: Boolean(params.hasFixDelta),
+        failedPremiumReviewCount: parentBefore?.failedPremiumReviewCount ?? 0,
+        openBlockerIds: parentBefore?.openBlockerIds ?? [],
+        blockerFamilies: parentBefore?.blockerFamilies ?? [],
         now: params.now,
       });
-      if (!params.narrowerPartition && !params.hasFixDelta) {
-        child.phase = 'routing_required';
-        child.nextAction = 'premium_fix_routing_or_split';
-      }
       persistParentAndOptionalChildUnlocked({
         repoRoot: params.repoRoot,
         parent: result.record,
@@ -1277,7 +1371,7 @@ export function applyProtocolTransition(params: {
   planPath?: string;
   baseCommit?: string;
   manifestPath?: string;
-  pass?: 'first' | 'closure';
+  pass?: WorkflowProtocolReviewPass;
   token?: string;
   result?: 'passed' | 'failed';
   blockerFamilies?: string[];

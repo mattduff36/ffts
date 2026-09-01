@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
@@ -7,6 +7,8 @@ import {
   applyFinaliseCorrelationToState,
   assertFinaliseAllowedForProtocol,
   correlateFinaliseRun,
+  formatFinaliseProtocolReadinessReport,
+  getFinaliseProtocolReadiness,
   resolveFinaliseWorkstreamMatches,
   shouldApplyFinaliseCorrelation,
 } from '@/scripts/automation/workflow-finalise-correlation';
@@ -53,29 +55,38 @@ function openWorkstream(
 function makeProtocol(
   workstreamId: string,
   phase: WorkflowProtocolRecord['phase'],
-  checkpointId: string | null = 'ckpt_explicit'
+  checkpointId: string | null = 'ckpt_explicit',
+  extra: Partial<WorkflowProtocolRecord> = {}
 ): WorkflowProtocolRecord {
   return {
     schemaVersion: '1',
-    workstreamId,
     identityStatus: 'present',
-    inheritedFailedReviewCount: 0,
-    branchName: 'main',
-    baseCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    headCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    inheritedFailedReviewCount: extra.inheritedFailedReviewCount ?? 0,
+    branchName: extra.branchName ?? 'main',
+    baseCommit: extra.baseCommit ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    headCommit: extra.headCommit ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    nextAction: extra.nextAction
+      ?? (phase === 'finalise_ready'
+        ? 'run_finalise'
+        : phase === 'split'
+          ? 'use_split_workstream'
+          : phase === 'review_closed'
+            ? 'finalise_start'
+            : 'continue'),
+    failedPremiumReviewCount: extra.failedPremiumReviewCount ?? 0,
+    activeReviewToken: extra.activeReviewToken ?? null,
+    activeReviewPass: extra.activeReviewPass ?? null,
+    reviewAttempts: extra.reviewAttempts ?? [],
+    blockerFamilies: extra.blockerFamilies ?? [],
+    openBlockerIds: extra.openBlockerIds ?? [],
+    evidenceManifestPath: extra.evidenceManifestPath ?? null,
+    fixDeltaManifestPath: extra.fixDeltaManifestPath ?? null,
+    activeCheckpointId: extra.activeCheckpointId ?? checkpointId,
+    planPath: extra.planPath ?? null,
+    sourceWorkstreamIds: extra.sourceWorkstreamIds,
+    updatedAt: extra.updatedAt ?? new Date().toISOString(),
+    workstreamId,
     phase,
-    nextAction: phase === 'finalise_ready' ? 'run_finalise' : 'continue',
-    failedPremiumReviewCount: 0,
-    activeReviewToken: null,
-    activeReviewPass: null,
-    reviewAttempts: [],
-    blockerFamilies: [],
-    openBlockerIds: [],
-    evidenceManifestPath: null,
-    fixDeltaManifestPath: null,
-    activeCheckpointId: checkpointId,
-    planPath: null,
-    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -474,3 +485,213 @@ describe('workflow finalise correlation', () => {
     expect(readProtocolRecord(repoRoot, workstreamId)?.activeCheckpointId).toBeNull();
   });
 });
+
+function writeProtocolFixture(
+  label: string,
+  records: WorkflowProtocolRecord[],
+  active?: { workstreamId: string; checkpointId: string }
+): string {
+  const repoRoot = mkdtempSync(path.join(tmpdir(), `${label}-`));
+  tempRoots.push(repoRoot);
+  mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+  const protocolRecords: Record<string, WorkflowProtocolRecord> = {};
+  for (const record of records) {
+    writeProtocolRecord(repoRoot, record);
+    protocolRecords[record.workstreamId] = record;
+  }
+  const paths = getWorkflowPaths(repoRoot);
+  saveWorkflowReviewState(paths.statePath, {
+    ...createEmptyWorkflowReviewState(),
+    protocolRecords,
+    activeFinaliseContext: active
+      ? {
+          workstreamId: active.workstreamId,
+          checkpointId: active.checkpointId,
+          activatedAt: new Date().toISOString(),
+        }
+      : null,
+  });
+  return repoRoot;
+}
+
+describe('TEE-FINALISE-002 split lineage liveness', () => {
+  it('A1: valid split parent + finalise-ready child allows the gate', () => {
+    const parent = makeProtocol('ws_split_parent', 'split', null);
+    const child = makeProtocol('ws_split_child', 'finalise_ready', 'ckpt_child', {
+      sourceWorkstreamIds: ['ws_split_parent'],
+    });
+    const repoRoot = writeProtocolFixture('split-parent-ready-child', [parent, child], {
+      workstreamId: 'ws_split_child',
+      checkpointId: 'ckpt_child',
+    });
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).not.toThrow();
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(true);
+    expect(readiness.lineages.find((row) => row.workstreamId === 'ws_split_parent')?.role).toBe(
+      'parked_split_ancestor'
+    );
+  });
+
+  it('A2: nested split root/child + finalise-ready grandchild allows the gate', () => {
+    const root = makeProtocol('ws_c4e8a91b7d203f56', 'split', null, {
+      openBlockerIds: ['B-SCH-TEAM-DB-001-SURROGATE'],
+    });
+    const child = makeProtocol('ws_4c15a6ddf4dcf287', 'split', null, {
+      sourceWorkstreamIds: ['ws_c4e8a91b7d203f56'],
+      openBlockerIds: ['B-SCH-TEAM-DB-001-SURROGATE'],
+    });
+    const grandchild = makeProtocol('ws_f56791b006fac275', 'finalise_ready', 'ckpt_leaf', {
+      sourceWorkstreamIds: ['ws_4c15a6ddf4dcf287', 'ws_c4e8a91b7d203f56'],
+    });
+    const repoRoot = writeProtocolFixture(
+      'nested-split-ready-grandchild',
+      [root, child, grandchild],
+      { workstreamId: 'ws_f56791b006fac275', checkpointId: 'ckpt_leaf' }
+    );
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).not.toThrow();
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(true);
+    expect(
+      readiness.lineages.filter((row) => row.role === 'parked_split_ancestor').map((row) => row.workstreamId)
+    ).toEqual(['ws_4c15a6ddf4dcf287', 'ws_c4e8a91b7d203f56']);
+    expect(readiness.lineages.find((row) => row.workstreamId === 'ws_f56791b006fac275')?.role).toBe(
+      'active_leaf'
+    );
+  });
+
+  it('A3: nested split + review_closed leaf blocks mutating finalise and points at the leaf', () => {
+    const root = makeProtocol('ws_root_split', 'split', null);
+    const child = makeProtocol('ws_child_split', 'split', null, {
+      sourceWorkstreamIds: ['ws_root_split'],
+    });
+    const leaf = makeProtocol('ws_leaf_closed', 'review_closed', null, {
+      sourceWorkstreamIds: ['ws_child_split', 'ws_root_split'],
+    });
+    const repoRoot = writeProtocolFixture('nested-split-review-closed', [root, child, leaf]);
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /CRITICAL workstream ws_leaf_closed is in phase review_closed|finalise-start --workstream ws_leaf_closed/iu
+    );
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(false);
+    expect(readiness.blockingWorkstreams.map((row) => row.workstreamId)).toEqual(['ws_leaf_closed']);
+    expect(readiness.suggestedActions.some((action) => action.includes('ws_leaf_closed'))).toBe(true);
+    expect(readiness.blockingWorkstreams.some((row) => row.workstreamId === 'ws_root_split')).toBe(
+      false
+    );
+    const report = formatFinaliseProtocolReadinessReport(readiness);
+    expect(report).toMatch(/Parked split ancestors/i);
+    expect(report).toMatch(/finalise-start --workstream ws_leaf_closed/);
+  });
+
+  it('A4: orphan split blocks as protocol integrity and is not skipped', () => {
+    const orphan = makeProtocol('ws_orphan_split', 'split', null);
+    const repoRoot = writeProtocolFixture('orphan-split', [orphan]);
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /orphan split|no valid child continuation|protocol integrity/iu
+    );
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.blockingWorkstreams).toHaveLength(1);
+    expect(readiness.blockingWorkstreams[0]?.role).toBe('orphan_split');
+  });
+
+  it('A5: independent unresolved CRITICAL lineage still blocks', () => {
+    const ready = makeProtocol('ws_ready_lineage', 'finalise_ready', 'ckpt_ready');
+    const other = makeProtocol('ws_other_critical', 'initialized', null);
+    const repoRoot = writeProtocolFixture('independent-lineages', [ready, other], {
+      workstreamId: 'ws_ready_lineage',
+      checkpointId: 'ckpt_ready',
+    });
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
+      /CRITICAL workstream ws_other_critical is in phase initialized/iu
+    );
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(false);
+    expect(readiness.blockingWorkstreams.map((row) => row.workstreamId)).toContain(
+      'ws_other_critical'
+    );
+  });
+
+  it('A6: reports all blockers instead of stopping at the first ID', () => {
+    const first = makeProtocol('ws_block_b', 'initialized', null);
+    const second = makeProtocol('ws_block_a', 'review_closed', null);
+    const repoRoot = writeProtocolFixture('all-blockers', [first, second]);
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.blockingWorkstreams.map((row) => row.workstreamId).sort()).toEqual([
+      'ws_block_a',
+      'ws_block_b',
+    ]);
+    const report = formatFinaliseProtocolReadinessReport(readiness);
+    expect(report).toMatch(/ws_block_a/);
+    expect(report).toMatch(/ws_block_b/);
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(/ws_block_a[\s\S]*ws_block_b|ws_block_b[\s\S]*ws_block_a/u);
+  });
+
+  it('D1: readiness evaluation does not mutate protocol records', () => {
+    const parent = makeProtocol('ws_parked', 'split', null);
+    const leaf = makeProtocol('ws_closed', 'review_closed', null, {
+      sourceWorkstreamIds: ['ws_parked'],
+    });
+    const repoRoot = writeProtocolFixture('readiness-no-mutate', [parent, leaf]);
+    const before = readFileSync(
+      path.join(repoRoot, 'docs_private', 'automation', 'workstreams', 'ws_parked', 'protocol.json'),
+      'utf8'
+    );
+    getFinaliseProtocolReadiness(repoRoot);
+    const after = readFileSync(
+      path.join(repoRoot, 'docs_private', 'automation', 'workstreams', 'ws_parked', 'protocol.json'),
+      'utf8'
+    );
+    expect(after).toBe(before);
+    expect(readProtocolRecord(repoRoot, 'ws_parked')?.phase).toBe('split');
+    expect(shouldApplyFinaliseCorrelation({ scriptName: 'finalise', args: ['--dry-run'] })).toBe(
+      false
+    );
+  });
+
+  it('B4: descendant finalise preserves ancestor split history', () => {
+    const parent = makeProtocol('ws_hist_parent', 'split', null, {
+      openBlockerIds: ['AUDIT-1'],
+    });
+    const child = makeProtocol('ws_hist_child', 'finalise_ready', 'ckpt_hist', {
+      sourceWorkstreamIds: ['ws_hist_parent'],
+    });
+    const repoRoot = writeProtocolFixture('preserve-split-history', [parent, child], {
+      workstreamId: 'ws_hist_child',
+      checkpointId: 'ckpt_hist',
+    });
+    const state = {
+      ...createEmptyWorkflowReviewState(),
+      protocolRecords: {
+        ws_hist_parent: parent,
+        ws_hist_child: child,
+      },
+      activeFinaliseContext: {
+        workstreamId: 'ws_hist_child',
+        checkpointId: 'ckpt_hist',
+        activatedAt: new Date().toISOString(),
+      },
+    };
+    const next = applyFinaliseCorrelationToState({
+      state,
+      matched: [
+        {
+          workstreamId: 'ws_hist_child',
+          branchName: 'main',
+          headCommit: child.headCommit,
+          taskIds: [],
+          eventIds: [],
+          status: 'open',
+          updatedAt: child.updatedAt,
+        },
+      ],
+      finaliseRunId: 'run_hist',
+      finaliseOutcome: 'passed',
+      resultingCommit: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      repoRoot,
+    });
+    expect(next.protocolRecords?.ws_hist_child?.phase).toBe('finalised');
+    expect(readProtocolRecord(repoRoot, 'ws_hist_parent')?.phase).toBe('split');
+    expect(readProtocolRecord(repoRoot, 'ws_hist_parent')?.openBlockerIds).toEqual(['AUDIT-1']);
+  });
+});
+

@@ -8,7 +8,9 @@ import { buildWorkflowFindings } from '@/scripts/automation/workflow-findings';
 import {
   WORKFLOW_ROUTING_REQUIRED_EXIT_CODE,
   applyProtocolTransition,
+  createEmptyProtocolRecord,
   readProtocolRecord,
+  writeProtocolRecord,
 } from '@/scripts/automation/workflow-review-protocol';
 import { buildWorkflowStopEvent } from '@/scripts/automation/workflow-review';
 import {
@@ -17,6 +19,21 @@ import {
 } from '@/scripts/automation/workflow-plan-contract';
 
 const tempRoots: string[] = [];
+
+function initGitRepo(repoRoot: string, message = 'fixture'): string {
+  writeFileSync(path.join(repoRoot, 'package.json'), '{"name":"fixture"}\n', 'utf8');
+  writeFileSync(path.join(repoRoot, '.gitignore'), 'docs_private/\n', 'utf8');
+  spawnSync('git', ['init'], { cwd: repoRoot });
+  spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoRoot });
+  spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repoRoot });
+  spawnSync('git', ['add', '.'], { cwd: repoRoot });
+  spawnSync(
+    'git',
+    ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', message],
+    { cwd: repoRoot }
+  );
+  return (spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout ?? '').trim();
+}
 
 function makeTempRoot(label: string): string {
   const root = path.join(
@@ -223,10 +240,16 @@ describe('workflow review protocol', () => {
     expect(split.ok).toBe(true);
     expect(split.splitWorkstreamId).toBe('ws_protocol_route_child');
     expect(readProtocolRecord(repoRoot, workstreamId)?.phase).toBe('split');
+    const child = readProtocolRecord(repoRoot, 'ws_protocol_route_child');
+    expect(child?.sourceWorkstreamIds?.[0]).toBe(workstreamId);
+    expect(child?.openBlockerIds).toEqual(['BLK-2']);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.openBlockerIds).toEqual(['BLK-2']);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.phase).toBe('split');
   });
 
   it('TEE-PROTO-001: successful closure reaches finalise_ready', () => {
     const repoRoot = makeTempRoot('finalise-ready');
+    initGitRepo(repoRoot);
     const workstreamId = 'ws_finalise_ready_1';
     applyProtocolTransition({
       repoRoot,
@@ -276,6 +299,108 @@ describe('workflow review protocol', () => {
     expect(readProtocolRecord(repoRoot, workstreamId)?.activeCheckpointId).toBe(
       finaliseStart.checkpointId
     );
+  });
+
+  it('TEE-PROTO-002: split cannot create a cycle and transfers blockers to the child', () => {
+    const repoRoot = makeTempRoot('split-cycle');
+    const workstreamId = 'ws_split_cycle_parent';
+    const record = createEmptyProtocolRecord({
+      workstreamId,
+      baseCommit: 'abc1234deadbeef',
+    });
+    record.phase = 'routing_required';
+    record.nextAction = 'premium_fix_routing_or_split';
+    record.sourceWorkstreamIds = ['ws_split_cycle_child'];
+    record.openBlockerIds = ['BLK-KEEP'];
+    record.blockerFamilies = ['family-keep'];
+    writeProtocolRecord(repoRoot, record);
+
+    const cyclic = applyProtocolTransition({
+      repoRoot,
+      command: 'split',
+      workstreamId,
+      newWorkstreamId: 'ws_split_cycle_child',
+    });
+    expect(cyclic.ok).toBe(false);
+    expect(cyclic.message).toMatch(/cycle/i);
+
+    const self = applyProtocolTransition({
+      repoRoot,
+      command: 'split',
+      workstreamId,
+      newWorkstreamId: workstreamId,
+    });
+    expect(self.ok).toBe(false);
+    expect(self.message).toMatch(/cannot be the parent/i);
+  });
+
+  it('TEE-PROTO-002: HEAD drift blocks finalise-start; delta review rebinds without silent rewrite', () => {
+    const repoRoot = makeTempRoot('head-drift');
+    const firstHead = initGitRepo(repoRoot);
+    const workstreamId = 'ws_head_drift_1';
+    const record = createEmptyProtocolRecord({
+      workstreamId,
+      baseCommit: firstHead,
+      headCommit: firstHead,
+    });
+    record.phase = 'review_closed';
+    record.nextAction = 'finalise_start';
+    writeProtocolRecord(repoRoot, record);
+
+    writeFileSync(path.join(repoRoot, 'later.ts'), 'export const later = 1;\n', 'utf8');
+    spawnSync('git', ['add', '.'], { cwd: repoRoot });
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'later'],
+      { cwd: repoRoot }
+    );
+    const secondHead = (
+      spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout ?? ''
+    ).trim();
+    expect(secondHead).not.toBe(firstHead);
+
+    const blocked = applyProtocolTransition({
+      repoRoot,
+      command: 'finalise-start',
+      workstreamId,
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.message).toContain(firstHead);
+    expect(blocked.message).toContain(secondHead);
+    expect(blocked.message).toMatch(/--pass delta/);
+    const unchanged = readProtocolRecord(repoRoot, workstreamId);
+    expect(unchanged?.phase).toBe('review_closed');
+    expect(unchanged?.headCommit).toBe(firstHead);
+    expect(unchanged?.activeCheckpointId).toBeNull();
+
+    const deltaStart = applyProtocolTransition({
+      repoRoot,
+      command: 'review-start',
+      workstreamId,
+      pass: 'delta',
+    });
+    expect(deltaStart.ok).toBe(true);
+    expect(deltaStart.reviewToken).toBeTruthy();
+
+    const deltaPass = applyProtocolTransition({
+      repoRoot,
+      command: 'review-record',
+      workstreamId,
+      token: deltaStart.reviewToken!,
+      result: 'passed',
+    });
+    expect(deltaPass.ok).toBe(true);
+    expect(deltaPass.record?.phase).toBe('review_closed');
+    expect(deltaPass.record?.headCommit).toBe(secondHead);
+
+    const started = applyProtocolTransition({
+      repoRoot,
+      command: 'finalise-start',
+      workstreamId,
+    });
+    expect(started.ok).toBe(true);
+    expect(started.record?.phase).toBe('finalise_ready');
+    expect(started.record?.headCommit).toBe(secondHead);
   });
 
   it('TEE-PROTO-001: null transcript remains unknown without inferred identity', async () => {

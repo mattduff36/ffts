@@ -335,11 +335,14 @@ export type WorkflowProtocolPhase =
   | 'fix_sweep_required'
   | 'fix_recorded'
   | 'closure_review'
+  | 'delta_review'
   | 'review_closed'
   | 'routing_required'
   | 'split'
   | 'finalise_ready'
   | 'finalised';
+
+export type WorkflowProtocolReviewPass = 'first' | 'closure' | 'delta';
 
 export type WorkflowIdentityStatus = 'present' | 'missing' | 'unknown';
 export type WorkflowTranscriptStatus = 'parsed' | 'null' | 'missing' | 'malformed';
@@ -552,7 +555,7 @@ export interface WorkflowWorkstreamRecord {
 }
 
 export interface WorkflowProtocolReviewAttempt {
-  pass: 'first' | 'closure';
+  pass: WorkflowProtocolReviewPass;
   token: string;
   startedAt: string;
   result?: 'passed' | 'failed';
@@ -575,7 +578,7 @@ export interface WorkflowProtocolRecord {
   nextAction: string;
   failedPremiumReviewCount: number;
   activeReviewToken: string | null;
-  activeReviewPass: 'first' | 'closure' | null;
+  activeReviewPass: WorkflowProtocolReviewPass | null;
   reviewAttempts: WorkflowProtocolReviewAttempt[];
   blockerFamilies: string[];
   openBlockerIds: string[];

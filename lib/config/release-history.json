@@ -1,5 +1,25 @@
 [
   {
+    "version": "0926.0.0",
+    "updateKind": "minor",
+    "title": "Scheduling update",
+    "description": "Updated app reliability. Ignore local planning packs so finalise cannot add them. Bind review tokens to HEAD and keep delta retries live. Make split CRITICAL lineages finalisable. Extend board hour lines through empty space. Fill Resources and the schedule board to the viewport. Show daily employee occupancy on resource cards. Add shared daily team buckets for visit assignment. Group the board by job, employee, or plant.",
+    "summary": "Updated app reliability. Ignore local planning packs so finalise cannot add them. Bind review tokens to HEAD and keep delta retries live. Make split CRITICAL lineages finalisable. Extend board hour lines through empty space. Fill Resources and the schedule board to the viewport. Show daily employee occupancy on resource cards. Add shared daily team buckets for visit assignment. Group the board by job, employee, or plant.",
+    "details": [
+      "Updated data storage, with changes to automation scripts, automated tests, and data storage.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "App reliability",
+      "Employee",
+      "Plant"
+    ],
+    "areaKeys": [
+      "app-reliability"
+    ],
+    "pushedAt": "2026-09-01T20:00:08.885Z"
+  },
+  {
     "version": "0826.12.0",
     "updateKind": "major",
     "title": "Quotes update",

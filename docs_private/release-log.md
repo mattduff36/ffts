@@ -2,6 +2,32 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.0.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): extend board hour lines through empty space`
+
+**PUSHED AT**
+2026-09-01T20:00:08.885Z
+
+**WHAT CHANGED**
+Update app reliability. Ignore local planning packs so finalise cannot add them. Bind review tokens to HEAD and keep delta retries live. Make split CRITICAL lineages finalisable. Extend board hour lines through empty space. Fill Resources and the schedule board to the viewport. Show daily employee occupancy on resource cards. Add shared daily team buckets for visit assignment. Group the board by job, employee, or plant.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to automation scripts, automated tests, and data storage.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `test(tests): update app reliability`
+- `chore: ignore local planning packs so finalise cannot add them`
+- `fix(workflow): bind review tokens to HEAD and keep delta retries live`
+- `fix(workflow): make split CRITICAL lineages finalisable`
+- `feat(scheduling): extend board hour lines through empty space`
+- `feat(scheduling): fill Resources and the schedule board to the viewport`
+- `feat(scheduling): show daily employee occupancy on resource cards`
+- `feat(scheduling): add shared daily team buckets for visit assignment`
+- `feat(scheduling): group the board by job, employee, or plant`
+
 ## 0826.12.0
 
 **GIT COMMIT MESSAGE**

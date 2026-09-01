@@ -68,6 +68,7 @@ ffts.code-workspace
 # private documentation and sensitive materials
 /docs_private/*
 !/docs_private/release-log.md
+/FFTS-Cursor-Scheduling-Concurrency-Planning-Pack/
 
 # Playwright
 node_modules/

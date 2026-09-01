@@ -5,6 +5,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  SCHEDULING_BOARD_PRIMARIES,
+  type SchedulingBoardPrimary,
+} from '@/lib/config/scheduling-primary-preference';
+import {
   SCHEDULING_BOARD_VIEWS,
   type SchedulingBoardView,
 } from '@/lib/config/scheduling-view-preference';
@@ -19,6 +23,8 @@ interface SchedulingDateRangeControlsProps {
   view: SchedulingBoardView;
   onDateChange: (date: string) => void;
   onViewChange: (view: SchedulingBoardView) => void;
+  primary: SchedulingBoardPrimary;
+  onPrimaryChange: (primary: SchedulingBoardPrimary) => void;
 }
 
 export function SchedulingDateRangeControls({
@@ -26,6 +32,8 @@ export function SchedulingDateRangeControls({
   view,
   onDateChange,
   onViewChange,
+  primary,
+  onPrimaryChange,
 }: SchedulingDateRangeControlsProps) {
   const selected = parseISO(selectedDate);
   const week = getSchedulingWeek(selectedDate);
@@ -51,6 +59,16 @@ export function SchedulingDateRangeControls({
     }
   }
 
+  function handlePrimaryChange(value: string) {
+    if (
+      value === SCHEDULING_BOARD_PRIMARIES.job
+      || value === SCHEDULING_BOARD_PRIMARIES.employee
+      || value === SCHEDULING_BOARD_PRIMARIES.plant
+    ) {
+      onPrimaryChange(value);
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Tabs value={view} onValueChange={handleViewChange}>
@@ -60,6 +78,35 @@ export function SchedulingDateRangeControls({
           </TabsTrigger>
           <TabsTrigger value={SCHEDULING_BOARD_VIEWS.weekly} className="px-3">
             Weekly
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <Tabs value={primary} onValueChange={handlePrimaryChange}>
+        <TabsList
+          aria-label="Board primary resource"
+          className="grid h-9 grid-cols-3"
+          data-testid="schedule-primary-tabs"
+        >
+          <TabsTrigger
+            value={SCHEDULING_BOARD_PRIMARIES.job}
+            className="px-3"
+            aria-label="Primary Jobs"
+          >
+            Jobs
+          </TabsTrigger>
+          <TabsTrigger
+            value={SCHEDULING_BOARD_PRIMARIES.employee}
+            className="px-3"
+            aria-label="Primary Employees"
+          >
+            Employees
+          </TabsTrigger>
+          <TabsTrigger
+            value={SCHEDULING_BOARD_PRIMARIES.plant}
+            className="px-3"
+            aria-label="Primary Plant"
+          >
+            Plant
           </TabsTrigger>
         </TabsList>
       </Tabs>

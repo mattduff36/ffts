@@ -12,6 +12,10 @@ import {
   getSchedulingViewStorageKey,
   SCHEDULING_BOARD_VIEWS,
 } from '@/lib/config/scheduling-view-preference';
+import {
+  getSchedulingPrimaryStorageKey,
+  SCHEDULING_BOARD_PRIMARIES,
+} from '@/lib/config/scheduling-primary-preference';
 import { SchedulingApiError } from '@/lib/client/scheduling';
 import {
   formatScheduleDate,
@@ -2746,5 +2750,105 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(screen.getByTestId('schedule-resource-employee-employee-1')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Available (2)' })).toBeInTheDocument();
+  });
+
+  it('defaults to the job-primary board and keeps Jobs as the row axis', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-primary-tabs')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Primary Jobs' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByTestId('schedule-board-row-job-job-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-employee-employee-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-job-footer-desktop-job-1')).toBeInTheDocument();
+  });
+
+  it('groups the board by employee, hides the row employee chip, and shows Unassigned', async () => {
+    const openVisit = {
+      ...board.visits[0],
+      id: 'visit-open',
+      sequence_number: 2,
+      title: 'Unstaffed visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T16:00:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, openVisit],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-board-row-employee-employee-1')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-board-row-unassigned')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-job-footer-desktop-job-1')).not.toBeInTheDocument();
+
+    const employeeRow = screen.getByTestId('schedule-board-row-employee-employee-1');
+    expect(within(employeeRow).queryByTestId('schedule-assignment-chip-assignment-1'))
+      .not.toBeInTheDocument();
+    expect(within(employeeRow).getByText('JOB-101')).toBeInTheDocument();
+    expect(
+      within(employeeRow).getByTestId('schedule-visit-employee:employee-1-visit-1')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('schedule-board-row-unassigned')).getByTestId(
+        'schedule-visit-unassigned-visit-open'
+      )
+    ).toBeInTheDocument();
+    expect(localStorage.getItem(getSchedulingPrimaryStorageKey('manager-1'))).toBe(
+      SCHEDULING_BOARD_PRIMARIES.employee
+    );
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+  });
+
+  it('keeps empty-day resource drops as visit assignments after switching primary', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'employee', id: 'employee-2', label: 'Bob Jones' },
+            },
+          },
+          target: { data: { workDate: '2026-07-15' } },
+        },
+      });
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith('Drop onto a timed visit.');
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+  });
+
+  it('restores the stored primary grouping preference', async () => {
+    localStorage.setItem(
+      getSchedulingPrimaryStorageKey('manager-1'),
+      SCHEDULING_BOARD_PRIMARIES.employee
+    );
+    renderBoard();
+
+    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Primary Employees' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByTestId('schedule-board-row-employee-employee-1')).toBeInTheDocument();
   });
 });

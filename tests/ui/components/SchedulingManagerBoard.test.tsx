@@ -1296,6 +1296,10 @@ describe('SchedulingManagerBoard', () => {
       'xl:h-0',
       'xl:flex-1'
     );
+    expect(screen.getByTestId('schedule-board-grid-fill')).toHaveClass(
+      'flex-1',
+      'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+    );
     expect(screen.getByTestId('schedule-resources-panel')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-resource-tabs')).toHaveClass(
       'grid',
@@ -1912,6 +1916,12 @@ describe('SchedulingManagerBoard', () => {
       'data-timeline-end',
       '20:00'
     );
+    const hourGridFill = screen.getByTestId('schedule-board-hour-grid-fill');
+    expect(screen.getByTestId('schedule-board-grid-fill')).toHaveClass('flex-1');
+    expect(hourGridFill).toHaveStyle({
+      backgroundImage: timelineCell.style.backgroundImage,
+      backgroundSize: timelineCell.style.backgroundSize,
+    });
     const visitPlacement = within(dailyTimeline).getByTestId(
       'schedule-timeline-visit-visit-1'
     );

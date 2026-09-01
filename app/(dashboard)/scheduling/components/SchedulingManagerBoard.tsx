@@ -1235,6 +1235,14 @@ const DAILY_TIMELINE_VISIT_STYLE = {
   backgroundColor: '#334155',
 } satisfies CSSProperties;
 
+function dailyTimelineHourGridStyle(hourWidth: number): CSSProperties {
+  return {
+    backgroundImage:
+      'linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px)',
+    backgroundSize: `${hourWidth}px 100%`,
+  };
+}
+
 interface DailyTimelineRange {
   startHour: number;
   endHour: number;
@@ -1735,9 +1743,7 @@ function DailyTimelineCell({
       style={{
         width: range.width,
         height: layout.rowHeight,
-        backgroundImage:
-          'linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px)',
-        backgroundSize: `${range.hourWidth}px 100%`,
+        ...dailyTimelineHourGridStyle(range.hourWidth),
       }}
     >
       {visibleLegacyAssignments.length > 0 ? (
@@ -5897,7 +5903,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:block xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:flex md:min-h-0 md:flex-col xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily
@@ -5950,7 +5956,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 }
               >
                 <div
-                  className={view === SCHEDULING_BOARD_VIEWS.daily ? undefined : 'min-w-[1260px]'}
+                  className={cn(
+                    'flex min-h-full flex-col',
+                    view !== SCHEDULING_BOARD_VIEWS.daily && 'min-w-[1260px]'
+                  )}
                   style={
                     view === SCHEDULING_BOARD_VIEWS.daily
                       ? {
@@ -5969,7 +5978,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 >
                   <div
                     className={cn(
-                      'grid bg-muted/60',
+                      'grid shrink-0 bg-muted/60',
                       view !== SCHEDULING_BOARD_VIEWS.daily
                         && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
                     )}
@@ -6039,7 +6048,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       <div
                       key={row.id}
                       className={cn(
-                        'grid border-t border-border',
+                        'grid shrink-0 border-t border-border',
                         view !== SCHEDULING_BOARD_VIEWS.daily
                           && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
                       )}
@@ -6151,6 +6160,47 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </div>
                     );
                   })}
+                  <div
+                    className={cn(
+                      'grid min-h-0 flex-1',
+                      view !== SCHEDULING_BOARD_VIEWS.daily
+                        && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                    )}
+                    data-testid="schedule-board-grid-fill"
+                    aria-hidden="true"
+                    style={
+                      view === SCHEDULING_BOARD_VIEWS.daily
+                        ? {
+                            gridTemplateColumns:
+                              `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                          }
+                        : undefined
+                    }
+                  >
+                    <div
+                      className={cn(
+                        'border-r border-t border-border',
+                        view === SCHEDULING_BOARD_VIEWS.daily
+                          ? 'sticky left-0 z-30 bg-[hsl(var(--background)/0.5)]'
+                          : 'sticky left-0 z-10 bg-slate-900'
+                      )}
+                    />
+                    {view === SCHEDULING_BOARD_VIEWS.daily ? (
+                      <div
+                        className="min-h-0 border-l border-t border-border bg-muted/10"
+                        data-testid="schedule-board-hour-grid-fill"
+                        data-timeline-pan-surface="true"
+                        style={dailyTimelineHourGridStyle(dailyTimelineRange.hourWidth)}
+                      />
+                    ) : (
+                      weekDates.map((date) => (
+                        <div
+                          key={`grid-fill-${date}`}
+                          className="min-h-0 border-l border-t border-border"
+                        />
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 

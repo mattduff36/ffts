@@ -596,19 +596,37 @@ describe('TEE-FINALISE-002 split lineage liveness', () => {
 
   it('A5: independent unresolved CRITICAL lineage still blocks', () => {
     const ready = makeProtocol('ws_ready_lineage', 'finalise_ready', 'ckpt_ready');
-    const other = makeProtocol('ws_other_critical', 'initialized', null);
+    const other = makeProtocol('ws_other_critical', 'review_closed', null);
     const repoRoot = writeProtocolFixture('independent-lineages', [ready, other], {
       workstreamId: 'ws_ready_lineage',
       checkpointId: 'ckpt_ready',
     });
     expect(() => assertFinaliseAllowedForProtocol(repoRoot)).toThrow(
-      /CRITICAL workstream ws_other_critical is in phase initialized/iu
+      /CRITICAL workstream ws_other_critical is in phase review_closed/iu
     );
     const readiness = getFinaliseProtocolReadiness(repoRoot);
     expect(readiness.allowed).toBe(false);
     expect(readiness.blockingWorkstreams.map((row) => row.workstreamId)).toContain(
       'ws_other_critical'
     );
+  });
+
+  it('A7: init-only sibling CRITICAL does not block a matching finalise_ready leaf', () => {
+    const ready = makeProtocol('ws_ready_lineage', 'finalise_ready', 'ckpt_ready');
+    const unstarted = makeProtocol('ws_unstarted_sibling', 'initialized', null);
+    const repoRoot = writeProtocolFixture('unstarted-sibling', [ready, unstarted], {
+      workstreamId: 'ws_ready_lineage',
+      checkpointId: 'ckpt_ready',
+    });
+    expect(() => assertFinaliseAllowedForProtocol(repoRoot)).not.toThrow();
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(true);
+    expect(readiness.blockingWorkstreams).toHaveLength(0);
+    expect(readiness.lineages.find((row) => row.workstreamId === 'ws_unstarted_sibling')?.role).toBe(
+      'parked_unstarted'
+    );
+    expect(readProtocolRecord(repoRoot, 'ws_unstarted_sibling')?.phase).toBe('initialized');
+    expect(formatFinaliseProtocolReadinessReport(readiness)).toMatch(/Parked unstarted/i);
   });
 
   it('A6: reports all blockers instead of stopping at the first ID', () => {

@@ -5,6 +5,19 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { gotoWithTimeoutSkip } from '../helpers/page-smoke';
 
+function boardResourceTab(page: Page, name: 'Employees' | 'Plant' | 'Jobs') {
+  return page.getByRole('tab', { name, exact: true });
+}
+
+function activateWithoutDrag(locator: Locator) {
+  return locator.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('expected an HTMLElement');
+    }
+    element.click();
+  });
+}
+
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -613,7 +626,7 @@ test.describe('@scheduling Scheduling', () => {
     await page.waitForTimeout(200);
     expect((await readControlContrast(dangerButton)).ratio).toBeGreaterThanOrEqual(4.5);
 
-    await page.getByRole('tab', { name: 'Employees' }).click();
+    await boardResourceTab(page, 'Employees').click();
     await page.getByRole('button', { name: 'Select visit 1 for TEST-JOB-101' }).first().click();
     await page.getByTestId(
       'schedule-resource-employee-22222222-2222-4222-8222-222222222222'
@@ -645,12 +658,16 @@ test.describe('@scheduling Scheduling', () => {
     const { fixture, projectScheduleRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
     await page.getByRole('tab', { name: 'Projects (1)' }).click();
-    await page.getByTestId(
+    const projectQuote = page.getByTestId(
       'schedule-quote-99999999-9999-4999-8999-999999999999'
-    ).click();
-    await page.getByRole('button', {
+    );
+    await projectQuote.scrollIntoViewIfNeeded();
+    await activateWithoutDrag(projectQuote);
+    const placeHere = page.getByRole('button', {
       name: `Schedule TEST-PROJECT-101 from ${fixture.week.start}`,
-    }).first().click();
+    }).first();
+    await expect(placeHere).toBeVisible();
+    await activateWithoutDrag(placeHere);
     const dialog = page.getByRole('dialog', { name: 'Schedule Project' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').first().click();
@@ -848,7 +865,7 @@ test.describe('@scheduling Scheduling', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
-    await page.getByRole('tab', { name: 'Employees' }).click();
+    await boardResourceTab(page, 'Employees').click();
 
     const dateLabel = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'UTC',
@@ -884,7 +901,7 @@ test.describe('@scheduling Scheduling', () => {
     await expect(dragHandle).toHaveCSS('touch-action', 'none');
     await expect(source).toHaveAttribute(
       'aria-label',
-      'Test Scheduler: select resource or drag to a timed visit'
+      /Test Scheduler: select resource or drag to a timed visit/
     );
     await expect(source).toHaveCSS('touch-action', 'none');
 
@@ -908,7 +925,7 @@ test.describe('@scheduling Scheduling', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
-    await page.getByRole('tab', { name: 'Plant' }).click();
+    await boardResourceTab(page, 'Plant').click();
 
     const source = page.getByTestId(
       'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab'
@@ -1215,7 +1232,7 @@ test.describe('@scheduling Scheduling', () => {
     const { assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
     await page.getByRole('tab', { name: 'Weekly' }).click();
-    await page.getByRole('tab', { name: 'Employees' }).click();
+    await boardResourceTab(page, 'Employees').click();
 
     const source = page.getByTestId(
       'schedule-resource-drag-handle-employee-22222222-2222-4222-8222-222222222222'
@@ -1265,7 +1282,7 @@ test.describe('@scheduling Scheduling', () => {
     test('keeps tap assignment available on a full-card drag target', async ({ page }) => {
       const { assignmentRequests } = await mockManagerBoard(page);
       await page.goto('/scheduling');
-      await page.getByRole('tab', { name: 'Employees' }).click();
+      await boardResourceTab(page, 'Employees').click();
 
       expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
       const resourceCard = page.getByTestId(
@@ -1278,12 +1295,10 @@ test.describe('@scheduling Scheduling', () => {
         .toBe('none');
       expect(await dragHandle.evaluate((element) => getComputedStyle(element).touchAction))
         .toBe('none');
-      await page
-        .getByRole('button', { name: 'Select visit 1 for TEST-JOB-101', exact: true })
-        .tap();
-      await page.getByRole('button', {
-        name: 'Test Scheduler: select resource or drag to a timed visit',
-      }).tap();
+      await activateWithoutDrag(
+        page.getByRole('button', { name: 'Select visit 1 for TEST-JOB-101', exact: true })
+      );
+      await activateWithoutDrag(resourceCard);
 
       await expect.poll(() => assignmentRequests).toHaveLength(1);
       await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);

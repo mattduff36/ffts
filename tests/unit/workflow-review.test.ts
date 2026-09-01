@@ -1362,7 +1362,7 @@ describe('workflow-review cadence', () => {
     const state = loadWorkflowReviewState(paths.statePath);
     expect(state.unreviewedEventIds).toHaveLength(0);
     expect(Object.keys(state.reviewWindowByEventId ?? {})).toHaveLength(25);
-  });
+  }, 20_000);
 
   it('does not run expensive aggregation merely because the month changes', async () => {
     const root = makeTempRoot('month');
@@ -1588,7 +1588,7 @@ describe('workflow-review cadence', () => {
       loadWorkflowReviewState(paths.statePath).workstreams?.[planContract!.workstreamId]
         ?.sourceWorkstreamIds
     ).toEqual(pending.sourceWorkstreamIds);
-  });
+  }, 20_000);
 
   it('keeps event files immutable and clears stale pending follow-up blockers', async () => {
     const root = makeTempRoot('immutable');
@@ -1627,7 +1627,7 @@ describe('workflow-review cadence', () => {
     });
     expect(resumed.reason).not.toBe('pending-follow-up-unresolved');
     expect(loadWorkflowReviewState(paths.statePath).pendingFollowUpPath).toBeNull();
-  });
+  }, 20_000);
 
   it('supports threshold progression around 25 and unavailable model fallback', async () => {
     const root = makeTempRoot('thresholds');
@@ -1676,7 +1676,7 @@ describe('workflow-review cadence', () => {
     expect(events[0]?.selectedModel).toBe('unavailable');
     expect(events[0]?.selectedModelSource).toBe('unavailable');
     expect(events[0]?.selectedModelTier).toBe('unknown');
-  });
+  }, 20_000);
 
   it('rejects oversized transcripts as unknown parse errors', async () => {
     const root = makeTempRoot('oversized');

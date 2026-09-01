@@ -136,6 +136,7 @@ export function isCriticalProtocolWorkstream(
 export type WorkflowProtocolLineageRole =
   | 'active_leaf'
   | 'parked_split_ancestor'
+  | 'parked_unstarted'
   | 'orphan_split'
   | 'finalised'
   | 'non_critical'
@@ -267,6 +268,28 @@ function loadGatedProtocol(
     return { status: 'ok', protocol: fromState };
   }
   return { status: 'missing' };
+}
+
+function isUnstartedInitializedProtocol(protocol: WorkflowProtocolRecord): boolean {
+  return (
+    protocol.phase === 'initialized' &&
+    protocol.activeCheckpointId == null &&
+    protocol.activeReviewToken == null &&
+    protocol.reviewAttempts.length === 0
+  );
+}
+
+function hasMatchingFinaliseReadyContext(
+  active: { workstreamId: string; checkpointId: string } | null,
+  byId: Map<string, WorkflowProtocolRecord>
+): boolean {
+  if (!active) return false;
+  const ready = byId.get(active.workstreamId);
+  return Boolean(
+    ready &&
+      ready.phase === 'finalise_ready' &&
+      ready.activeCheckpointId === active.checkpointId
+  );
 }
 
 function makeBlocker(params: {
@@ -469,6 +492,29 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       continue;
     }
 
+    if (
+      isUnstartedInitializedProtocol(protocol) &&
+      active &&
+      hasMatchingFinaliseReadyContext(active, byId) &&
+      active.workstreamId !== protocol.workstreamId
+    ) {
+      lineages.push(
+        makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'parked_unstarted',
+          phase: protocol.phase,
+          message: `unstarted CRITICAL workstream ${protocol.workstreamId} is parked historical init-only state; ${active.workstreamId} owns the current finalise. It was not marked finalised.`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+        })
+      );
+      warnings.push(
+        `parked unstarted workstream ${protocol.workstreamId} remains phase initialized; complete or abandon it after this release`
+      );
+      continue;
+    }
+
     if (protocol.phase === 'finalise_ready') {
       const contextMatches = Boolean(
         active &&
@@ -608,6 +654,15 @@ export function formatFinaliseProtocolReadinessReport(
       );
     }
   }
+  const parkedUnstarted = readiness.lineages.filter((row) => row.role === 'parked_unstarted');
+  if (parkedUnstarted.length > 0) {
+    lines.push('Parked unstarted workstreams (init-only, not independent finalise blockers):');
+    for (const row of parkedUnstarted) {
+      lines.push(
+        `- ${row.workstreamId} phase=${row.phase} next=${row.nextAction ?? 'n/a'}`
+      );
+    }
+  }
   if (readiness.blockingWorkstreams.length > 0) {
     lines.push('Blockers:');
     for (const blocker of readiness.blockingWorkstreams) {
@@ -636,6 +691,8 @@ export function formatFinaliseProtocolReadinessReport(
  * when activeFinaliseContext is stale / wrong-phase, or when finalise_ready exists without a
  * matching explicit activeFinaliseContext (no anonymous finalise_ready proceed).
  * Valid split ancestors are parked history; orphan splits remain protocol-integrity blockers.
+ * Init-only CRITICAL workstreams (phase initialized, no review/checkpoint) do not
+ * independently block a different matching finalise_ready lineage.
  */
 export function assertFinaliseAllowedForProtocol(repoRoot: string): void {
   const readiness = getFinaliseProtocolReadiness(repoRoot);

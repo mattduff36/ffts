@@ -419,6 +419,7 @@ function renderBoard(searchParams = '') {
   const result = render(renderTree());
   return Object.assign(result, {
     rerenderBoard: () => result.rerender(renderTree()),
+    queryClient,
   });
 }
 
@@ -1662,6 +1663,10 @@ describe('SchedulingManagerBoard', () => {
     await waitFor(() => expect(mockAssignDayTeam).toHaveBeenCalledWith({
       visit_id: 'visit-1',
       slot_index: 1,
+      member_ids: ['employee-2'],
+      member_request_ids: {
+        'employee-2': expect.any(String),
+      },
     }));
   });
 
@@ -2459,12 +2464,15 @@ describe('SchedulingManagerBoard', () => {
       name: 'Bob Jones: select resource or drag to a timed visit',
     }));
 
-    expect(mockCreateAssignment).toHaveBeenCalledWith({
-      job_id: 'job-1',
-      visit_id: 'visit-1',
-      resource_type: 'employee',
-      resource_id: 'employee-2',
-    });
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        job_id: 'job-1',
+        visit_id: 'visit-1',
+        resource_type: 'employee',
+        resource_id: 'employee-2',
+        request_id: expect.any(String),
+      })
+    );
     expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-"]'))
       .toHaveLength(4);
     expect(screen.queryByTestId('schedule-resource-employee-employee-2'))
@@ -2529,6 +2537,7 @@ describe('SchedulingManagerBoard', () => {
         visit_id: 'visit-1',
         resource_type: 'employee',
         resource_id: 'employee-2',
+        request_id: expect.any(String),
       })
     );
     expect(screen.queryByRole('dialog', { name: 'Assign resource' })).not.toBeInTheDocument();
@@ -2565,6 +2574,7 @@ describe('SchedulingManagerBoard', () => {
         visit_id: 'visit-1',
         resource_type: 'plant',
         resource_id: 'plant-1',
+        request_id: expect.any(String),
       })
     );
   });
@@ -2606,6 +2616,7 @@ describe('SchedulingManagerBoard', () => {
         expect.objectContaining({
           resource_id: 'employee-2',
           override_conflicts: true,
+          request_id: expect.any(String),
         })
       )
     );
@@ -2644,7 +2655,12 @@ describe('SchedulingManagerBoard', () => {
     });
 
     await waitFor(() =>
-      expect(mockMoveAssignment).toHaveBeenCalledWith(board.assignments[0], 'visit-2')
+      expect(mockMoveAssignment).toHaveBeenCalledWith(
+        board.assignments[0],
+        'visit-2',
+        false,
+        expect.any(String)
+      )
     );
   });
 
@@ -3085,4 +3101,479 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(screen.getByTestId('schedule-board-row-employee-employee-1')).toBeInTheDocument();
   });
+
+  it('UI-001/002 keeps a second employee assignment visible while the first persist is held', async () => {
+    const employeeThree = {
+      id: 'employee-3',
+      full_name: 'Cara Lee',
+      employee_id: 'E003',
+      team_id: 'team-1',
+      team_name: 'Arborists',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      resources: {
+        ...board.resources,
+        employees: [...board.resources.employees, employeeThree],
+      },
+    });
+    const first = deferredAssignment();
+    const second = deferredAssignment();
+    mockCreateAssignment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const { container } = renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Cara Lee: select resource or drag to a timed visit',
+    }));
+
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2));
+    expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-"]')).toHaveLength(6);
+    expect(screen.getAllByText('Bob Jones').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cara Lee').length).toBeGreaterThan(0);
+    first.resolve({ assignments: [], employee_capacity: [] });
+    second.resolve({ assignments: [], employee_capacity: [] });
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2));
+  });
+
+  it('UI-003 serializes the same employee across two non-overlapping visits and keeps both chips', async () => {
+    const afternoonVisit = {
+      ...board.visits[0],
+      id: 'visit-2',
+      sequence_number: 2,
+      title: 'Afternoon visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T17:00:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, afternoonVisit],
+    });
+    const first = deferredAssignment();
+    const second = deferredAssignment();
+    mockCreateAssignment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const { container } = renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 2 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockCreateAssignment).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-"]')).toHaveLength(6);
+
+    first.resolve({ assignments: [], employee_capacity: [] });
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2));
+    expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-"]')).toHaveLength(6);
+    second.resolve({ assignments: [], employee_capacity: [] });
+  });
+
+  it('UI-004 keeps the board usable after a genuine overlapping 409', async () => {
+    const overlappingVisit = {
+      ...board.visits[0],
+      id: 'visit-overlap',
+      sequence_number: 2,
+      title: 'Overlapping visit',
+      starts_at: '2026-07-14T09:00:00Z',
+      ends_at: '2026-07-14T11:00:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, overlappingVisit],
+    });
+    mockCreateAssignment.mockImplementation(async (input: { visit_id?: string }) => {
+      if (input.visit_id === 'visit-overlap') {
+        throw new SchedulingApiError(
+          'This assignment has scheduling conflicts.',
+          409,
+          {
+            conflicts_by_date: {
+              '2026-07-14': [{
+                code: 'employee_overlap',
+                severity: 'warning',
+                message: 'Employee is already assigned to an overlapping visit.',
+              }],
+            },
+          }
+        );
+      }
+      return {
+        assignments: [{
+          id: 'assignment-new',
+          job_id: 'job-1',
+          work_date: '2026-07-14',
+          visit_id: 'visit-1',
+          profile_id: 'employee-2',
+          resource_type: 'employee',
+        }],
+        employee_capacity: [],
+      };
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 2 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+
+    expect(
+      await screen.findByRole('alertdialog', { name: 'Review scheduling conflict' })
+    ).toHaveTextContent('Employee is already assigned to an overlapping visit.');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep current schedule' }));
+    expect(screen.queryByRole('alertdialog', { name: 'Review scheduling conflict' }))
+      .not.toBeInTheDocument();
+    expect(screen.getByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0])
+      .toBeInTheDocument();
+  });
+
+  it('UI-005 does not duplicate an exact repeated assign gesture', async () => {
+    mockWideViewport(true);
+    const held = deferredAssignment();
+    mockCreateAssignment.mockImplementation(() => held.promise);
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    const drop = {
+      canceled: false,
+      operation: {
+        source: {
+          data: {
+            resource: { type: 'employee', id: 'employee-2', label: 'Bob Jones' },
+          },
+        },
+        target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+      },
+    };
+    act(() => {
+      dndState.onDragEnd?.(drop);
+      dndState.onDragEnd?.(drop);
+    });
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(1));
+    held.resolve({ assignments: [], employee_capacity: [] });
+  });
+
+  it('UI-006 persists different resources concurrently', async () => {
+    mockWideViewport(true);
+    const employeeHold = deferredAssignment();
+    const plantHold = deferredAssignment();
+    mockCreateAssignment
+      .mockImplementationOnce(() => employeeHold.promise)
+      .mockImplementationOnce(() => plantHold.promise);
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'employee', id: 'employee-2', label: 'Bob Jones' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-1', label: 'P001 — Loader' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+    });
+
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2));
+    expect(mockCreateAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      resource_type: 'employee',
+      resource_id: 'employee-2',
+    }));
+    expect(mockCreateAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      resource_type: 'plant',
+      resource_id: 'plant-1',
+    }));
+    employeeHold.resolve({ assignments: [], employee_capacity: [] });
+    plantHold.resolve({ assignments: [], employee_capacity: [] });
+  });
+
+  it('UI-007 coalesces an unsent move A→B→C onto visit C', async () => {
+    mockWideViewport(true);
+    const afternoonVisit = {
+      ...board.visits[0],
+      id: 'visit-2',
+      sequence_number: 2,
+      title: 'Afternoon visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T15:00:00Z',
+    };
+    const eveningVisit = {
+      ...board.visits[0],
+      id: 'visit-3',
+      sequence_number: 3,
+      title: 'Evening visit',
+      starts_at: '2026-07-14T15:30:00Z',
+      ends_at: '2026-07-14T17:30:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, afternoonVisit, eveningVisit],
+    });
+    const held = deferredAssignment();
+    mockMoveAssignment.mockImplementation(() => held.promise);
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { assignment: board.assignments[0] } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-2', workDate: '2026-07-14' } },
+        },
+      });
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { assignment: board.assignments[0] } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-3', workDate: '2026-07-14' } },
+        },
+      });
+    });
+
+    await waitFor(() => expect(mockMoveAssignment).toHaveBeenCalledTimes(1));
+    expect(mockMoveAssignment).toHaveBeenCalledWith(
+      board.assignments[0],
+      'visit-3',
+      false,
+      expect.any(String)
+    );
+    const eveningLayouts = screen.getAllByTestId('schedule-assignment-layout-visit-3');
+    expect(
+      eveningLayouts.some((layout) =>
+        Boolean(layout.querySelector('[data-testid="schedule-assignment-chip-assignment-1"]'))
+      )
+    ).toBe(true);
+    const afternoonLayouts = screen.getAllByTestId('schedule-assignment-layout-visit-2');
+    expect(
+      afternoonLayouts.some((layout) =>
+        Boolean(layout.querySelector('[data-testid="schedule-assignment-chip-assignment-1"]'))
+      )
+    ).toBe(false);
+    held.resolve({ assignment: { id: 'assignment-1' } } as never);
+  });
+
+  it('UI-007b queues a later move with a new request_id while the first persist is held', async () => {
+    mockWideViewport(true);
+    const afternoonVisit = {
+      ...board.visits[0],
+      id: 'visit-2',
+      sequence_number: 2,
+      title: 'Afternoon visit',
+      starts_at: '2026-07-14T13:00:00Z',
+      ends_at: '2026-07-14T15:00:00Z',
+    };
+    const eveningVisit = {
+      ...board.visits[0],
+      id: 'visit-3',
+      sequence_number: 3,
+      title: 'Evening visit',
+      starts_at: '2026-07-14T15:30:00Z',
+      ends_at: '2026-07-14T17:30:00Z',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [...board.visits, afternoonVisit, eveningVisit],
+    });
+    const first = deferredAssignment();
+    mockMoveAssignment
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValueOnce({ assignment: { id: 'assignment-1' } });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { assignment: board.assignments[0] } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-2', workDate: '2026-07-14' } },
+        },
+      });
+    });
+    await waitFor(() => expect(mockMoveAssignment).toHaveBeenCalledTimes(1));
+    const firstRequestId = mockMoveAssignment.mock.calls[0][3];
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { data: { assignment: { ...board.assignments[0], visit_id: 'visit-2' } } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-3', workDate: '2026-07-14' } },
+        },
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockMoveAssignment).toHaveBeenCalledTimes(1);
+    first.resolve({ assignment: { id: 'assignment-1' } } as never);
+    await waitFor(() => expect(mockMoveAssignment).toHaveBeenCalledTimes(2));
+    expect(mockMoveAssignment.mock.calls[1][1]).toBe('visit-3');
+    expect(mockMoveAssignment.mock.calls[1][3]).not.toBe(firstRequestId);
+  });
+
+  it('UI-008 keeps a pending assignment when a stale board refetch returns', async () => {
+    const held = deferredAssignment();
+    mockCreateAssignment.mockImplementation(() => held.promise);
+    const { queryClient, container } = renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(1));
+    expect(container.querySelectorAll('[data-testid*="optimistic:"]').length).toBeGreaterThan(0);
+
+    mockFetchBoard.mockResolvedValue(board);
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['scheduling-board'] });
+    });
+    expect(container.querySelectorAll('[data-testid*="optimistic:"]').length).toBeGreaterThan(0);
+    expect(mockCreateAssignment).toHaveBeenCalledTimes(1);
+    held.resolve({ assignments: [], employee_capacity: [] });
+  });
+
+  it('UI-009 removes only the failed 4xx assignment and keeps the held success', async () => {
+    const employeeThree = {
+      id: 'employee-3',
+      full_name: 'Cara Lee',
+      employee_id: 'E003',
+      team_id: 'team-1',
+      team_name: 'Arborists',
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      resources: {
+        ...board.resources,
+        employees: [...board.resources.employees, employeeThree],
+      },
+    });
+    const held = deferredAssignment();
+    mockCreateAssignment
+      .mockImplementationOnce(() => held.promise)
+      .mockRejectedValueOnce(new SchedulingApiError('Assignment is not valid.', 400, {}));
+    const { container } = renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Cara Lee: select resource or drag to a timed visit',
+    }));
+
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-testid^="schedule-assignment-chip-optimistic:"]'))
+        .toHaveLength(2);
+    });
+    expect(screen.queryAllByRole('button', { name: 'Remove Cara Lee' })).toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: 'Remove Bob Jones' }).length).toBeGreaterThan(0);
+  });
+
+  it('UI-010 retries an ambiguous TypeError with the same request_id', async () => {
+    mockCreateAssignment
+      .mockRejectedValueOnce(new TypeError('network lost'))
+      .mockResolvedValueOnce({ assignments: [], employee_capacity: [] });
+    const { container } = renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 1 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(1));
+    expect(container.querySelectorAll('[data-testid*="optimistic:"]').length).toBeGreaterThan(0);
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(mockCreateAssignment.mock.calls[0][0].request_id).toBe(
+      mockCreateAssignment.mock.calls[1][0].request_id
+    );
+    expect(container.querySelectorAll('[data-testid*="optimistic:"]').length).toBeGreaterThan(0);
+  });
+
+  it('UI-011 keeps the provisional-id assignment guard on the board', async () => {
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [
+        board.visits[0],
+        {
+          ...board.visits[0],
+          id: 'optimistic:visit-op:visit',
+          sequence_number: 2,
+          title: 'Unsaved visit',
+          starts_at: '2026-07-14T13:00:00Z',
+          ends_at: '2026-07-14T17:00:00Z',
+        },
+      ],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select visit 2 for JOB-101' })[0]);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Bob Jones: select resource or drag to a timed visit',
+    }));
+
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      'Wait for this new visit to finish saving before assigning resources.'
+    );
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+  });
 });
+
+function deferredAssignment() {
+  let resolve!: (value: {
+    assignments: Array<Record<string, unknown>>;
+    employee_capacity: never[];
+  }) => void;
+  const promise = new Promise<{
+    assignments: Array<Record<string, unknown>>;
+    employee_capacity: never[];
+  }>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}

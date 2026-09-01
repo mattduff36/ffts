@@ -8,6 +8,8 @@ import { isScheduleDayTeamSlotIndex } from '@/lib/utils/scheduling-day-teams';
 const teamAssignSchema = z.object({
   visit_id: z.uuid(),
   slot_index: z.number().int(),
+  member_ids: z.array(z.uuid()).optional(),
+  member_request_ids: z.record(z.string(), z.uuid()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -29,6 +31,8 @@ export async function POST(request: NextRequest) {
       visitId: parsed.data.visit_id,
       slotIndex: parsed.data.slot_index,
       actorUserId: access.userId,
+      memberIds: parsed.data.member_ids,
+      memberRequestIds: parsed.data.member_request_ids,
     });
     if ('error' in result && 'status' in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });

@@ -82,6 +82,7 @@ describe('ScheduleAssignmentDialog', () => {
       resource_type: 'employee',
       resource_id: 'employee-1',
       work_dates: ['2026-07-14'],
+      request_id: expect.any(String),
     }));
     expect(onSaved).toHaveBeenCalled();
   });
@@ -108,7 +109,10 @@ describe('ScheduleAssignmentDialog', () => {
 
     await waitFor(() =>
       expect(mockCreateAssignment).toHaveBeenLastCalledWith(
-        expect.objectContaining({ override_conflicts: true })
+        expect.objectContaining({
+          override_conflicts: true,
+          request_id: expect.any(String),
+        })
       )
     );
   });

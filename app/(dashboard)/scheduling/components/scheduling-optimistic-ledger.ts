@@ -4,6 +4,11 @@ import type {
   ScheduleVisitBacklogItem,
   SchedulingBoardPayload,
 } from '@/types/scheduling';
+import {
+  claimsConflict,
+  claimsFromLockKeys,
+  type SchedulingMutationClaim,
+} from './scheduling-mutation-claims';
 
 export interface SchedulingProjection {
   board: SchedulingBoardPayload | undefined;
@@ -14,12 +19,24 @@ export interface SchedulingProjection {
 
 export type SchedulingOptimisticStatus = 'pending' | 'acknowledged' | 'uncertain';
 
+export type SchedulingExecutionStatus =
+  | 'queued'
+  | 'executing'
+  | 'awaitingRetry'
+  | 'completed';
+
 export interface SchedulingOptimisticOperation {
   id: string;
   sequence: number;
   kind: string;
   status: SchedulingOptimisticStatus;
   lockKeys: string[];
+  claims?: SchedulingMutationClaim[];
+  requestId?: string;
+  duplicateKey?: string;
+  coalesceGroup?: string;
+  executionStatus?: SchedulingExecutionStatus;
+  retryCount?: number;
   queryKeys: string[];
   reconciledKeys: string[];
   proofs: Record<string, (base: SchedulingProjection) => boolean>;
@@ -57,52 +74,27 @@ export function projectSchedulingState(
             : state.board,
         quoteCandidates:
           operation.queryKeys.includes('quotes') && shouldApply('quotes')
-          ? applied.quoteCandidates
-          : state.quoteCandidates,
+            ? applied.quoteCandidates
+            : state.quoteCandidates,
         projectCandidates:
           operation.queryKeys.includes('projects') && shouldApply('projects')
-          ? applied.projectCandidates
-          : state.projectCandidates,
+            ? applied.projectCandidates
+            : state.projectCandidates,
         visitBacklog:
           operation.queryKeys.includes('backlog') && shouldApply('backlog')
-          ? applied.visitBacklog
-          : state.visitBacklog,
+            ? applied.visitBacklog
+            : state.visitBacklog,
       };
     }, base);
 }
 
-function splitLockKey(key: string): { kind: string; id: string } {
-  const separator = key.indexOf(':');
-  return separator === -1
-    ? { kind: key, id: '' }
-    : { kind: key.slice(0, separator), id: key.slice(separator + 1) };
-}
-
-function lockKeysConflict(left: string, right: string): boolean {
-  if (left === right) return true;
-  const a = splitLockKey(left);
-  const b = splitLockKey(right);
-  if (a.id !== b.id) return false;
-  const relatedKinds: Record<string, string[]> = {
-    job: ['job-tree'],
-    'job-tree': ['job'],
-    visit: ['visit-tree'],
-    'visit-tree': ['visit'],
-  };
-  return relatedKinds[a.kind]?.includes(b.kind) === true;
-}
-
 export function operationsOverlap(
-  operation: Pick<SchedulingOptimisticOperation, 'lockKeys'>,
+  operation: Pick<SchedulingOptimisticOperation, 'lockKeys' | 'claims'>,
   operations: SchedulingOptimisticOperation[]
 ): boolean {
-  const requested = new Set(operation.lockKeys);
+  const requested = operation.claims || claimsFromLockKeys(operation.lockKeys);
   return operations.some((current) =>
-    current.lockKeys.some((currentKey) =>
-      Array.from(requested).some((requestedKey) =>
-        lockKeysConflict(currentKey, requestedKey)
-      )
-    )
+    claimsConflict(requested, current.claims || claimsFromLockKeys(current.lockKeys))
   );
 }
 

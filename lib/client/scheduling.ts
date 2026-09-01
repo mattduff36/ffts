@@ -336,6 +336,15 @@ export interface CreateAssignmentInput {
   work_dates?: string[];
   notes?: string | null;
   override_conflicts?: boolean;
+  request_id?: string;
+}
+
+async function maybeDelaySchedulingMutation() {
+  if (process.env.NODE_ENV !== 'development') return;
+  const raw = process.env.NEXT_PUBLIC_SCHEDULING_MUTATION_DELAY_MS;
+  const delayMs = raw ? Number(raw) : 0;
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 export interface SaveScheduleVisitInput {
@@ -371,12 +380,17 @@ export async function deleteScheduleVisit(id: string): Promise<void> {
 export async function createScheduleAssignment(
   input: CreateAssignmentInput
 ): Promise<AssignmentMutationResult> {
-  assertNoProvisionalIds(input);
+  const payload = {
+    ...input,
+    request_id: input.request_id || crypto.randomUUID(),
+  };
+  assertNoProvisionalIds(payload);
+  await maybeDelaySchedulingMutation();
   return readResponse(
     await fetch('/api/scheduling/assignments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify(payload),
     })
   );
 }
@@ -433,8 +447,11 @@ export interface DayTeamAssignResult {
 export async function assignScheduleDayTeam(input: {
   visit_id: string;
   slot_index: 1 | 2 | 3;
+  member_ids?: string[];
+  member_request_ids?: Record<string, string>;
 }): Promise<DayTeamAssignResult> {
   assertNoProvisionalIds(input);
+  await maybeDelaySchedulingMutation();
   return readResponse(
     await fetch('/api/scheduling/assignments/team', {
       method: 'POST',
@@ -447,9 +464,11 @@ export async function assignScheduleDayTeam(input: {
 export async function moveScheduleAssignment(
   assignment: Pick<ScheduleAssignment, 'id' | 'resource_type'>,
   visitId: string,
-  overrideConflicts = false
+  overrideConflicts = false,
+  requestId?: string
 ): Promise<AssignmentMutationResult> {
   assertNoProvisionalIds({ assignment_id: assignment.id, visit_id: visitId });
+  await maybeDelaySchedulingMutation();
   return readResponse(
     await fetch(`/api/scheduling/assignments/${assignment.id}`, {
       method: 'PATCH',
@@ -458,6 +477,7 @@ export async function moveScheduleAssignment(
         resource_type: assignment.resource_type,
         visit_id: visitId,
         override_conflicts: overrideConflicts,
+        request_id: requestId || crypto.randomUUID(),
       }),
     })
   );
@@ -465,14 +485,19 @@ export async function moveScheduleAssignment(
 
 export async function deleteScheduleAssignment(
   id: string,
-  resourceType: 'employee' | 'plant'
+  resourceType: 'employee' | 'plant',
+  requestId?: string
 ): Promise<AssignmentMutationResult> {
   assertNoProvisionalIds({ id });
+  await maybeDelaySchedulingMutation();
+  const params = new URLSearchParams({
+    resource_type: resourceType,
+    request_id: requestId || crypto.randomUUID(),
+  });
   return readResponse(
-    await fetch(
-      `/api/scheduling/assignments/${id}?resource_type=${encodeURIComponent(resourceType)}`,
-      { method: 'DELETE' }
-    )
+    await fetch(`/api/scheduling/assignments/${id}?${params.toString()}`, {
+      method: 'DELETE',
+    })
   );
 }
 

@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  assignmentCreateInputHash,
+  replayAssignmentMutationIfPresent,
+  rpcWithIdempotentFallback,
+} from '@/lib/server/scheduling-assignment-idempotency';
 import { loadEmployeeCapacityForDates } from '@/lib/server/scheduling-assignment-capacity';
 import { detectEmployeeConflicts } from '@/lib/server/scheduling-conflicts';
 import {
@@ -146,6 +151,8 @@ export async function assignDayTeamToVisit(
     visitId: string;
     slotIndex: ScheduleDayTeamSlotIndex;
     actorUserId: string;
+    memberIds?: string[];
+    memberRequestIds?: Record<string, string>;
   }
 ): Promise<AssignDayTeamResult | { status: number; error: string }> {
   const visitResult = await admin
@@ -160,17 +167,21 @@ export async function assignDayTeamToVisit(
   }
 
   const workDate = getScheduleVisitDate(visit.starts_at);
-  const membersResult = await admin
-    .from('schedule_day_team_members')
-    .select('work_date, slot_index, profile_id, added_by, created_at')
-    .eq('work_date', workDate)
-    .eq('slot_index', input.slotIndex)
-    .order('created_at');
-  if (membersResult.error) throw membersResult.error;
-
-  const profileIds = ((membersResult.data || []) as Array<{ profile_id: string }>)
-    .map((row) => row.profile_id);
-  const uniqueProfileIds = Array.from(new Set(profileIds));
+  let uniqueProfileIds = Array.from(new Set(input.memberIds || []));
+  if (!input.memberIds) {
+    const membersResult = await admin
+      .from('schedule_day_team_members')
+      .select('work_date, slot_index, profile_id, added_by, created_at')
+      .eq('work_date', workDate)
+      .eq('slot_index', input.slotIndex)
+      .order('created_at');
+    if (membersResult.error) throw membersResult.error;
+    uniqueProfileIds = Array.from(
+      new Set(
+        ((membersResult.data || []) as Array<{ profile_id: string }>).map((row) => row.profile_id)
+      )
+    );
+  }
   if (uniqueProfileIds.length === 0) {
     const capacity = await loadEmployeeCapacityForDates(admin, [workDate]);
     return {
@@ -210,6 +221,33 @@ export async function assignDayTeamToVisit(
 
   for (const profileId of uniqueProfileIds) {
     const fullName = namesById.get(profileId) || 'Employee';
+    const memberRequestId = input.memberRequestIds?.[profileId];
+    if (memberRequestId) {
+      const replay = await replayAssignmentMutationIfPresent<Record<string, unknown> | Record<string, unknown>[]>(
+        admin,
+        memberRequestId,
+        'create',
+        assignmentCreateInputHash({
+          jobId: visit.job_id,
+          visitId: visit.id,
+          resourceType: 'employee',
+          resourceId: profileId,
+          workDate,
+          notes: null,
+          overrideConflicts: false,
+        })
+      );
+      if (replay.kind === 'replay') {
+        const created = Array.isArray(replay.result) ? replay.result[0] : replay.result;
+        if (created) {
+          assignments.push(mapAssignmentRow(created));
+          if (alreadyOnVisit.has(profileId)) alreadyAssignedCount += 1;
+          alreadyOnVisit.add(profileId);
+          continue;
+        }
+      }
+    }
+
     if (alreadyOnVisit.has(profileId)) {
       alreadyAssignedCount += 1;
       continue;
@@ -231,7 +269,7 @@ export async function assignDayTeamToVisit(
       continue;
     }
 
-    const { data, error } = await admin.rpc('create_schedule_assignment_v1', {
+    const createArgs = {
       p_job_id: visit.job_id,
       p_visit_id: visit.id,
       p_resource_type: 'employee',
@@ -239,9 +277,18 @@ export async function assignDayTeamToVisit(
       p_work_date: workDate,
       p_notes: null,
       p_override_conflicts: false,
-      p_conflict_codes: [],
+      p_conflict_codes: [] as string[],
       p_actor_user_id: input.actorUserId,
-    });
+    };
+    const { data, error } = memberRequestId
+      ? await rpcWithIdempotentFallback(
+          admin,
+          'create_schedule_assignment_v2',
+          { ...createArgs, p_request_id: memberRequestId },
+          'create_schedule_assignment_v1',
+          createArgs
+        )
+      : await admin.rpc('create_schedule_assignment_v1', createArgs);
     if (error) {
       if (isOverlapAssignmentError(error)) {
         const reread = await admin

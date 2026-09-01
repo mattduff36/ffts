@@ -130,13 +130,26 @@ import {
 import {
   createOptimisticEntityId,
   isOptimisticEntityId,
-  operationsOverlap,
   projectSchedulingState,
   reconcileOptimisticOperations,
   removeOptimisticOperation,
   type SchedulingOptimisticOperation,
   type SchedulingProjection,
 } from './scheduling-optimistic-ledger';
+import {
+  assignmentCreateClaims,
+  assignmentDeleteClaims,
+  assignmentDuplicateKey,
+  assignmentMoveClaims,
+  assignmentMoveCoalesceGroup,
+  claimsFromLockKeys,
+  dayTeamAssignClaims,
+} from './scheduling-mutation-claims';
+import {
+  findCoordinatorPersistTarget,
+  SchedulingMutationCoordinator,
+  type SchedulingPersistOutcome,
+} from './scheduling-mutation-coordinator';
 import { ScheduleBoardQuickAddDialog } from './ScheduleBoardQuickAddDialog';
 import {
   SCHEDULING_BOARD_PRIMARIES,
@@ -1977,6 +1990,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     useState<SchedulingOptimisticOperation[]>([]);
   const optimisticOperationsRef = useRef<SchedulingOptimisticOperation[]>([]);
   const optimisticSequenceRef = useRef(0);
+  const coordinatorOwnedIdsRef = useRef<Set<string>>(new Set());
+  const mutationCoordinatorRef = useRef<SchedulingMutationCoordinator | null>(null);
   const reconciliationTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
@@ -2087,6 +2102,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       clearTimeout(timer);
     }
     reconciliationTimersRef.current.clear();
+    mutationCoordinatorRef.current?.dispose();
+    mutationCoordinatorRef.current = null;
   }, []);
   useEffect(() => {
     if (!canCreateQuotes || !quotesSensitiveAccess.canAccess) {
@@ -2175,9 +2192,45 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   function syncOptimisticOperations(next: SchedulingOptimisticOperation[]) {
     optimisticOperationsRef.current = next;
     setOptimisticOperations(next);
+    mutationCoordinatorRef.current?.replaceOperations(
+      next.filter((operation) => coordinatorOwnedIdsRef.current.has(operation.id))
+    );
+    mutationCoordinatorRef.current?.setPeerOperations(
+      next.filter((operation) => !coordinatorOwnedIdsRef.current.has(operation.id))
+    );
     for (const attemptKey of reconciliationAttemptsRef.current.keys()) {
       if (!next.some((operation) => attemptKey.startsWith(`${operation.id}:`))) {
         reconciliationAttemptsRef.current.delete(attemptKey);
+      }
+    }
+  }
+
+  function getMutationCoordinator(): SchedulingMutationCoordinator {
+    if (!mutationCoordinatorRef.current) {
+      mutationCoordinatorRef.current = new SchedulingMutationCoordinator({
+        nextSequence: () => ++optimisticSequenceRef.current,
+        onChange: (operations) => {
+          const ownedIds = new Set(operations.map((operation) => operation.id));
+          const previousOwned = coordinatorOwnedIdsRef.current;
+          coordinatorOwnedIdsRef.current = ownedIds;
+          const others = optimisticOperationsRef.current.filter(
+            (operation) => !previousOwned.has(operation.id) && !ownedIds.has(operation.id)
+          );
+          optimisticOperationsRef.current = [...others, ...operations].sort(
+            (left, right) => left.sequence - right.sequence
+          );
+          setOptimisticOperations(optimisticOperationsRef.current);
+        },
+      });
+    }
+    return mutationCoordinatorRef.current;
+  }
+
+  function cancelOptimisticQueries(queryKeys: string[]) {
+    for (const key of queryKeys) {
+      const queryKey = queryKeyFromOptimisticKey(key);
+      if (queryKey) {
+        void queryClient.cancelQueries({ queryKey, exact: true });
       }
     }
   }
@@ -2189,27 +2242,43 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     queryKeys: string[];
     proofs?: SchedulingOptimisticOperation['proofs'];
     apply: SchedulingOptimisticOperation['apply'];
-  }): SchedulingOptimisticOperation | null {
-    if (operationsOverlap(input, optimisticOperationsRef.current)) return null;
+  }): SchedulingOptimisticOperation {
     const operation: SchedulingOptimisticOperation = {
       id: input.id || crypto.randomUUID(),
       sequence: ++optimisticSequenceRef.current,
       kind: input.kind,
       status: 'pending',
       lockKeys: input.lockKeys,
+      claims: claimsFromLockKeys(input.lockKeys),
       queryKeys: input.queryKeys,
       reconciledKeys: [],
       proofs: input.proofs || {},
       apply: input.apply,
     };
     syncOptimisticOperations([...optimisticOperationsRef.current, operation]);
-    for (const key of operation.queryKeys) {
-      const queryKey = queryKeyFromOptimisticKey(key);
-      if (queryKey) {
-        void queryClient.cancelQueries({ queryKey, exact: true });
-      }
-    }
+    cancelOptimisticQueries(operation.queryKeys);
     return operation;
+  }
+
+  function admitBoardCommand(input: {
+    id?: string;
+    kind: string;
+    claims: ReturnType<typeof claimsFromLockKeys>;
+    lockKeys?: string[];
+    duplicateKey?: string;
+    coalesceGroup?: string;
+    requestId?: string;
+    queryKeys: string[];
+    proofs?: SchedulingOptimisticOperation['proofs'];
+    apply: SchedulingOptimisticOperation['apply'];
+    persist: () => Promise<SchedulingPersistOutcome>;
+  }) {
+    const result = getMutationCoordinator().admit(input);
+    coordinatorOwnedIdsRef.current.add(result.operation.id);
+    if (!result.duplicate) {
+      cancelOptimisticQueries(result.operation.queryKeys);
+    }
+    return result;
   }
 
   function queryKeyFromOptimisticKey(key: string): readonly unknown[] | null {
@@ -2425,10 +2494,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       )
     );
     reconcileOptimisticKeysInBackground(operation.queryKeys);
-  }
-
-  function assignmentMutationKey(assignmentId: string): string {
-    return `assignment:${assignmentId}`;
   }
 
   const board = projectedState.board;
@@ -3706,16 +3771,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       ) === true;
   }
 
-  function provesAssignment(expected: ScheduleAssignment) {
-    return (state: SchedulingProjection) =>
-      state.board?.assignments.some(
-        (assignment) =>
-          assignment.id === expected.id
-          && assignment.updated_at === expected.updated_at
-          && assignment.visit_id === expected.visit_id
-      ) === true;
-  }
-
   function provesPlantBlock(expected: SchedulePlantUnavailability) {
     return (state: SchedulingProjection) =>
       state.board?.plant_unavailability.some(
@@ -3998,9 +4053,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this new visit to finish saving before assigning resources.');
       return;
     }
-    const mutationKey = `assign:${resource.type}:${resource.id}:${target.visit.id}`;
-    const mutationEpoch = beginMutation(mutationKey);
-    if (mutationEpoch == null) return;
     const input: CreateAssignmentInput = {
       job_id: target.job.id,
       visit_id: target.visit.id,
@@ -4008,18 +4060,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       resource_id: resource.id,
     };
     const operationId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
     const optimisticAssignment = createOptimisticAssignment(
       target,
       resource,
       operationId
     );
-    const operation = registerOptimisticOperation({
+    const admitted = admitBoardCommand({
       id: operationId,
       kind: 'create-assignment',
-      lockKeys: [
-        `job-tree:${target.job.id}`,
-        `assignment-slot:${resource.type}:${resource.id}:${target.visit.id}`,
-      ],
+      requestId,
+      duplicateKey: assignmentDuplicateKey(resource.type, resource.id, target.visit.id),
+      claims: assignmentCreateClaims({
+        resourceType: resource.type,
+        resourceId: resource.id,
+        workDate: getScheduleVisitDate(target.visit.starts_at),
+        jobId: target.job.id,
+        visitId: target.visit.id,
+      }),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
@@ -4039,63 +4097,51 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           ? patchBoardWithAssignment(state.board, optimisticAssignment)
           : state.board,
       }),
+      persist: async () => {
+        const liveRequestId =
+          mutationCoordinatorRef.current?.getOperations().find((op) => op.id === operationId)
+            ?.requestId ?? requestId;
+        try {
+          const result = await createScheduleAssignment({
+            ...input,
+            request_id: liveRequestId,
+          });
+          const createdRow = result.assignments?.[0];
+          if (createdRow) {
+            const authoritative = assignmentFromMutationRow(
+              createdRow,
+              resource,
+              target.visit
+            );
+            setBoardBaseData((current) =>
+              applyCapacity(
+                patchBoardWithAssignment(current, authoritative),
+                result.employee_capacity
+              )
+            );
+          }
+          toast.success(`${resource.label} assigned`);
+          return { kind: 'success' };
+        } catch (error) {
+          if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
+            setPendingConflict({
+              input: { ...input, request_id: liveRequestId },
+              conflicts: flattenConflictMessages(error.payload),
+            });
+            toast.error(error instanceof Error ? error.message : 'Assignment conflict');
+            return { kind: 'conflict' };
+          }
+          if (error instanceof SchedulingApiError && error.status === 400) {
+            toast.error(error.message);
+            return { kind: 'failed', error };
+          }
+          throw error;
+        }
+      },
     });
-    if (!operation) {
-      endMutation(mutationKey);
-      return;
-    }
+    if (admitted.duplicate) return;
     setSelectedResource(null);
     activateVisit(target.job, target.visit);
-
-    try {
-      const result = await createScheduleAssignment(input);
-      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-      const createdRow = result.assignments?.[0];
-      if (createdRow) {
-        const authoritative = assignmentFromMutationRow(
-          createdRow,
-          resource,
-          target.visit
-        );
-        setBoardBaseData((current) =>
-          applyCapacity(
-            patchBoardWithAssignment(current, authoritative),
-            result.employee_capacity
-          )
-        );
-      }
-      if (createdRow) {
-        const authoritative = assignmentFromMutationRow(
-          createdRow,
-          resource,
-          target.visit
-        );
-        settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: { [`board:${weekStart}`]: provesAssignment(authoritative) },
-          apply: (state) => ({
-            ...state,
-            board: state.board
-              ? patchBoardWithAssignment(state.board, authoritative)
-              : state.board,
-          }),
-        });
-      } else {
-        settleOptimisticOperation(operation.id);
-      }
-      toast.success(`${resource.label} assigned`);
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
-        setPendingConflict({
-          input,
-          conflicts: flattenConflictMessages(error.payload),
-        });
-      } else {
-        toast.error(error instanceof Error ? error.message : 'Unable to create assignment');
-      }
-    } finally {
-      endMutation(mutationKey);
-    }
   }
 
   async function addEmployeeToDayTeam(
@@ -4261,29 +4307,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Add employees to this team first.');
       return;
     }
-    const mutationKey = `day-team-assign:${target.visit.id}:${slotIndex}`;
-    const mutationEpoch = beginMutation(mutationKey);
-    if (mutationEpoch == null) return;
-    try {
-      const result = await assignScheduleDayTeam({
-        visit_id: target.visit.id,
-        slot_index: slotIndex,
-      });
-      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-      if (result.assignments.length > 0) {
-        setBoardBaseData((current) => {
-          let next = applyCapacity(current, result.employee_capacity);
-          for (const row of result.assignments) {
-            next = patchBoardWithAssignment(
-              next,
-              assignmentFromMutationRow(row, null, target.visit)
-            );
-          }
-          return next;
-        });
-      } else if (result.employee_capacity) {
-        setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
-      }
+    const memberIds = members.map((member) => member.profile_id);
+    const memberRequestIds = Object.fromEntries(
+      memberIds.map((profileId) => [profileId, crypto.randomUUID()])
+    );
+    const operationId = crypto.randomUUID();
+    const optimisticAssignments = members
+      .filter((member) =>
+        !board?.assignments.some(
+          (assignment) =>
+            assignment.visit_id === target.visit.id
+            && 'profile_id' in assignment
+            && assignment.profile_id === member.profile_id
+        )
+      )
+      .map((member) =>
+        createOptimisticAssignment(
+          target,
+          { type: 'employee', id: member.profile_id, label: member.employee?.full_name || 'Employee' },
+          `${operationId}:${member.profile_id}`
+        )
+      );
+    function reportDayTeamResult(result: Awaited<ReturnType<typeof assignScheduleDayTeam>>) {
       const skipSummary = result.skipped
         .map((item) => `${item.full_name} (${item.conflicts[0]?.message || item.reason})`)
         .join('; ');
@@ -4304,11 +4349,91 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       } else {
         toast.info('Add employees to this team first.');
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to assign this team');
-    } finally {
-      endMutation(mutationKey);
     }
+    admitBoardCommand({
+      id: operationId,
+      kind: 'assign-day-team',
+      claims: dayTeamAssignClaims({
+        workDate: getScheduleVisitDate(target.visit.starts_at),
+        jobId: target.job.id,
+        visitId: target.visit.id,
+        memberIds,
+      }),
+      queryKeys: [`board:${weekStart}`],
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? optimisticAssignments.reduce(
+              (next, assignment) => patchBoardWithAssignment(next, assignment),
+              state.board
+            )
+          : state.board,
+      }),
+      persist: async () => {
+        try {
+          const result = await assignScheduleDayTeam({
+            visit_id: target.visit.id,
+            slot_index: slotIndex,
+            member_ids: memberIds,
+            member_request_ids: memberRequestIds,
+          });
+          if (result.assignments.length > 0) {
+            setBoardBaseData((current) => {
+              let next = applyCapacity(current, result.employee_capacity);
+              for (const row of result.assignments) {
+                next = patchBoardWithAssignment(
+                  next,
+                  assignmentFromMutationRow(row, null, target.visit)
+                );
+              }
+              return next;
+            });
+          } else if (result.employee_capacity) {
+            setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+          }
+          reportDayTeamResult(result);
+          const createdProfileIds = new Set(
+            result.assignments
+              .map((row) => ('profile_id' in row ? row.profile_id : null))
+              .filter((id): id is string => Boolean(id))
+          );
+          return {
+            kind: 'success',
+            apply: (state) => ({
+              ...state,
+              board: state.board
+                ? result.assignments.reduce(
+                    (next, row) =>
+                      patchBoardWithAssignment(
+                        next,
+                        assignmentFromMutationRow(row, null, target.visit)
+                      ),
+                    state.board
+                  )
+                : state.board,
+            }),
+            proofs: {
+              [`board:${weekStart}`]: (state) =>
+                createdProfileIds.size === 0
+                || [...createdProfileIds].every((profileId) =>
+                  state.board?.assignments.some(
+                    (assignment) =>
+                      assignment.visit_id === target.visit.id
+                      && 'profile_id' in assignment
+                      && assignment.profile_id === profileId
+                  ) === true
+                ),
+            },
+          };
+        } catch (error) {
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to assign this team');
+            return { kind: 'failed', error };
+          }
+          throw error;
+        }
+      },
+    });
   }
 
   async function moveAssignmentToVisit(
@@ -4323,17 +4448,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       return;
     }
     if (assignment.visit_id === target.visit.id) return;
-    const mutationKey = assignmentMutationKey(assignment.id);
-    const mutationEpoch = beginMutation(mutationKey);
-    if (mutationEpoch == null) return;
-    const operation = registerOptimisticOperation({
+    const operationId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
+    const resourceId =
+      assignment.resource_type === 'employee'
+        ? assignment.profile_id
+        : assignment.plant_id;
+    const admitted = admitBoardCommand({
+      id: operationId,
       kind: 'move-assignment',
-      lockKeys: [
-        `job-tree:${assignment.job_id}`,
-        `job-tree:${target.job.id}`,
-        `assignment:${assignment.id}`,
-        `visit-tree:${target.visit.id}`,
-      ],
+      requestId,
+      coalesceGroup: assignmentMoveCoalesceGroup(assignment.id),
+      claims: assignmentMoveClaims({
+        assignmentId: assignment.id,
+        resourceType: assignment.resource_type,
+        resourceId,
+        sourceWorkDate: assignment.work_date,
+        targetWorkDate: getScheduleVisitDate(target.visit.starts_at),
+        sourceJobId: assignment.job_id,
+        targetJobId: target.job.id,
+        sourceVisitId: assignment.visit_id,
+        targetVisitId: target.visit.id,
+      }),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
@@ -4355,81 +4491,66 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             }))
           : state.board,
       }),
+      persist: async () => {
+        const live = findCoordinatorPersistTarget(
+          mutationCoordinatorRef.current?.getOperations() || [],
+          operationId,
+          assignmentMoveCoalesceGroup(assignment.id)
+        );
+        const liveRequestId = live?.requestId ?? requestId;
+        try {
+          const result = await moveScheduleAssignment(
+            assignment,
+            target.visit.id,
+            false,
+            liveRequestId
+          );
+          if (result.assignment) {
+            const authoritative = assignmentFromMutationRow(
+              result.assignment,
+              null,
+              target.visit
+            );
+            setBoardBaseData((current) =>
+              applyCapacity(
+                patchBoardWithAssignment(current, authoritative),
+                result.employee_capacity
+              )
+            );
+          } else if (result.employee_capacity) {
+            setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+          }
+          toast.success('Assignment moved');
+          return { kind: 'success' };
+        } catch (error) {
+          if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
+            setPendingConflict({
+              assignment,
+              input: {
+                job_id: target.job.id,
+                visit_id: target.visit.id,
+                resource_type: assignment.resource_type,
+                resource_id: resourceId,
+              },
+              conflicts: flattenConflictMessages(error.payload),
+            });
+            toast.error(error instanceof Error ? error.message : 'Assignment conflict');
+            return { kind: 'conflict' };
+          }
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to move assignment');
+            return { kind: 'failed', error };
+          }
+          throw error;
+        }
+      },
     });
-    if (!operation) {
-      endMutation(mutationKey);
-      return;
-    }
+    if (admitted.duplicate) return;
     activateVisit(target.job, target.visit);
-
-    try {
-      const result = await moveScheduleAssignment(assignment, target.visit.id);
-      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-      if (result.assignment) {
-        const authoritative = assignmentFromMutationRow(
-          result.assignment,
-          null,
-          target.visit
-        );
-        setBoardBaseData((current) =>
-          applyCapacity(
-            patchBoardWithAssignment(current, authoritative),
-            result.employee_capacity
-          )
-        );
-      } else if (result.employee_capacity) {
-        setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
-      }
-      if (result.assignment) {
-        const authoritative = assignmentFromMutationRow(
-          result.assignment,
-          null,
-          target.visit
-        );
-        settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: { [`board:${weekStart}`]: provesAssignment(authoritative) },
-          apply: (state) => ({
-            ...state,
-            board: state.board
-              ? patchBoardWithAssignment(state.board, authoritative)
-              : state.board,
-          }),
-        });
-      } else {
-        settleOptimisticOperation(operation.id);
-      }
-      toast.success('Assignment moved');
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
-        setPendingConflict({
-          assignment,
-          input: {
-            job_id: target.job.id,
-            visit_id: target.visit.id,
-            resource_type: assignment.resource_type,
-            resource_id:
-              assignment.resource_type === 'employee'
-                ? assignment.profile_id
-                : assignment.plant_id,
-          },
-          conflicts: flattenConflictMessages(error.payload),
-        });
-      } else {
-        toast.error(error instanceof Error ? error.message : 'Unable to move assignment');
-      }
-    } finally {
-      endMutation(mutationKey);
-    }
   }
 
   async function overridePendingConflict() {
     if (!pendingConflict) return;
-    const mutationKey = pendingConflict.assignment
-      ? assignmentMutationKey(pendingConflict.assignment.id)
-      : `assign:${pendingConflict.input.resource_type}:${pendingConflict.input.resource_id}:${pendingConflict.input.visit_id}`;
-    const mutationEpoch = beginMutation(mutationKey);
-    if (mutationEpoch == null) return;
     const conflict = pendingConflict;
     const targetVisit = conflict.input.visit_id
       ? board?.visits.find((visit) => visit.id === conflict.input.visit_id) || null
@@ -4437,11 +4558,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const targetJob = conflict.input.job_id
       ? board?.jobs.find((job) => job.id === conflict.input.job_id) || null
       : null;
-    if (!targetVisit) {
-      endMutation(mutationKey);
-      return;
-    }
+    if (!targetVisit) return;
     const operationId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
     const overrideResource: SelectedScheduleResource = {
       type: conflict.input.resource_type,
       id: conflict.input.resource_id,
@@ -4454,19 +4573,29 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         : { job: { id: conflict.input.job_id } as ScheduleJob, visit: targetVisit },
       overrideResource,
       operationId);
-    const operation = registerOptimisticOperation({
+    admitBoardCommand({
       id: operationId,
       kind: 'override-assignment-conflict',
-      lockKeys: conflict.assignment
-        ? [
-            `job-tree:${conflict.assignment.job_id}`,
-            `job-tree:${conflict.input.job_id}`,
-            `assignment:${conflict.assignment.id}`,
-          ]
-        : [
-            `job-tree:${conflict.input.job_id}`,
-            `assignment-slot:${conflict.input.resource_type}:${conflict.input.resource_id}:${targetVisit.id}`,
-          ],
+      requestId,
+      claims: conflict.assignment
+        ? assignmentMoveClaims({
+            assignmentId: conflict.assignment.id,
+            resourceType: conflict.assignment.resource_type,
+            resourceId: conflict.input.resource_id,
+            sourceWorkDate: conflict.assignment.work_date,
+            targetWorkDate: getScheduleVisitDate(targetVisit.starts_at),
+            sourceJobId: conflict.assignment.job_id,
+            targetJobId: conflict.input.job_id,
+            sourceVisitId: conflict.assignment.visit_id,
+            targetVisitId: targetVisit.id,
+          })
+        : assignmentCreateClaims({
+            resourceType: conflict.input.resource_type,
+            resourceId: conflict.input.resource_id,
+            workDate: getScheduleVisitDate(targetVisit.starts_at),
+            jobId: conflict.input.job_id,
+            visitId: targetVisit.id,
+          }),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
@@ -4510,75 +4639,70 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 })
               : state.board,
       }),
+      persist: async () => {
+        try {
+          let result: AssignmentMutationResult;
+          if (conflict.assignment && conflict.input.visit_id) {
+            result = await moveScheduleAssignment(
+              conflict.assignment,
+              conflict.input.visit_id,
+              true,
+              requestId
+            );
+            if (result.assignment) {
+              const authoritative = assignmentFromMutationRow(
+                result.assignment,
+                null,
+                targetVisit
+              );
+              setBoardBaseData((current) =>
+                applyCapacity(
+                  patchBoardWithAssignment(current, authoritative),
+                  result.employee_capacity
+                )
+              );
+            } else if (result.employee_capacity) {
+              setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+            }
+            if (targetJob) activateVisit(targetJob, targetVisit);
+            toast.success('Assignment moved with conflict override');
+          } else {
+            result = await createScheduleAssignment({
+              ...conflict.input,
+              override_conflicts: true,
+              request_id: requestId,
+            });
+            const createdRow = result.assignments?.[0];
+            if (createdRow) {
+              const authoritative = assignmentFromMutationRow(
+                createdRow,
+                overrideResource,
+                targetVisit
+              );
+              setBoardBaseData((current) =>
+                applyCapacity(
+                  patchBoardWithAssignment(current, authoritative),
+                  result.employee_capacity
+                )
+              );
+            } else if (result.employee_capacity) {
+              setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
+            }
+            if (targetJob) activateVisit(targetJob, targetVisit);
+            toast.success('Resource assigned with conflict override');
+          }
+          setPendingConflict(null);
+          setSelectedResource(null);
+          return { kind: 'success' };
+        } catch (error) {
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to override conflict');
+            return { kind: 'failed', error };
+          }
+          throw error;
+        }
+      },
     });
-    if (!operation) {
-      endMutation(mutationKey);
-      return;
-    }
-    try {
-      let result: AssignmentMutationResult;
-      if (conflict.assignment && conflict.input.visit_id) {
-        result = await moveScheduleAssignment(
-          conflict.assignment,
-          conflict.input.visit_id,
-          true
-        );
-        if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-        if (result.assignment && targetVisit) {
-          const authoritative = assignmentFromMutationRow(
-            result.assignment,
-            null,
-            targetVisit
-          );
-          setBoardBaseData((current) =>
-            applyCapacity(
-              patchBoardWithAssignment(current, authoritative),
-              result.employee_capacity
-            )
-          );
-        } else if (result.employee_capacity) {
-          setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
-        }
-        if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
-        toast.success('Assignment moved with conflict override');
-      } else {
-        result = await createScheduleAssignment({
-          ...conflict.input,
-          override_conflicts: true,
-        });
-        if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-        const createdRow = result.assignments?.[0];
-        if (createdRow && targetVisit) {
-          const authoritative = assignmentFromMutationRow(
-            createdRow,
-            {
-              type: conflict.input.resource_type,
-              id: conflict.input.resource_id,
-              label: conflict.input.resource_type,
-            },
-            targetVisit
-          );
-          setBoardBaseData((current) =>
-            applyCapacity(
-              patchBoardWithAssignment(current, authoritative),
-              result.employee_capacity
-            )
-          );
-        } else if (result.employee_capacity) {
-          setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
-        }
-        if (targetJob && targetVisit) activateVisit(targetJob, targetVisit);
-        toast.success('Resource assigned with conflict override');
-      }
-      settleOptimisticOperation(operation.id);
-      setPendingConflict(null);
-      setSelectedResource(null);
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      toast.error(error instanceof Error ? error.message : 'Unable to override conflict');
-    } finally {
-      endMutation(mutationKey);
-    }
   }
 
   async function handleDeleteAssignment(assignment: ScheduleAssignment) {
@@ -4586,12 +4710,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this assignment to finish saving.');
       return;
     }
-    const mutationKey = assignmentMutationKey(assignment.id);
-    const mutationEpoch = beginMutation(mutationKey);
-    if (mutationEpoch == null) return;
-    const operation = registerOptimisticOperation({
+    const operationId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
+    const resourceId =
+      assignment.resource_type === 'employee'
+        ? assignment.profile_id
+        : assignment.plant_id;
+    admitBoardCommand({
+      id: operationId,
       kind: 'delete-assignment',
-      lockKeys: [`job-tree:${assignment.job_id}`, `assignment:${assignment.id}`],
+      requestId,
+      claims: assignmentDeleteClaims({
+        assignmentId: assignment.id,
+        resourceType: assignment.resource_type,
+        resourceId,
+        workDate: assignment.work_date,
+        jobId: assignment.job_id,
+        visitId: assignment.visit_id,
+      }),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: provesBoardEntityAbsent('assignment', assignment.id),
@@ -4602,128 +4738,122 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           ? patchBoardRemoveAssignment(state.board, assignment.id)
           : state.board,
       }),
-    });
-    if (!operation) {
-      endMutation(mutationKey);
-      return;
-    }
-    try {
-      const result = await deleteScheduleAssignment(assignment.id, assignment.resource_type);
-      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
-      if (result.employee_capacity) {
-        setBoardBaseData((current) =>
-          applyCapacity(
-            patchBoardRemoveAssignment(current, assignment.id),
-            result.employee_capacity
-          )
-        );
-      } else {
-        setBoardBaseData((current) =>
-          patchBoardRemoveAssignment(current, assignment.id)
-        );
-      }
-      settleOptimisticOperation(operation.id, 'success', undefined, {
-        proofs: {
-          [`board:${weekStart}`]: provesBoardEntityAbsent('assignment', assignment.id),
-        },
-        apply: (state) => ({
-          ...state,
-          board: state.board
-            ? patchBoardRemoveAssignment(state.board, assignment.id)
-            : state.board,
-        }),
-      });
-      toast.success('Assignment removed', {
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            const restoreOperationId = crypto.randomUUID();
-            const optimisticRestore: ScheduleAssignment = {
-              ...assignment,
-              id: createOptimisticEntityId(restoreOperationId, 'assignment'),
-            };
-            const restoreOperation = registerOptimisticOperation({
-              id: restoreOperationId,
-              kind: 'restore-assignment',
-              lockKeys: [
-                `job-tree:${assignment.job_id}`,
-                `assignment-slot:${assignment.resource_type}:${
-                  assignment.resource_type === 'employee'
-                    ? assignment.profile_id
-                    : assignment.plant_id
-                }:${assignment.visit_id || assignment.work_date}`,
-              ],
-              queryKeys: [`board:${weekStart}`],
-              proofs: {
-                [`board:${weekStart}`]: (state) =>
-                  state.board?.assignments.some(
-                    (item) =>
-                      item.job_id === assignment.job_id
-                      && item.visit_id === assignment.visit_id
-                      && (
-                        assignment.resource_type === 'employee'
-                          ? 'profile_id' in item
-                            && 'profile_id' in assignment
-                            && item.profile_id === assignment.profile_id
-                          : 'plant_id' in item
-                            && 'plant_id' in assignment
-                            && item.plant_id === assignment.plant_id
-                      )
-                  ) === true,
+      persist: async () => {
+        try {
+          const result = await deleteScheduleAssignment(
+            assignment.id,
+            assignment.resource_type,
+            requestId
+          );
+          if (result.employee_capacity) {
+            setBoardBaseData((current) =>
+              applyCapacity(
+                patchBoardRemoveAssignment(current, assignment.id),
+                result.employee_capacity
+              )
+            );
+          } else {
+            setBoardBaseData((current) =>
+              patchBoardRemoveAssignment(current, assignment.id)
+            );
+          }
+          toast.success('Assignment removed', {
+            action: {
+              label: 'Undo',
+              onClick: () => {
+                const restoreOperationId = crypto.randomUUID();
+                const restoreRequestId = crypto.randomUUID();
+                const optimisticRestore: ScheduleAssignment = {
+                  ...assignment,
+                  id: createOptimisticEntityId(restoreOperationId, 'assignment'),
+                };
+                admitBoardCommand({
+                  id: restoreOperationId,
+                  kind: 'restore-assignment',
+                  requestId: restoreRequestId,
+                  claims: assignmentCreateClaims({
+                    resourceType: assignment.resource_type,
+                    resourceId,
+                    workDate: assignment.work_date,
+                    jobId: assignment.job_id,
+                    visitId: assignment.visit_id,
+                  }),
+                  queryKeys: [`board:${weekStart}`],
+                  proofs: {
+                    [`board:${weekStart}`]: (state) =>
+                      state.board?.assignments.some(
+                        (item) =>
+                          item.job_id === assignment.job_id
+                          && item.visit_id === assignment.visit_id
+                          && (
+                            assignment.resource_type === 'employee'
+                              ? 'profile_id' in item
+                                && 'profile_id' in assignment
+                                && item.profile_id === assignment.profile_id
+                              : 'plant_id' in item
+                                && 'plant_id' in assignment
+                                && item.plant_id === assignment.plant_id
+                          )
+                      ) === true,
+                  },
+                  apply: (state) => ({
+                    ...state,
+                    board: state.board
+                      ? patchBoardWithAssignment(state.board, optimisticRestore)
+                      : state.board,
+                  }),
+                  persist: async () => {
+                    try {
+                      const restoreResult = await createScheduleAssignment({
+                        job_id: assignment.job_id,
+                        visit_id: assignment.visit_id || undefined,
+                        resource_type: assignment.resource_type,
+                        resource_id: resourceId,
+                        work_dates: assignment.visit_id ? undefined : [assignment.work_date],
+                        notes: assignment.notes,
+                        override_conflicts: assignment.conflict_override,
+                        request_id: restoreRequestId,
+                      });
+                      const restored = restoreResult.assignments?.[0];
+                      if (restored) {
+                        setBoardBaseData((current) =>
+                          applyCapacity(
+                            patchBoardWithAssignment(
+                              current,
+                              assignmentFromMutationRow(restored, null, assignment.visit)
+                            ),
+                            restoreResult.employee_capacity
+                          )
+                        );
+                      } else if (restoreResult.employee_capacity) {
+                        setBoardBaseData((current) =>
+                          applyCapacity(current, restoreResult.employee_capacity)
+                        );
+                      }
+                      toast.success('Assignment restored');
+                      return { kind: 'success' };
+                    } catch (error) {
+                      if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+                        toast.error(error instanceof Error ? error.message : 'Unable to restore assignment');
+                        return { kind: 'failed', error };
+                      }
+                      throw error;
+                    }
+                  },
+                });
               },
-              apply: (state) => ({
-                ...state,
-                board: state.board
-                  ? patchBoardWithAssignment(state.board, optimisticRestore)
-                  : state.board,
-              }),
-            });
-            if (!restoreOperation) return;
-            void createScheduleAssignment({
-              job_id: assignment.job_id,
-              visit_id: assignment.visit_id || undefined,
-              resource_type: assignment.resource_type,
-              resource_id:
-                assignment.resource_type === 'employee'
-                  ? assignment.profile_id
-                  : assignment.plant_id,
-              work_dates: assignment.visit_id ? undefined : [assignment.work_date],
-              notes: assignment.notes,
-              override_conflicts: assignment.conflict_override,
-            })
-              .then((restoreResult) => {
-                const restored = restoreResult.assignments?.[0];
-                if (restored) {
-                  setBoardBaseData((current) =>
-                    applyCapacity(
-                      patchBoardWithAssignment(
-                        current,
-                        assignmentFromMutationRow(restored, null, assignment.visit)
-                      ),
-                      restoreResult.employee_capacity
-                    )
-                  );
-                } else if (restoreResult.employee_capacity) {
-                  setBoardBaseData((current) =>
-                    applyCapacity(current, restoreResult.employee_capacity)
-                  );
-                }
-                settleOptimisticOperation(restoreOperation.id);
-              })
-              .then(() => toast.success('Assignment restored'))
-              .catch((error) => {
-                settleOptimisticOperation(restoreOperation.id, 'failure', error);
-                toast.error(error instanceof Error ? error.message : 'Unable to restore assignment');
-              });
-          },
-        },
-      });
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
-    } finally {
-      endMutation(mutationKey);
-    }
+            },
+          });
+          return { kind: 'success' };
+        } catch (error) {
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
+            return { kind: 'failed', error };
+          }
+          throw error;
+        }
+      },
+    });
   }
 
   function handleQuickAddSubmit(input: QuickAddScheduleProjectInput) {

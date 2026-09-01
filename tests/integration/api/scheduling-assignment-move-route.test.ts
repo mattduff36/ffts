@@ -113,25 +113,30 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
     });
     mockDetectEmployeeConflicts.mockResolvedValue([]);
     mockLoadCapacity.mockResolvedValue([]);
-    mockRpc.mockResolvedValue({
-      data: [{
-        assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        resource_type: 'employee',
-        job_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-        visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-        work_date: '2026-07-14',
-        profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        plant_id: null,
-        notes: null,
-        conflict_override: false,
-        conflict_codes: [],
-        conflict_override_by: null,
-        conflict_override_at: null,
-        assigned_by: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-        created_at: '2026-07-14T08:00:00.000Z',
-        updated_at: '2026-07-14T13:00:00.000Z',
-      }],
-      error: null,
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'schedule_assignment_request_replay_v2') {
+        return { data: null, error: null };
+      }
+      return {
+        data: [{
+          assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          resource_type: 'employee',
+          job_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          work_date: '2026-07-14',
+          profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          plant_id: null,
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          created_at: '2026-07-14T08:00:00.000Z',
+          updated_at: '2026-07-14T13:00:00.000Z',
+        }],
+        error: null,
+      };
     });
   });
 
@@ -200,6 +205,79 @@ describe('PATCH /api/scheduling/assignments/[id]', () => {
         p_override_conflicts: true,
         p_conflict_codes: ['employee_absent'],
       })
+    );
+  });
+
+  it('API-MOVE-001/002 send request_id to the v2 move wrapper when present', async () => {
+    const { PATCH } = await import('@/app/api/scheduling/assignments/[id]/route');
+    const requestId = '99999999-9999-4999-8999-999999999999';
+    const response = await PATCH(
+      new NextRequest(
+        'http://localhost/api/scheduling/assignments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resource_type: 'employee',
+            visit_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            request_id: requestId,
+          }),
+        }
+      ),
+      params
+    );
+    expect(response.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'move_schedule_assignment_v2',
+      expect.objectContaining({
+        p_request_id: requestId,
+        p_assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      })
+    );
+  });
+
+  it('API-DELETE-IDEMP-001 replays delete through v2 with the same request_id', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{
+        success: true,
+        assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        work_date: '2026-07-14',
+        resource_type: 'employee',
+        already_absent: false,
+      }],
+      error: null,
+    });
+    const { DELETE } = await import('@/app/api/scheduling/assignments/[id]/route');
+    const requestId = '99999999-9999-4999-8999-999999999999';
+    const first = await DELETE(
+      new NextRequest(
+        `http://localhost/api/scheduling/assignments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?resource_type=employee&request_id=${requestId}`,
+        { method: 'DELETE' }
+      ),
+      params
+    );
+    mockRpc.mockResolvedValue({
+      data: [{
+        success: true,
+        assignment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        work_date: '2026-07-14',
+        resource_type: 'employee',
+        already_absent: true,
+      }],
+      error: null,
+    });
+    const second = await DELETE(
+      new NextRequest(
+        `http://localhost/api/scheduling/assignments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?resource_type=employee&request_id=${requestId}`,
+        { method: 'DELETE' }
+      ),
+      params
+    );
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'delete_schedule_assignment_v2',
+      expect.objectContaining({ p_request_id: requestId })
     );
   });
 });

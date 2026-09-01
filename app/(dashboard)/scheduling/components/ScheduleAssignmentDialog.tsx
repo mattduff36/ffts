@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -83,6 +83,7 @@ export function ScheduleAssignmentDialog({
   const [saving, setSaving] = useState(false);
   const [pendingInput, setPendingInput] = useState<CreateAssignmentInput | null>(null);
   const [conflicts, setConflicts] = useState<SchedulingConflict[]>([]);
+  const requestIdRef = useRef(crypto.randomUUID());
 
   const jobDates = useMemo(
     () => {
@@ -103,6 +104,7 @@ export function ScheduleAssignmentDialog({
     setSelectedDates(visit ? [getScheduleVisitDate(visit.starts_at)] : initialDate ? [initialDate] : []);
     setPendingInput(null);
     setConflicts([]);
+    requestIdRef.current = crypto.randomUUID();
   }, [initialDate, initialResource, open, visit]);
 
   function toggleDate(date: string, checked: boolean) {
@@ -142,6 +144,7 @@ export function ScheduleAssignmentDialog({
       resource_type: resourceType,
       resource_id: resourceId,
       work_dates: selectedDates,
+      request_id: requestIdRef.current,
     });
   }
 
@@ -281,7 +284,13 @@ export function ScheduleAssignmentDialog({
               disabled={saving}
               onClick={(event) => {
                 event.preventDefault();
-                if (pendingInput) void submit({ ...pendingInput, override_conflicts: true });
+                if (pendingInput) {
+                  void submit({
+                    ...pendingInput,
+                    override_conflicts: true,
+                    request_id: crypto.randomUUID(),
+                  });
+                }
               }}
               className={schedulingControlStyles.warning}
             >

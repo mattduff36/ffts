@@ -29,6 +29,7 @@ function createAdmin(options: {
   visitStartsAt?: string;
   rpcErrorFor?: string;
   rpcOverlapFor?: string;
+  rpcReplayFor?: Record<string, Record<string, unknown>>;
 }) {
   const visitStartsAt = options.visitStartsAt ?? '2026-09-01T08:00:00.000Z';
   const visit = {
@@ -44,7 +45,14 @@ function createAdmin(options: {
     profile_id: profileId,
   }));
   const memberQueries: Array<Record<string, unknown>> = [];
-  const rpc = vi.fn(async (_name: string, args: { p_resource_id: string; p_work_date?: string }) => {
+  const rpc = vi.fn(async (
+    _name: string,
+    args: { p_resource_id?: string; p_work_date?: string; p_request_id?: string }
+  ) => {
+    if (_name === 'schedule_assignment_request_replay_v2') {
+      const replay = args.p_request_id ? options.rpcReplayFor?.[args.p_request_id] : null;
+      return { data: replay ?? null, error: null };
+    }
     if (options.rpcErrorFor === args.p_resource_id) {
       return { data: null, error: { message: 'unexpected', code: 'XX000' } };
     }
@@ -279,5 +287,75 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
     if ('status' in result) throw new Error(result.error);
     expect(result.assignments).toHaveLength(1);
     expect(result.partial_error).toMatch(/already be on the visit|try the rest/i);
+  });
+
+  it('TEAM-SNAPSHOT-001 assigns the gesture-time member snapshot instead of live membership', async () => {
+    const snapshotId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const requestId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const admin = createAdmin({
+      members: [clearId, busyId],
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+      memberIds: [snapshotId],
+      memberRequestIds: { [snapshotId]: requestId },
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(admin.memberQueries).toEqual([]);
+    expect(admin.rpc).toHaveBeenCalledWith(
+      'create_schedule_assignment_v2',
+      expect.objectContaining({
+        p_resource_id: snapshotId,
+        p_request_id: requestId,
+      })
+    );
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.objectContaining({ p_resource_id: clearId })
+    );
+    expect(result.assignments.map((item) => item.profile_id)).toEqual([snapshotId]);
+  });
+
+  it('replays a committed member request even when they are already on the visit', async () => {
+    const requestId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const admin = createAdmin({
+      members: [clearId],
+      alreadyOnVisit: [clearId],
+      rpcReplayFor: {
+        [requestId]: {
+          assignment_id: 'asg-replayed',
+          job_id: jobId,
+          visit_id: visitId,
+          work_date: '2026-09-01',
+          profile_id: clearId,
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'manager-1',
+          created_at: '2026-09-01T08:00:00.000Z',
+          updated_at: '2026-09-01T08:00:00.000Z',
+        },
+      },
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+      memberIds: [clearId],
+      memberRequestIds: { [clearId]: requestId },
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments.map((item) => item.id)).toEqual(['asg-replayed']);
+    expect(result.already_assigned_count).toBe(1);
+    expect(mockDetect).not.toHaveBeenCalled();
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v2',
+      expect.anything()
+    );
   });
 });

@@ -104,6 +104,9 @@ describe('POST /api/scheduling/assignments', () => {
       employees: [],
     }]);
     mockRpc.mockImplementation(async (_name: string, args: Record<string, unknown>) => {
+      if (_name === 'schedule_assignment_request_replay_v2') {
+        return { data: null, error: null };
+      }
       const workDates = (args.p_work_dates as string[]) || [];
       const codesByDate = (args.p_conflict_codes_by_date || {}) as Record<string, string[]>;
       return {
@@ -281,5 +284,110 @@ describe('POST /api/scheduling/assignments', () => {
 
     expect(response.status).toBe(403);
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('API-IDEMP-001 sends the same request_id through replay then the v2 bulk wrapper', async () => {
+    const requestId = '99999999-9999-4999-8999-999999999999';
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const body = {
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+      request_id: requestId,
+    };
+    const first = await POST(request(body));
+    const second = await POST(request(body));
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'schedule_assignment_request_replay_v2',
+      expect.objectContaining({ p_request_id: requestId, p_action: 'create_bulk' })
+    );
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_schedule_assignments_bulk_v2',
+      expect.objectContaining({ p_request_id: requestId })
+    );
+  });
+
+  it('API-IDEMP-003 replays a committed request before mutable conflict preflight', async () => {
+    const requestId = '99999999-9999-4999-8999-999999999999';
+    const stored = [{
+      assignment_id: '66666666-6666-4666-8666-666666666660',
+      resource_type: 'employee',
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      work_date: '2026-07-14',
+      profile_id: '22222222-2222-4222-8222-222222222222',
+      plant_id: null,
+      notes: null,
+      conflict_override: false,
+      conflict_codes: [],
+      conflict_override_by: null,
+      conflict_override_at: null,
+      assigned_by: managerAccess.userId,
+      created_at: '2026-07-14T08:00:00.000Z',
+      updated_at: '2026-07-14T08:00:00.000Z',
+    }];
+    let committed = false;
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'schedule_assignment_request_replay_v2') {
+        return { data: committed ? stored : null, error: null };
+      }
+      if (name === 'create_schedule_assignments_bulk_v2') {
+        committed = true;
+        return { data: stored, error: null };
+      }
+      return { data: null, error: { message: 'unexpected rpc', code: 'XX000' } };
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const body = {
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+      request_id: requestId,
+    };
+    const first = await POST(request(body));
+    mockDetectEmployeeConflicts.mockResolvedValue([{
+      code: 'employee_double_booked',
+      severity: 'warning',
+      message: 'This resource is already assigned during an overlapping visit.',
+    }]);
+    const second = await POST(request(body));
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(mockDetectEmployeeConflicts).toHaveBeenCalledTimes(1);
+    expect(mockRpc.mock.calls.filter(([name]) => name === 'create_schedule_assignments_bulk_v2')).toHaveLength(1);
+  });
+
+  it('API-IDEMP-002 maps REQUEST_ID_REUSED when the wrapper rejects a changed input', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'REQUEST_ID_REUSED' },
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const response = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+      request_id: '99999999-9999-4999-8999-999999999999',
+    }));
+    const payload = await response.json();
+    expect(response.status).toBe(409);
+    expect(payload.code).toBe('request_id_reused');
+  });
+
+  it('API-CONFLICT-002 still creates when the same employee has no overlapping visit', async () => {
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const response = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'employee',
+      resource_id: '22222222-2222-4222-8222-222222222222',
+    }));
+    expect(response.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalled();
   });
 });

@@ -10,6 +10,11 @@ import {
   detectPlantConflicts,
   isDateWithinRange,
 } from '@/lib/server/scheduling-conflicts';
+import {
+  assignmentCreateBulkInputHash,
+  replayAssignmentMutationIfPresent,
+  rpcWithIdempotentFallback,
+} from '@/lib/server/scheduling-assignment-idempotency';
 import { getScheduleVisitDate } from '@/lib/utils/scheduling';
 import type { ScheduleVisit } from '@/types/scheduling';
 
@@ -22,6 +27,7 @@ const assignmentSchema = z
     work_dates: z.array(z.iso.date()).max(31).default([]),
     notes: z.string().trim().max(2000).nullish(),
     override_conflicts: z.boolean().default(false),
+    request_id: z.uuid().optional(),
   })
   .refine((value) => Boolean(value.visit_id) || value.work_dates.length > 0, {
     message: 'Choose a visit or at least one work date.',
@@ -80,6 +86,81 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    type CreatedAssignmentRow = {
+      assignment_id: string;
+      job_id: string;
+      work_date: string;
+      visit_id: string | null;
+      notes: string | null;
+      conflict_override: boolean;
+      conflict_codes: string[];
+      conflict_override_by: string | null;
+      conflict_override_at: string | null;
+      assigned_by: string | null;
+      created_at: string;
+      updated_at: string;
+      profile_id: string | null;
+      plant_id: string | null;
+    };
+
+    const toCreatedAssignments = (rows: CreatedAssignmentRow[]) =>
+      rows.map((created) => ({
+        id: created.assignment_id,
+        job_id: created.job_id,
+        work_date: created.work_date,
+        visit_id: created.visit_id,
+        notes: created.notes,
+        conflict_override: created.conflict_override,
+        conflict_codes: created.conflict_codes,
+        conflict_override_by: created.conflict_override_by,
+        conflict_override_at: created.conflict_override_at,
+        assigned_by: created.assigned_by,
+        created_at: created.created_at,
+        updated_at: created.updated_at,
+        resource_type: input.resource_type,
+        ...(input.resource_type === 'employee'
+          ? { profile_id: created.profile_id }
+          : { plant_id: created.plant_id }),
+      }));
+
+    if (input.request_id) {
+      const replay = await replayAssignmentMutationIfPresent<CreatedAssignmentRow[] | CreatedAssignmentRow>(
+        admin,
+        input.request_id,
+        'create_bulk',
+        assignmentCreateBulkInputHash({
+          jobId: input.job_id,
+          visitId: visit?.id || null,
+          resourceType: input.resource_type,
+          resourceId: input.resource_id,
+          workDates: input.work_dates,
+          notes: input.notes || null,
+          overrideConflicts: input.override_conflicts,
+        })
+      );
+      if (replay.kind === 'reused') {
+        return NextResponse.json(
+          {
+            error: 'This scheduling request ID was already used for another change.',
+            code: 'request_id_reused',
+          },
+          { status: 409 }
+        );
+      }
+      if (replay.kind === 'replay') {
+        const replayRows = Array.isArray(replay.result) ? replay.result : [replay.result];
+        const createdAssignments = toCreatedAssignments(replayRows);
+        if (createdAssignments.length === 0) {
+          throw new Error('Assignment creation replay returned no result.');
+        }
+        const capacity = await loadEmployeeCapacityForDates(admin, input.work_dates);
+        return NextResponse.json(
+          { assignments: createdAssignments, employee_capacity: capacity },
+          { status: 201 }
+        );
+      }
+    }
+
     const conflictEntries = await Promise.all(
       input.work_dates.map(async (workDate) => {
         const conflicts =
@@ -120,7 +201,7 @@ export async function POST(request: NextRequest) {
         conflictCodes(conflictsByDate[workDate] || []),
       ])
     );
-    const { data: rows, error } = await admin.rpc('create_schedule_assignments_bulk_v1', {
+    const bulkArgs = {
       p_job_id: input.job_id,
       p_visit_id: visit?.id || null,
       p_resource_type: input.resource_type,
@@ -130,9 +211,18 @@ export async function POST(request: NextRequest) {
       p_override_conflicts: input.override_conflicts,
       p_conflict_codes_by_date: conflictCodesByDate,
       p_actor_user_id: access.userId,
-    });
+    };
+    const { data: rows, error } = input.request_id
+      ? await rpcWithIdempotentFallback(
+          admin,
+          'create_schedule_assignments_bulk_v2',
+          { ...bulkArgs, p_request_id: input.request_id },
+          'create_schedule_assignments_bulk_v1',
+          bulkArgs
+        )
+      : await admin.rpc('create_schedule_assignments_bulk_v1', bulkArgs);
     if (error) {
-      if (error.code === '23505' || error.message.includes('RESOURCE_OVERLAP')) {
+      if (error.code === '23505' || error.message?.includes('RESOURCE_OVERLAP')) {
         return NextResponse.json(
           {
             error: visit
@@ -158,7 +248,7 @@ export async function POST(request: NextRequest) {
       }
       if (error.code === 'P0001') {
         const mapped = mapScheduleVisitTransitionError(error);
-        if (mapped?.code === 'visit_queued') {
+        if (mapped) {
           return NextResponse.json(
             { error: mapped.message, code: mapped.code },
             { status: mapped.status }
@@ -169,41 +259,8 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    type CreatedAssignmentRow = {
-      assignment_id: string;
-      job_id: string;
-      work_date: string;
-      visit_id: string | null;
-      notes: string | null;
-      conflict_override: boolean;
-      conflict_codes: string[];
-      conflict_override_by: string | null;
-      conflict_override_at: string | null;
-      assigned_by: string | null;
-      created_at: string;
-      updated_at: string;
-      profile_id: string | null;
-      plant_id: string | null;
-    };
     const createdRows = (rows || []) as CreatedAssignmentRow[];
-    const createdAssignments = createdRows.map((created) => ({
-      id: created.assignment_id,
-      job_id: created.job_id,
-      work_date: created.work_date,
-      visit_id: created.visit_id,
-      notes: created.notes,
-      conflict_override: created.conflict_override,
-      conflict_codes: created.conflict_codes,
-      conflict_override_by: created.conflict_override_by,
-      conflict_override_at: created.conflict_override_at,
-      assigned_by: created.assigned_by,
-      created_at: created.created_at,
-      updated_at: created.updated_at,
-      resource_type: input.resource_type,
-      ...(input.resource_type === 'employee'
-        ? { profile_id: created.profile_id }
-        : { plant_id: created.plant_id }),
-    }));
+    const createdAssignments = toCreatedAssignments(createdRows);
     if (createdAssignments.length === 0) {
       throw new Error('Assignment creation returned no result.');
     }

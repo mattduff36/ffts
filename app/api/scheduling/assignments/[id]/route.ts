@@ -10,6 +10,12 @@ import {
   detectPlantConflicts,
   isDateWithinRange,
 } from '@/lib/server/scheduling-conflicts';
+import {
+  assignmentMoveInputHash,
+  isMissingScheduleRpc,
+  replayAssignmentMutationIfPresent,
+  rpcWithIdempotentFallback,
+} from '@/lib/server/scheduling-assignment-idempotency';
 import { getScheduleVisitDate } from '@/lib/utils/scheduling';
 import type { ScheduleVisit } from '@/types/scheduling';
 
@@ -21,6 +27,7 @@ const moveAssignmentSchema = z.object({
   resource_type: z.enum(['employee', 'plant']),
   visit_id: z.uuid(),
   override_conflicts: z.boolean().default(false),
+  request_id: z.uuid().optional(),
 });
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
@@ -90,6 +97,58 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const previousWorkDate = String(
       (assignmentResult.data as { work_date: string }).work_date
     );
+
+    if (input.request_id) {
+      const replay = await replayAssignmentMutationIfPresent<Record<string, unknown>>(
+        admin,
+        input.request_id,
+        'move',
+        assignmentMoveInputHash({
+          assignmentId: id,
+          resourceType: input.resource_type,
+          visitId: visit.id,
+          overrideConflicts: input.override_conflicts,
+        })
+      );
+      if (replay.kind === 'reused') {
+        return NextResponse.json(
+          {
+            error: 'This scheduling request ID was already used for another change.',
+            code: 'request_id_reused',
+          },
+          { status: 409 }
+        );
+      }
+      if (replay.kind === 'replay') {
+        const moved = replay.result;
+        const capacity = await loadEmployeeCapacityForDates(
+          admin,
+          Array.from(new Set([previousWorkDate, workDate]))
+        );
+        return NextResponse.json({
+          assignment: {
+            id: moved.assignment_id,
+            job_id: moved.job_id,
+            work_date: moved.work_date,
+            visit_id: moved.visit_id,
+            notes: moved.notes,
+            conflict_override: moved.conflict_override,
+            conflict_codes: moved.conflict_codes,
+            conflict_override_by: moved.conflict_override_by,
+            conflict_override_at: moved.conflict_override_at,
+            assigned_by: moved.assigned_by,
+            created_at: moved.created_at,
+            updated_at: moved.updated_at,
+            resource_type: input.resource_type,
+            ...(input.resource_type === 'employee'
+              ? { profile_id: moved.profile_id }
+              : { plant_id: moved.plant_id }),
+          },
+          employee_capacity: capacity,
+        });
+      }
+    }
+
     const conflicts =
       input.resource_type === 'employee'
         ? await detectEmployeeConflicts(admin, {
@@ -117,16 +176,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const { data: rows, error } = await admin.rpc('move_schedule_assignment_v1', {
+    const moveArgs = {
       p_assignment_id: id,
       p_resource_type: input.resource_type,
       p_visit_id: visit.id,
       p_override_conflicts: input.override_conflicts,
       p_conflict_codes: conflictCodes(conflicts),
       p_actor_user_id: access.userId,
-    });
+    };
+    const { data: rows, error } = input.request_id
+      ? await rpcWithIdempotentFallback(
+          admin,
+          'move_schedule_assignment_v2',
+          { ...moveArgs, p_request_id: input.request_id },
+          'move_schedule_assignment_v1',
+          moveArgs
+        )
+      : await admin.rpc('move_schedule_assignment_v1', moveArgs);
     if (error) {
-      if (error.code === '23505' || error.message.includes('RESOURCE_OVERLAP')) {
+      if (error.code === '23505' || error.message?.includes('RESOURCE_OVERLAP')) {
         return NextResponse.json(
           {
             error: 'This resource is already assigned to the target visit.',
@@ -145,7 +213,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
       if (error.code === 'P0001') {
         const mapped = mapScheduleVisitTransitionError(error);
-        if (mapped?.code === 'visit_queued') {
+        if (mapped) {
           return NextResponse.json(
             { error: mapped.message, code: mapped.code },
             { status: mapped.status }
@@ -196,12 +264,49 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const resourceType = new URL(request.url).searchParams.get('resource_type');
+    const search = new URL(request.url).searchParams;
+    const resourceType = search.get('resource_type');
+    const requestId = search.get('request_id');
     if (resourceType !== 'employee' && resourceType !== 'plant') {
       return NextResponse.json({ error: 'A valid resource type is required.' }, { status: 400 });
     }
     const { id } = await params;
     const admin = createAdminClient();
+    if (requestId) {
+      const parsedRequestId = z.uuid().safeParse(requestId);
+      if (!parsedRequestId.success) {
+        return NextResponse.json({ error: 'A valid request ID is required.' }, { status: 400 });
+      }
+      const { data: rows, error } = await admin.rpc('delete_schedule_assignment_v2', {
+        p_request_id: parsedRequestId.data,
+        p_assignment_id: id,
+        p_resource_type: resourceType,
+        p_actor_user_id: access.userId || null,
+      });
+      if (error && !isMissingScheduleRpc(error)) {
+        if (error.code === 'P0001') {
+          const mapped = mapScheduleVisitTransitionError(error);
+          if (mapped) {
+            return NextResponse.json(
+              { error: mapped.message, code: mapped.code },
+              { status: mapped.status }
+            );
+          }
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+        throw error;
+      }
+      if (!error) {
+        const deleted = Array.isArray(rows) ? rows[0] : rows;
+        const workDate = deleted && typeof deleted === 'object' && 'work_date' in deleted
+          ? String((deleted as { work_date: string | null }).work_date || '')
+          : '';
+        const capacity = workDate
+          ? await loadEmployeeCapacityForDates(admin, [workDate])
+          : [];
+        return NextResponse.json({ success: true, employee_capacity: capacity });
+      }
+    }
     const table =
       resourceType === 'employee' ? 'schedule_employee_assignments' : 'schedule_plant_assignments';
     const existing = await admin

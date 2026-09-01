@@ -37,6 +37,13 @@ export function isDateWithinRange(workDate: string, startDate: string, endDate: 
   return workDate >= startDate && workDate <= endDate;
 }
 
+export function absenceCoversWorkDate(
+  absence: { date: string; end_date?: string | null },
+  workDate: string
+): boolean {
+  return isDateWithinRange(workDate, absence.date, absence.end_date || absence.date);
+}
+
 export function isEmployeeWorkingOnDate(
   workDate: string,
   shift: Record<string, boolean> | null | undefined
@@ -68,12 +75,13 @@ export async function detectEmployeeConflicts(
       .eq('work_date', input.workDate),
     admin
       .from('absences')
-      .select('id')
+      .select('id, date, end_date')
       .eq('profile_id', input.profileId)
       .in('status', ['approved', 'processed'])
-      .lte('date', input.workDate)
-      .or(`end_date.gte.${input.workDate},end_date.is.null`)
-      .limit(1),
+      .or(
+        `and(date.lte.${input.workDate},end_date.gte.${input.workDate}),and(end_date.is.null,date.eq.${input.workDate})`
+      )
+      .limit(5),
     admin
       .from('employee_work_shifts')
       .select(`
@@ -118,7 +126,20 @@ export async function detectEmployeeConflicts(
     });
   }
 
-  if ((absenceResult.data || []).length > 0) {
+  const matchedAbsences = (absenceResult.data || []).map((row) => {
+    const start = String(row.date);
+    const end = row.end_date == null ? null : String(row.end_date);
+    return {
+      date: start,
+      end_date: end,
+      coversWithBoardRule: absenceCoversWorkDate(
+        { date: start, end_date: end },
+        input.workDate
+      ),
+    };
+  });
+  const coveringAbsences = matchedAbsences.filter((row) => row.coversWithBoardRule);
+  if (coveringAbsences.length > 0) {
     conflicts.push({
       code: 'employee_absent',
       severity: 'warning',

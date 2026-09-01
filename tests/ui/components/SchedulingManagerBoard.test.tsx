@@ -1042,9 +1042,21 @@ describe('SchedulingManagerBoard', () => {
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
     });
-    expect(confirmation).toHaveTextContent('Checking assignments');
-    expect(within(confirmation).getByRole('button', { name: 'Checking…' }))
-      .toBeDisabled();
+    expect(confirmation).toHaveTextContent('1 assignment will be permanently removed');
+    expect(confirmation).toHaveTextContent('Other visits for this job will stay scheduled');
+    expect(within(confirmation).getByRole('button', { name: 'Return visit to Jobs' }))
+      .toBeEnabled();
+    expect(mockEnqueueVisit).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(confirmation).getByRole('button', { name: 'Return visit to Jobs' })
+    );
+    expect(mockEnqueueVisit).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole('button', { name: 'Select visit 1 for JOB-101' })
+      ).toHaveLength(0)
+    );
     resolvePreview({
       visit_id: 'visit-1',
       job_id: 'job-1',
@@ -1054,15 +1066,6 @@ describe('SchedulingManagerBoard', () => {
       fingerprint: 'preview-hash',
       already_queued: false,
     });
-    await waitFor(() =>
-      expect(confirmation).toHaveTextContent('1 assignment will be permanently removed')
-    );
-    expect(confirmation).toHaveTextContent('Other visits for this job will stay scheduled');
-    expect(mockEnqueueVisit).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      within(confirmation).getByRole('button', { name: 'Return visit to Jobs' })
-    );
     await waitFor(() =>
       expect(mockEnqueueVisit).toHaveBeenCalledWith({
         request_id: expect.any(String),

@@ -172,6 +172,15 @@ describe('scheduling visit backlog routes', () => {
       p_expected_fingerprint: 'preview-hash',
       p_actor_user_id: 'manager-1',
     });
+    expect(mockLoadBacklog).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({
+      transition: {
+        visit_id: visitId,
+        job_id: 'job-1',
+        assignment_count: 3,
+        queued_at: '2026-08-11T00:00:00.000Z',
+      },
+    });
   });
 
   it('rejects a stale confirmation without reporting success', async () => {

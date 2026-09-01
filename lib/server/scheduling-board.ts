@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildEmployeeCapacity, buildEmployeeDaySessions } from '@/lib/server/scheduling-capacity';
-import { isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
+import { absenceCoversWorkDate, isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { loadScheduleDayTeams } from '@/lib/server/scheduling-day-teams';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import {
@@ -75,9 +75,7 @@ function hasAbsence(
 ): boolean {
   return absences.some(
     (absence) =>
-      absence.profile_id === profileId &&
-      absence.date <= workDate &&
-      (absence.end_date || absence.date) >= workDate
+      absence.profile_id === profileId && absenceCoversWorkDate(absence, workDate)
   );
 }
 

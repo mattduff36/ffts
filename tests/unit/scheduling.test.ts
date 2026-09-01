@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  absenceCoversWorkDate,
   conflictCodes,
   isDateWithinRange,
   isEmployeeWorkingOnDate,
@@ -67,6 +68,22 @@ describe('scheduling date utilities', () => {
     expect(enumerateScheduleDates('2026-07-15', '2026-07-13')).toEqual([]);
     expect(isScheduleDate('15/07/2026')).toBe(false);
     expect(isDateWithinRange('2026-07-14', '2026-07-13', '2026-07-15')).toBe(true);
+  });
+});
+
+describe('absenceCoversWorkDate', () => {
+  it('treats a null end_date as a single-day absence', () => {
+    expect(absenceCoversWorkDate({ date: '2026-08-31', end_date: null }, '2026-08-31')).toBe(true);
+    expect(absenceCoversWorkDate({ date: '2026-08-31', end_date: null }, '2026-09-01')).toBe(false);
+  });
+
+  it('includes inclusive multi-day ranges only', () => {
+    expect(
+      absenceCoversWorkDate({ date: '2026-08-31', end_date: '2026-09-02' }, '2026-09-01')
+    ).toBe(true);
+    expect(
+      absenceCoversWorkDate({ date: '2026-08-31', end_date: '2026-09-02' }, '2026-09-03')
+    ).toBe(false);
   });
 });
 

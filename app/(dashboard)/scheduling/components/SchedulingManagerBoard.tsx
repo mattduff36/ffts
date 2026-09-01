@@ -560,11 +560,11 @@ function DraggableResourceCard({
       title={occupancyLabel || 'Tap to assign, or drag to a timed visit'}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'relative flex min-h-11 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition active:cursor-grabbing',
+        'relative flex min-h-11 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition',
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type),
-        isDragging && 'opacity-40'
+        isDragging && 'cursor-grabbing opacity-40'
       )}
       style={{ touchAction: 'none' }}
     >
@@ -641,7 +641,7 @@ function DraggableQuoteCard({
         title={`${quote.base_quote_reference} — ${quote.customer_name ? `${quote.customer_name} · ` : ''}${quote.title}`}
         data-testid={`schedule-quote-${quote.id}`}
         className={cn(
-          'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg p-1 text-left transition active:cursor-grabbing',
+          'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg p-1 text-left transition',
           selected
             ? schedulingControlStyles.primary
             : schedulingControlStyles.resourceJob,
@@ -875,7 +875,10 @@ function AssignmentChip({
       <button
         ref={handleRef}
         type="button"
-        className="flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-l-full active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
+        className={cn(
+          'flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-l-full focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current',
+          isDragging && 'cursor-grabbing'
+        )}
         style={{ touchAction: 'none' }}
         aria-label={`Move ${fullLabel} to another visit`}
         data-testid={`schedule-assignment-drag-handle-${assignment.id}`}
@@ -1041,10 +1044,10 @@ function VisitCard({
       data-testid={visitCardTestId(visit.id, dndInstanceId)}
       style={{ ...style, touchAction: 'none' }}
       className={cn(
-        'flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5 active:cursor-grabbing',
+        'flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
         className,
         visit.status === 'cancelled' && 'opacity-60',
-        isDragging && 'opacity-40',
+        isDragging && 'cursor-grabbing opacity-40',
         isActiveTarget && 'border-scheduling ring-1 ring-scheduling',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
@@ -1055,7 +1058,10 @@ function VisitCard({
           type="button"
           onClick={handleClick}
           onPointerDown={resetDragState}
-          className="min-w-0 flex-1 touch-none cursor-grab overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          className={cn(
+            'min-w-0 flex-1 touch-none cursor-grab overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
+            isDragging && 'cursor-grabbing'
+          )}
           style={{ touchAction: 'none' }}
           aria-label={
             visit.status === 'cancelled'
@@ -1372,6 +1378,42 @@ function getDailyTimelineAvailableWidth(viewportWidth: number): number {
   return Math.max(0, viewportWidth - DAILY_TIMELINE_JOB_COLUMN_WIDTH);
 }
 
+const capturedSchedulePointers = new Map<number, Element>();
+
+function rememberSchedulePointerCapture(target: Element, pointerId: number) {
+  capturedSchedulePointers.set(pointerId, target);
+}
+
+function releaseSchedulePointerCaptures(pointerId?: number) {
+  const entries = pointerId == null
+    ? Array.from(capturedSchedulePointers.entries())
+    : capturedSchedulePointers.has(pointerId)
+      ? [[pointerId, capturedSchedulePointers.get(pointerId)!] as const]
+      : [];
+  for (const [id, element] of entries) {
+    if (element.hasPointerCapture?.(id)) {
+      element.releasePointerCapture(id);
+    }
+    capturedSchedulePointers.delete(id);
+  }
+  return entries.length;
+}
+
+function clearScheduleTextSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0) return;
+  selection.removeAllRanges();
+}
+
+function isTimelinePanBlockedTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      'button, a, input, textarea, select, [data-schedule-visit-card], [data-no-timeline-pan], [role="button"]'
+    )
+  );
+}
+
 function DailyTimelineHeader({
   date,
   range,
@@ -1402,7 +1444,7 @@ function DailyTimelineHeader({
     <div
       ref={ref}
       className={cn(
-        'relative z-0 h-16 border-l border-border bg-muted/60 transition',
+        'relative z-0 h-16 select-none border-l border-border bg-muted/60 transition',
         isPannable && 'cursor-grab',
         isDropTarget && 'bg-scheduling-soft ring-2 ring-inset ring-scheduling'
       )}
@@ -1527,6 +1569,30 @@ function getResizedVisitTimes(
   };
 }
 
+const VISIT_RESIZE_DRAFT_KEY = 'ffts-schedule-visit-resize-drafts';
+
+function readVisitResizeDrafts(): Record<string, VisitResizeTimes> {
+  try {
+    return JSON.parse(sessionStorage.getItem(VISIT_RESIZE_DRAFT_KEY) || '{}') as Record<
+      string,
+      VisitResizeTimes
+    >;
+  } catch {
+    return {};
+  }
+}
+
+function writeVisitResizeDraft(visitId: string, next: VisitResizeTimes | null) {
+  const drafts = readVisitResizeDrafts();
+  if (next) drafts[visitId] = next;
+  else delete drafts[visitId];
+  sessionStorage.setItem(VISIT_RESIZE_DRAFT_KEY, JSON.stringify(drafts));
+}
+
+function sameVisitClock(left: string, right: string) {
+  return parseISO(left).getTime() === parseISO(right).getTime();
+}
+
 function ResizableDailyVisit({
   job,
   visit,
@@ -1543,8 +1609,27 @@ function ResizableDailyVisit({
   dndInstanceId,
   hiddenAssignment = null,
 }: ResizableDailyVisitProps) {
-  const [draftTimes, setDraftTimes] = useState<VisitResizeTimes | null>(null);
+  const [draftTimes, setDraftTimesState] = useState<VisitResizeTimes | null>(
+    () => readVisitResizeDrafts()[visit.id] || null
+  );
   const resizeOperation = useRef<VisitResizeOperation | null>(null);
+
+  function setDraftTimes(next: VisitResizeTimes | null) {
+    writeVisitResizeDraft(visit.id, next);
+    setDraftTimesState(next);
+  }
+
+  useEffect(() => {
+    const stored = readVisitResizeDrafts()[visit.id];
+    if (!stored) return;
+    if (
+      sameVisitClock(visit.starts_at, stored.startsAt)
+      && sameVisitClock(visit.ends_at, stored.endsAt)
+    ) {
+      writeVisitResizeDraft(visit.id, null);
+      setDraftTimesState(null);
+    }
+  }, [visit.id, visit.starts_at, visit.ends_at]);
   const displayedVisit = draftTimes
     ? { ...visit, starts_at: draftTimes.startsAt, ends_at: draftTimes.endsAt }
     : visit;
@@ -1576,7 +1661,9 @@ function ResizableDailyVisit({
   ) {
     event.preventDefault();
     event.stopPropagation();
+    clearScheduleTextSelection();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    rememberSchedulePointerCapture(event.currentTarget, event.pointerId);
     resizeOperation.current = {
       edge,
       pointerId: event.pointerId,
@@ -1611,10 +1698,9 @@ function ResizableDailyVisit({
     if (!operation || operation.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
     resizeOperation.current = null;
+    releaseSchedulePointerCaptures(event.pointerId);
+    clearScheduleTextSelection();
     if (
       operation.nextStartsAt === operation.startsAt
       && operation.nextEndsAt === operation.endsAt
@@ -1622,11 +1708,17 @@ function ResizableDailyVisit({
       setDraftTimes(null);
       return;
     }
+    setDraftTimes({
+      startsAt: operation.nextStartsAt,
+      endsAt: operation.nextEndsAt,
+    });
     void onResizeVisit(
       visit,
       operation.nextStartsAt,
       operation.nextEndsAt
-    ).finally(() => setDraftTimes(null));
+    ).catch(() => {
+      setDraftTimes(null);
+    });
   }
 
   function cancelResize(event: PointerEvent<HTMLButtonElement>) {
@@ -1669,6 +1761,7 @@ function ResizableDailyVisit({
         onPointerMove={handleResizePointerMove}
         onPointerUp={finishResize}
         onPointerCancel={cancelResize}
+        onLostPointerCapture={finishResize}
         onKeyDown={(event) => handleResizeKeyDown(event, edge)}
         onClick={(event) => {
           event.preventDefault();
@@ -1749,7 +1842,7 @@ function DailyTimelineCell({
       data-timeline-start={`${String(range.startHour).padStart(2, '0')}:00`}
       data-timeline-end={`${String(range.endHour).padStart(2, '0')}:00`}
       className={cn(
-        'relative z-0 border-l border-border bg-muted/10',
+        'relative z-0 select-none border-l border-border bg-muted/10',
         isPannable && 'cursor-grab'
       )}
       data-timeline-pan-surface="true"
@@ -1911,6 +2004,7 @@ interface PendingAssignmentConflict {
 
 interface PendingVisitReturn {
   target: ActiveVisitTarget;
+  localAssignmentCount: number;
   preview: ScheduleVisitBacklogPreview | null;
 }
 
@@ -1980,7 +2074,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [pendingConflict, setPendingConflict] = useState<PendingAssignmentConflict | null>(null);
   const [pendingVisitReturn, setPendingVisitReturn] =
     useState<PendingVisitReturn | null>(null);
-  const [isReturningVisit, setIsReturningVisit] = useState(false);
+  const [returningVisitIds, setReturningVisitIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [inFlightMutationKeys, setInFlightMutationKeys] = useState<Set<string>>(
     () => new Set()
   );
@@ -1989,6 +2085,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [optimisticOperations, setOptimisticOperations] =
     useState<SchedulingOptimisticOperation[]>([]);
   const optimisticOperationsRef = useRef<SchedulingOptimisticOperation[]>([]);
+  const pendingOptimisticVisitResizesRef = useRef<
+    Map<string, { startsAt: string; endsAt: string; operationId: string | null }>
+  >(new Map());
   const optimisticSequenceRef = useRef(0);
   const coordinatorOwnedIdsRef = useRef<Set<string>>(new Set());
   const mutationCoordinatorRef = useRef<SchedulingMutationCoordinator | null>(null);
@@ -1996,6 +2095,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     new Map()
   );
   const reconciliationAttemptsRef = useRef<Map<string, number>>(new Map());
+  const deferredReconcileKeysRef = useRef<string[]>([]);
+  const boardInteractionBusyRef = useRef(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddDraft, setQuickAddDraft] =
     useState<QuickAddScheduleProjectInput | null>(null);
@@ -2036,6 +2137,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [dailyTimelineViewportWidth, setDailyTimelineViewportWidth] =
     useState<number | null>(null);
   const [isDailyTimelinePanning, setIsDailyTimelinePanning] = useState(false);
+  const [dndSessionEpoch, setDndSessionEpoch] = useState(0);
+  const dragUiRef = useRef({
+    resource: false,
+    assignment: false,
+    quote: false,
+    visit: false,
+    dayTeam: false,
+  });
+  const visitReturnPreviewPromisesRef = useRef<
+    Map<string, Promise<ScheduleVisitBacklogPreview>>
+  >(new Map());
+  const visitReturnPersistPromisesRef = useRef<Map<string, Promise<void>>>(
+    new Map()
+  );
   const [coldWeekStates, setColdWeekStates] =
     useState<Map<string, ColdWeekLoadState>>(() => new Map());
   const coldWeekEpochsRef = useRef<Map<string, number>>(new Map());
@@ -2105,6 +2220,62 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     mutationCoordinatorRef.current?.dispose();
     mutationCoordinatorRef.current = null;
   }, []);
+  function clearDragUi() {
+    const leftover = Object.values(dragUiRef.current).some(Boolean);
+    dragUiRef.current = {
+      resource: false,
+      assignment: false,
+      quote: false,
+      visit: false,
+      dayTeam: false,
+    };
+    setDraggedResource(null);
+    setDraggedAssignment(null);
+    setDraggedQuote(null);
+    setDraggedVisit(null);
+    setDraggedDayTeam(null);
+    return leftover;
+  }
+
+  function clearStuckBoardInteraction(
+    _reason: string,
+    options?: { resetDnd?: boolean }
+  ) {
+    dailyTimelinePanOperation.current = null;
+    setIsDailyTimelinePanning(false);
+    const hadDrag = clearDragUi();
+    clearScheduleTextSelection();
+    releaseSchedulePointerCaptures();
+    if (hadDrag && options?.resetDnd) {
+      setDndSessionEpoch((epoch) => epoch + 1);
+    }
+  }
+
+  useEffect(() => {
+    function resetStuckPointerUi(event: globalThis.PointerEvent) {
+      if (event.type === 'pointerup' && event.buttons !== 0) return;
+      const leftoverDrag = Object.values(dragUiRef.current).some(Boolean);
+      const hadPan = Boolean(dailyTimelinePanOperation.current);
+      if (leftoverDrag || hadPan || isDailyTimelinePanning) {
+        clearStuckBoardInteraction(`window-${event.type}`, { resetDnd: leftoverDrag });
+      }
+      if (boardInteractionBusyRef.current) {
+        endBoardPointerBusy(`window-${event.type}`);
+      }
+    }
+    function resetStuckPointerUiOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      clearStuckBoardInteraction('escape', { resetDnd: true });
+    }
+    window.addEventListener('pointerup', resetStuckPointerUi);
+    window.addEventListener('pointercancel', resetStuckPointerUi);
+    window.addEventListener('keydown', resetStuckPointerUiOnEscape);
+    return () => {
+      window.removeEventListener('pointerup', resetStuckPointerUi);
+      window.removeEventListener('pointercancel', resetStuckPointerUi);
+      window.removeEventListener('keydown', resetStuckPointerUiOnEscape);
+    };
+  }, [isDailyTimelinePanning]);
   useEffect(() => {
     if (!canCreateQuotes || !quotesSensitiveAccess.canAccess) {
       setQuoteManagerOptions([]);
@@ -2260,6 +2431,147 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return operation;
   }
 
+  function takePendingOptimisticVisitResize(...visitIds: Array<string | undefined>) {
+    for (const visitId of visitIds) {
+      if (!visitId) continue;
+      const pending = pendingOptimisticVisitResizesRef.current.get(visitId);
+      if (!pending) continue;
+      pendingOptimisticVisitResizesRef.current.delete(visitId);
+      if (pending.operationId) {
+        syncOptimisticOperations(
+          removeOptimisticOperation(optimisticOperationsRef.current, pending.operationId)
+        );
+      }
+      return pending;
+    }
+    return null;
+  }
+
+  function isVisitPlacementPending(visitId: string) {
+    return optimisticOperationsRef.current.some(
+      (operation) =>
+        operation.status === 'pending'
+        && (
+          operation.kind === 'schedule-backlog-visit'
+          || operation.kind === 'schedule-quote'
+          || operation.kind === 'schedule-project'
+          || operation.kind === 'quick-add'
+          || operation.kind === 'create-visit'
+        )
+        && operation.lockKeys.some((key) => key.includes(visitId))
+    );
+  }
+
+  function queuePendingVisitResize(
+    visit: ScheduleVisit,
+    startsAt: string,
+    endsAt: string,
+    _reason: string
+  ) {
+    const resizedVisit = { ...visit, starts_at: startsAt, ends_at: endsAt };
+    const existing = pendingOptimisticVisitResizesRef.current.get(visit.id);
+    if (existing?.operationId) {
+      syncOptimisticOperations(
+        optimisticOperationsRef.current.map((operation) =>
+          operation.id === existing.operationId
+            ? {
+                ...operation,
+                proofs: {
+                  [`board:${weekStart}`]: (state) =>
+                    state.board?.visits.some(
+                      (item) =>
+                        item.id === visit.id
+                        && item.starts_at === startsAt
+                        && item.ends_at === endsAt
+                    ) === true,
+                },
+                apply: (state) => ({
+                  ...state,
+                  board: state.board
+                    ? patchBoardWithVisit(state.board, resizedVisit)
+                    : state.board,
+                }),
+              }
+            : operation
+        )
+      );
+      pendingOptimisticVisitResizesRef.current.set(visit.id, {
+        ...existing,
+        startsAt,
+        endsAt,
+      });
+    } else {
+      const operation = registerOptimisticOperation({
+        kind: 'resize-visit-pending',
+        lockKeys: [`job-tree:${visit.job_id}`, `visit:${visit.id}`],
+        queryKeys: [`board:${weekStart}`],
+        proofs: {
+          [`board:${weekStart}`]: (state) =>
+            state.board?.visits.some(
+              (item) =>
+                item.id === visit.id
+                && item.starts_at === startsAt
+                && item.ends_at === endsAt
+            ) === true,
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? patchBoardWithVisit(state.board, resizedVisit)
+            : state.board,
+        }),
+      });
+      pendingOptimisticVisitResizesRef.current.set(visit.id, {
+        startsAt,
+        endsAt,
+        operationId: operation?.id || null,
+      });
+    }
+    setActiveVisitTarget((current) =>
+      current?.visit.id === visit.id
+        ? { ...current, visit: resizedVisit }
+        : current
+    );
+  }
+
+  function applyAuthoritativeVisitWithPendingResize(
+    optimisticVisitId: string | undefined,
+    authoritative: ScheduleVisit | null | undefined
+  ): ScheduleVisit | null | undefined {
+    if (!authoritative) return authoritative;
+    const pending = takePendingOptimisticVisitResize(optimisticVisitId, authoritative.id);
+    if (
+      !pending
+      || (
+        pending.startsAt === authoritative.starts_at
+        && pending.endsAt === authoritative.ends_at
+      )
+    ) {
+      return authoritative;
+    }
+    const nextVisit = {
+      ...authoritative,
+      starts_at: pending.startsAt,
+      ends_at: pending.endsAt,
+    };
+    void saveScheduleVisit({
+      job_id: authoritative.job_id,
+      title: authoritative.title,
+      starts_at: pending.startsAt,
+      ends_at: pending.endsAt,
+      status: authoritative.status,
+      notes: authoritative.notes,
+    }, authoritative.id)
+      .then((saved) => {
+        setBoardBaseData((current) => patchBoardWithVisit(current, saved));
+      })
+      .catch((error) => {
+        setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
+        toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
+      });
+    return nextVisit;
+  }
+
   function admitBoardCommand(input: {
     id?: string;
     kind: string;
@@ -2347,7 +2659,45 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       });
   }
 
+  function isBoardPointerBusy() {
+    return (
+      boardInteractionBusyRef.current
+      || Boolean(dailyTimelinePanOperation.current)
+      || Object.values(dragUiRef.current).some(Boolean)
+    );
+  }
+
+  function flushDeferredReconciles() {
+    const keys = deferredReconcileKeysRef.current;
+    deferredReconcileKeysRef.current = [];
+    if (keys.length === 0) return;
+    reconcileOptimisticKeysInBackground(keys);
+  }
+
+  function beginBoardPointerBusy(_reason: string) {
+    boardInteractionBusyRef.current = true;
+    void queryClient.cancelQueries({
+      queryKey: ['scheduling-board', weekStart],
+      exact: true,
+    });
+    void queryClient.cancelQueries({
+      queryKey: ['scheduling-visit-backlog'],
+      exact: true,
+    });
+  }
+
+  function endBoardPointerBusy(_reason: string) {
+    boardInteractionBusyRef.current = false;
+    flushDeferredReconciles();
+  }
+
   function reconcileOptimisticKeysInBackground(keys: string[], delayMs = 0) {
+    if (isBoardPointerBusy()) {
+      deferredReconcileKeysRef.current = Array.from(
+        new Set([...deferredReconcileKeysRef.current, ...keys])
+      );
+      return;
+    }
     for (const key of new Set(keys)) {
       const existing = reconciliationTimersRef.current.get(key);
       if (existing) clearTimeout(existing);
@@ -2417,8 +2767,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 reconciliationAttemptsRef.current.delete(`${operation.id}:${key}`);
               }
             }
-            syncOptimisticOperations(updated);
-            if (boardWeek && coldEpoch !== null) {
+            syncOptimisticOperations(updated);            if (boardWeek && coldEpoch !== null) {
               setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
                 status: 'authoritative',
               });
@@ -2988,29 +3337,39 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       if (!operation) return;
       setSelectedQuote(null);
       try {
+        const pendingReturn = visitReturnPersistPromisesRef.current.get(
+          quote.returned_visit.visit_id
+        );
+        if (pendingReturn) {
+          await pendingReturn;
+        }
         const result = await scheduleQueuedVisit({
           request_id: crypto.randomUUID(),
           visit_id: quote.returned_visit.visit_id,
           starts_at: startsAt,
         });
+        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
+          quote.returned_visit.visit_id,
+          result.visit
+        ) || result.visit;
         setBoardBaseData((current) =>
           patchBoardWithVisit(
             patchBoardWithJob(current, result.job),
-            result.visit
+            scheduledVisit
           )
         );
         queryClient.setQueryData(
           ['scheduling-visit-backlog'],
           (current: ScheduleVisitBacklogItem[] | undefined) =>
-            removeVisitBacklogItem(current, result.visit.id)
+            removeVisitBacklogItem(current, scheduledVisit.id)
         );
         settleOptimisticOperation(operation.id, 'success', undefined, {
           proofs: {
             [`board:${weekStart}`]: (state) =>
-              provesJob(result.job)(state) && provesVisit(result.visit)(state),
+              provesJob(result.job)(state) && provesVisit(scheduledVisit)(state),
             backlog: (state) =>
               state.visitBacklog?.every(
-                (item) => item.visit_id !== result.visit.id
+                (item) => item.visit_id !== scheduledVisit.id
               ) === true,
           },
           apply: (state) => ({
@@ -3018,12 +3377,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             board: state.board
               ? patchBoardWithVisit(
                   patchBoardWithJob(state.board, result.job),
-                  result.visit
+                  scheduledVisit
                 )
               : state.board,
             visitBacklog: removeVisitBacklogItem(
               state.visitBacklog,
-              result.visit.id
+              scheduledVisit.id
             ),
           }),
         });
@@ -3126,9 +3485,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         end_date: endDate,
         ...(initialVisit ? { initial_visit: initialVisit } : {}),
       });
+      const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
+        optimisticVisit?.id,
+        result.visit
+      );
       setBoardBaseData((current) => {
         const withJob = patchBoardWithJob(current, result.job);
-        return result.visit ? patchBoardWithVisit(withJob, result.visit) : withJob;
+        return scheduledVisit ? patchBoardWithVisit(withJob, scheduledVisit) : withJob;
       });
       queryClient.setQueryData(
         ['scheduling-quote-candidates'],
@@ -3139,7 +3502,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         proofs: {
           [`board:${weekStart}`]: (state) =>
             provesJob(result.job)(state)
-            && (!result.visit || provesVisit(result.visit)(state)),
+            && (!scheduledVisit || provesVisit(scheduledVisit)(state)),
           quotes: (state) =>
             state.quoteCandidates?.every(
               (candidate) => candidate.id !== quote.id
@@ -3148,10 +3511,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         apply: (state) => ({
           ...state,
           board: state.board
-            ? result.visit
+            ? scheduledVisit
               ? patchBoardWithVisit(
                   patchBoardWithJob(state.board, result.job),
-                  result.visit
+                  scheduledVisit
                 )
               : patchBoardWithJob(state.board, result.job)
             : state.board,
@@ -3250,9 +3613,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     if (optimisticVisit) activateVisit(optimisticJob, optimisticVisit);
     void createProjectScheduleJob(input)
       .then((result) => {
+        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
+          optimisticVisit?.id,
+          result.visit
+        );
         setBoardBaseData((current) => {
           const withJob = patchBoardWithJob(current, result.job);
-          return result.visit ? patchBoardWithVisit(withJob, result.visit) : withJob;
+          return scheduledVisit ? patchBoardWithVisit(withJob, scheduledVisit) : withJob;
         });
         queryClient.setQueryData(
           ['scheduling-project-candidates'],
@@ -3263,7 +3630,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           proofs: {
             [`board:${weekStart}`]: (state) =>
               provesJob(result.job)(state)
-              && (!result.visit || provesVisit(result.visit)(state)),
+              && (!scheduledVisit || provesVisit(scheduledVisit)(state)),
             projects: (state) =>
               state.projectCandidates?.every(
                 (candidate) => candidate.id !== project.id
@@ -3272,10 +3639,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           apply: (state) => ({
             ...state,
             board: state.board
-              ? result.visit
+              ? scheduledVisit
                 ? patchBoardWithVisit(
                     patchBoardWithJob(state.board, result.job),
-                    result.visit
+                    scheduledVisit
                   )
                 : patchBoardWithJob(state.board, result.job)
               : state.board,
@@ -3286,11 +3653,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           }),
         });
         setProjectPlacementDraft(null);
-        const authoritativeVisit = result.visit;
-        if (authoritativeVisit) {
+        if (scheduledVisit) {
           setActiveVisitTarget((current) =>
             current?.visit.id === optimisticVisit?.id
-              ? { job: result.job, visit: authoritativeVisit }
+              ? { job: result.job, visit: scheduledVisit }
               : current
           );
         }
@@ -3569,9 +3935,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this new visit to finish saving.');
       return;
     }
-    setPendingVisitReturn({ target, preview: null });
+    clearStuckBoardInteraction('prepare-return', { resetDnd: true });
+    const localAssignmentCount = (projectedState.board?.assignments || []).filter(
+      (assignment) => assignment.visit_id === target.visit.id
+    ).length;
+    if (
+      (projectedState.visitBacklog || []).some(
+        (item) => item.visit_id === target.visit.id
+      )
+    ) {
+      toast.info('This visit is already in the Jobs queue.');
+      reconcileOptimisticKeysInBackground([`board:${weekStart}`, 'backlog']);
+      return;
+    }
+    setPendingVisitReturn({
+      target,
+      localAssignmentCount,
+      preview: null,
+    });
+    const previewRequest = previewScheduleVisitBacklog(target.visit.id);
+    visitReturnPreviewPromisesRef.current.set(target.visit.id, previewRequest);
     try {
-      const preview = await previewScheduleVisitBacklog(target.visit.id);
+      const preview = await previewRequest;
       if (preview.already_queued) {
         toast.info('This visit is already in the Jobs queue.');
         setPendingVisitReturn(null);
@@ -3579,7 +3964,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         return;
       }
       setPendingVisitReturn((current) =>
-        current?.target.visit.id === target.visit.id ? { target, preview } : current
+        current?.target.visit.id === target.visit.id
+          ? { target, localAssignmentCount, preview }
+          : current
       );
     } catch (error) {
       setPendingVisitReturn(null);
@@ -3588,12 +3975,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           ? error.message
           : 'Unable to review this visit before returning it to Jobs'
       );
+    } finally {
+      if (visitReturnPreviewPromisesRef.current.get(target.visit.id) === previewRequest) {
+        visitReturnPreviewPromisesRef.current.delete(target.visit.id);
+      }
     }
   }
 
   async function confirmVisitReturn() {
-    if (!pendingVisitReturn?.preview || isReturningVisit) return;
-    const { target, preview } = pendingVisitReturn;
+    if (
+      !pendingVisitReturn
+      || returningVisitIds.has(pendingVisitReturn.target.visit.id)
+    ) return;
+    const { target, preview: preparedPreview } = pendingVisitReturn;
     const queuedAt = new Date().toISOString();
     const backlogItem: ScheduleVisitBacklogItem = {
       visit_id: target.visit.id,
@@ -3650,8 +4044,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         };
       },
     });
-    if (!operation) return;
-    setIsReturningVisit(true);
+    setBoardBaseData((current) => {
+      const otherVisits = current.visits.filter(
+        (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+      );
+      return otherVisits.length > 0
+        ? patchBoardRemoveVisit(current, target.visit.id)
+        : patchBoardRemoveJob(current, target.job.id);
+    });
+    queryClient.setQueryData(
+      ['scheduling-visit-backlog'],
+      (current: ScheduleVisitBacklogItem[] | undefined) =>
+        upsertVisitBacklogItem(current, backlogItem)
+    );
+    setReturningVisitIds((current) => {
+      const next = new Set(current);
+      next.add(target.visit.id);
+      return next;
+    });
     setPendingVisitReturn(null);
     setActiveVisitTarget((current) =>
       current?.visit.id === target.visit.id ? null : current
@@ -3663,7 +4073,40 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     setSelectedQuote(null);
     setSidebarTab('jobs');
     setQuoteStage('all');
-    try {
+    const persistWork = (async () => {
+      let preview = preparedPreview;
+      if (!preview?.fingerprint) {
+        preview = await (
+          visitReturnPreviewPromisesRef.current.get(target.visit.id)
+          ?? previewScheduleVisitBacklog(target.visit.id)
+        );
+      }
+      if (preview.already_queued) {
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          proofs: {
+            [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
+            backlog: (state) =>
+              state.visitBacklog?.some(
+                (item) => item.visit_id === target.visit.id
+              ) === true,
+          },
+          apply: (state) => ({
+            ...state,
+            board: state.board
+              ? (
+                state.board.visits.some(
+                  (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+                )
+                  ? patchBoardRemoveVisit(state.board, target.visit.id)
+                  : patchBoardRemoveJob(state.board, target.job.id)
+              )
+              : state.board,
+            visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
+          }),
+        });
+        toast.info('This visit is already in the Jobs queue.');
+        return;
+      }
       const result = await enqueueScheduleVisit({
         request_id: crypto.randomUUID(),
         visit_id: target.visit.id,
@@ -3727,20 +4170,35 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.success(
         `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
       );
+    })();
+    visitReturnPersistPromisesRef.current.set(target.visit.id, persistWork);
+    try {
+      await persistWork;
     } catch (error) {
       settleOptimisticOperation(operation.id, 'failure', error);
       if (
         error instanceof SchedulingApiError
         && error.payload.code === 'stale_visit_preview'
       ) {
-        setPendingVisitReturn({ target, preview: null });
+        setPendingVisitReturn({
+          target,
+          localAssignmentCount: pendingVisitReturn.localAssignmentCount,
+          preview: null,
+        });
         void prepareVisitReturn(target);
       }
       toast.error(
         error instanceof Error ? error.message : 'Unable to return this visit to Jobs'
       );
     } finally {
-      setIsReturningVisit(false);
+      if (visitReturnPersistPromisesRef.current.get(target.visit.id) === persistWork) {
+        visitReturnPersistPromisesRef.current.delete(target.visit.id);
+      }
+      setReturningVisitIds((current) => {
+        const next = new Set(current);
+        next.delete(target.visit.id);
+        return next;
+      });
     }
   }
 
@@ -3862,13 +4320,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
     void saveScheduleVisit(input, existingVisit?.id)
       .then((authoritative) => {
-        setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
+        const savedVisit = applyAuthoritativeVisitWithPendingResize(
+          existingVisit ? undefined : optimisticVisit.id,
+          authoritative
+        ) || authoritative;
+        setBoardBaseData((current) => patchBoardWithVisit(current, savedVisit));
         settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
+          proofs: { [`board:${weekStart}`]: provesVisit(savedVisit) },
           apply: (state) => ({
             ...state,
             board: state.board
-              ? patchBoardWithVisit(state.board, authoritative)
+              ? patchBoardWithVisit(state.board, savedVisit)
               : state.board,
           }),
         });
@@ -3940,7 +4402,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     startsAt: string,
     endsAt: string
   ) {
-    if (isOptimisticEntityId(visit.id) || isOptimisticEntityId(visit.job_id)) {
+    if (isOptimisticEntityId(visit.id) || isVisitPlacementPending(visit.id)) {
+      queuePendingVisitResize(
+        visit,
+        startsAt,
+        endsAt,
+        isOptimisticEntityId(visit.id) ? 'optimistic-visit' : 'placement-pending'
+      );
+      return;
+    }
+    if (isOptimisticEntityId(visit.job_id)) {
       toast.info('Wait for this new visit to finish saving.');
       return;
     }
@@ -3993,6 +4464,21 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       });
       toast.success('Visit times updated');
     } catch (error) {
+      const queued =
+        error instanceof SchedulingApiError
+        && (
+          error.payload.code === 'visit_queued'
+          || error.payload.code === 'visit_already_queued'
+        );
+      if (queued) {
+        pendingOptimisticVisitResizesRef.current.set(visit.id, {
+          startsAt,
+          endsAt,
+          operationId: operation.id,
+        });
+        queuePendingVisitResize(visit, startsAt, endsAt, String(error.payload.code));
+        return;
+      }
       settleOptimisticOperation(operation.id, 'failure', error);
       setActiveVisitTarget((current) =>
         current?.visit.id === visit.id ? { ...current, visit } : current
@@ -4952,20 +5438,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     activateVisit(optimisticJob, optimisticVisit);
     void quickAddScheduleProject(input)
       .then((result) => {
+        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
+          optimisticVisit.id,
+          result.visit
+        ) || result.visit;
         queryClient.setQueryData<SchedulingBoardPayload>(
           targetKey,
           (current) => current
             ? patchBoardWithQuickAdd({
                 board: current,
                 job: result.job,
-                visit: result.visit,
+                visit: scheduledVisit,
               })
             : current
         );
         settleOptimisticOperation(operation.id, 'success', undefined, {
           proofs: {
             [`board:${targetWeekStart}`]: (state) =>
-              provesJob(result.job)(state) && provesVisit(result.visit)(state),
+              provesJob(result.job)(state) && provesVisit(scheduledVisit)(state),
             projects: () => true,
           },
           apply: (state) => ({
@@ -4975,7 +5465,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 ? patchBoardWithQuickAdd({
                     board: state.board,
                     job: result.job,
-                    visit: result.visit,
+                    visit: scheduledVisit,
                   })
                 : state.board,
           }),
@@ -4983,7 +5473,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         setQuickAddDraft(null);
         setActiveVisitTarget((current) =>
           current?.visit.id === optimisticVisit.id
-            ? { job: result.job, visit: result.visit }
+            ? { job: result.job, visit: scheduledVisit }
             : current
         );
         toast.success(`${result.project_reference} added to the schedule`);
@@ -5166,9 +5656,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       event.target instanceof Element
         ? event.target.closest('[data-timeline-pan-surface="true"]')
         : null;
-    if (!panSurface || event.target !== panSurface) return;
+    if (!panSurface || isTimelinePanBlockedTarget(event.target)) return;
 
+    event.preventDefault();
+    clearScheduleTextSelection();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    rememberSchedulePointerCapture(event.currentTarget, event.pointerId);
+    beginBoardPointerBusy('pan-start');
     dailyTimelinePanOperation.current = {
       pointerId: event.pointerId,
       originClientX: event.clientX,
@@ -5196,17 +5690,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const operation = dailyTimelinePanOperation.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
     if (operation.hasDragged) event.preventDefault();
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
     dailyTimelinePanOperation.current = null;
     setIsDailyTimelinePanning(false);
+    releaseSchedulePointerCaptures(event.pointerId);
+    clearScheduleTextSelection();
+    endBoardPointerBusy('pan-finish');
   }
 
   function cancelTimelinePan(event: PointerEvent<HTMLDivElement>) {
     if (dailyTimelinePanOperation.current?.pointerId !== event.pointerId) return;
     dailyTimelinePanOperation.current = null;
     setIsDailyTimelinePanning(false);
+    clearScheduleTextSelection();
+    endBoardPointerBusy('pan-cancel');
   }
 
   function openVisitEditor(job: ScheduleJob, date: string, visit: ScheduleVisit | null = null) {
@@ -5257,6 +5753,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   return (
     <DragDropProvider
+      key={dndSessionEpoch}
       sensors={[
         PointerSensor.configure({
           activationConstraints() {
@@ -5338,11 +5835,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         const visit = event.operation.source?.data?.visit as ScheduleVisit | undefined;
         const job = event.operation.source?.data?.job as ScheduleJob | undefined;
         const dayTeam = event.operation.source?.data?.dayTeam as ScheduleDayTeamDragData | undefined;
+        dragUiRef.current = {
+          resource: Boolean(resource),
+          assignment: Boolean(assignment),
+          quote: Boolean(quote),
+          visit: Boolean(visit && job),
+          dayTeam: Boolean(dayTeam),
+        };
         setDraggedResource(resource || null);
         setDraggedAssignment(assignment || null);
         setDraggedQuote(quote || null);
         setDraggedVisit(visit && job ? { visit, job } : null);
         setDraggedDayTeam(dayTeam || null);
+        beginBoardPointerBusy('drag-start');
       }}
       onDragEnd={(event) => {
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
@@ -5367,12 +5872,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           typeof operationPosition?.x === 'number'
             ? operationPosition.x
             : latestPointerClientX.current;
+        dragUiRef.current = {
+          resource: false,
+          assignment: false,
+          quote: false,
+          visit: false,
+          dayTeam: false,
+        };
         setDraggedResource(null);
         setDraggedAssignment(null);
         setDraggedQuote(null);
         setDraggedVisit(null);
         setDraggedDayTeam(null);
-        if (event.canceled) return;
+        endBoardPointerBusy('drag-end');        if (event.canceled) return;
         if (sourceVisit && sourceVisitJob) {
           if (!targetData?.returnToResources) {
             toast.info('Drop this visit anywhere in Resources to return it to Jobs.');
@@ -6033,7 +6545,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain md:flex md:min-h-0 md:flex-col xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain select-none md:flex md:min-h-0 md:flex-col xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily
@@ -6045,7 +6557,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   view === SCHEDULING_BOARD_VIEWS.daily
                     && visibleDraggedQuote
                     && 'ring-2 ring-inset ring-emerald-400',
-                  isDailyTimelinePanning && 'cursor-grabbing select-none'
+                  isDailyTimelinePanning && 'cursor-grabbing'
                 )}
                 data-testid={view === SCHEDULING_BOARD_VIEWS.daily ? 'schedule-daily-timeline' : undefined}
                 aria-label={view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily schedule timeline' : undefined}
@@ -6082,6 +6594,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 onPointerCancel={
                   view === SCHEDULING_BOARD_VIEWS.daily
                     ? cancelTimelinePan
+                    : undefined
+                }
+                onLostPointerCapture={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? finishTimelinePan
+                    : undefined
+                }
+                onDragStart={
+                  view === SCHEDULING_BOARD_VIEWS.daily
+                    ? (event) => event.preventDefault()
                     : undefined
                 }
               >
@@ -6775,7 +7297,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       <AlertDialog
         open={pendingVisitReturn !== null}
         onOpenChange={(open) => {
-          if (!open && !isReturningVisit) setPendingVisitReturn(null);
+          if (!open) setPendingVisitReturn(null);
         }}
       >
         <AlertDialogContent>
@@ -6783,31 +7305,30 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             <AlertDialogTitle>Return this visit to Jobs?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingVisitReturn
-                ? pendingVisitReturn.preview
-                  ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${pendingVisitReturn.preview.assignment_count === 0
-                    ? 'It has no resource assignments.'
-                    : `${pendingVisitReturn.preview.assignment_count} ${pendingVisitReturn.preview.assignment_count === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
-                  : `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number}. Checking assignments before this visit can be returned…`
+                ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${(pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount) === 0
+                  ? 'It has no resource assignments.'
+                  : `${pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount} ${(pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount) === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
                 : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel
               className={schedulingControlStyles.outline}
-              disabled={isReturningVisit}
             >
               Keep scheduled
             </AlertDialogCancel>
             <AlertDialogAction
               className={schedulingControlStyles.warning}
               onClick={() => void confirmVisitReturn()}
-              disabled={isReturningVisit || !pendingVisitReturn?.preview}
+              disabled={
+                pendingVisitReturn != null
+                && returningVisitIds.has(pendingVisitReturn.target.visit.id)
+              }
             >
-              {isReturningVisit
+              {pendingVisitReturn
+                && returningVisitIds.has(pendingVisitReturn.target.visit.id)
                 ? 'Returning...'
-                : pendingVisitReturn?.preview
-                  ? 'Return visit to Jobs'
-                  : 'Checking…'}
+                : 'Return visit to Jobs'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,6 +3,7 @@ import {
   patchBoardMoveAssignment,
   patchBoardRemoveAssignment,
   patchBoardWithAssignment,
+  patchBoardWithJob,
   patchBoardWithQuickAdd,
   replaceEmployeeCapacity,
   snapshotBoard,
@@ -145,6 +146,48 @@ describe('scheduling-board-cache', () => {
     });
     expect(next.jobs.map((item) => item.id)).toContain('job-9');
     expect(next.visits.map((item) => item.id)).toContain('visit-9');
+  });
+
+  it('keeps newly added jobs in add order instead of sorting by job reference', () => {
+    const zebra = {
+      id: 'job-z',
+      job_reference: '99000-ZZ',
+      title: 'Zebra',
+      description: null,
+      site_address: null,
+      status: 'scheduled',
+      source_type: 'manual',
+      start_date: '2026-07-14',
+      end_date: '2026-07-14',
+      estimated_duration_minutes: 120,
+      quote_id: null,
+      quote_project_number_id: null,
+      customer_id: null,
+      customer_site_id: null,
+      is_drop_on_ready: false,
+      tags: [],
+      created_by: null,
+      updated_by: null,
+      created_at: '2026-07-14T07:00:00.000Z',
+      updated_at: '2026-07-14T07:00:00.000Z',
+    } as ScheduleJob;
+    const alpha = {
+      ...zebra,
+      id: 'job-a',
+      job_reference: '10000-AA',
+      title: 'Alpha',
+      created_at: '2026-07-14T07:01:00.000Z',
+    };
+    const withZebra = patchBoardWithJob(boardFixture(), zebra);
+    const withBoth = patchBoardWithJob(withZebra, alpha);
+    expect(withBoth.jobs.map((item) => item.job_reference)).toEqual([
+      '99000-ZZ',
+      '10000-AA',
+    ]);
+    const updatedZebra = { ...zebra, title: 'Zebra updated' };
+    const replaced = patchBoardWithJob(withBoth, updatedZebra);
+    expect(replaced.jobs.map((item) => item.id)).toEqual(['job-z', 'job-a']);
+    expect(replaced.jobs[0].title).toBe('Zebra updated');
   });
 
   it('merges capacity updates by date', () => {

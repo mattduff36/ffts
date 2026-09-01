@@ -1627,6 +1627,8 @@ function ResizableDailyVisit({
       && sameVisitClock(visit.ends_at, stored.endsAt)
     ) {
       writeVisitResizeDraft(visit.id, null);
+      // Draft store is external; clear the matching local draft after persist.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync from session draft
       setDraftTimesState(null);
     }
   }, [visit.id, visit.starts_at, visit.ends_at]);

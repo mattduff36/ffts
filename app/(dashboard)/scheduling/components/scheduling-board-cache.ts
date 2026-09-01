@@ -136,14 +136,17 @@ export function patchBoardWithJob(
   job: ScheduleJob,
   replaceId?: string
 ): SchedulingBoardPayload {
-  const jobs = board.jobs
-    .filter((item) => item.id !== job.id && item.id !== replaceId);
+  const existingIndex = board.jobs.findIndex(
+    (item) => item.id === job.id || item.id === replaceId
+  );
+  const jobs = board.jobs.filter((item) => item.id !== job.id && item.id !== replaceId);
+  if (existingIndex >= 0) {
+    jobs.splice(Math.min(existingIndex, jobs.length), 0, job);
+    return { ...board, jobs };
+  }
   return {
     ...board,
-    jobs: [...jobs, job].sort((a, b) =>
-      a.start_date.localeCompare(b.start_date)
-      || a.job_reference.localeCompare(b.job_reference)
-    ),
+    jobs: [...jobs, job],
   };
 }
 

@@ -221,8 +221,7 @@ export async function loadSchedulingBoard(
         .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
         .lte('start_date', weekEnd)
         .gte('end_date', weekStart)
-        .order('start_date')
-        .order('job_reference'),
+        .order('created_at'),
       admin
         .from('schedule_job_tags')
         .select('id, name, color, description, is_active')

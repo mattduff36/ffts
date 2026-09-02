@@ -939,17 +939,20 @@ describe('scheduling mutation coordinator', () => {
 
   it('P1-001 create optimistic visit then immediate resize persists against the authoritative id', async () => {
     const { coordinator } = createCoordinator();
-    const optimisticId = 'optimistic:create-1:visit';
-    const authoritativeId = '11111111-1111-4111-8111-111111111111';
+    const optimisticVisitId = 'optimistic:create-1:visit';
+    const optimisticJobId = 'optimistic:create-1:job';
+    const authoritativeVisitId = '11111111-1111-4111-8111-111111111111';
+    const authoritativeJobId = '22222222-2222-4222-8222-222222222222';
     const createGate = deferred();
     let createStarted = 0;
     let resizeStarted = 0;
-    let persistedResizeId: string | undefined;
+    let persistedResizeVisitId: string | undefined;
+    let persistedResizeJobId: string | undefined;
     coordinator.admit({
       id: 'create',
       kind: 'create-visit',
       retryPolicy: 'none',
-      claims: visitCreateClaims('job-1', optimisticId),
+      claims: visitCreateClaims(optimisticJobId, optimisticVisitId),
       queryKeys: ['board:week'],
       apply: applyMarker('create-visible'),
       persist: async () => {
@@ -960,15 +963,16 @@ describe('scheduling mutation coordinator', () => {
     coordinator.admit({
       id: 'resize',
       kind: 'resize-visit',
-      claims: visitTimesClaims('job-1', optimisticId),
-      coalesceGroup: visitTimesCoalesceGroup(optimisticId),
+      claims: visitTimesClaims(optimisticJobId, optimisticVisitId),
+      coalesceGroup: visitTimesCoalesceGroup(optimisticVisitId),
       dependsOn: ['create'],
-      identityWaitKeys: [optimisticId],
+      identityWaitKeys: [optimisticVisitId, optimisticJobId],
       queryKeys: ['board:week'],
       apply: applyMarker('resize-visible'),
       persist: async () => {
         resizeStarted += 1;
-        persistedResizeId = coordinator.resolveIdentity(optimisticId);
+        persistedResizeVisitId = coordinator.resolveIdentity(optimisticVisitId);
+        persistedResizeJobId = coordinator.resolveIdentity(optimisticJobId);
         return { kind: 'success' };
       },
     });
@@ -978,11 +982,15 @@ describe('scheduling mutation coordinator', () => {
     expect(coordinator.getOperations().map((operation) => operation.id)).toEqual(['create', 'resize']);
     createGate.resolve({
       kind: 'success',
-      identityAliases: { [optimisticId]: authoritativeId },
+      identityAliases: {
+        [optimisticVisitId]: authoritativeVisitId,
+        [optimisticJobId]: authoritativeJobId,
+      },
     });
     await flush();
     expect(resizeStarted).toBe(1);
-    expect(persistedResizeId).toBe(authoritativeId);
+    expect(persistedResizeVisitId).toBe(authoritativeVisitId);
+    expect(persistedResizeJobId).toBe(authoritativeJobId);
     coordinator.dispose();
   });
 
@@ -1083,12 +1091,15 @@ describe('scheduling mutation coordinator', () => {
     const persistCalls: string[] = [];
     const waitToStart = deferred<void>();
     const gate = deferred();
+    const proofB = () => false;
+    const proofC = () => true;
     coordinator.admit({
       kind: 'resize-visit',
       requestId: 'req-b',
       coalesceGroup: visitTimesCoalesceGroup('visit-1'),
       claims: visitTimesClaims('job-1', 'visit-1'),
       queryKeys: ['board:week'],
+      proofs: { 'board:week': proofB },
       apply: applyMarker('B'),
       persist: async () => {
         persistCalls.push('B');
@@ -1102,6 +1113,7 @@ describe('scheduling mutation coordinator', () => {
       coalesceGroup: visitTimesCoalesceGroup('visit-1'),
       claims: visitTimesClaims('job-1', 'visit-1'),
       queryKeys: ['board:week'],
+      proofs: { 'board:week': proofC },
       apply: applyMarker('C'),
       persist: async () => {
         persistCalls.push('C');
@@ -1110,6 +1122,7 @@ describe('scheduling mutation coordinator', () => {
     });
     expect(second.coalesced).toBe(true);
     expect(second.operation.requestId).toBe('req-b');
+    expect(second.operation.proofs['board:week']).toBe(proofC);
     await flush();
     waitToStart.resolve();
     gate.resolve({ kind: 'success' });
@@ -1249,6 +1262,57 @@ describe('scheduling mutation coordinator', () => {
     expect(dependentStarted).toBe(0);
     expect(uncertain.getOperations().some((operation) => operation.kind === 'resize-visit')).toBe(true);
     uncertain.dispose();
+
+    const returnPlace = createCoordinator().coordinator;
+    let placeStarted = 0;
+    returnPlace.admit({
+      id: 'return-u',
+      kind: 'return-visit-to-backlog',
+      retryPolicy: 'none',
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week', 'backlog'],
+      apply: applyMarker('returned'),
+      persist: async () => {
+        throw new TypeError('lost return');
+      },
+    });
+    await flush();
+    const uncertainReturn = returnPlace.getOperations().find((operation) => operation.id === 'return-u');
+    expect(uncertainReturn?.status).toBe('uncertain');
+    expect(uncertainReturn?.executionStatus).toBe('completed');
+    returnPlace.admit({
+      id: 'place-after-uncertain',
+      kind: 'schedule-backlog-visit',
+      dependsOn: ['return-u'],
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week', 'backlog'],
+      apply: applyMarker('placed'),
+      persist: async () => {
+        placeStarted += 1;
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(placeStarted).toBe(0);
+    expect(
+      returnPlace.getOperations().some((operation) => operation.id === 'place-after-uncertain')
+    ).toBe(true);
+
+    let unlinkedPlaceStarted = 0;
+    returnPlace.admit({
+      id: 'place-unlinked',
+      kind: 'schedule-backlog-visit',
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week', 'backlog'],
+      apply: applyMarker('placed-unlinked'),
+      persist: async () => {
+        unlinkedPlaceStarted += 1;
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(unlinkedPlaceStarted).toBe(0);
+    returnPlace.dispose();
     coordinator.dispose();
   });
 
@@ -1277,8 +1341,10 @@ describe('scheduling mutation coordinator', () => {
   it('P1-009 reuses the original request ID for return and place retries', async () => {
     vi.useFakeTimers();
     const { coordinator } = createCoordinator();
-    const requestIds: string[] = [];
+    const returnIds: string[] = [];
+    const placeIds: string[] = [];
     coordinator.admit({
+      id: 'return-op',
       kind: 'return-visit-to-backlog',
       requestId: 'req-return-stable',
       claims: visitReturnPlaceClaims('job-1', 'visit-1'),
@@ -1288,15 +1354,35 @@ describe('scheduling mutation coordinator', () => {
         const live = coordinator.getOperations().find((operation) =>
           operation.kind === 'return-visit-to-backlog'
         );
-        requestIds.push(live?.requestId || '');
-        if (requestIds.length === 1) throw new TypeError('network lost');
+        returnIds.push(live?.requestId || '');
+        if (returnIds.length === 1) throw new TypeError('network lost');
+        return { kind: 'success' };
+      },
+    });
+    coordinator.admit({
+      id: 'place-op',
+      kind: 'schedule-backlog-visit',
+      requestId: 'req-place-stable',
+      dependsOn: ['return-op'],
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('place'),
+      persist: async () => {
+        const live = coordinator.getOperations().find((operation) =>
+          operation.kind === 'schedule-backlog-visit'
+        );
+        placeIds.push(live?.requestId || '');
+        if (placeIds.length === 1) throw new TypeError('network lost');
         return { kind: 'success' };
       },
     });
     await flush();
     await vi.advanceTimersByTimeAsync(250);
     await flush();
-    expect(requestIds).toEqual(['req-return-stable', 'req-return-stable']);
+    expect(returnIds).toEqual(['req-return-stable', 'req-return-stable']);
+    await vi.advanceTimersByTimeAsync(250);
+    await flush();
+    expect(placeIds).toEqual(['req-place-stable', 'req-place-stable']);
     coordinator.dispose();
   });
 

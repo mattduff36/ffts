@@ -2531,11 +2531,28 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return input.visit;
   }
 
+  function isBlockingVisitCommand(operation: SchedulingCoordinatorOperation) {
+    return operation.status === 'uncertain' || operation.executionStatus !== 'completed';
+  }
+
+  function visitCommandClaimsIdentity(
+    operation: SchedulingCoordinatorOperation,
+    visitId: string,
+    resolved: string
+  ) {
+    return (
+      operation.claims.some((claim) =>
+        claim.scope === 'visit-tree' && (claim.id === visitId || claim.id === resolved)
+      )
+      || operation.lockKeys.some((key) => key.endsWith(':' + visitId) || key.endsWith(':' + resolved))
+    );
+  }
+
   function findActiveVisitProducer(visitId: string) {
     const coordinator = getMutationCoordinator();
     const resolved = coordinator.resolveIdentity(visitId);
     return coordinator.getOperations().find((operation) =>
-      operation.executionStatus !== 'completed'
+      isBlockingVisitCommand(operation)
       && (
         operation.kind === 'create-visit'
         || operation.kind === 'quick-add'
@@ -2543,12 +2560,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         || operation.kind === 'schedule-project'
         || operation.kind === 'schedule-backlog-visit'
       )
-      && (
-        operation.claims.some((claim) =>
-          claim.scope === 'visit-tree' && (claim.id === visitId || claim.id === resolved)
-        )
-        || operation.lockKeys.some((key) => key.endsWith(':' + visitId) || key.endsWith(':' + resolved))
-      )
+      && visitCommandClaimsIdentity(operation, visitId, resolved)
     );
   }
 
@@ -2557,13 +2569,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const resolved = coordinator.resolveIdentity(visitId);
     return coordinator.getOperations().find((operation) =>
       operation.kind === 'return-visit-to-backlog'
-      && operation.executionStatus !== 'completed'
-      && (
-        operation.claims.some((claim) =>
-          claim.scope === 'visit-tree' && (claim.id === visitId || claim.id === resolved)
-        )
-        || operation.lockKeys.some((key) => key.endsWith(':' + visitId) || key.endsWith(':' + resolved))
-      )
+      && isBlockingVisitCommand(operation)
+      && visitCommandClaimsIdentity(operation, visitId, resolved)
     );
   }
 
@@ -4343,7 +4350,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       retryPolicy: existingVisit ? 'ambiguous' : 'none',
       coalesceGroup: existingVisit ? visitTimesCoalesceGroup(resolvedVisitId) : undefined,
       dependsOn: producer ? [producer.id] : undefined,
-      identityWaitKeys: visitIdentityWaitKeys(optimisticVisit.id, optimisticVisit.job_id),
+      identityWaitKeys: existingVisit
+        ? visitIdentityWaitKeys(optimisticVisit.id, optimisticVisit.job_id)
+        : visitIdentityWaitKeys(optimisticVisit.job_id),
       claims: existingVisit
         ? visitTimesClaims(resolvedJobId, resolvedVisitId)
         : visitCreateClaims(resolvedJobId, optimisticVisit.id),

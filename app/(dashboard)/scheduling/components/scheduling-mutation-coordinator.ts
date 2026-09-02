@@ -257,7 +257,7 @@ export class SchedulingMutationCoordinator {
         existing.claims = input.claims;
         existing.lockKeys = input.lockKeys || claimsToLockKeys(input.claims);
         existing.queryKeys = input.queryKeys;
-        existing.proofs = input.proofs || existing.proofs;
+        existing.proofs = input.proofs || {};
         existing.apply = input.apply;
         existing.dependsOn = input.dependsOn;
         existing.identityWaitKeys = input.identityWaitKeys;
@@ -328,7 +328,8 @@ export class SchedulingMutationCoordinator {
     return [
       ...this.operations.filter(
         (operation) =>
-          operation.executionStatus === 'executing'
+          operation.status === 'uncertain'
+          || operation.executionStatus === 'executing'
           || operation.executionStatus === 'awaitingRetry'
       ),
       ...this.peers.filter(

@@ -344,7 +344,7 @@ The finalise rule must:
 - avoid starting duplicate finalise processes;
 - surface changed files and the planned push contents;
 - obey the user's current push authorization rule;
-- treat only `finalise and push`, `finalise full and push`, `finalise with push`, `finalise:push`, and `push to GitHub` as explicit push requests (short aliases `fap` / `ffap` / `/fap` / `/ffap` do not authorize a push);
+- treat `finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, `finalise with push`, `finalise:push`, and `push to GitHub` as explicit push requests;
 - never push after failed build, test, cleanup, release, or commit steps;
 - read the generated finalise run summary and report its artifact path.
 

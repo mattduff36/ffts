@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const root = process.cwd();
 
 describe('TEE V2.2 FFTS project context', () => {
-  it('TEE-DOCS-001 / TEE-PUSH-001: short aliases do not authorize push', () => {
+  it('TEE-DOCS-001 / TEE-PUSH-001: fap and ffap authorize their push variants', () => {
     const commandDirectory = path.join(root, '.cursor', 'commands');
     expect(readdirSync(commandDirectory).sort()).toEqual([
       'cleancodebase.md',
@@ -29,22 +29,30 @@ describe('TEE V2.2 FFTS project context', () => {
       path.join(root, '.cursor', 'rules', 'finalise-commands.mdc'),
       'utf8'
     );
-    expect(fap).toMatch(/does \*\*not\*\* authorize pushing/iu);
-    expect(ffap).toMatch(/does \*\*not\*\* authorize pushing/iu);
+    expect(fap).toMatch(/authorizes `npm run finalise:push`/iu);
+    expect(ffap).toMatch(/authorizes `npm run finalise:full:push`/iu);
+    expect(fap).toMatch(/authorized push phrase/iu);
+    expect(ffap).toMatch(/authorized push phrase/iu);
     expect(ffap).toMatch(/status --blocking/);
     expect(ffap).toMatch(/review-start --pass delta/);
-    expect(fap).toMatch(/explicit push phrase/iu);
-    expect(ffap).toMatch(/explicit push phrase/iu);
+    expect(fap).toMatch(/finalise and push/iu);
+    expect(ffap).toMatch(/finalise full and push/iu);
+    expect(fap).toContain('npm run finalise:push');
+    expect(ffap).toContain('npm run finalise:full:push');
+    expect(fap).not.toMatch(/does \*\*not\*\* authorize pushing/iu);
+    expect(ffap).not.toMatch(/does \*\*not\*\* authorize pushing/iu);
     expect(finalise).toMatch(/not push/iu);
     expect(finaliseFull).toMatch(/not push/iu);
     expect(workflowReview).toMatch(/Never push/iu);
     expect(finalise).not.toMatch(/\/fap|\/ffap/iu);
-    expect(core).toMatch(/do \*\*not\*\* authorize a push/iu);
+    expect(core).toMatch(/`fap` \/ `\/fap`/);
+    expect(core).toMatch(/`ffap` \/ `\/ffap`/);
+    expect(core).not.toMatch(/do \*\*not\*\* authorize a push/iu);
     expect(core).toContain('finalise and push');
     expect(core).toContain('finalise:push');
-    expect(finaliseCommands).not.toMatch(/Map `fap`/);
-    expect(finaliseCommands).not.toMatch(/Map `ffap`/);
-    expect(finaliseCommands).toMatch(/do \*\*not\*\* authorize a push/iu);
+    expect(finaliseCommands).toMatch(/Map `finalise and push` and `fap`/);
+    expect(finaliseCommands).toMatch(/Map `finalise full and push` and `ffap`/);
+    expect(finaliseCommands).not.toMatch(/do \*\*not\*\* authorize a push/iu);
     expect(finaliseCommands).toContain('finalise and push');
     expect(fixerrors).toContain('fixerrors-exact-snapshot-v1');
     expect(fixerrors).toMatch(/Never push/iu);
@@ -130,7 +138,7 @@ describe('TEE V2.2 FFTS project context', () => {
     }
   });
 
-  it('TEE-PUSH-001: finalise commands document repair; aliases omit push authorization', () => {
+  it('TEE-PUSH-001: finalise commands document repair; aliases authorize matching push variants', () => {
     const finalise = readFileSync(path.join(root, '.cursor', 'commands', 'finalise.md'), 'utf8');
     const finaliseFull = readFileSync(
       path.join(root, '.cursor', 'commands', 'finalise-full.md'),
@@ -145,8 +153,12 @@ describe('TEE V2.2 FFTS project context', () => {
     expect(finalise).toMatch(/Never push/iu);
     expect(finaliseFull).toMatch(/Never push/iu);
     expect(finalise).not.toMatch(/push to GitHub/iu);
-    expect(fap).toMatch(/does \*\*not\*\* authorize pushing/iu);
-    expect(ffap).toMatch(/does \*\*not\*\* authorize pushing/iu);
+    expect(fap).toContain('npm run finalise:push');
+    expect(ffap).toContain('npm run finalise:full:push');
+    expect(fap).toMatch(/authorized push phrase/iu);
+    expect(ffap).toMatch(/authorized push phrase/iu);
+    expect(fap).not.toMatch(/does \*\*not\*\* authorize pushing/iu);
+    expect(ffap).not.toMatch(/does \*\*not\*\* authorize pushing/iu);
     expect(fap).toMatch(/finalise and push/iu);
     expect(ffap).toMatch(/finalise full and push/iu);
   });

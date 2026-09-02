@@ -2019,6 +2019,7 @@ interface PendingVisitReturn {
   target: ActiveVisitTarget;
   localAssignmentCount: number;
   preview: ScheduleVisitBacklogPreview | null;
+  skipConfirmation?: boolean;
 }
 
 type DailyTimelineMode = 'fit' | 'scroll';
@@ -4018,7 +4019,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       });
   }
 
-  async function prepareVisitReturn(target: ActiveVisitTarget) {
+  async function prepareVisitReturn(
+    target: ActiveVisitTarget,
+    options: { skipConfirmation?: boolean } = {}
+  ) {
     if (isOptimisticEntityId(target.job.id) || isOptimisticEntityId(target.visit.id)) {
       toast.info('Wait for this new visit to finish saving.');
       return;
@@ -4034,6 +4038,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     ) {
       toast.info('This visit is already in the Jobs queue.');
       reconcileOptimisticKeysInBackground([`board:${weekStart}`, 'backlog']);
+      return;
+    }
+    if (options.skipConfirmation) {
+      void confirmVisitReturn({
+        target,
+        localAssignmentCount,
+        preview: null,
+        skipConfirmation: true,
+      });
       return;
     }
     setPendingVisitReturn({
@@ -4070,12 +4083,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
-  async function confirmVisitReturn() {
+  async function confirmVisitReturn(
+    pending: PendingVisitReturn | null = pendingVisitReturn
+  ) {
     if (
-      !pendingVisitReturn
-      || returningVisitIds.has(pendingVisitReturn.target.visit.id)
+      !pending
+      || returningVisitIds.has(pending.target.visit.id)
     ) return;
-    const { target, preview: preparedPreview } = pendingVisitReturn;
+    const { target, preview: preparedPreview } = pending;
     const queuedAt = new Date().toISOString();
     const requestId = crypto.randomUUID();
     const backlogItem: ScheduleVisitBacklogItem = {
@@ -4210,10 +4225,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           if (
             error instanceof SchedulingApiError
             && error.payload.code === 'stale_visit_preview'
+            && !pending.skipConfirmation
           ) {
             setPendingVisitReturn({
               target,
-              localAssignmentCount: pendingVisitReturn.localAssignmentCount,
+              localAssignmentCount: pending.localAssignmentCount,
               preview: null,
             });
             void prepareVisitReturn(target);
@@ -6886,7 +6902,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               : null
                           }
                           onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, selectedDate, visit)}
-                          onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
+                          onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit }, { skipConfirmation: true })}
                           onDeleteAssignment={setPendingDeleteAssignment}
                           onResizeVisit={resizeVisit}
                         />
@@ -6904,7 +6920,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                 : null
                             }
                             onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, date, visit)}
-                            onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
+                            onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit }, { skipConfirmation: true })}
                             onDeleteAssignment={setPendingDeleteAssignment}
                           />
                         ))
@@ -7101,7 +7117,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     isActiveTarget={activeVisitTarget?.visit.id === placement.visit.id}
                                     onActivate={() => activateVisit(placement.job, placement.visit)}
                                     onEdit={() => openVisitEditor(placement.job, date, placement.visit)}
-                                    onReturn={() => void prepareVisitReturn({ job: placement.job, visit: placement.visit })}
+                                    onReturn={() => void prepareVisitReturn({ job: placement.job, visit: placement.visit }, { skipConfirmation: true })}
                                     onDeleteAssignment={setPendingDeleteAssignment}
                                     dndScope="mobile"
                                     dndInstanceId={dndInstanceId}

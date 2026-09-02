@@ -1076,6 +1076,30 @@ describe('SchedulingManagerBoard', () => {
     expect(mockPreviewVisitBacklog).toHaveBeenCalledWith('visit-1');
   });
 
+  it('returns a visit to Jobs immediately from the card button', async () => {
+    mockWideViewport(true);
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: 'Return visit 1 for JOB-101 to Jobs',
+      })[0]
+    );
+
+    expect(screen.queryByRole('alertdialog', {
+      name: 'Return this visit to Jobs?',
+    })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockEnqueueVisit).toHaveBeenCalledWith({
+        request_id: expect.any(String),
+        visit_id: 'visit-1',
+        expected_fingerprint: 'preview-hash',
+      })
+    );
+    expect(mockPreviewVisitBacklog).toHaveBeenCalledWith('visit-1');
+  });
+
   it('prompts to drop on Resources when a board visit is released without a return target', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();

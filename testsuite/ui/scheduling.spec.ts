@@ -744,7 +744,7 @@ test.describe('@scheduling Scheduling', () => {
     releaseQuoteSchedule();
   });
 
-  test('wide board exposes visit return and confirms one visit back to Jobs', async ({ page }) => {
+  test('wide board exposes visit return and returns one visit back to Jobs', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { fixture, visitReturnRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
@@ -764,13 +764,9 @@ test.describe('@scheduling Scheduling', () => {
       name: 'Return visit 1 for TEST-JOB-101 to Jobs',
     }).click();
 
-    const confirmation = page.getByRole('alertdialog', {
+    await expect(page.getByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
-    });
-    await expect(confirmation).toBeVisible();
-    await expect(confirmation).toContainText('Other visits for this job will stay scheduled');
-    await expect.poll(() => visitReturnRequests).toHaveLength(0);
-    await confirmation.getByRole('button', { name: 'Return visit to Jobs' }).click();
+    })).toHaveCount(0);
 
     await expect.poll(() => visitReturnRequests).toHaveLength(1);
     expect(visitReturnRequests[0]).toMatchObject({

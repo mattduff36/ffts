@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.1.1",
+    "updateKind": "minor",
+    "title": "Scheduling improvements",
+    "description": "Persist Schedule Board job order independently of created_at.",
+    "summary": "Persist Schedule Board job order independently of created_at.",
+    "details": [
+      "Updated data storage, with changes to shared typing, automation scripts, automated tests, and data storage."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-02T00:37:51.564Z"
+  },
+  {
     "version": "0926.1.0",
     "updateKind": "major",
     "title": "App screens update",

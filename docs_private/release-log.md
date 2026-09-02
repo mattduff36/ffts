@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.1.1
+
+**GIT COMMIT MESSAGE**
+`fix(scheduling): persist Schedule Board job order independently of created_at`
+
+**PUSHED AT**
+2026-09-02T00:37:51.564Z
+
+**WHAT CHANGED**
+Persist Schedule Board job order independently of created_at.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to shared typing, automation scripts, automated tests, and data storage.
+
+**COMMITS IN THIS RELEASE**
+- `fix(scheduling): persist Schedule Board job order independently of created_at`
+
 ## 0926.1.0
 
 **GIT COMMIT MESSAGE**

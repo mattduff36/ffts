@@ -1,5 +1,21 @@
 [
   {
+    "version": "0926.1.2",
+    "updateKind": "minor",
+    "title": "Scheduling improvements",
+    "description": "Keep visit dependencies from self-deadlock and uncertain release. Coordinate dependent visit commands without full-week refetch.",
+    "summary": "Keep visit dependencies from self-deadlock and uncertain release. Coordinate dependent visit commands without full-week refetch.",
+    "details": [
+      "Updated app screens, with changes to app screens."
+    ],
+    "areas": [
+      "Keep visit dependencies from self-deadlock",
+      "Uncertain release. Coordinate dependent visit commands without full-week refetch"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-02T11:32:20.168Z"
+  },
+  {
     "version": "0926.1.1",
     "updateKind": "minor",
     "title": "Scheduling improvements",

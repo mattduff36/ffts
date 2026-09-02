@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.1.2
+
+**GIT COMMIT MESSAGE**
+`fix(scheduling): coordinate dependent visit commands without full-week refetch`
+
+**PUSHED AT**
+2026-09-02T11:32:20.168Z
+
+**WHAT CHANGED**
+Keep visit dependencies from self-deadlock and uncertain release. Coordinate dependent visit commands without full-week refetch.
+
+**VERSION HISTORY DETAILS**
+- Updated app screens, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `fix(scheduling): keep visit dependencies from self-deadlock and uncertain release`
+- `fix(scheduling): coordinate dependent visit commands without full-week refetch`
+
 ## 0926.1.1
 
 **GIT COMMIT MESSAGE**

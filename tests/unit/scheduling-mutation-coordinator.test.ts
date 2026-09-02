@@ -10,16 +10,24 @@ import {
   dayTeamAssignClaims,
   exclusiveJobTreeClaim,
   exclusiveVisitTreeClaim,
+  visitCreateClaims,
+  visitReturnPlaceClaims,
+  visitTimesClaims,
+  visitTimesCoalesceGroup,
 } from '@/app/(dashboard)/scheduling/components/scheduling-mutation-claims';
 import {
   findCoordinatorPersistTarget,
+  rewriteLockOrGroupKey,
   SchedulingMutationCoordinator,
   isAmbiguousSchedulingFailure,
   type SchedulingCoordinatorOperation,
   type SchedulingPersistOutcome,
 } from '@/app/(dashboard)/scheduling/components/scheduling-mutation-coordinator';
 import { SchedulingApiError } from '@/lib/client/scheduling';
-import type { SchedulingProjection } from '@/app/(dashboard)/scheduling/components/scheduling-optimistic-ledger';
+import {
+  projectSchedulingState,
+  type SchedulingProjection,
+} from '@/app/(dashboard)/scheduling/components/scheduling-optimistic-ledger';
 
 function deferred<T = SchedulingPersistOutcome>() {
   let resolve!: (value: T) => void;
@@ -926,6 +934,414 @@ describe('scheduling mutation coordinator', () => {
     expect(live?.status).toBe('uncertain');
     expect(live?.executionStatus).toBe('completed');
     expect(live?.requestId).toBe('req-retry');
+    coordinator.dispose();
+  });
+
+  it('P1-001 create optimistic visit then immediate resize persists against the authoritative id', async () => {
+    const { coordinator } = createCoordinator();
+    const optimisticId = 'optimistic:create-1:visit';
+    const authoritativeId = '11111111-1111-4111-8111-111111111111';
+    const createGate = deferred();
+    let createStarted = 0;
+    let resizeStarted = 0;
+    let persistedResizeId: string | undefined;
+    coordinator.admit({
+      id: 'create',
+      kind: 'create-visit',
+      retryPolicy: 'none',
+      claims: visitCreateClaims('job-1', optimisticId),
+      queryKeys: ['board:week'],
+      apply: applyMarker('create-visible'),
+      persist: async () => {
+        createStarted += 1;
+        return createGate.promise;
+      },
+    });
+    coordinator.admit({
+      id: 'resize',
+      kind: 'resize-visit',
+      claims: visitTimesClaims('job-1', optimisticId),
+      coalesceGroup: visitTimesCoalesceGroup(optimisticId),
+      dependsOn: ['create'],
+      identityWaitKeys: [optimisticId],
+      queryKeys: ['board:week'],
+      apply: applyMarker('resize-visible'),
+      persist: async () => {
+        resizeStarted += 1;
+        persistedResizeId = coordinator.resolveIdentity(optimisticId);
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(createStarted).toBe(1);
+    expect(resizeStarted).toBe(0);
+    expect(coordinator.getOperations().map((operation) => operation.id)).toEqual(['create', 'resize']);
+    createGate.resolve({
+      kind: 'success',
+      identityAliases: { [optimisticId]: authoritativeId },
+    });
+    await flush();
+    expect(resizeStarted).toBe(1);
+    expect(persistedResizeId).toBe(authoritativeId);
+    coordinator.dispose();
+  });
+
+  it('P1-002 never sends an unresolved optimistic identity and rewrites keys exactly', async () => {
+    const aliases = new Map([['optimistic:op:visit', 'visit-real']]);
+    expect(rewriteLockOrGroupKey('visit:optimistic:op:visit', aliases)).toBe('visit:visit-real');
+    expect(rewriteLockOrGroupKey('visit:optimistic:op:visit-extra', aliases)).toBe(
+      'visit:optimistic:op:visit-extra'
+    );
+    expect(rewriteLockOrGroupKey('visit-times:optimistic:op:visit', aliases)).toBe(
+      'visit-times:visit-real'
+    );
+    const { coordinator } = createCoordinator();
+    const optimisticId = 'optimistic:create-2:visit';
+    const apiIds: string[] = [];
+    const createGate = deferred();
+    coordinator.admit({
+      id: 'create',
+      kind: 'create-visit',
+      retryPolicy: 'none',
+      claims: visitCreateClaims('job-1', optimisticId),
+      queryKeys: ['board:week'],
+      apply: applyMarker('create'),
+      persist: async () => createGate.promise,
+    });
+    coordinator.admit({
+      kind: 'resize-visit',
+      claims: visitTimesClaims('job-1', optimisticId),
+      identityWaitKeys: [optimisticId],
+      queryKeys: ['board:week'],
+      apply: applyMarker('resize'),
+      persist: async () => {
+        const resolved = coordinator.resolveIdentity(optimisticId);
+        apiIds.push(resolved);
+        expect(resolved.startsWith('optimistic:')).toBe(false);
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(apiIds).toEqual([]);
+    createGate.resolve({
+      kind: 'success',
+      identityAliases: { [optimisticId]: '22222222-2222-4222-8222-222222222222' },
+    });
+    await flush();
+    expect(apiIds).toEqual(['22222222-2222-4222-8222-222222222222']);
+    coordinator.dispose();
+  });
+
+  it('P1-003 return then immediate place waits for enqueue and avoids a false 409', async () => {
+    const { coordinator } = createCoordinator();
+    const returnGate = deferred();
+    let queued = false;
+    let placeStarted = 0;
+    let falseConflict = false;
+    coordinator.admit({
+      id: 'return',
+      kind: 'return-visit-to-backlog',
+      requestId: 'req-return',
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week', 'backlog'],
+      apply: applyMarker('returned'),
+      persist: async () => {
+        const outcome = await returnGate.promise;
+        queued = true;
+        return outcome;
+      },
+    });
+    coordinator.admit({
+      id: 'place',
+      kind: 'schedule-backlog-visit',
+      requestId: 'req-place',
+      dependsOn: ['return'],
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week', 'backlog'],
+      apply: applyMarker('placed'),
+      persist: async () => {
+        placeStarted += 1;
+        if (!queued) {
+          falseConflict = true;
+          throw new SchedulingApiError('not queued yet', 409, { code: 'visit_not_queued' });
+        }
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(placeStarted).toBe(0);
+    expect(coordinator.getOperations().map((operation) => operation.id)).toEqual(['return', 'place']);
+    returnGate.resolve({ kind: 'success' });
+    await flush();
+    expect(placeStarted).toBe(1);
+    expect(falseConflict).toBe(false);
+    coordinator.dispose();
+  });
+
+  it('P1-004 coalesces unsent resize B into C and persists only C', async () => {
+    const { coordinator } = createCoordinator();
+    const persistCalls: string[] = [];
+    const waitToStart = deferred<void>();
+    const gate = deferred();
+    coordinator.admit({
+      kind: 'resize-visit',
+      requestId: 'req-b',
+      coalesceGroup: visitTimesCoalesceGroup('visit-1'),
+      claims: visitTimesClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('B'),
+      persist: async () => {
+        persistCalls.push('B');
+        await waitToStart;
+        return gate.promise;
+      },
+    });
+    const second = coordinator.admit({
+      kind: 'resize-visit',
+      requestId: 'req-c',
+      coalesceGroup: visitTimesCoalesceGroup('visit-1'),
+      claims: visitTimesClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('C'),
+      persist: async () => {
+        persistCalls.push('C');
+        return { kind: 'success' };
+      },
+    });
+    expect(second.coalesced).toBe(true);
+    expect(second.operation.requestId).toBe('req-b');
+    await flush();
+    waitToStart.resolve();
+    gate.resolve({ kind: 'success' });
+    await flush();
+    expect(persistCalls).toEqual(['C']);
+    coordinator.dispose();
+  });
+
+  it('P1-005 keeps C visible and queued while executing B acknowledgement cannot snap back', async () => {
+    const { coordinator } = createCoordinator();
+    const executing = deferred();
+    const queued = deferred();
+    coordinator.admit({
+      id: 'resize-b',
+      kind: 'resize-visit',
+      coalesceGroup: visitTimesCoalesceGroup('visit-1'),
+      claims: visitTimesClaims('job-1', 'visit-1'),
+      queryKeys: ['quotes'],
+      apply: applyMarker('B'),
+      persist: async () => executing.promise,
+    });
+    await flush();
+    coordinator.admit({
+      id: 'resize-c',
+      kind: 'resize-visit',
+      coalesceGroup: visitTimesCoalesceGroup('visit-1'),
+      claims: visitTimesClaims('job-1', 'visit-1'),
+      queryKeys: ['quotes'],
+      apply: applyMarker('C'),
+      persist: async () => queued.promise,
+    });
+    executing.resolve({
+      kind: 'success',
+      apply: applyMarker('B-ack'),
+    });
+    await flush();
+    const operations = coordinator.getOperations();
+    expect(operations.find((operation) => operation.id === 'resize-c')?.apply).toBeDefined();
+    const projected = projectSchedulingState(
+      { board: undefined, quoteCandidates: [], projectCandidates: [], visitBacklog: [] },
+      operations
+    );
+    expect(projected.quoteCandidates?.at(-1)?.id).toBe('C');
+    queued.resolve({ kind: 'success' });
+    await flush();
+    coordinator.dispose();
+  });
+
+  it('P1-006 persists resizes on two visits concurrently', async () => {
+    const { coordinator } = createCoordinator();
+    const first = deferred();
+    const second = deferred();
+    let started = 0;
+    coordinator.admit({
+      kind: 'resize-visit',
+      claims: visitTimesClaims('job-1', 'visit-a'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('a'),
+      persist: async () => {
+        started += 1;
+        return first.promise;
+      },
+    });
+    coordinator.admit({
+      kind: 'resize-visit',
+      claims: visitTimesClaims('job-1', 'visit-b'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('b'),
+      persist: async () => {
+        started += 1;
+        return second.promise;
+      },
+    });
+    await flush();
+    expect(started).toBe(2);
+    first.resolve({ kind: 'success' });
+    second.resolve({ kind: 'success' });
+    await flush();
+    coordinator.dispose();
+  });
+
+  it('P1-007 failed or uncertain producers never release dependents', async () => {
+    const { coordinator } = createCoordinator();
+    let resizeStarted = 0;
+    coordinator.admit({
+      id: 'create',
+      kind: 'create-visit',
+      retryPolicy: 'none',
+      claims: visitCreateClaims('job-1', 'optimistic:create-7:visit'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('create'),
+      persist: async () => ({ kind: 'failed', error: new Error('create failed') }),
+    });
+    coordinator.admit({
+      id: 'resize',
+      kind: 'resize-visit',
+      dependsOn: ['create'],
+      identityWaitKeys: ['optimistic:create-7:visit'],
+      claims: visitTimesClaims('job-1', 'optimistic:create-7:visit'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('resize'),
+      persist: async () => {
+        resizeStarted += 1;
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(resizeStarted).toBe(0);
+    expect(coordinator.getOperations().some((operation) => operation.id === 'resize')).toBe(false);
+
+    const uncertain = createCoordinator().coordinator;
+    let dependentStarted = 0;
+    uncertain.admit({
+      id: 'create-u',
+      kind: 'create-visit',
+      retryPolicy: 'none',
+      claims: visitCreateClaims('job-1', 'optimistic:create-u:visit'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('create'),
+      persist: async () => {
+        throw new TypeError('lost');
+      },
+    });
+    uncertain.admit({
+      kind: 'resize-visit',
+      dependsOn: ['create-u'],
+      identityWaitKeys: ['optimistic:create-u:visit'],
+      claims: visitTimesClaims('job-1', 'optimistic:create-u:visit'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('resize'),
+      persist: async () => {
+        dependentStarted += 1;
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    expect(dependentStarted).toBe(0);
+    expect(uncertain.getOperations().some((operation) => operation.kind === 'resize-visit')).toBe(true);
+    uncertain.dispose();
+    coordinator.dispose();
+  });
+
+  it('P1-008 does not automatically replay an ambiguous non-idempotent create', async () => {
+    const { coordinator } = createCoordinator();
+    let posts = 0;
+    coordinator.admit({
+      kind: 'create-visit',
+      retryPolicy: 'none',
+      claims: visitCreateClaims('job-1', 'optimistic:create-8:visit'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('create'),
+      persist: async () => {
+        posts += 1;
+        throw new TypeError('network lost');
+      },
+    });
+    await flush();
+    expect(posts).toBe(1);
+    const live = coordinator.getOperations()[0];
+    expect(live?.status).toBe('uncertain');
+    expect(live?.executionStatus).toBe('completed');
+    coordinator.dispose();
+  });
+
+  it('P1-009 reuses the original request ID for return and place retries', async () => {
+    vi.useFakeTimers();
+    const { coordinator } = createCoordinator();
+    const requestIds: string[] = [];
+    coordinator.admit({
+      kind: 'return-visit-to-backlog',
+      requestId: 'req-return-stable',
+      claims: visitReturnPlaceClaims('job-1', 'visit-1'),
+      queryKeys: ['board:week'],
+      apply: applyMarker('return'),
+      persist: async () => {
+        const live = coordinator.getOperations().find((operation) =>
+          operation.kind === 'return-visit-to-backlog'
+        );
+        requestIds.push(live?.requestId || '');
+        if (requestIds.length === 1) throw new TypeError('network lost');
+        return { kind: 'success' };
+      },
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(250);
+    await flush();
+    expect(requestIds).toEqual(['req-return-stable', 'req-return-stable']);
+    coordinator.dispose();
+  });
+
+  it('REGRESSION-002 existing assignment coordinator concurrency and coalescing remain intact', async () => {
+    const { coordinator } = createCoordinator();
+    const first = deferred();
+    const second = deferred();
+    let started = 0;
+    coordinator.admit({
+      kind: 'create-assignment',
+      claims: assignmentCreateClaims({
+        resourceType: 'employee',
+        resourceId: 'e1',
+        workDate: '2026-07-14',
+        jobId: 'job-1',
+        visitId: 'visit-1',
+      }),
+      queryKeys: ['board:week'],
+      apply: applyMarker('e1'),
+      persist: async () => {
+        started += 1;
+        return first.promise;
+      },
+    });
+    coordinator.admit({
+      kind: 'create-assignment',
+      claims: assignmentCreateClaims({
+        resourceType: 'employee',
+        resourceId: 'e2',
+        workDate: '2026-07-14',
+        jobId: 'job-1',
+        visitId: 'visit-1',
+      }),
+      queryKeys: ['board:week'],
+      apply: applyMarker('e2'),
+      persist: async () => {
+        started += 1;
+        return second.promise;
+      },
+    });
+    await flush();
+    expect(started).toBe(2);
+    first.resolve({ kind: 'success' });
+    second.resolve({ kind: 'success' });
+    await flush();
     coordinator.dispose();
   });
 });

@@ -3,8 +3,10 @@ import type { SchedulingOptimisticOperation } from './scheduling-optimistic-ledg
 import {
   claimsConflict,
   claimsToLockKeys,
+  splitLockKey,
   type SchedulingMutationClaim,
 } from './scheduling-mutation-claims';
+import { isOptimisticEntityId } from './scheduling-optimistic-ledger';
 
 export type SchedulingExecutionStatus =
   | 'queued'
@@ -12,11 +14,15 @@ export type SchedulingExecutionStatus =
   | 'awaitingRetry'
   | 'completed';
 
+export type SchedulingRetryPolicy = 'ambiguous' | 'none';
+export type SchedulingCommandOutcomeKind = 'success' | 'failed' | 'uncertain';
+
 export type SchedulingPersistOutcome =
   | {
       kind: 'success';
       proofs?: SchedulingOptimisticOperation['proofs'];
       apply?: SchedulingOptimisticOperation['apply'];
+      identityAliases?: Record<string, string>;
     }
   | { kind: 'conflict'; error?: unknown }
   | { kind: 'failed'; error: unknown };
@@ -26,6 +32,9 @@ export interface SchedulingCoordinatorOperation extends SchedulingOptimisticOper
   requestId: string;
   duplicateKey?: string;
   coalesceGroup?: string;
+  dependsOn?: string[];
+  identityWaitKeys?: string[];
+  retryPolicy?: SchedulingRetryPolicy;
   executionStatus: SchedulingExecutionStatus;
   retryCount: number;
 }
@@ -37,6 +46,9 @@ export interface AdmitSchedulingCommandInput {
   lockKeys?: string[];
   duplicateKey?: string;
   coalesceGroup?: string;
+  dependsOn?: string[];
+  identityWaitKeys?: string[];
+  retryPolicy?: SchedulingRetryPolicy;
   requestId?: string;
   queryKeys: string[];
   proofs?: SchedulingOptimisticOperation['proofs'];
@@ -72,6 +84,39 @@ export function toPersistOutcome(error: unknown): SchedulingPersistOutcome {
   throw error;
 }
 
+export function rewriteIdentityToken(
+  value: string,
+  aliases: ReadonlyMap<string, string>
+): string {
+  let current = value;
+  const seen = new Set<string>();
+  while (aliases.has(current) && !seen.has(current)) {
+    seen.add(current);
+    current = aliases.get(current)!;
+  }
+  return current;
+}
+
+export function rewriteLockOrGroupKey(
+  key: string,
+  aliases: ReadonlyMap<string, string>
+): string {
+  const { kind, id } = splitLockKey(key);
+  if (!id) return rewriteIdentityToken(key, aliases);
+  const nextId = rewriteIdentityToken(id, aliases);
+  return nextId === id ? key : `${kind}:${nextId}`;
+}
+
+export function rewriteMutationClaims(
+  claims: readonly SchedulingMutationClaim[],
+  aliases: ReadonlyMap<string, string>
+): SchedulingMutationClaim[] {
+  return claims.map((claim) => {
+    const nextId = rewriteIdentityToken(claim.id, aliases);
+    return nextId === claim.id ? claim : { ...claim, id: nextId };
+  });
+}
+
 function isActiveCommand(operation: SchedulingCoordinatorOperation): boolean {
   return operation.executionStatus !== 'completed';
 }
@@ -94,24 +139,64 @@ export class SchedulingMutationCoordinator {
   private peers: SchedulingOptimisticOperation[] = [];
   private persistById = new Map<string, () => Promise<SchedulingPersistOutcome>>();
   private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private identityAliases = new Map<string, string>();
+  private commandOutcomes = new Map<string, SchedulingCommandOutcomeKind>();
   private sequence = 0;
   private disposed = false;
   private readonly nextSequence: () => number;
   private readonly onChange: (operations: SchedulingCoordinatorOperation[]) => void;
+  private readonly onSettled?: (
+    operation: SchedulingCoordinatorOperation,
+    outcome: SchedulingPersistOutcome | { kind: 'uncertain' }
+  ) => void;
   private readonly logger?: (event: Record<string, unknown>) => void;
 
   constructor(options: {
     nextSequence?: () => number;
     onChange: (operations: SchedulingCoordinatorOperation[]) => void;
+    onSettled?: (
+      operation: SchedulingCoordinatorOperation,
+      outcome: SchedulingPersistOutcome | { kind: 'uncertain' }
+    ) => void;
     logger?: (event: Record<string, unknown>) => void;
   }) {
     this.nextSequence = options.nextSequence || (() => ++this.sequence);
     this.onChange = options.onChange;
+    this.onSettled = options.onSettled;
     this.logger = options.logger;
   }
 
   getOperations(): SchedulingCoordinatorOperation[] {
     return this.operations.slice();
+  }
+
+  resolveIdentity(id: string): string {
+    return rewriteIdentityToken(id, this.identityAliases);
+  }
+
+  publishIdentityAliases(aliases: Record<string, string>) {
+    this.applyIdentityAliases(aliases);
+    this.emit();
+    this.kick();
+  }
+
+  retire(operationId: string) {
+    const live = this.operations.find((operation) => operation.id === operationId);
+    if (!live || live.executionStatus !== 'completed') return;
+    this.persistById.delete(operationId);
+    this.operations = this.operations.filter((operation) => operation.id !== operationId);
+    this.emit();
+  }
+
+  cancelWaiters(identityKey: string) {
+    const resolved = this.resolveIdentity(identityKey);
+    const waiters = this.operations.filter((operation) =>
+      operation.executionStatus !== 'completed'
+      && operation.identityWaitKeys?.some(
+        (key) => key === identityKey || this.resolveIdentity(key) === resolved
+      )
+    );
+    for (const waiter of waiters) this.fail(waiter);
   }
 
   replaceOperations(operations: SchedulingOptimisticOperation[]) {
@@ -174,6 +259,9 @@ export class SchedulingMutationCoordinator {
         existing.queryKeys = input.queryKeys;
         existing.proofs = input.proofs || existing.proofs;
         existing.apply = input.apply;
+        existing.dependsOn = input.dependsOn;
+        existing.identityWaitKeys = input.identityWaitKeys;
+        if (input.retryPolicy) existing.retryPolicy = input.retryPolicy;
         this.persistById.set(existing.id, input.persist);
         this.emit();
         this.kickAfterAdmit();
@@ -200,6 +288,9 @@ export class SchedulingMutationCoordinator {
       requestId: input.requestId || crypto.randomUUID(),
       duplicateKey: input.duplicateKey,
       coalesceGroup: input.coalesceGroup,
+      dependsOn: input.dependsOn,
+      identityWaitKeys: input.identityWaitKeys,
+      retryPolicy: input.retryPolicy || 'ambiguous',
       executionStatus: 'queued',
       retryCount: 0,
     };
@@ -221,6 +312,9 @@ export class SchedulingMutationCoordinator {
       requestId: operation.requestId || current?.requestId || crypto.randomUUID(),
       duplicateKey: operation.duplicateKey || current?.duplicateKey,
       coalesceGroup: operation.coalesceGroup || current?.coalesceGroup,
+      dependsOn: operation.dependsOn || current?.dependsOn,
+      identityWaitKeys: operation.identityWaitKeys || current?.identityWaitKeys,
+      retryPolicy: operation.retryPolicy || current?.retryPolicy || 'ambiguous',
       executionStatus: operation.executionStatus || current?.executionStatus || 'queued',
       retryCount: operation.retryCount ?? current?.retryCount ?? 0,
     };
@@ -260,6 +354,22 @@ export class SchedulingMutationCoordinator {
     });
   }
 
+  private dependencyKind(operationId: string): SchedulingCommandOutcomeKind | 'pending' {
+    const recorded = this.commandOutcomes.get(operationId);
+    if (recorded) return recorded;
+    const live = this.operations.find((operation) => operation.id === operationId);
+    if (!live) return 'failed';
+    if (live.executionStatus === 'completed' && live.status === 'acknowledged') return 'success';
+    if (live.status === 'uncertain') return 'uncertain';
+    return 'pending';
+  }
+
+  private identityWaitsReady(operation: SchedulingCoordinatorOperation): boolean {
+    return (operation.identityWaitKeys || []).every(
+      (key) => !isOptimisticEntityId(this.resolveIdentity(key))
+    );
+  }
+
   private kickAfterAdmit() {
     queueMicrotask(() => this.kick());
   }
@@ -268,6 +378,15 @@ export class SchedulingMutationCoordinator {
     if (this.disposed) return;
     for (const operation of [...this.operations].sort((left, right) => left.sequence - right.sequence)) {
       if (operation.executionStatus !== 'queued') continue;
+      const dependencyKinds = (operation.dependsOn || []).map((operationId) =>
+        this.dependencyKind(operationId)
+      );
+      if (dependencyKinds.includes('failed')) {
+        this.fail(operation);
+        continue;
+      }
+      if (dependencyKinds.some((kind) => kind !== 'success')) continue;
+      if (!this.identityWaitsReady(operation)) continue;
       if (this.operationsHoldConflictingExecution(operation)) continue;
       void this.runPersist(operation);
     }
@@ -290,8 +409,10 @@ export class SchedulingMutationCoordinator {
       this.complete(live, outcome);
     } catch (error) {
       if (this.disposed) return;
-      if (isAmbiguousSchedulingFailure(error)) {
+      if (isAmbiguousSchedulingFailure(error) && live.retryPolicy !== 'none') {
         this.scheduleRetry(live, error);
+      } else if (isAmbiguousSchedulingFailure(error)) {
+        this.markUncertain(live);
       } else {
         this.fail(live);
       }
@@ -311,22 +432,55 @@ export class SchedulingMutationCoordinator {
       live.executionStatus = 'completed';
       if (outcome.proofs) live.proofs = outcome.proofs;
       if (outcome.apply) live.apply = outcome.apply;
+      this.commandOutcomes.set(live.id, 'success');
+      this.applyIdentityAliases(outcome.identityAliases || {});
       this.persistById.delete(live.id);
       this.emit();
+      this.onSettled?.(live, outcome);
       return;
     }
-    this.fail(live);
+    this.fail(live, outcome.kind === 'failed' || outcome.kind === 'conflict' ? outcome : undefined);
   }
 
-  private fail(operation: SchedulingCoordinatorOperation) {
-    const timer = this.retryTimers.get(operation.id);
+  private fail(
+    operation: SchedulingCoordinatorOperation,
+    outcome?: Extract<SchedulingPersistOutcome, { kind: 'failed' } | { kind: 'conflict' }>
+  ) {
+    const live = this.operations.find((item) => item.id === operation.id);
+    if (!live) {
+      this.commandOutcomes.set(operation.id, 'failed');
+      return;
+    }
+    const timer = this.retryTimers.get(live.id);
     if (timer) {
       clearTimeout(timer);
-      this.retryTimers.delete(operation.id);
+      this.retryTimers.delete(live.id);
     }
-    this.persistById.delete(operation.id);
-    this.operations = this.operations.filter((item) => item.id !== operation.id);
+    this.persistById.delete(live.id);
+    this.commandOutcomes.set(live.id, 'failed');
+    const dependents = this.operations.filter(
+      (item) => item.id !== live.id && item.dependsOn?.includes(live.id)
+    );
+    this.operations = this.operations.filter((item) => item.id !== live.id);
     this.emit();
+    this.onSettled?.(live, outcome || { kind: 'failed', error: undefined as unknown });
+    for (const dependent of dependents) this.fail(dependent);
+  }
+
+  private markUncertain(operation: SchedulingCoordinatorOperation) {
+    const live = this.operations.find((item) => item.id === operation.id);
+    if (!live) return;
+    const timer = this.retryTimers.get(live.id);
+    if (timer) {
+      clearTimeout(timer);
+      this.retryTimers.delete(live.id);
+    }
+    live.status = 'uncertain';
+    live.executionStatus = 'completed';
+    this.commandOutcomes.set(live.id, 'uncertain');
+    this.persistById.delete(live.id);
+    this.emit();
+    this.onSettled?.(live, { kind: 'uncertain' });
   }
 
   private scheduleRetry(operation: SchedulingCoordinatorOperation, error: unknown) {
@@ -337,10 +491,7 @@ export class SchedulingMutationCoordinator {
     live.retryCount += 1;
     if (live.retryCount > MAX_AMBIGUOUS_RETRIES) {
       this.log({ type: 'retry-exhausted', operationId: live.id, requestId: live.requestId });
-      live.status = 'uncertain';
-      live.executionStatus = 'completed';
-      this.persistById.delete(live.id);
-      this.emit();
+      this.markUncertain(live);
       return;
     }
     const delay = RETRY_BACKOFF_MS[Math.min(live.retryCount - 1, RETRY_BACKOFF_MS.length - 1)];
@@ -361,6 +512,39 @@ export class SchedulingMutationCoordinator {
     }, delay);
     this.retryTimers.set(live.id, timer);
     this.emit();
+  }
+
+  private applyIdentityAliases(aliases: Record<string, string>) {
+    let changed = false;
+    for (const [from, to] of Object.entries(aliases)) {
+      if (!from || !to || from === to) continue;
+      if (this.identityAliases.get(from) === to) continue;
+      this.identityAliases.set(from, to);
+      changed = true;
+    }
+    if (!changed && this.identityAliases.size === 0) return;
+    this.rewriteQueuedIdentities();
+  }
+
+  private rewriteQueuedIdentities() {
+    const aliases = this.identityAliases;
+    if (aliases.size === 0) return;
+    for (const operation of this.operations) {
+      if (operation.executionStatus === 'executing') continue;
+      operation.claims = rewriteMutationClaims(operation.claims, aliases);
+      operation.lockKeys = operation.lockKeys.map((key) => rewriteLockOrGroupKey(key, aliases));
+      if (operation.coalesceGroup) {
+        operation.coalesceGroup = rewriteLockOrGroupKey(operation.coalesceGroup, aliases);
+      }
+      if (operation.duplicateKey) {
+        operation.duplicateKey = rewriteLockOrGroupKey(operation.duplicateKey, aliases);
+      }
+      if (operation.identityWaitKeys) {
+        operation.identityWaitKeys = operation.identityWaitKeys.map((key) =>
+          rewriteIdentityToken(key, aliases)
+        );
+      }
+    }
   }
 
   private emit() {

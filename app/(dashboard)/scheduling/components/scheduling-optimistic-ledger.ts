@@ -35,6 +35,9 @@ export interface SchedulingOptimisticOperation {
   requestId?: string;
   duplicateKey?: string;
   coalesceGroup?: string;
+  dependsOn?: string[];
+  identityWaitKeys?: string[];
+  retryPolicy?: 'ambiguous' | 'none';
   executionStatus?: SchedulingExecutionStatus;
   retryCount?: number;
   queryKeys: string[];

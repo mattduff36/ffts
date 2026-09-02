@@ -164,6 +164,32 @@ export function exclusiveVisitTreeClaim(visitId: string): SchedulingMutationClai
   return { scope: 'visit-tree', id: visitId, mode: 'exclusive' };
 }
 
+export function exclusiveVisitCreateClaim(jobId: string): SchedulingMutationClaim {
+  return { scope: 'visit-create', id: jobId, mode: 'exclusive' };
+}
+
+export function visitTimesCoalesceGroup(visitId: string): string {
+  return `visit-times:${visitId}`;
+}
+
+export function visitCreateClaims(jobId: string, visitId: string): SchedulingMutationClaim[] {
+  return [
+    exclusiveVisitCreateClaim(jobId),
+    exclusiveVisitTreeClaim(visitId),
+  ];
+}
+
+export function visitTimesClaims(jobId: string, visitId: string): SchedulingMutationClaim[] {
+  return [
+    { scope: 'job-tree', id: jobId, mode: 'shared' },
+    exclusiveVisitTreeClaim(visitId),
+  ];
+}
+
+export function visitReturnPlaceClaims(jobId: string, visitId: string): SchedulingMutationClaim[] {
+  return visitTimesClaims(jobId, visitId);
+}
+
 export function exclusiveDayTeamDateClaim(workDate: string): SchedulingMutationClaim {
   return { scope: 'day-team', id: workDate, mode: 'exclusive' };
 }

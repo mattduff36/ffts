@@ -316,6 +316,31 @@ describe('Schedule Board job order', () => {
     ]);
   });
 
+  it('REGRESSION-001: visit cache updates do not reorder jobs by board_sequence', () => {
+    const onBoard = boardFixture([jobC, jobA, jobF, jobB]);
+    const resized = patchBoardWithVisit(
+      onBoard,
+      visit('visit-a', jobA.id, '2026-09-01T10:00:00.000Z')
+    );
+    expect(resized.jobs.map((item) => item.id)).toEqual([
+      'job-c',
+      'job-a',
+      'job-f',
+      'job-b',
+    ]);
+    const replaced = patchBoardWithVisit(
+      resized,
+      visit('visit-uuid', jobA.id, '2026-09-01T10:00:00.000Z'),
+      'visit-a'
+    );
+    expect(replaced.jobs.map((item) => item.id)).toEqual([
+      'job-c',
+      'job-a',
+      'job-f',
+      'job-b',
+    ]);
+  });
+
   it('JOB-ORDER-007: created_at/start-date/reference order cannot win', () => {
     const scrambled = sortJobsByBoardSequence([jobB, jobA, jobC, jobF]);
     expect(scrambled.map((item) => item.title)).toEqual([

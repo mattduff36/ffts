@@ -144,12 +144,23 @@ import {
   assignmentMoveCoalesceGroup,
   claimsFromLockKeys,
   dayTeamAssignClaims,
+  visitCreateClaims,
+  visitReturnPlaceClaims,
+  visitTimesClaims,
+  visitTimesCoalesceGroup,
 } from './scheduling-mutation-claims';
 import {
   findCoordinatorPersistTarget,
   SchedulingMutationCoordinator,
+  toPersistOutcome,
+  type SchedulingCoordinatorOperation,
   type SchedulingPersistOutcome,
 } from './scheduling-mutation-coordinator';
+import {
+  CoalescedBackgroundReconciler,
+  planPostMutationReconciliation,
+  proofsSatisfiedForKeys,
+} from './scheduling-board-reconciliation';
 import { ScheduleBoardQuickAddDialog } from './ScheduleBoardQuickAddDialog';
 import {
   SCHEDULING_BOARD_PRIMARIES,
@@ -2087,15 +2098,27 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [optimisticOperations, setOptimisticOperations] =
     useState<SchedulingOptimisticOperation[]>([]);
   const optimisticOperationsRef = useRef<SchedulingOptimisticOperation[]>([]);
-  const pendingOptimisticVisitResizesRef = useRef<
-    Map<string, { startsAt: string; endsAt: string; operationId: string | null }>
-  >(new Map());
   const optimisticSequenceRef = useRef(0);
   const coordinatorOwnedIdsRef = useRef<Set<string>>(new Set());
   const mutationCoordinatorRef = useRef<SchedulingMutationCoordinator | null>(null);
-  const reconciliationTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map()
+  const settleCoordinatorCommandRef = useRef<
+    (
+      operation: SchedulingCoordinatorOperation,
+      outcome: SchedulingPersistOutcome | { kind: 'uncertain' }
+    ) => void
+  >(() => {});
+  const runCoalescedReconciliationRef = useRef<(keys: string[]) => Promise<void>>(
+    async () => undefined
   );
+  const backgroundReconcilerRef = useRef<CoalescedBackgroundReconciler | null>(null);
+  if (!backgroundReconcilerRef.current) {
+    backgroundReconcilerRef.current = new CoalescedBackgroundReconciler({
+      delayMs: 400,
+      run: async (keys) => {
+        await runCoalescedReconciliationRef.current(keys);
+      },
+    });
+  }
   const reconciliationAttemptsRef = useRef<Map<string, number>>(new Map());
   const deferredReconcileKeysRef = useRef<string[]>([]);
   const boardInteractionBusyRef = useRef(false);
@@ -2150,9 +2173,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const visitReturnPreviewPromisesRef = useRef<
     Map<string, Promise<ScheduleVisitBacklogPreview>>
   >(new Map());
-  const visitReturnPersistPromisesRef = useRef<Map<string, Promise<void>>>(
-    new Map()
-  );
   const [coldWeekStates, setColdWeekStates] =
     useState<Map<string, ColdWeekLoadState>>(() => new Map());
   const coldWeekEpochsRef = useRef<Map<string, number>>(new Map());
@@ -2215,10 +2235,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     ]
   );
   useEffect(() => () => {
-    for (const timer of reconciliationTimersRef.current.values()) {
-      clearTimeout(timer);
-    }
-    reconciliationTimersRef.current.clear();
+    backgroundReconcilerRef.current?.dispose();
+    backgroundReconcilerRef.current = null;
     mutationCoordinatorRef.current?.dispose();
     mutationCoordinatorRef.current = null;
   }, []);
@@ -2394,6 +2412,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           );
           setOptimisticOperations(optimisticOperationsRef.current);
         },
+        onSettled: (operation, outcome) => {
+          settleCoordinatorCommandRef.current(operation, outcome);
+        },
       });
     }
     return mutationCoordinatorRef.current;
@@ -2433,154 +2454,129 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     return operation;
   }
 
-  function takePendingOptimisticVisitResize(...visitIds: Array<string | undefined>) {
-    for (const visitId of visitIds) {
-      if (!visitId) continue;
-      const pending = pendingOptimisticVisitResizesRef.current.get(visitId);
-      if (!pending) continue;
-      pendingOptimisticVisitResizesRef.current.delete(visitId);
-      if (pending.operationId) {
-        syncOptimisticOperations(
-          removeOptimisticOperation(optimisticOperationsRef.current, pending.operationId)
-        );
+  function visitIdentityWaitKeys(...ids: Array<string | undefined | null>) {
+    return ids.filter((id): id is string => Boolean(id && isOptimisticEntityId(id)));
+  }
+
+  function rewriteIdentityInMap(id: string, aliases: Record<string, string>) {
+    return aliases[id] || id;
+  }
+
+  function publishSchedulingIdentityAliases(aliases: Record<string, string>) {
+    const entries = Object.entries(aliases).filter(([from, to]) => Boolean(from && to && from !== to));
+    if (entries.length === 0) return;
+    const map = Object.fromEntries(entries);
+    getMutationCoordinator().publishIdentityAliases(map);
+    setActiveVisitTarget((current) => {
+      if (!current) return current;
+      const nextVisitId = rewriteIdentityInMap(current.visit.id, map);
+      const nextJobId = rewriteIdentityInMap(current.job.id, map);
+      const nextVisitJobId = rewriteIdentityInMap(current.visit.job_id, map);
+      if (
+        nextVisitId === current.visit.id
+        && nextJobId === current.job.id
+        && nextVisitJobId === current.visit.job_id
+      ) {
+        return current;
       }
-      return pending;
-    }
-    return null;
-  }
-
-  function isVisitPlacementPending(visitId: string) {
-    return optimisticOperationsRef.current.some(
-      (operation) =>
-        operation.status === 'pending'
-        && (
-          operation.kind === 'schedule-backlog-visit'
-          || operation.kind === 'schedule-quote'
-          || operation.kind === 'schedule-project'
-          || operation.kind === 'quick-add'
-          || operation.kind === 'create-visit'
-        )
-        && operation.lockKeys.some((key) => key.includes(visitId))
-    );
-  }
-
-  function queuePendingVisitResize(
-    visit: ScheduleVisit,
-    startsAt: string,
-    endsAt: string,
-    _reason: string
-  ) {
-    const resizedVisit = { ...visit, starts_at: startsAt, ends_at: endsAt };
-    const existing = pendingOptimisticVisitResizesRef.current.get(visit.id);
-    if (existing?.operationId) {
-      syncOptimisticOperations(
-        optimisticOperationsRef.current.map((operation) =>
-          operation.id === existing.operationId
-            ? {
-                ...operation,
-                proofs: {
-                  [`board:${weekStart}`]: (state) =>
-                    state.board?.visits.some(
-                      (item) =>
-                        item.id === visit.id
-                        && item.starts_at === startsAt
-                        && item.ends_at === endsAt
-                    ) === true,
-                },
-                apply: (state) => ({
-                  ...state,
-                  board: state.board
-                    ? patchBoardWithVisit(state.board, resizedVisit)
-                    : state.board,
-                }),
-              }
-            : operation
-        )
-      );
-      pendingOptimisticVisitResizesRef.current.set(visit.id, {
-        ...existing,
-        startsAt,
-        endsAt,
-      });
-    } else {
-      const operation = registerOptimisticOperation({
-        kind: 'resize-visit-pending',
-        lockKeys: [`job-tree:${visit.job_id}`, `visit:${visit.id}`],
-        queryKeys: [`board:${weekStart}`],
-        proofs: {
-          [`board:${weekStart}`]: (state) =>
-            state.board?.visits.some(
-              (item) =>
-                item.id === visit.id
-                && item.starts_at === startsAt
-                && item.ends_at === endsAt
-            ) === true,
+      return {
+        ...current,
+        job: nextJobId === current.job.id ? current.job : { ...current.job, id: nextJobId },
+        visit: {
+          ...current.visit,
+          id: nextVisitId,
+          job_id: nextVisitJobId,
         },
-        apply: (state) => ({
-          ...state,
-          board: state.board
-            ? patchBoardWithVisit(state.board, resizedVisit)
-            : state.board,
-        }),
-      });
-      pendingOptimisticVisitResizesRef.current.set(visit.id, {
-        startsAt,
-        endsAt,
-        operationId: operation?.id || null,
-      });
+      };
+    });
+    setVisitTarget((current) => {
+      if (!current?.visit) return current;
+      const nextVisitId = rewriteIdentityInMap(current.visit.id, map);
+      const nextJobId = rewriteIdentityInMap(current.job.id, map);
+      const nextVisitJobId = rewriteIdentityInMap(current.visit.job_id, map);
+      if (
+        nextVisitId === current.visit.id
+        && nextJobId === current.job.id
+        && nextVisitJobId === current.visit.job_id
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        job: nextJobId === current.job.id ? current.job : { ...current.job, id: nextJobId },
+        visit: {
+          ...current.visit,
+          id: nextVisitId,
+          job_id: nextVisitJobId,
+        },
+      };
+    });
+  }
+
+  function adoptAuthoritativeVisit(input: {
+    optimisticVisitId?: string | null;
+    visit: ScheduleVisit | null | undefined;
+    optimisticJobId?: string | null;
+    job?: ScheduleJob | null;
+  }): ScheduleVisit | null | undefined {
+    if (!input.visit) return input.visit;
+    const aliases: Record<string, string> = {};
+    if (input.optimisticVisitId && input.optimisticVisitId !== input.visit.id) {
+      aliases[input.optimisticVisitId] = input.visit.id;
     }
-    setActiveVisitTarget((current) =>
-      current?.visit.id === visit.id
-        ? { ...current, visit: resizedVisit }
-        : current
+    if (input.optimisticJobId && input.job && input.optimisticJobId !== input.job.id) {
+      aliases[input.optimisticJobId] = input.job.id;
+    }
+    publishSchedulingIdentityAliases(aliases);
+    return input.visit;
+  }
+
+  function findActiveVisitProducer(visitId: string) {
+    const coordinator = getMutationCoordinator();
+    const resolved = coordinator.resolveIdentity(visitId);
+    return coordinator.getOperations().find((operation) =>
+      operation.executionStatus !== 'completed'
+      && (
+        operation.kind === 'create-visit'
+        || operation.kind === 'quick-add'
+        || operation.kind === 'schedule-quote'
+        || operation.kind === 'schedule-project'
+        || operation.kind === 'schedule-backlog-visit'
+      )
+      && (
+        operation.claims.some((claim) =>
+          claim.scope === 'visit-tree' && (claim.id === visitId || claim.id === resolved)
+        )
+        || operation.lockKeys.some((key) => key.endsWith(':' + visitId) || key.endsWith(':' + resolved))
+      )
     );
   }
 
-  function applyAuthoritativeVisitWithPendingResize(
-    optimisticVisitId: string | undefined,
-    authoritative: ScheduleVisit | null | undefined
-  ): ScheduleVisit | null | undefined {
-    if (!authoritative) return authoritative;
-    const pending = takePendingOptimisticVisitResize(optimisticVisitId, authoritative.id);
-    if (
-      !pending
-      || (
-        pending.startsAt === authoritative.starts_at
-        && pending.endsAt === authoritative.ends_at
+  function findActiveVisitReturn(visitId: string) {
+    const coordinator = getMutationCoordinator();
+    const resolved = coordinator.resolveIdentity(visitId);
+    return coordinator.getOperations().find((operation) =>
+      operation.kind === 'return-visit-to-backlog'
+      && operation.executionStatus !== 'completed'
+      && (
+        operation.claims.some((claim) =>
+          claim.scope === 'visit-tree' && (claim.id === visitId || claim.id === resolved)
+        )
+        || operation.lockKeys.some((key) => key.endsWith(':' + visitId) || key.endsWith(':' + resolved))
       )
-    ) {
-      return authoritative;
-    }
-    const nextVisit = {
-      ...authoritative,
-      starts_at: pending.startsAt,
-      ends_at: pending.endsAt,
-    };
-    void saveScheduleVisit({
-      job_id: authoritative.job_id,
-      title: authoritative.title,
-      starts_at: pending.startsAt,
-      ends_at: pending.endsAt,
-      status: authoritative.status,
-      notes: authoritative.notes,
-    }, authoritative.id)
-      .then((saved) => {
-        setBoardBaseData((current) => patchBoardWithVisit(current, saved));
-      })
-      .catch((error) => {
-        setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
-        toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
-      });
-    return nextVisit;
+    );
   }
 
   function admitBoardCommand(input: {
     id?: string;
     kind: string;
-    claims: ReturnType<typeof claimsFromLockKeys>;
+    claims: SchedulingCoordinatorOperation['claims'];
     lockKeys?: string[];
     duplicateKey?: string;
     coalesceGroup?: string;
+    dependsOn?: string[];
+    identityWaitKeys?: string[];
+    retryPolicy?: SchedulingCoordinatorOperation['retryPolicy'];
     requestId?: string;
     queryKeys: string[];
     proofs?: SchedulingOptimisticOperation['proofs'];
@@ -2693,7 +2689,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     flushDeferredReconciles();
   }
 
-  function reconcileOptimisticKeysInBackground(keys: string[], delayMs = 0) {
+  function readConfirmedProjection(boardWeek = weekStart): SchedulingProjection {
+    return {
+      board: queryClient.getQueryData(['scheduling-board', boardWeek]),
+      quoteCandidates: queryClient.getQueryData(['scheduling-quote-candidates']),
+      projectCandidates: queryClient.getQueryData(['scheduling-project-candidates']),
+      visitBacklog: queryClient.getQueryData(['scheduling-visit-backlog']),
+    };
+  }
+
+  function scheduleBackgroundReconciliation(keys: string[]) {
+    backgroundReconcilerRef.current?.schedule(keys);
+  }
+
+  async function runCoalescedReconciliation(keys: string[]) {
     if (isBoardPointerBusy()) {
       deferredReconcileKeysRef.current = Array.from(
         new Set([...deferredReconcileKeysRef.current, ...keys])
@@ -2701,110 +2710,148 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       return;
     }
     for (const key of new Set(keys)) {
-      const existing = reconciliationTimersRef.current.get(key);
-      if (existing) clearTimeout(existing);
-      const timer = setTimeout(() => {
-        reconciliationTimersRef.current.delete(key);
-        if (
-          optimisticOperationsRef.current.some(
+      if (
+        optimisticOperationsRef.current.some(
+          (operation) =>
+            operation.queryKeys.includes(key)
+            && operation.status === 'pending'
+        )
+      ) {
+        continue;
+      }
+      const queryKey = queryKeyFromOptimisticKey(key);
+      if (!queryKey) continue;
+      const boardWeek = key.startsWith('board:')
+        ? key.slice('board:'.length)
+        : null;
+      const eligibleOperationIds = new Set(
+        optimisticOperationsRef.current
+          .filter(
             (operation) =>
-              operation.queryKeys.includes(key)
-              && operation.status === 'pending'
+              operation.status !== 'pending'
+              && operation.queryKeys.includes(key)
+              && (reconciliationAttemptsRef.current.get(
+                `${operation.id}:${key}`
+              ) || 0) < 3
           )
-        ) {
-          return;
-        }
-        const queryKey = queryKeyFromOptimisticKey(key);
-        if (!queryKey) return;
-        const boardWeek = key.startsWith('board:')
-          ? key.slice('board:'.length)
+          .map((operation) => operation.id)
+      );
+      const coldEpoch =
+        boardWeek && coldWeekEpochsRef.current.has(boardWeek)
+          ? beginColdWeekEpoch(boardWeek)
           : null;
-        const eligibleOperationIds = new Set(
-          optimisticOperationsRef.current
-            .filter(
-              (operation) =>
-                operation.status !== 'pending'
-                && operation.queryKeys.includes(key)
-                && (reconciliationAttemptsRef.current.get(
-                  `${operation.id}:${key}`
-                ) || 0) < 3
-            )
-            .map((operation) => operation.id)
+      for (const operationId of eligibleOperationIds) {
+        const attemptKey = `${operationId}:${key}`;
+        reconciliationAttemptsRef.current.set(
+          attemptKey,
+          (reconciliationAttemptsRef.current.get(attemptKey) || 0) + 1
         );
-        if (eligibleOperationIds.size === 0) return;
-        const coldEpoch =
-          boardWeek && coldWeekEpochsRef.current.has(boardWeek)
-            ? beginColdWeekEpoch(boardWeek)
-            : null;
-        for (const operationId of eligibleOperationIds) {
-          const attemptKey = `${operationId}:${key}`;
-          reconciliationAttemptsRef.current.set(
-            attemptKey,
-            (reconciliationAttemptsRef.current.get(attemptKey) || 0) + 1
-          );
-        }
-        void queryClient.refetchQueries(
+      }
+      try {
+        await queryClient.refetchQueries(
           { queryKey, exact: true, type: 'all' },
           { throwOnError: true, cancelRefetch: true }
-        )
-          .then(() => {
-            const proofBoardWeek = boardWeek || weekStart;
-            const base: SchedulingProjection = {
-              board: queryClient.getQueryData(['scheduling-board', proofBoardWeek]),
-              quoteCandidates: queryClient.getQueryData(['scheduling-quote-candidates']),
-              projectCandidates: queryClient.getQueryData(['scheduling-project-candidates']),
-              visitBacklog: queryClient.getQueryData(['scheduling-visit-backlog']),
-            };
-            const updated = reconcileOptimisticOperations(
+        );
+        const proofBoardWeek = boardWeek || weekStart;
+        const base = readConfirmedProjection(proofBoardWeek);
+        const updated = eligibleOperationIds.size > 0
+          ? reconcileOptimisticOperations(
               optimisticOperationsRef.current,
               key,
               base,
               eligibleOperationIds
-            );
-            for (const operation of updated) {
-              if (
-                eligibleOperationIds.has(operation.id)
-                && operation.reconciledKeys.includes(key)
-              ) {
-                reconciliationAttemptsRef.current.delete(`${operation.id}:${key}`);
-              }
+            )
+          : optimisticOperationsRef.current;
+        if (eligibleOperationIds.size > 0) {
+          for (const operation of updated) {
+            if (
+              eligibleOperationIds.has(operation.id)
+              && operation.reconciledKeys.includes(key)
+            ) {
+              reconciliationAttemptsRef.current.delete(`${operation.id}:${key}`);
             }
-            syncOptimisticOperations(updated);            if (boardWeek && coldEpoch !== null) {
-              setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
-                status: 'authoritative',
-              });
-            }
-            const needsRetry = updated.some(
-              (operation) =>
-                eligibleOperationIds.has(operation.id)
-                && !operation.reconciledKeys.includes(key)
-                && (reconciliationAttemptsRef.current.get(
-                  `${operation.id}:${key}`
-                ) || 0) < 3
-            );
-            if (needsRetry) reconcileOptimisticKeysInBackground([key], 100);
-          })
-          .catch(() => {
-            // A failed read never proves or retires an optimistic operation.
-            if (boardWeek && coldEpoch !== null) {
-              setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
-                status: 'failed',
-                error: 'Unable to reconcile the latest schedule for this week.',
-              });
-            }
-            const needsRetry = optimisticOperationsRef.current.some(
-              (operation) =>
-                eligibleOperationIds.has(operation.id)
-                && (reconciliationAttemptsRef.current.get(
-                  `${operation.id}:${key}`
-                ) || 0) < 3
-            );
-            if (needsRetry) reconcileOptimisticKeysInBackground([key], 100);
+          }
+          syncOptimisticOperations(updated);
+        }
+        if (boardWeek && coldEpoch !== null) {
+          setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
+            status: 'authoritative',
           });
-      }, delayMs);
-      reconciliationTimersRef.current.set(key, timer);
+        }
+        const needsRetry = updated.some(
+          (operation) =>
+            eligibleOperationIds.has(operation.id)
+            && !operation.reconciledKeys.includes(key)
+            && (reconciliationAttemptsRef.current.get(
+              `${operation.id}:${key}`
+            ) || 0) < 3
+        );
+        if (needsRetry) scheduleBackgroundReconciliation([key]);
+      } catch {
+        if (boardWeek && coldEpoch !== null) {
+          setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
+            status: 'failed',
+            error: 'Unable to reconcile the latest schedule for this week.',
+          });
+        }
+        const needsRetry = optimisticOperationsRef.current.some(
+          (operation) =>
+            eligibleOperationIds.has(operation.id)
+            && (reconciliationAttemptsRef.current.get(
+              `${operation.id}:${key}`
+            ) || 0) < 3
+        );
+        if (needsRetry) scheduleBackgroundReconciliation([key]);
+      }
     }
   }
+  runCoalescedReconciliationRef.current = runCoalescedReconciliation;
+
+  function reconcileOptimisticKeysInBackground(keys: string[], _delayMs = 0) {
+    scheduleBackgroundReconciliation(keys);
+  }
+
+  function retireSatisfiedOperation(
+    operation: SchedulingOptimisticOperation,
+    projection: SchedulingProjection
+  ) {
+    let next = optimisticOperationsRef.current;
+    for (const key of operation.queryKeys) {
+      next = reconcileOptimisticOperations(
+        next,
+        key,
+        projection,
+        new Set([operation.id])
+      );
+    }
+    syncOptimisticOperations(next);
+    if (coordinatorOwnedIdsRef.current.has(operation.id)) {
+      getMutationCoordinator().retire(operation.id);
+    }
+  }
+
+  function settleCoordinatorCommand(
+    operation: SchedulingCoordinatorOperation,
+    outcome: SchedulingPersistOutcome | { kind: 'uncertain' }
+  ) {
+    const projection = readConfirmedProjection();
+    if (outcome.kind === 'success') {
+      const proofsSatisfied = proofsSatisfiedForKeys(
+        operation.proofs,
+        operation.queryKeys,
+        projection
+      );
+      const plan = planPostMutationReconciliation({
+        outcome: 'success',
+        proofsSatisfied,
+      });
+      if (plan.retire) retireSatisfiedOperation(operation, projection);
+      scheduleBackgroundReconciliation(operation.queryKeys);
+      return;
+    }
+    scheduleBackgroundReconciliation(operation.queryKeys);
+  }
+  settleCoordinatorCommandRef.current = settleCoordinatorCommand;
 
   function settleOptimisticOperation(
     operationId: string,
@@ -2829,22 +2876,33 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       syncOptimisticOperations(
         removeOptimisticOperation(optimisticOperationsRef.current, operationId)
       );
-      reconcileOptimisticKeysInBackground(operation.queryKeys);
+      scheduleBackgroundReconciliation(operation.queryKeys);
       return;
     }
-    syncOptimisticOperations(
-      optimisticOperationsRef.current.map((current) =>
-        current.id === operationId
-          ? {
-              ...current,
-              status: isAmbiguous ? 'uncertain' : 'acknowledged',
-              proofs: acknowledgement?.proofs || current.proofs,
-              apply: acknowledgement?.apply || current.apply,
-            }
-          : current
-      )
+    const nextOperations = optimisticOperationsRef.current.map((current) =>
+      current.id === operationId
+        ? {
+            ...current,
+            status: isAmbiguous ? 'uncertain' as const : 'acknowledged' as const,
+            proofs: acknowledgement?.proofs || current.proofs,
+            apply: acknowledgement?.apply || current.apply,
+          }
+        : current
     );
-    reconcileOptimisticKeysInBackground(operation.queryKeys);
+    syncOptimisticOperations(nextOperations);
+    const settled = nextOperations.find((current) => current.id === operationId);
+    if (!settled) return;
+    const projection = readConfirmedProjection();
+    const plan = planPostMutationReconciliation({
+      outcome: isAmbiguous ? 'ambiguous' : 'success',
+      proofsSatisfied: proofsSatisfiedForKeys(
+        settled.proofs,
+        settled.queryKeys,
+        projection
+      ),
+    });
+    if (plan.retire) retireSatisfiedOperation(settled, projection);
+    scheduleBackgroundReconciliation(settled.queryKeys);
   }
 
   const board = projectedState.board;
@@ -3304,14 +3362,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             updated_at: now,
           }
         : fallbackVisit;
-      const operation = registerOptimisticOperation({
+      const requestId = crypto.randomUUID();
+      const returnCommand = findActiveVisitReturn(quote.returned_visit.visit_id);
+      const admitted = admitBoardCommand({
         id: operationId,
         kind: 'schedule-backlog-visit',
-        lockKeys: [
-          `job-tree:${optimisticJob.id}`,
-          `backlog-visit:${optimisticVisit.id}`,
-          `visit-tree:${optimisticVisit.id}`,
-        ],
+        requestId,
+        dependsOn: returnCommand ? [returnCommand.id] : undefined,
+        claims: visitReturnPlaceClaims(optimisticJob.id, optimisticVisit.id),
         queryKeys: [`board:${weekStart}`, 'backlog'],
         proofs: {
           [`board:${weekStart}`]: (state) =>
@@ -3335,67 +3393,72 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             : state.board,
           visitBacklog: removeVisitBacklogItem(state.visitBacklog, optimisticVisit.id),
         }),
+        persist: async () => {
+          const liveRequestId =
+            mutationCoordinatorRef.current?.getOperations().find((operation) =>
+              operation.id === operationId
+            )?.requestId ?? requestId;
+          try {
+            const result = await scheduleQueuedVisit({
+              request_id: liveRequestId,
+              visit_id: quote.returned_visit.visit_id,
+              starts_at: startsAt,
+            });
+            const scheduledVisit = adoptAuthoritativeVisit({
+              optimisticVisitId: quote.returned_visit.visit_id,
+              visit: result.visit,
+              job: result.job,
+            }) || result.visit;
+            setBoardBaseData((current) =>
+              patchBoardWithVisit(
+                patchBoardWithJob(current, result.job),
+                scheduledVisit
+              )
+            );
+            queryClient.setQueryData(
+              ['scheduling-visit-backlog'],
+              (current: ScheduleVisitBacklogItem[] | undefined) =>
+                removeVisitBacklogItem(current, scheduledVisit.id)
+            );
+            toast.success(`${quote.base_quote_reference} returned to the schedule`);
+            return {
+              kind: 'success' as const,
+              proofs: {
+                [`board:${weekStart}`]: (state: SchedulingProjection) =>
+                  provesJob(result.job)(state) && provesVisit(scheduledVisit)(state),
+                backlog: (state: SchedulingProjection) =>
+                  state.visitBacklog?.every(
+                    (item) => item.visit_id !== scheduledVisit.id
+                  ) === true,
+              },
+              apply: (state: SchedulingProjection) => ({
+                ...state,
+                board: state.board
+                  ? patchBoardWithVisit(
+                      patchBoardWithJob(state.board, result.job),
+                      scheduledVisit
+                    )
+                  : state.board,
+                visitBacklog: removeVisitBacklogItem(
+                  state.visitBacklog,
+                  scheduledVisit.id
+                ),
+              }),
+            };
+          } catch (error) {
+            setSelectedQuote(quote);
+            if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to schedule this returned visit'
+              );
+              return toPersistOutcome(error);
+            }
+            throw error;
+          }
+        },
       });
-      if (!operation) return;
+      if (admitted.duplicate) return;
       setSelectedQuote(null);
-      try {
-        const pendingReturn = visitReturnPersistPromisesRef.current.get(
-          quote.returned_visit.visit_id
-        );
-        if (pendingReturn) {
-          await pendingReturn;
-        }
-        const result = await scheduleQueuedVisit({
-          request_id: crypto.randomUUID(),
-          visit_id: quote.returned_visit.visit_id,
-          starts_at: startsAt,
-        });
-        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
-          quote.returned_visit.visit_id,
-          result.visit
-        ) || result.visit;
-        setBoardBaseData((current) =>
-          patchBoardWithVisit(
-            patchBoardWithJob(current, result.job),
-            scheduledVisit
-          )
-        );
-        queryClient.setQueryData(
-          ['scheduling-visit-backlog'],
-          (current: ScheduleVisitBacklogItem[] | undefined) =>
-            removeVisitBacklogItem(current, scheduledVisit.id)
-        );
-        settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: {
-            [`board:${weekStart}`]: (state) =>
-              provesJob(result.job)(state) && provesVisit(scheduledVisit)(state),
-            backlog: (state) =>
-              state.visitBacklog?.every(
-                (item) => item.visit_id !== scheduledVisit.id
-              ) === true,
-          },
-          apply: (state) => ({
-            ...state,
-            board: state.board
-              ? patchBoardWithVisit(
-                  patchBoardWithJob(state.board, result.job),
-                  scheduledVisit
-                )
-              : state.board,
-            visitBacklog: removeVisitBacklogItem(
-              state.visitBacklog,
-              scheduledVisit.id
-            ),
-          }),
-        });
-        toast.success(`${quote.base_quote_reference} returned to the schedule`);
-      } catch (error) {
-        settleOptimisticOperation(operation.id, 'failure', error);
-        setSelectedQuote(quote);
-        toast.error(
-          error instanceof Error ? error.message : 'Unable to schedule this returned visit'
-        );
-      }
       return;
     }
     if (quote.kind === 'project') {
@@ -3487,13 +3550,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         end_date: endDate,
         ...(initialVisit ? { initial_visit: initialVisit } : {}),
       });
-      const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
-        optimisticVisit?.id,
-        result.visit
-      );
+      const scheduledVisit = adoptAuthoritativeVisit({
+        optimisticVisitId: optimisticVisit?.id,
+        visit: result.visit,
+        optimisticJobId: optimisticJob.id,
+        job: result.job,
+      });
       setBoardBaseData((current) => {
-        const withJob = patchBoardWithJob(current, result.job);
-        return scheduledVisit ? patchBoardWithVisit(withJob, scheduledVisit) : withJob;
+        const withJob = patchBoardWithJob(current, result.job, optimisticJob.id);
+        return scheduledVisit
+          ? patchBoardWithVisit(withJob, scheduledVisit, optimisticVisit?.id)
+          : withJob;
       });
       queryClient.setQueryData(
         ['scheduling-quote-candidates'],
@@ -3527,6 +3594,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         `${quote.base_quote_reference} scheduled ${startDate === endDate ? `for ${startDate}` : `from ${startDate} to ${endDate}`}`
       );
     } catch (error) {
+      if (optimisticVisit) getMutationCoordinator().cancelWaiters(optimisticVisit.id);
+      if (optimisticJob) getMutationCoordinator().cancelWaiters(optimisticJob.id);
       settleOptimisticOperation(operation.id, 'failure', error);
       setSelectedQuote(quote);
       toast.error(error instanceof Error ? error.message : 'Unable to schedule this Quote');
@@ -3615,13 +3684,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     if (optimisticVisit) activateVisit(optimisticJob, optimisticVisit);
     void createProjectScheduleJob(input)
       .then((result) => {
-        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
-          optimisticVisit?.id,
-          result.visit
-        );
+        const scheduledVisit = adoptAuthoritativeVisit({
+          optimisticVisitId: optimisticVisit?.id,
+          visit: result.visit,
+          optimisticJobId: optimisticJob.id,
+          job: result.job,
+        });
         setBoardBaseData((current) => {
-          const withJob = patchBoardWithJob(current, result.job);
-          return scheduledVisit ? patchBoardWithVisit(withJob, scheduledVisit) : withJob;
+          const withJob = patchBoardWithJob(current, result.job, optimisticJob.id);
+          return scheduledVisit
+            ? patchBoardWithVisit(withJob, scheduledVisit, optimisticVisit?.id)
+            : withJob;
         });
         queryClient.setQueryData(
           ['scheduling-project-candidates'],
@@ -3657,7 +3730,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         setProjectPlacementDraft(null);
         if (scheduledVisit) {
           setActiveVisitTarget((current) =>
-            current?.visit.id === optimisticVisit?.id
+            current
+            && (
+              current.visit.id === optimisticVisit?.id
+              || current.visit.id === scheduledVisit.id
+            )
               ? { job: result.job, visit: scheduledVisit }
               : current
           );
@@ -3665,6 +3742,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         toast.success(`${project.project_reference} scheduled`);
       })
       .catch((error) => {
+        if (optimisticVisit) getMutationCoordinator().cancelWaiters(optimisticVisit.id);
+        getMutationCoordinator().cancelWaiters(optimisticJob.id);
         settleOptimisticOperation(operation.id, 'failure', error);
         setProjectPlacement({
           project,
@@ -3991,6 +4070,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     ) return;
     const { target, preview: preparedPreview } = pendingVisitReturn;
     const queuedAt = new Date().toISOString();
+    const requestId = crypto.randomUUID();
     const backlogItem: ScheduleVisitBacklogItem = {
       visit_id: target.visit.id,
       job_id: target.job.id,
@@ -4011,54 +4091,141 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       ),
       queued_at: queuedAt,
     };
-    const operation = registerOptimisticOperation({
+    const applyReturn = (
+      state: SchedulingProjection,
+      item: ScheduleVisitBacklogItem
+    ): SchedulingProjection => {
+      if (!state.board) {
+        return {
+          ...state,
+          visitBacklog: upsertVisitBacklogItem(state.visitBacklog, item),
+        };
+      }
+      const otherVisits = state.board.visits.filter(
+        (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+      );
+      return {
+        ...state,
+        board: otherVisits.length > 0
+          ? patchBoardRemoveVisit(state.board, target.visit.id)
+          : patchBoardRemoveJob(state.board, target.job.id),
+        visitBacklog: upsertVisitBacklogItem(state.visitBacklog, item),
+      };
+    };
+    const admitted = admitBoardCommand({
       kind: 'return-visit-to-backlog',
-      lockKeys: [
-        `job-tree:${target.job.id}`,
-        `visit-tree:${target.visit.id}`,
-        `backlog-visit:${target.visit.id}`,
-      ],
+      requestId,
+      claims: visitReturnPlaceClaims(target.job.id, target.visit.id),
       queryKeys: [`board:${weekStart}`, 'backlog'],
       proofs: {
         [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
         backlog: (state) =>
-          state.visitBacklog?.some(
-            (item) => item.visit_id === target.visit.id
-          ) === true,
+          state.visitBacklog?.some((item) => item.visit_id === target.visit.id) === true,
       },
-      apply: (state) => {
-        if (!state.board) {
-          return {
-            ...state,
-            visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
+      apply: (state) => applyReturn(state, backlogItem),
+      persist: async () => {
+        const liveRequestId =
+          mutationCoordinatorRef.current?.getOperations().find((operation) =>
+            operation.requestId === requestId
+          )?.requestId ?? requestId;
+        try {
+          let preview = preparedPreview;
+          if (!preview?.fingerprint) {
+            preview = await (
+              visitReturnPreviewPromisesRef.current.get(target.visit.id)
+              ?? previewScheduleVisitBacklog(target.visit.id)
+            );
+          }
+          if (preview.already_queued) {
+            setBoardBaseData((current) => {
+              const otherVisits = current.visits.filter(
+                (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+              );
+              return otherVisits.length > 0
+                ? patchBoardRemoveVisit(current, target.visit.id)
+                : patchBoardRemoveJob(current, target.job.id);
+            });
+            queryClient.setQueryData(
+              ['scheduling-visit-backlog'],
+              (current: ScheduleVisitBacklogItem[] | undefined) =>
+                upsertVisitBacklogItem(current, backlogItem)
+            );
+            toast.info('This visit is already in the Jobs queue.');
+            return {
+              kind: 'success' as const,
+              proofs: {
+                [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
+                backlog: (state: SchedulingProjection) =>
+                  state.visitBacklog?.some((item) => item.visit_id === target.visit.id) === true,
+              },
+              apply: (state: SchedulingProjection) => applyReturn(state, backlogItem),
+            };
+          }
+          const result = await enqueueScheduleVisit({
+            request_id: liveRequestId,
+            visit_id: target.visit.id,
+            expected_fingerprint: preview.fingerprint,
+          });
+          const authoritativeBacklogItem = result.backlog_item || {
+            ...backlogItem,
+            queued_at: result.queued_at,
           };
+          setBoardBaseData((current) => {
+            const otherVisits = current.visits.filter(
+              (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
+            );
+            return otherVisits.length > 0
+              ? patchBoardRemoveVisit(current, target.visit.id)
+              : patchBoardRemoveJob(current, target.job.id);
+          });
+          queryClient.setQueryData(
+            ['scheduling-visit-backlog'],
+            (current: ScheduleVisitBacklogItem[] | undefined) =>
+              upsertVisitBacklogItem(current, authoritativeBacklogItem)
+          );
+          toast.success(
+            `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
+          );
+          return {
+            kind: 'success' as const,
+            proofs: {
+              [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
+              backlog: (state: SchedulingProjection) =>
+                state.visitBacklog?.some(
+                  (item) =>
+                    item.visit_id === target.visit.id
+                    && item.queued_at === authoritativeBacklogItem.queued_at
+                ) === true,
+            },
+            apply: (state: SchedulingProjection) => applyReturn(state, authoritativeBacklogItem),
+          };
+        } catch (error) {
+          if (
+            error instanceof SchedulingApiError
+            && error.payload.code === 'stale_visit_preview'
+          ) {
+            setPendingVisitReturn({
+              target,
+              localAssignmentCount: pendingVisitReturn.localAssignmentCount,
+              preview: null,
+            });
+            void prepareVisitReturn(target);
+          }
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to return this visit to Jobs');
+            return { kind: 'failed' as const, error };
+          }
+          throw error;
+        } finally {
+          setReturningVisitIds((current) => {
+            const next = new Set(current);
+            next.delete(target.visit.id);
+            return next;
+          });
         }
-        const otherVisits = state.board.visits.filter(
-          (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
-        );
-        const nextBoard = otherVisits.length > 0
-          ? patchBoardRemoveVisit(state.board, target.visit.id)
-          : patchBoardRemoveJob(state.board, target.job.id);
-        return {
-          ...state,
-          board: nextBoard,
-          visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
-        };
       },
     });
-    setBoardBaseData((current) => {
-      const otherVisits = current.visits.filter(
-        (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
-      );
-      return otherVisits.length > 0
-        ? patchBoardRemoveVisit(current, target.visit.id)
-        : patchBoardRemoveJob(current, target.job.id);
-    });
-    queryClient.setQueryData(
-      ['scheduling-visit-backlog'],
-      (current: ScheduleVisitBacklogItem[] | undefined) =>
-        upsertVisitBacklogItem(current, backlogItem)
-    );
+    if (admitted.duplicate) return;
     setReturningVisitIds((current) => {
       const next = new Set(current);
       next.add(target.visit.id);
@@ -4075,133 +4242,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     setSelectedQuote(null);
     setSidebarTab('jobs');
     setQuoteStage('all');
-    const persistWork = (async () => {
-      let preview = preparedPreview;
-      if (!preview?.fingerprint) {
-        preview = await (
-          visitReturnPreviewPromisesRef.current.get(target.visit.id)
-          ?? previewScheduleVisitBacklog(target.visit.id)
-        );
-      }
-      if (preview.already_queued) {
-        settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: {
-            [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
-            backlog: (state) =>
-              state.visitBacklog?.some(
-                (item) => item.visit_id === target.visit.id
-              ) === true,
-          },
-          apply: (state) => ({
-            ...state,
-            board: state.board
-              ? (
-                state.board.visits.some(
-                  (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
-                )
-                  ? patchBoardRemoveVisit(state.board, target.visit.id)
-                  : patchBoardRemoveJob(state.board, target.job.id)
-              )
-              : state.board,
-            visitBacklog: upsertVisitBacklogItem(state.visitBacklog, backlogItem),
-          }),
-        });
-        toast.info('This visit is already in the Jobs queue.');
-        return;
-      }
-      const result = await enqueueScheduleVisit({
-        request_id: crypto.randomUUID(),
-        visit_id: target.visit.id,
-        expected_fingerprint: preview.fingerprint,
-      });
-      setBoardBaseData((current) => {
-        const otherVisits = current.visits.filter(
-          (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
-        );
-        return otherVisits.length > 0
-          ? patchBoardRemoveVisit(current, target.visit.id)
-          : patchBoardRemoveJob(current, target.job.id);
-      });
-      queryClient.setQueryData(
-        ['scheduling-visit-backlog'],
-        (current: ScheduleVisitBacklogItem[] | undefined) =>
-          upsertVisitBacklogItem(current, {
-            ...(result.backlog_item || backlogItem),
-            queued_at: result.backlog_item?.queued_at || result.queued_at,
-          })
-      );
-      const authoritativeBacklogItem = result.backlog_item || {
-        ...backlogItem,
-        queued_at: result.queued_at,
-      };
-      settleOptimisticOperation(operation.id, 'success', undefined, {
-        proofs: {
-          [`board:${weekStart}`]: provesBoardEntityAbsent('visit', target.visit.id),
-          backlog: (state) =>
-            state.visitBacklog?.some(
-              (item) =>
-                item.visit_id === target.visit.id
-                && item.queued_at === authoritativeBacklogItem.queued_at
-            ) === true,
-        },
-        apply: (state) => {
-          if (!state.board) {
-            return {
-              ...state,
-              visitBacklog: upsertVisitBacklogItem(
-                state.visitBacklog,
-                authoritativeBacklogItem
-              ),
-            };
-          }
-          const otherVisits = state.board.visits.filter(
-            (visit) => visit.job_id === target.job.id && visit.id !== target.visit.id
-          );
-          return {
-            ...state,
-            board: otherVisits.length > 0
-              ? patchBoardRemoveVisit(state.board, target.visit.id)
-              : patchBoardRemoveJob(state.board, target.job.id),
-            visitBacklog: upsertVisitBacklogItem(
-              state.visitBacklog,
-              authoritativeBacklogItem
-            ),
-          };
-        },
-      });
-      toast.success(
-        `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
-      );
-    })();
-    visitReturnPersistPromisesRef.current.set(target.visit.id, persistWork);
-    try {
-      await persistWork;
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      if (
-        error instanceof SchedulingApiError
-        && error.payload.code === 'stale_visit_preview'
-      ) {
-        setPendingVisitReturn({
-          target,
-          localAssignmentCount: pendingVisitReturn.localAssignmentCount,
-          preview: null,
-        });
-        void prepareVisitReturn(target);
-      }
-      toast.error(
-        error instanceof Error ? error.message : 'Unable to return this visit to Jobs'
-      );
-    } finally {
-      if (visitReturnPersistPromisesRef.current.get(target.visit.id) === persistWork) {
-        visitReturnPersistPromisesRef.current.delete(target.visit.id);
-      }
-      setReturningVisitIds((current) => {
-        const next = new Set(current);
-        next.delete(target.visit.id);
-        return next;
-      });
-    }
   }
 
   function setBoardBaseData(
@@ -4257,15 +4297,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     input: SaveScheduleVisitInput,
     existingVisit: ScheduleVisit | null
   ) {
-    if (isOptimisticEntityId(input.job_id) || isOptimisticEntityId(existingVisit?.id)) {
+    if (!existingVisit && isOptimisticEntityId(input.job_id)) {
       toast.info('Wait for this new schedule item to finish saving.');
       return;
     }
     const operationId = crypto.randomUUID();
     setVisitDraft(input);
     const now = new Date().toISOString();
-    const job = board?.jobs.find((item) => item.id === input.job_id);
-    if (!job) return;
+    const job = board?.jobs.find((item) => item.id === input.job_id)
+      || (existingVisit
+        ? board?.jobs.find((item) => item.id === existingVisit.job_id)
+        : undefined);
+    if (!job && !existingVisit) return;
+    const targetJob = job || existingVisit && board?.jobs.find((item) => item.id === existingVisit.job_id);
+    if (!targetJob) return;
     const optimisticVisit: ScheduleVisit = existingVisit
       ? { ...existingVisit, ...input, updated_by: userId, updated_at: now }
       : {
@@ -4288,19 +4333,27 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           created_at: now,
           updated_at: now,
         };
-    const operation = registerOptimisticOperation({
+    const coordinator = getMutationCoordinator();
+    const resolvedVisitId = coordinator.resolveIdentity(optimisticVisit.id);
+    const resolvedJobId = coordinator.resolveIdentity(optimisticVisit.job_id);
+    const producer = findActiveVisitProducer(optimisticVisit.id);
+    const admitted = admitBoardCommand({
       id: operationId,
       kind: existingVisit ? 'update-visit' : 'create-visit',
-      lockKeys: existingVisit
-        ? [`job-tree:${input.job_id}`, `visit:${existingVisit.id}`]
-        : [`job-tree:${input.job_id}`],
+      retryPolicy: existingVisit ? 'ambiguous' : 'none',
+      coalesceGroup: existingVisit ? visitTimesCoalesceGroup(resolvedVisitId) : undefined,
+      dependsOn: producer ? [producer.id] : undefined,
+      identityWaitKeys: visitIdentityWaitKeys(optimisticVisit.id, optimisticVisit.job_id),
+      claims: existingVisit
+        ? visitTimesClaims(resolvedJobId, resolvedVisitId)
+        : visitCreateClaims(resolvedJobId, optimisticVisit.id),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
           state.board?.visits.some(
             (visit) =>
-              visit.job_id === input.job_id
-              && (!existingVisit || visit.id === existingVisit.id)
+              visit.job_id === resolvedJobId
+              && (!existingVisit || visit.id === resolvedVisitId)
               && visit.starts_at === input.starts_at
               && visit.ends_at === input.ends_at
           ) === true,
@@ -4308,46 +4361,67 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       apply: (state) => ({
         ...state,
         board: state.board
-          ? patchBoardWithVisit(state.board, optimisticVisit)
+          ? patchBoardWithVisit(
+              state.board,
+              {
+                ...optimisticVisit,
+                id: coordinator.resolveIdentity(optimisticVisit.id),
+                job_id: coordinator.resolveIdentity(optimisticVisit.job_id),
+              },
+              optimisticVisit.id
+            )
           : state.board,
       }),
+      persist: async () => {
+        try {
+          const visitId = existingVisit
+            ? coordinator.resolveIdentity(optimisticVisit.id)
+            : undefined;
+          const jobId = coordinator.resolveIdentity(optimisticVisit.job_id);
+          const authoritative = await saveScheduleVisit(
+            { ...input, job_id: jobId },
+            visitId
+          );
+          const savedVisit = adoptAuthoritativeVisit({
+            optimisticVisitId: existingVisit ? undefined : optimisticVisit.id,
+            visit: authoritative,
+            optimisticJobId: isOptimisticEntityId(optimisticVisit.job_id)
+              ? optimisticVisit.job_id
+              : undefined,
+          }) || authoritative;
+          setBoardBaseData((current) =>
+            patchBoardWithVisit(current, savedVisit, existingVisit ? undefined : optimisticVisit.id)
+          );
+          setVisitDraft(null);
+          toast.success(existingVisit ? 'Visit updated' : 'Visit added');
+          return {
+            kind: 'success' as const,
+            identityAliases: existingVisit
+              ? undefined
+              : { [optimisticVisit.id]: savedVisit.id },
+            proofs: { [`board:${weekStart}`]: provesVisit(savedVisit) },
+            apply: (state: SchedulingProjection) => ({
+              ...state,
+              board: state.board
+                ? patchBoardWithVisit(state.board, savedVisit, optimisticVisit.id)
+                : state.board,
+            }),
+          };
+        } catch (error) {
+          setVisitTarget({
+            job: targetJob,
+            visit: existingVisit,
+            date: getScheduleVisitDate(input.starts_at),
+          });
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to save visit');
+            return toPersistOutcome(error);
+          }
+          throw error;
+        }
+      },
     });
-    if (!operation) {
-      setVisitTarget({
-        job,
-        visit: existingVisit,
-        date: getScheduleVisitDate(input.starts_at),
-      });
-      return;
-    }
-    void saveScheduleVisit(input, existingVisit?.id)
-      .then((authoritative) => {
-        const savedVisit = applyAuthoritativeVisitWithPendingResize(
-          existingVisit ? undefined : optimisticVisit.id,
-          authoritative
-        ) || authoritative;
-        setBoardBaseData((current) => patchBoardWithVisit(current, savedVisit));
-        settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: { [`board:${weekStart}`]: provesVisit(savedVisit) },
-          apply: (state) => ({
-            ...state,
-            board: state.board
-              ? patchBoardWithVisit(state.board, savedVisit)
-              : state.board,
-          }),
-        });
-        setVisitDraft(null);
-        toast.success(existingVisit ? 'Visit updated' : 'Visit added');
-      })
-      .catch((error) => {
-        settleOptimisticOperation(operation.id, 'failure', error);
-        setVisitTarget({
-          job,
-          visit: existingVisit,
-          date: getScheduleVisitDate(input.starts_at),
-        });
-        toast.error(error instanceof Error ? error.message : 'Unable to save visit');
-      });
+    if (admitted.duplicate || admitted.coalesced) return;
   }
 
   function handleVisitDelete(visit: ScheduleVisit) {
@@ -4404,89 +4478,96 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     startsAt: string,
     endsAt: string
   ) {
-    if (isOptimisticEntityId(visit.id) || isVisitPlacementPending(visit.id)) {
-      queuePendingVisitResize(
-        visit,
-        startsAt,
-        endsAt,
-        isOptimisticEntityId(visit.id) ? 'optimistic-visit' : 'placement-pending'
-      );
-      return;
-    }
-    if (isOptimisticEntityId(visit.job_id)) {
-      toast.info('Wait for this new visit to finish saving.');
-      return;
-    }
-    const resizedVisit = { ...visit, starts_at: startsAt, ends_at: endsAt };
-    const operation = registerOptimisticOperation({
+    const coordinator = getMutationCoordinator();
+    const resolvedVisitId = coordinator.resolveIdentity(visit.id);
+    const resolvedJobId = coordinator.resolveIdentity(visit.job_id);
+    const resizedVisit = {
+      ...visit,
+      id: resolvedVisitId,
+      job_id: resolvedJobId,
+      starts_at: startsAt,
+      ends_at: endsAt,
+    };
+    const producer = findActiveVisitProducer(visit.id);
+    const admitted = admitBoardCommand({
       kind: 'resize-visit',
-      lockKeys: [`job-tree:${visit.job_id}`, `visit:${visit.id}`],
+      coalesceGroup: visitTimesCoalesceGroup(resolvedVisitId),
+      dependsOn: producer ? [producer.id] : undefined,
+      identityWaitKeys: visitIdentityWaitKeys(visit.id, visit.job_id),
+      claims: visitTimesClaims(resolvedJobId, resolvedVisitId),
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
           state.board?.visits.some(
             (item) =>
-              item.id === visit.id
+              (item.id === resolvedVisitId || item.id === visit.id)
               && item.starts_at === startsAt
               && item.ends_at === endsAt
           ) === true,
       },
-      apply: (state) => ({
-        ...state,
-        board: state.board
-          ? patchBoardWithVisit(state.board, resizedVisit)
-          : state.board,
-      }),
-    });
-    if (!operation) return;
-    setActiveVisitTarget((current) =>
-      current?.visit.id === visit.id
-        ? { ...current, visit: resizedVisit }
-        : current
-    );
-
-    try {
-      const authoritative = await saveScheduleVisit({
-        job_id: visit.job_id,
-        title: visit.title,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        status: visit.status,
-        notes: visit.notes,
-      }, visit.id);
-      setBoardBaseData((current) => patchBoardWithVisit(current, authoritative));
-      settleOptimisticOperation(operation.id, 'success', undefined, {
-        proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
-        apply: (state) => ({
+      apply: (state) => {
+        const liveVisitId = coordinator.resolveIdentity(visit.id);
+        const liveJobId = coordinator.resolveIdentity(visit.job_id);
+        const nextVisit = {
+          ...resizedVisit,
+          id: liveVisitId,
+          job_id: liveJobId,
+        };
+        return {
           ...state,
           board: state.board
-            ? patchBoardWithVisit(state.board, authoritative)
+            ? patchBoardWithVisit(state.board, nextVisit, visit.id)
             : state.board,
-        }),
-      });
-      toast.success('Visit times updated');
-    } catch (error) {
-      const queued =
-        error instanceof SchedulingApiError
-        && (
-          error.payload.code === 'visit_queued'
-          || error.payload.code === 'visit_already_queued'
-        );
-      if (queued) {
-        pendingOptimisticVisitResizesRef.current.set(visit.id, {
-          startsAt,
-          endsAt,
-          operationId: operation.id,
-        });
-        queuePendingVisitResize(visit, startsAt, endsAt, String(error.payload.code));
-        return;
-      }
-      settleOptimisticOperation(operation.id, 'failure', error);
-      setActiveVisitTarget((current) =>
-        current?.visit.id === visit.id ? { ...current, visit } : current
-      );
-      toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
-    }
+        };
+      },
+      persist: async () => {
+        const visitId = coordinator.resolveIdentity(visit.id);
+        const jobId = coordinator.resolveIdentity(visit.job_id);
+        try {
+          const authoritative = await saveScheduleVisit({
+            job_id: jobId,
+            title: visit.title,
+            starts_at: startsAt,
+            ends_at: endsAt,
+            status: visit.status,
+            notes: visit.notes,
+          }, visitId);
+          setBoardBaseData((current) => patchBoardWithVisit(current, authoritative, visit.id));
+          toast.success('Visit times updated');
+          return {
+            kind: 'success' as const,
+            proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
+            apply: (state: SchedulingProjection) => ({
+              ...state,
+              board: state.board
+                ? patchBoardWithVisit(state.board, authoritative, visit.id)
+                : state.board,
+            }),
+          };
+        } catch (error) {
+          const queued =
+            error instanceof SchedulingApiError
+            && (
+              error.payload.code === 'visit_queued'
+              || error.payload.code === 'visit_already_queued'
+            );
+          if (queued) {
+            return { kind: 'failed' as const, error };
+          }
+          if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
+            toast.error(error instanceof Error ? error.message : 'Unable to resize this visit');
+            return toPersistOutcome(error);
+          }
+          throw error;
+        }
+      },
+    });
+    if (admitted.duplicate) return;
+    setActiveVisitTarget((current) =>
+      current?.visit.id === visit.id || current?.visit.id === resolvedVisitId
+        ? { ...current, visit: { ...current.visit, ...resizedVisit } }
+        : current
+    );
   }
 
   function createOptimisticAssignment(
@@ -5440,10 +5521,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     activateVisit(optimisticJob, optimisticVisit);
     void quickAddScheduleProject(input)
       .then((result) => {
-        const scheduledVisit = applyAuthoritativeVisitWithPendingResize(
-          optimisticVisit.id,
-          result.visit
-        ) || result.visit;
+        const scheduledVisit = adoptAuthoritativeVisit({
+          optimisticVisitId: optimisticVisit.id,
+          visit: result.visit,
+          optimisticJobId: optimisticJob.id,
+          job: result.job,
+        }) || result.visit;
         queryClient.setQueryData<SchedulingBoardPayload>(
           targetKey,
           (current) => current
@@ -5474,13 +5557,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         });
         setQuickAddDraft(null);
         setActiveVisitTarget((current) =>
-          current?.visit.id === optimisticVisit.id
+          current
+          && (
+            current.visit.id === optimisticVisit.id
+            || current.visit.id === scheduledVisit.id
+          )
             ? { job: result.job, visit: scheduledVisit }
             : current
         );
         toast.success(`${result.project_reference} added to the schedule`);
       })
       .catch((error) => {
+        getMutationCoordinator().cancelWaiters(optimisticVisit.id);
+        getMutationCoordinator().cancelWaiters(optimisticJob.id);
         settleOptimisticOperation(operation.id, 'failure', error);
         setQuickAddOpen(true);
         toast.error(error instanceof Error ? error.message : 'Unable to quick add this job.');

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readBoardSequence } from '@/lib/utils/scheduling-board-order';
 import type {
   ScheduleJob,
   ScheduleVisit,
@@ -66,6 +67,7 @@ export async function loadScheduleVisitBacklog(
           updated_by,
           created_at,
           updated_at,
+          board_sequence,
           customer:customers(company_name)
         )
       )
@@ -122,6 +124,7 @@ export async function loadScheduleVisitBacklog(
       updated_by: typeof job.updated_by === 'string' ? job.updated_by : null,
       created_at: String(job.created_at),
       updated_at: String(job.updated_at),
+      board_sequence: readBoardSequence(job.board_sequence),
     };
     const authoritativeVisit: ScheduleVisit = {
       id: String(visit.id),

@@ -6303,6 +6303,7 @@ export type Database = {
           updated_by: string | null
           created_at: string
           updated_at: string
+          board_sequence: number
         }
         Insert: {
           id?: string

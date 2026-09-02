@@ -8,6 +8,10 @@ import {
   getScheduleLondonStartsAtRangeIso,
   scheduleVisitIntervalsOverlap,
 } from '@/lib/utils/scheduling';
+import {
+  readBoardSequence,
+  sortJobsByBoardSequence,
+} from '@/lib/utils/scheduling-board-order';
 import type {
   ScheduleAssignment,
   ScheduleEmployeeAssignment,
@@ -65,6 +69,7 @@ function mapJob(row: Record<string, unknown>): ScheduleJob {
     customer_name: customer?.company_name || null,
     is_drop_on_ready: row.is_drop_on_ready === true,
     tags,
+    board_sequence: readBoardSequence(row.board_sequence),
   } as unknown as ScheduleJob;
 }
 
@@ -221,7 +226,8 @@ export async function loadSchedulingBoard(
         .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
         .lte('start_date', weekEnd)
         .gte('end_date', weekStart)
-        .order('created_at'),
+        .order('board_sequence')
+        .order('id'),
       admin
         .from('schedule_job_tags')
         .select('id, name, color, description, is_active')
@@ -290,7 +296,9 @@ export async function loadSchedulingBoard(
     .select('visit_id');
   if (visitBacklogResult.error) throw visitBacklogResult.error;
 
-  const jobs = ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob);
+  const jobs = sortJobsByBoardSequence(
+    ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob)
+  );
   const visitRows = (visitsResult.data || []) as ScheduleVisit[];
   const queuedVisitIds = new Set(
     ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
@@ -489,7 +497,9 @@ export async function loadSchedulingSelf(
   return {
     week: { start: weekStart, end: weekEnd },
     assignments,
-    jobs: ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob),
+    jobs: sortJobsByBoardSequence(
+      ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob)
+    ),
     visits,
     plant_assignments: plantAssignments,
   };

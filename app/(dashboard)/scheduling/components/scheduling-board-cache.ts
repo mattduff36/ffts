@@ -15,6 +15,7 @@ import {
   removeScheduleDayTeamMember as removeDayTeamMemberFromBoard,
   upsertScheduleDayTeamMember,
 } from '@/lib/utils/scheduling-day-teams';
+import { insertJobInBoardOrder } from '@/lib/utils/scheduling-board-order';
 
 export function snapshotBoard(
   board: SchedulingBoardPayload | undefined
@@ -115,9 +116,7 @@ export function patchBoardWithQuickAdd(input: {
   job: ScheduleJob;
   visit: ScheduleVisit;
 }): SchedulingBoardPayload {
-  const jobs = input.board.jobs.some((job) => job.id === input.job.id)
-    ? input.board.jobs.map((job) => (job.id === input.job.id ? input.job : job))
-    : [...input.board.jobs, input.job];
+  const jobs = insertJobInBoardOrder(input.board.jobs, input.job);
   const visits = input.board.visits.some((visit) => visit.id === input.visit.id)
     ? input.board.visits.map((visit) =>
         visit.id === input.visit.id ? input.visit : visit
@@ -136,17 +135,9 @@ export function patchBoardWithJob(
   job: ScheduleJob,
   replaceId?: string
 ): SchedulingBoardPayload {
-  const existingIndex = board.jobs.findIndex(
-    (item) => item.id === job.id || item.id === replaceId
-  );
-  const jobs = board.jobs.filter((item) => item.id !== job.id && item.id !== replaceId);
-  if (existingIndex >= 0) {
-    jobs.splice(Math.min(existingIndex, jobs.length), 0, job);
-    return { ...board, jobs };
-  }
   return {
     ...board,
-    jobs: [...jobs, job],
+    jobs: insertJobInBoardOrder(board.jobs, job, replaceId),
   };
 }
 

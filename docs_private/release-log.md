@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.2.1
+
+**GIT COMMIT MESSAGE**
+`fix(scheduling): return visits to Jobs without a confirmation dialog`
+
+**PUSHED AT**
+2026-09-02T13:40:31.459Z
+
+**WHAT CHANGED**
+Treat fap and ffap as authorized finalise push aliases. Return visits to Jobs without a confirmation dialog.
+
+**VERSION HISTORY DETAILS**
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): treat fap and ffap as authorized finalise push aliases`
+- `fix(scheduling): return visits to Jobs without a confirmation dialog`
+
 ## 0926.2.0
 
 **GIT COMMIT MESSAGE**

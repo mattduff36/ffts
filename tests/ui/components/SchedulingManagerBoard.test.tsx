@@ -1002,7 +1002,7 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByText('Q-DRAFT')).not.toBeInTheDocument();
   });
 
-  it('OPT-SAFETY-001 opens return confirmation before authoritative preview resolves', async () => {
+  it('OPT-SAFETY-001 returns a visit immediately while awaiting the authoritative preview', async () => {
     let resolvePreview!: (value: {
       visit_id: string;
       job_id: string;
@@ -1039,18 +1039,9 @@ describe('SchedulingManagerBoard', () => {
       });
     });
 
-    const confirmation = await screen.findByRole('alertdialog', {
+    expect(screen.queryByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
-    });
-    expect(confirmation).toHaveTextContent('1 assignment will be permanently removed');
-    expect(confirmation).toHaveTextContent('Other visits for this job will stay scheduled');
-    expect(within(confirmation).getByRole('button', { name: 'Return visit to Jobs' }))
-      .toBeEnabled();
-    expect(mockEnqueueVisit).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      within(confirmation).getByRole('button', { name: 'Return visit to Jobs' })
-    );
+    })).not.toBeInTheDocument();
     expect(mockEnqueueVisit).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(

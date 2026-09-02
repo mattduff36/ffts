@@ -2015,13 +2015,6 @@ interface PendingAssignmentConflict {
   assignment?: ScheduleAssignment;
 }
 
-interface PendingVisitReturn {
-  target: ActiveVisitTarget;
-  localAssignmentCount: number;
-  preview: ScheduleVisitBacklogPreview | null;
-  skipConfirmation?: boolean;
-}
-
 type DailyTimelineMode = 'fit' | 'scroll';
 
 interface ColdWeekLoadState {
@@ -2086,8 +2079,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [resourceAvailabilityView, setResourceAvailabilityView] =
     useState<'available' | 'unavailable' | 'all'>('all');
   const [pendingConflict, setPendingConflict] = useState<PendingAssignmentConflict | null>(null);
-  const [pendingVisitReturn, setPendingVisitReturn] =
-    useState<PendingVisitReturn | null>(null);
   const [returningVisitIds, setReturningVisitIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -4019,18 +4010,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       });
   }
 
-  async function prepareVisitReturn(
-    target: ActiveVisitTarget,
-    options: { skipConfirmation?: boolean } = {}
-  ) {
+  async function prepareVisitReturn(target: ActiveVisitTarget) {
     if (isOptimisticEntityId(target.job.id) || isOptimisticEntityId(target.visit.id)) {
       toast.info('Wait for this new visit to finish saving.');
       return;
     }
     clearStuckBoardInteraction('prepare-return', { resetDnd: true });
-    const localAssignmentCount = (projectedState.board?.assignments || []).filter(
-      (assignment) => assignment.visit_id === target.visit.id
-    ).length;
     if (
       (projectedState.visitBacklog || []).some(
         (item) => item.visit_id === target.visit.id
@@ -4040,57 +4025,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       reconcileOptimisticKeysInBackground([`board:${weekStart}`, 'backlog']);
       return;
     }
-    if (options.skipConfirmation) {
-      void confirmVisitReturn({
-        target,
-        localAssignmentCount,
-        preview: null,
-        skipConfirmation: true,
-      });
-      return;
-    }
-    setPendingVisitReturn({
-      target,
-      localAssignmentCount,
-      preview: null,
-    });
-    const previewRequest = previewScheduleVisitBacklog(target.visit.id);
-    visitReturnPreviewPromisesRef.current.set(target.visit.id, previewRequest);
-    try {
-      const preview = await previewRequest;
-      if (preview.already_queued) {
-        toast.info('This visit is already in the Jobs queue.');
-        setPendingVisitReturn(null);
-        reconcileOptimisticKeysInBackground([`board:${weekStart}`, 'backlog']);
-        return;
-      }
-      setPendingVisitReturn((current) =>
-        current?.target.visit.id === target.visit.id
-          ? { target, localAssignmentCount, preview }
-          : current
+    if (!visitReturnPreviewPromisesRef.current.has(target.visit.id)) {
+      visitReturnPreviewPromisesRef.current.set(
+        target.visit.id,
+        previewScheduleVisitBacklog(target.visit.id)
       );
-    } catch (error) {
-      setPendingVisitReturn(null);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Unable to review this visit before returning it to Jobs'
-      );
-    } finally {
-      if (visitReturnPreviewPromisesRef.current.get(target.visit.id) === previewRequest) {
-        visitReturnPreviewPromisesRef.current.delete(target.visit.id);
-      }
     }
+    void confirmVisitReturn(target);
   }
 
-  async function confirmVisitReturn(
-    pending: PendingVisitReturn | null = pendingVisitReturn
-  ) {
-    if (
-      !pending
-      || returningVisitIds.has(pending.target.visit.id)
-    ) return;
-    const { target, preview: preparedPreview } = pending;
+  async function confirmVisitReturn(target: ActiveVisitTarget) {
+    if (returningVisitIds.has(target.visit.id)) return;
     const queuedAt = new Date().toISOString();
     const requestId = crypto.randomUUID();
     const backlogItem: ScheduleVisitBacklogItem = {
@@ -4151,13 +4096,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             operation.requestId === requestId
           )?.requestId ?? requestId;
         try {
-          let preview = preparedPreview;
-          if (!preview?.fingerprint) {
-            preview = await (
-              visitReturnPreviewPromisesRef.current.get(target.visit.id)
-              ?? previewScheduleVisitBacklog(target.visit.id)
-            );
-          }
+          const previewRequest = visitReturnPreviewPromisesRef.current.get(target.visit.id);
+          const preview = await (
+            previewRequest ?? previewScheduleVisitBacklog(target.visit.id)
+          );
           if (preview.already_queued) {
             setBoardBaseData((current) => {
               const otherVisits = current.visits.filter(
@@ -4222,24 +4164,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             apply: (state: SchedulingProjection) => applyReturn(state, authoritativeBacklogItem),
           };
         } catch (error) {
-          if (
-            error instanceof SchedulingApiError
-            && error.payload.code === 'stale_visit_preview'
-            && !pending.skipConfirmation
-          ) {
-            setPendingVisitReturn({
-              target,
-              localAssignmentCount: pending.localAssignmentCount,
-              preview: null,
-            });
-            void prepareVisitReturn(target);
-          }
           if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
             toast.error(error instanceof Error ? error.message : 'Unable to return this visit to Jobs');
             return { kind: 'failed' as const, error };
           }
           throw error;
         } finally {
+          visitReturnPreviewPromisesRef.current.delete(target.visit.id);
           setReturningVisitIds((current) => {
             const next = new Set(current);
             next.delete(target.visit.id);
@@ -4254,7 +4185,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       next.add(target.visit.id);
       return next;
     });
-    setPendingVisitReturn(null);
     setActiveVisitTarget((current) =>
       current?.visit.id === target.visit.id ? null : current
     );
@@ -6902,7 +6832,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               : null
                           }
                           onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, selectedDate, visit)}
-                          onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit }, { skipConfirmation: true })}
+                          onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                           onDeleteAssignment={setPendingDeleteAssignment}
                           onResizeVisit={resizeVisit}
                         />
@@ -6920,7 +6850,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                 : null
                             }
                             onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, date, visit)}
-                            onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit }, { skipConfirmation: true })}
+                            onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                             onDeleteAssignment={setPendingDeleteAssignment}
                           />
                         ))
@@ -7117,7 +7047,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     isActiveTarget={activeVisitTarget?.visit.id === placement.visit.id}
                                     onActivate={() => activateVisit(placement.job, placement.visit)}
                                     onEdit={() => openVisitEditor(placement.job, date, placement.visit)}
-                                    onReturn={() => void prepareVisitReturn({ job: placement.job, visit: placement.visit }, { skipConfirmation: true })}
+                                    onReturn={() => void prepareVisitReturn({ job: placement.job, visit: placement.visit })}
                                     onDeleteAssignment={setPendingDeleteAssignment}
                                     dndScope="mobile"
                                     dndInstanceId={dndInstanceId}
@@ -7406,45 +7336,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               className={schedulingControlStyles.warning}
             >
               Assign anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={pendingVisitReturn !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingVisitReturn(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Return this visit to Jobs?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingVisitReturn
-                ? `${pendingVisitReturn.target.job.job_reference} · Visit ${pendingVisitReturn.target.visit.sequence_number} will leave the schedule board. ${(pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount) === 0
-                  ? 'It has no resource assignments.'
-                  : `${pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount} ${(pendingVisitReturn.preview?.assignment_count ?? pendingVisitReturn.localAssignmentCount) === 1 ? 'assignment' : 'assignments'} will be permanently removed.`} Other visits for this job will stay scheduled.`
-                : ''}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className={schedulingControlStyles.outline}
-            >
-              Keep scheduled
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className={schedulingControlStyles.warning}
-              onClick={() => void confirmVisitReturn()}
-              disabled={
-                pendingVisitReturn != null
-                && returningVisitIds.has(pendingVisitReturn.target.visit.id)
-              }
-            >
-              {pendingVisitReturn
-                && returningVisitIds.has(pendingVisitReturn.target.visit.id)
-                ? 'Returning...'
-                : 'Return visit to Jobs'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

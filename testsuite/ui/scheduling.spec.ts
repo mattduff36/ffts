@@ -802,14 +802,12 @@ test.describe('@scheduling Scheduling', () => {
     const resources = page.getByTestId('schedule-resources-panel');
     await dragWithMouse(page, source, resources);
 
-    const confirmation = page.getByRole('alertdialog', {
+    await expect(page.getByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
-    });
-    await expect(confirmation).toBeVisible();
+    })).toHaveCount(0);
     await expect(page.getByText(
       'Drop this visit anywhere in Resources to return it to Jobs.'
     )).toHaveCount(0);
-    await confirmation.getByRole('button', { name: 'Return visit to Jobs' }).click();
 
     await expect.poll(() => visitReturnRequests).toHaveLength(1);
     await expect(page.getByTestId(

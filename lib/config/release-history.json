@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.3.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Fit the manager board to the desktop viewport.",
+    "summary": "Fit the manager board to the desktop viewport.",
+    "details": [
+      "Updated app screens, with changes to app screens."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-03T23:46:07.210Z"
+  },
+  {
     "version": "0926.2.2",
     "updateKind": "minor",
     "title": "Workflow improvements",

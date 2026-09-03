@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.3.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): fit the manager board to the desktop viewport`
+
+**PUSHED AT**
+2026-09-03T23:46:07.210Z
+
+**WHAT CHANGED**
+Fit the manager board to the desktop viewport.
+
+**VERSION HISTORY DETAILS**
+- Updated app screens, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `feat(scheduling): fit the manager board to the desktop viewport`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.2.2
 
 **GIT COMMIT MESSAGE**

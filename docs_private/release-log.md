@@ -2,6 +2,33 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.2.2
+
+**GIT COMMIT MESSAGE**
+`fix(workflow): authorise finalise from the latest legal review only`
+
+**PUSHED AT**
+2026-09-03T23:26:11.313Z
+
+**WHAT CHANGED**
+Treat sourceWorkstreamIds as audit provenance. Reject mismatched review tokens as current authority. Treat inherited exhaustion as no current review authority. Stop leaking FDR-002 through the describe title. Keep required latest-legal IDs on one assertion each. Authorise finalise from the latest legal review only.
+
+**VERSION HISTORY DETAILS**
+- Updated sign in, with changes to automated tests.
+- Updated help and FAQ, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): treat sourceWorkstreamIds as audit provenance`
+- `fix(workflow): reject mismatched review tokens as current authority`
+- `fix(workflow): treat inherited exhaustion as no current review authority`
+- `test(workflow): stop leaking FDR-002 through the describe title`
+- `test(workflow): keep required latest-legal IDs on one assertion each`
+- `fix(workflow): authorise finalise from the latest legal review only`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.2.1
 
 **GIT COMMIT MESSAGE**

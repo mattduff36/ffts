@@ -1,5 +1,19 @@
 [
   {
+    "version": "0926.2.2",
+    "updateKind": "minor",
+    "title": "Workflow improvements",
+    "description": "Treat sourceWorkstreamIds as audit provenance. Reject mismatched review tokens as current authority. Treat inherited exhaustion as no current review authority. Stop leaking FDR-002 through the describe title. Keep required latest-legal IDs on one assertion each. Authorise finalise from the latest legal review only.",
+    "summary": "Treat sourceWorkstreamIds as audit provenance. Reject mismatched review tokens as current authority. Treat inherited exhaustion as no current review authority. Stop leaking FDR-002 through the describe title. Keep required latest-legal IDs on one assertion each. Authorise finalise from the latest legal review only.",
+    "details": [
+      "Updated sign in, with changes to automated tests.",
+      "Updated help and FAQ, with changes to automated tests."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-03T23:26:11.313Z"
+  },
+  {
     "version": "0926.2.1",
     "updateKind": "minor",
     "title": "Scheduling improvements",

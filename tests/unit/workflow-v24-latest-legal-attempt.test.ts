@@ -146,7 +146,7 @@ function expectNotAuthorized(record: WorkflowProtocolRecord): void {
   expect(reviewAuthorizesProtectedFinalise(record)).toBe(false);
 }
 
-describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority', () => {
+describe('latest legal final-diff authority', () => {
   it('latest-legal: first passed and no closure is authorised', () => {
     const record = makeRecord({
       phase: 'finalise_ready',

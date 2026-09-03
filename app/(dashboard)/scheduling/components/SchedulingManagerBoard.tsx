@@ -27,8 +27,10 @@ import {
   useQueryStates,
 } from 'nuqs';
 import Link from 'next/link';
+import { AppPageHeader } from '@/components/layout/AppPageShell';
 import {
   AlertTriangle,
+  CalendarDays,
   CalendarOff,
   CalendarPlus,
   Check,
@@ -452,7 +454,7 @@ function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
     <Card
       ref={ref}
       className={cn(
-        'flex min-h-0 flex-col border-border transition xl:h-full xl:overflow-hidden',
+        'flex h-full min-h-0 flex-col overflow-hidden border-border transition',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
       data-testid="schedule-resources-panel"
@@ -5798,7 +5800,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   return (
-    <DragDropProvider
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col [&>*]:flex [&>*]:h-full [&>*]:min-h-0 [&>*]:flex-1 [&>*]:flex-col"
+      data-testid="schedule-manager-board-root"
+    >
+      <DragDropProvider
       key={dndSessionEpoch}
       sensors={[
         PointerSensor.configure({
@@ -6034,72 +6040,77 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       }}
     >
       <div
-        className="flex min-h-0 flex-col gap-4 xl:flex-1 xl:overflow-hidden"
+        className="flex h-full min-h-0 flex-col gap-4 overflow-hidden"
         onClick={handleBoardClick}
         onPointerMoveCapture={(event) => {
           latestPointerClientX.current = event.clientX;
         }}
       >
-        <div className="flex shrink-0 flex-col gap-3 rounded-xl border border-border bg-card/70 p-4 xl:flex-row xl:items-center xl:justify-between">
-          <SchedulingDateRangeControls
-            selectedDate={selectedDate}
-            view={view}
-            onDateChange={setSelectedDate}
-            onViewChange={handleViewChange}
-            primary={primary}
-            onPrimaryChange={handlePrimaryChange}
+        <div data-testid="schedule-page-header" className="shrink-0">
+          <AppPageHeader
+            title="Job Scheduling"
+            description="Plan work across the week and allocate employees and plant with clear availability warnings."
+            icon={<CalendarDays className="h-5 w-5" />}
+            className="shrink-0"
+            contentClassName="flex-row flex-nowrap items-center justify-between gap-3"
+            headingClassName="min-w-0 shrink space-y-1"
+            titleClassName="whitespace-nowrap"
+            descriptionClassName="truncate"
+            actionsClassName="w-auto shrink-0 flex-nowrap"
+            actions={(
+              <>
+                <Button
+                  className={schedulingControlStyles.outline}
+                  variant="outline"
+                  onClick={() => {
+                    setPlantBlockDraft(null);
+                    setUnavailabilityOpen(true);
+                  }}
+                >
+                  <CalendarOff className="mr-2 h-4 w-4" />
+                  Plant availability
+                </Button>
+                <Button
+                  variant="outline"
+                  className={schedulingControlStyles.outline}
+                  disabled={!canCreateQuotes || !canViewCustomers}
+                  title={!canCreateQuotes || !canViewCustomers ? 'Quotes and Customers access required' : 'New Quote'}
+                  onClick={() => requestCreation('quote')}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Quote
+                </Button>
+                <Button
+                  variant="outline"
+                  className={schedulingControlStyles.outline}
+                  disabled={!canCreateQuotes}
+                  title={!canCreateQuotes ? 'Quotes access required' : 'New Project Number'}
+                  onClick={() => requestCreation('project')}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Project Number
+                </Button>
+                <Button
+                  className={schedulingControlStyles.primary}
+                  disabled={!canCreateQuotes || !canViewCustomers}
+                  title={
+                    !canCreateQuotes || !canViewCustomers
+                      ? 'Quotes and Customers access required'
+                      : 'Quick add a Project job with a timed visit'
+                  }
+                  onClick={() => requestCreation('quick_add')}
+                  data-testid="schedule-quick-add-button"
+                >
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Quick add
+                </Button>
+              </>
+            )}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className={schedulingControlStyles.outline}
-              variant="outline"
-              onClick={() => {
-                setPlantBlockDraft(null);
-                setUnavailabilityOpen(true);
-              }}
-            >
-              <CalendarOff className="mr-2 h-4 w-4" />
-              Plant availability
-            </Button>
-            <Button
-              variant="outline"
-              className={schedulingControlStyles.outline}
-              disabled={!canCreateQuotes || !canViewCustomers}
-              title={!canCreateQuotes || !canViewCustomers ? 'Quotes and Customers access required' : 'New Quote'}
-              onClick={() => requestCreation('quote')}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Quote
-            </Button>
-            <Button
-              variant="outline"
-              className={schedulingControlStyles.outline}
-              disabled={!canCreateQuotes}
-              title={!canCreateQuotes ? 'Quotes access required' : 'New Project Number'}
-              onClick={() => requestCreation('project')}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Project Number
-            </Button>
-            <Button
-              className={schedulingControlStyles.primary}
-              disabled={!canCreateQuotes || !canViewCustomers}
-              title={
-                !canCreateQuotes || !canViewCustomers
-                  ? 'Quotes and Customers access required'
-                  : 'Quick add a Project job with a timed visit'
-              }
-              onClick={() => requestCreation('quick_add')}
-              data-testid="schedule-quick-add-button"
-            >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Quick add
-            </Button>
-          </div>
         </div>
 
         <div
-          className="grid min-h-0 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[350px_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)]"
+          className="grid h-full min-h-0 flex-1 grid-cols-[350px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4"
           data-testid="schedule-manager-layout"
         >
           <ResourcesReturnDropCard>
@@ -6211,7 +6222,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   ) : null}
                   </div>
                   <ScrollArea
-                    className="h-[420px] min-h-0 pr-3 xl:h-0 xl:flex-1"
+                    className="h-0 min-h-0 flex-1 pr-3"
                     data-mobile-scroll-lock="true"
                     data-testid="schedule-jobs-scroll-area"
                   >
@@ -6336,7 +6347,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   ) : null}
                   </div>
                   <ScrollArea
-                    className="h-[420px] min-h-0 pr-3 xl:h-0 xl:flex-1"
+                    className="h-0 min-h-0 flex-1 pr-3"
                     data-mobile-scroll-lock="true"
                     data-testid="schedule-resource-scroll-area"
                   >
@@ -6427,18 +6438,29 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           </ResourcesReturnDropCard>
 
           <Card
-            className="flex min-h-0 min-w-0 flex-col border-border xl:h-full xl:overflow-hidden"
+            className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-border"
             data-testid="schedule-board-panel"
           >
             <CardHeader className="shrink-0 gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle>
+              <div
+                className="flex flex-nowrap items-center gap-3"
+                data-testid="schedule-board-title-row"
+              >
+                <CardTitle className="shrink-0 whitespace-nowrap">
                   {getScheduleBoardTitle(
                     view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily' : 'Weekly',
                     primary
                   )}
                 </CardTitle>
-                <div className="relative w-full sm:w-72">
+                <SchedulingDateRangeControls
+                  selectedDate={selectedDate}
+                  view={view}
+                  onDateChange={setSelectedDate}
+                  onViewChange={handleViewChange}
+                  primary={primary}
+                  onPrimaryChange={handlePrimaryChange}
+                />
+                <div className="relative ml-auto w-36 max-w-72 shrink-0">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     value={jobSearch}
@@ -6591,7 +6613,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain select-none md:flex md:min-h-0 md:flex-col xl:h-0 xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain select-none md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily
@@ -7398,6 +7420,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DragDropProvider>
+      </DragDropProvider>
+    </div>
   );
 }

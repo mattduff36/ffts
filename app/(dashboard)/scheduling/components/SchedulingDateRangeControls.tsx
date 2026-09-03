@@ -41,7 +41,7 @@ export function SchedulingDateRangeControls({
   const weekEnd = parseISO(week.end);
   const periodLabel =
     view === SCHEDULING_BOARD_VIEWS.daily
-      ? format(selected, 'EEEE, d MMMM yyyy')
+      ? format(selected, 'EEE d MMM yyyy')
       : `${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`;
   const periodName = view === SCHEDULING_BOARD_VIEWS.daily ? 'day' : 'week';
 
@@ -70,7 +70,7 @@ export function SchedulingDateRangeControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex shrink-0 flex-nowrap items-center gap-2">
       <Tabs value={view} onValueChange={handleViewChange}>
         <TabsList aria-label="Job board date range" className="grid h-9 grid-cols-2">
           <TabsTrigger value={SCHEDULING_BOARD_VIEWS.daily} className="px-3">
@@ -111,7 +111,7 @@ export function SchedulingDateRangeControls({
         </TabsList>
       </Tabs>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2">
         <Button
           variant="outline"
           className={schedulingControlStyles.outline}
@@ -131,7 +131,7 @@ export function SchedulingDateRangeControls({
         </Button>
         <div
           aria-live="polite"
-          className="min-w-44 text-center text-sm font-semibold text-foreground"
+          className="whitespace-nowrap text-center text-sm font-semibold text-foreground"
         >
           {periodLabel}
         </div>

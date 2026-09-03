@@ -47,11 +47,11 @@ describe('SchedulingDateRangeControls', () => {
       />
     );
 
-    expect(screen.getByText('Tuesday, 14 July 2026')).toBeInTheDocument();
+    expect(screen.getByText('Tue 14 Jul 2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
-    expect(screen.getByText('Wednesday, 15 July 2026')).toBeInTheDocument();
+    expect(screen.getByText('Wed 15 Jul 2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Previous day' }));
-    expect(screen.getByText('Tuesday, 14 July 2026')).toBeInTheDocument();
+    expect(screen.getByText('Tue 14 Jul 2026')).toBeInTheDocument();
   });
 
   it('preserves weekly labels and navigates seven days at a time', () => {

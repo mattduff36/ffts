@@ -274,11 +274,8 @@ export function latestLegalFinalDiffAttempt(
   record: Pick<WorkflowProtocolRecord, 'reviewAttempts' | 'inheritedFailedReviewCount'>
 ): LatestLegalFinalDiffAttemptResult {
   const inherited = record.inheritedFailedReviewCount;
-  const hasLocalLegalPass = record.reviewAttempts.some(
-    (attempt) => attempt.pass === 'first' || attempt.pass === 'closure'
-  );
-  if (inherited >= 2 && hasLocalLegalPass) {
-    return { ok: false, message: 'impossible first/closure attempt ordering' };
+  if (inherited >= 2) {
+    return { ok: true, attempt: null };
   }
 
   let first: WorkflowProtocolReviewAttempt | undefined;

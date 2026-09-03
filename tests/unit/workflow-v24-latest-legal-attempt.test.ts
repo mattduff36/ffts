@@ -400,7 +400,9 @@ describe('latest legal final-diff authority', () => {
       failedPremiumReviewCount: 2,
       reviewAttempts: [passedAttempt('first')],
     });
-    expect(latestLegalFinalDiffAttempt(withFirst).ok).toBe(false);
+    const firstLatest = latestLegalFinalDiffAttempt(withFirst);
+    expect(firstLatest.ok).toBe(true);
+    if (firstLatest.ok) expect(firstLatest.attempt).toBeNull();
     expect(validateCurrentV24ProtocolRecord(withFirst).ok).toBe(false);
     expectNotAuthorized(withFirst);
 
@@ -411,7 +413,9 @@ describe('latest legal final-diff authority', () => {
       failedPremiumReviewCount: 2,
       reviewAttempts: [passedAttempt('closure')],
     });
-    expect(latestLegalFinalDiffAttempt(withClosure).ok).toBe(false);
+    const closureLatest = latestLegalFinalDiffAttempt(withClosure);
+    expect(closureLatest.ok).toBe(true);
+    if (closureLatest.ok) expect(closureLatest.attempt).toBeNull();
     expect(validateCurrentV24ProtocolRecord(withClosure).ok).toBe(false);
     expectNotAuthorized(withClosure);
     const repoRoot = writeReadinessFixture('inherited-exhausted', withClosure, {

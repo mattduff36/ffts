@@ -147,7 +147,7 @@ function expectNotAuthorized(record: WorkflowProtocolRecord): void {
 }
 
 describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority', () => {
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: first passed and no closure is authorised', () => {
+  it('latest-legal: first passed and no closure is authorised', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       reviewAttempts: [passedAttempt('first')],
@@ -160,7 +160,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(true);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: first failed then closure passed is authorised', () => {
+  it('latest-legal: first failed then closure passed is authorised', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 1,
@@ -174,7 +174,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(true);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: first failed and closure failed is rejected', () => {
+  it('latest-legal: first failed and closure failed is rejected', () => {
     const successClaim = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 2,
@@ -197,7 +197,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: passed then later failed legal attempt is rejected', () => {
+  it('latest-legal: passed then later failed legal attempt is rejected', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 1,
@@ -215,7 +215,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: earlier pass cannot override latest legal failure', () => {
+  it('latest-legal: earlier pass cannot override latest legal failure', () => {
     const record = makeRecord({
       phase: 'review_closed',
       failedPremiumReviewCount: 1,
@@ -229,7 +229,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(validateCurrentV24ProtocolRecord(record).ok).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: no legal review is rejected', () => {
+  it('latest-legal: no legal review is rejected', () => {
     const record = makeRecord({ phase: 'finalise_ready' });
     const latest = latestLegalFinalDiffAttempt(record);
     expect(latest.ok).toBe(true);
@@ -243,7 +243,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: architecture approval alone is rejected', () => {
+  it('latest-legal: architecture approval alone is rejected', () => {
     const record = makeRecord({
       workstreamId: 'ws_latest_arch_only',
       phase: 'finalise_ready',
@@ -254,7 +254,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expectNotAuthorized(record);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: illegal third review does not grant authority', () => {
+  it('latest-legal: illegal third review does not grant authority', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 2,
@@ -275,7 +275,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: malformed first/closure ordering is rejected', () => {
+  it('latest-legal: malformed first/closure ordering is rejected', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 1,
@@ -286,7 +286,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expectNotAuthorized(record);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: duplicate or impossible attempt ordering fails closed', () => {
+  it('latest-legal: duplicate or impossible attempt ordering fails closed', () => {
     const duplicateFirst = makeRecord({
       phase: 'review_closed',
       activeCheckpointId: null,
@@ -309,7 +309,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expectNotAuthorized(closureThenFirst);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: routing_required after latest failure is rejected', () => {
+  it('latest-legal: routing_required after latest failure is rejected', () => {
     const record = makeRecord({
       workstreamId: 'ws_latest_routing',
       phase: 'routing_required',
@@ -330,7 +330,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: stale earlier-pass HEAD/fingerprint cannot grant finalise', () => {
+  it('latest-legal: stale earlier-pass HEAD/fingerprint cannot grant finalise', () => {
     const record = makeRecord({
       phase: 'finalise_ready',
       failedPremiumReviewCount: 1,
@@ -354,7 +354,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: current valid passed record remains compatible', () => {
+  it('latest-legal: current valid passed record remains compatible', () => {
     const record = makeRecord({
       workstreamId: 'ws_latest_compatible',
       phase: 'review_closed',
@@ -480,7 +480,7 @@ describe('FDR-PROTOCOL-RECORD-VALIDATION-002 latest legal final-diff authority',
     }
   });
 
-  it('FDR-PROTOCOL-RECORD-VALIDATION-002: appending a later failed attempt withdraws readiness', () => {
+  it('latest-legal: appending a later failed attempt withdraws readiness', () => {
     const valid = makeRecord({
       workstreamId: 'ws_latest_mutate',
       phase: 'finalise_ready',

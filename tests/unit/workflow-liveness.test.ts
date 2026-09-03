@@ -118,6 +118,18 @@ function passedLegalReviewAttempt(
   };
 }
 
+function passedClosureAttempt(
+  repoRoot: string,
+  head: string,
+  token = `rev_closure_${head.slice(0, 12)}`
+): WorkflowProtocolRecord['reviewAttempts'][number] {
+  return {
+    ...passedLegalReviewAttempt(repoRoot, head, token),
+    pass: 'closure',
+    token,
+  };
+}
+
 function readyChild(
   repoRoot: string,
   workstreamId: string,
@@ -138,6 +150,12 @@ function readyChild(
     extra.reviewedTreeFingerprint ?? getCurrentTreeFingerprint(repoRoot).inputFingerprint;
   record.reviewedTreeFingerprint = treeFingerprint;
   if (extra.openBlockerIds) record.openBlockerIds = extra.openBlockerIds;
+  if (extra.inheritedFailedReviewCount !== undefined) {
+    record.inheritedFailedReviewCount = extra.inheritedFailedReviewCount;
+  }
+  if (extra.failedPremiumReviewCount !== undefined) {
+    record.failedPremiumReviewCount = extra.failedPremiumReviewCount;
+  }
   if (extra.reviewAttempts) {
     record.reviewAttempts = extra.reviewAttempts;
   } else if (record.phase === 'finalise_ready' || record.phase === 'review_closed' || record.phase === 'finalised') {
@@ -677,6 +695,9 @@ describe('workflow liveness hardening', () => {
     const danglingHead = initGitRepo(danglingRoot);
     readyChild(danglingRoot, 'ws_dangling', danglingHead, {
       sourceWorkstreamIds: ['ws_missing_parent'],
+      inheritedFailedReviewCount: 1,
+      failedPremiumReviewCount: 1,
+      reviewAttempts: [passedClosureAttempt(danglingRoot, danglingHead)],
     });
     const dangling = getFinaliseProtocolReadiness(danglingRoot);
     expect(dangling.allowed).toBe(false);
@@ -835,6 +856,9 @@ describe('workflow liveness hardening', () => {
     const danglingHead = initGitRepo(danglingRoot);
     readyChild(danglingRoot, 'ws_dangling', danglingHead, {
       sourceWorkstreamIds: ['ws_missing_parent'],
+      inheritedFailedReviewCount: 1,
+      failedPremiumReviewCount: 1,
+      reviewAttempts: [passedClosureAttempt(danglingRoot, danglingHead)],
     });
     expect(
       getFinaliseProtocolReadiness(danglingRoot).blockingWorkstreams.some((row) =>
@@ -1004,5 +1028,111 @@ describe('workflow dry-run write freedom', () => {
       dryRun.status === 0 || dryRun.status === 1,
       `finalise dry-run status=${String(dryRun.status)} error=${dryRun.error?.message ?? ''} stderr=${dryRun.stderr ?? ''}`
     ).toBe(true);
+  });
+
+  it('audit-source: missing provenance IDs are not dangling split parents', () => {
+    const auditSources = [
+      'ws_c5c401aaedc4b8c2',
+      'ws_d450653f52e6e4ca',
+      'ws_c9316968d70fb4ac',
+      'ws_e7d36a35fe954132',
+      'ws_4cded2875b84835d',
+    ];
+    const closedRoot = makeTempRoot('audit-source-closed');
+    const closedHead = initGitRepo(closedRoot);
+    const closed = readyChild(closedRoot, 'ws_23a6b3f0178004f0', closedHead, {
+      phase: 'review_closed',
+      nextAction: 'finalise_start',
+      activeCheckpointId: null,
+      inheritedFailedReviewCount: 0,
+      failedPremiumReviewCount: 1,
+      sourceWorkstreamIds: auditSources,
+      reviewAttempts: [
+        {
+          pass: 'first',
+          token: 'rev_first_auditone',
+          startedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          result: 'failed',
+          blockerFamilies: ['protocol-record-validation'],
+          blockerIds: ['FDR-PROTOCOL-RECORD-VALIDATION-002'],
+          siblingSurfaces: ['workflow'],
+        },
+        {
+          pass: 'closure',
+          token: 'rev_closure_audittwo',
+          startedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          result: 'passed',
+          headCommit: closedHead,
+          treeFingerprint: getCurrentTreeFingerprint(closedRoot).inputFingerprint,
+        },
+      ],
+    });
+    expect(closed.sourceWorkstreamIds).toEqual(auditSources);
+    expect(closed.inheritedFailedReviewCount).toBe(0);
+    const closedReady = getFinaliseProtocolReadiness(closedRoot);
+    expect(
+      closedReady.blockingWorkstreams.some((row) => row.message.includes('dangling parent'))
+    ).toBe(false);
+    expect(closedReady.blockingWorkstreams.some((row) => row.role === 'parked_split_ancestor')).toBe(
+      false
+    );
+    expect(closedReady.lineages.some((row) => auditSources.includes(row.workstreamId))).toBe(false);
+
+    const readyRoot = makeTempRoot('audit-source-ready');
+    const readyHead = initGitRepo(readyRoot);
+    const ready = readyChild(readyRoot, 'ws_audit_finalise_ready', readyHead, {
+      inheritedFailedReviewCount: 0,
+      failedPremiumReviewCount: 1,
+      sourceWorkstreamIds: auditSources,
+      reviewAttempts: [
+        {
+          pass: 'first',
+          token: 'rev_first_auditready',
+          startedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          result: 'failed',
+          blockerFamilies: ['protocol-record-validation'],
+          blockerIds: ['FDR-PROTOCOL-RECORD-VALIDATION-002'],
+          siblingSurfaces: ['workflow'],
+        },
+        {
+          pass: 'closure',
+          token: 'rev_closure_auditready',
+          startedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          result: 'passed',
+          headCommit: readyHead,
+          treeFingerprint: getCurrentTreeFingerprint(readyRoot).inputFingerprint,
+        },
+      ],
+    });
+    activate(readyRoot, ready.workstreamId, 'ckpt_ws_audit_finalise_ready', readyHead);
+    const allowed = getFinaliseProtocolReadiness(readyRoot);
+    expect(allowed.blockingWorkstreams.some((row) => row.message.includes('dangling parent'))).toBe(
+      false
+    );
+    expect(allowed.lineages.find((row) => row.workstreamId === ready.workstreamId)?.parentWorkstreamId).toBe(
+      null
+    );
+    expect(readProtocolRecord(readyRoot, ready.workstreamId)?.sourceWorkstreamIds).toEqual(auditSources);
+    expect(allowed.allowed).toBe(true);
+  });
+
+  it('audit-source: inherited split parent still dangles when missing', () => {
+    const repoRoot = makeTempRoot('audit-source-structural');
+    const head = initGitRepo(repoRoot);
+    readyChild(repoRoot, 'ws_split_child_missing_parent', head, {
+      sourceWorkstreamIds: ['ws_c5c401aaedc4b8c2'],
+      inheritedFailedReviewCount: 1,
+      failedPremiumReviewCount: 1,
+      reviewAttempts: [passedClosureAttempt(repoRoot, head, 'rev_closure_structparent')],
+    });
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    expect(readiness.allowed).toBe(false);
+    expect(readiness.blockingWorkstreams.some((row) => row.message.includes('dangling parent'))).toBe(
+      true
+    );
   });
 });

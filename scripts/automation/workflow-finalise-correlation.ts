@@ -198,16 +198,30 @@ export interface WorkflowFinaliseProtocolReadiness {
   suggestedActions: string[];
 }
 
-function immediateParentId(record: WorkflowProtocolRecord): string | null {
-  return record.sourceWorkstreamIds?.[0] ?? null;
+/**
+ * Live structural parent only. `sourceWorkstreamIds` are audit/provenance
+ * unless this record is a genuine split/inherited continuation.
+ * A missing audit-only source is not a dangling parent.
+ */
+function immediateParentId(
+  record: WorkflowProtocolRecord,
+  byId?: Map<string, WorkflowProtocolRecord>
+): string | null {
+  const candidate = record.sourceWorkstreamIds?.[0] ?? null;
+  if (!candidate) return null;
+  const parent = byId?.get(candidate);
+  if (parent?.phase === 'split') return candidate;
+  if (record.inheritedFailedReviewCount > 0) return candidate;
+  return null;
 }
 
 function indexImmediateChildren(
-  records: Iterable<WorkflowProtocolRecord>
+  records: Iterable<WorkflowProtocolRecord>,
+  byId: Map<string, WorkflowProtocolRecord>
 ): Map<string, string[]> {
   const children = new Map<string, string[]>();
   for (const record of records) {
-    const parentId = immediateParentId(record);
+    const parentId = immediateParentId(record, byId);
     if (!parentId) continue;
     const existing = children.get(parentId) ?? [];
     existing.push(record.workstreamId);
@@ -225,7 +239,7 @@ function lineageRootId(
   while (current) {
     if (seen.has(current.workstreamId)) return current.workstreamId;
     seen.add(current.workstreamId);
-    const parentId = immediateParentId(current);
+    const parentId = immediateParentId(current, byId);
     if (!parentId) return current.workstreamId;
     current = byId.get(parentId);
     if (!current) return parentId;
@@ -242,7 +256,7 @@ function hasAncestorCycle(
   while (current) {
     if (seen.has(current.workstreamId)) return true;
     seen.add(current.workstreamId);
-    const parentId = immediateParentId(current);
+    const parentId = immediateParentId(current, byId);
     if (!parentId) return false;
     current = byId.get(parentId);
   }
@@ -366,7 +380,9 @@ function makeBlocker(params: {
   childWorkstreamIds?: string[];
   suggestedCommands?: string[];
 }): WorkflowProtocolReadinessBlocker {
-  const parentWorkstreamId = params.protocol ? immediateParentId(params.protocol) : null;
+  const parentWorkstreamId = params.protocol
+    ? immediateParentId(params.protocol, params.byId)
+    : null;
   return {
     workstreamId: params.workstreamId,
     role: params.role,
@@ -426,7 +442,7 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
   for (const row of loaded) {
     if (row.protocol) byId.set(row.workstreamId, row.protocol);
   }
-  const children = indexImmediateChildren(byId.values());
+  const children = indexImmediateChildren(byId.values(), byId);
 
   const pushBlocker = (blocker: WorkflowProtocolReadinessBlocker): void => {
     lineages.push(blocker);

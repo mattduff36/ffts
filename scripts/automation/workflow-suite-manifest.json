@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1",
+  "id": "ffts-workflow-regression-suite",
+  "files": [
+    "tests/unit/tee-v2-context.test.ts",
+    "tests/unit/workflow-execution-mode.test.ts",
+    "tests/unit/workflow-finalise-correlation.test.ts",
+    "tests/unit/workflow-liveness.test.ts",
+    "tests/unit/workflow-plan-contract.test.ts",
+    "tests/unit/workflow-review-protocol.test.ts",
+    "tests/unit/workflow-review.test.ts",
+    "tests/unit/workflow-v24-budget.test.ts",
+    "tests/unit/workflow-v24-fd-git-003.test.ts",
+    "tests/unit/workflow-v24-first-fix.test.ts",
+    "tests/unit/workflow-v24-reinit.test.ts",
+    "tests/unit/workflow-v24-c9-finish.test.ts",
+    "tests/unit/workflow-v24-c9-context-swap.test.ts",
+    "tests/unit/workflow-v24-c9-push-binding.test.ts",
+    "tests/unit/workflow-v24-bound-provenance.test.ts",
+    "tests/unit/workflow-v24-git-scope.test.ts",
+    "tests/unit/workflow-v24-ledger-authenticity.test.ts",
+    "tests/unit/workflow-v24-exit-status.test.ts",
+    "tests/unit/workflow-v24-c9-finish-atomicity.test.ts",
+    "tests/unit/workflow-v24-finalise-direct-bypass.test.ts",
+    "tests/unit/workflow-v24-finalise-crash-boundary.test.ts",
+    "tests/unit/workflow-v24-engineering-audit.test.ts",
+    "tests/unit/workflow-v24-fdr-contract.test.ts",
+    "tests/unit/workflow-v24-closure-blockers.test.ts",
+    "tests/unit/workflow-v24-latest-legal-attempt.test.ts",
+    "tests/unit/workflow-v24-wording-compat.test.ts",
+    "tests/unit/workflow-verification-ledger.test.ts"
+  ]
+}

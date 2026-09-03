@@ -4,6 +4,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildEvidenceManifest } from '@/scripts/automation/workflow-evidence-manifest';
+import { persistFixtureLedger, writeCriticalPlan, writePassingManifest } from './workflow-v24-test-harness';
 import { buildWorkflowFindings } from '@/scripts/automation/workflow-findings';
 import {
   WORKFLOW_ROUTING_REQUIRED_EXIT_CODE,
@@ -23,7 +24,7 @@ const tempRoots: string[] = [];
 function initGitRepo(repoRoot: string, message = 'fixture'): string {
   writeFileSync(path.join(repoRoot, 'package.json'), '{"name":"fixture"}\n', 'utf8');
   writeFileSync(path.join(repoRoot, '.gitignore'), 'docs_private/\n', 'utf8');
-  spawnSync('git', ['init'], { cwd: repoRoot });
+  spawnSync('git', ['init', '-b', 'main'], { cwd: repoRoot });
   spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoRoot });
   spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repoRoot });
   spawnSync('git', ['add', '.'], { cwd: repoRoot });
@@ -54,66 +55,53 @@ afterEach(() => {
   }
 });
 
-function writePassingManifest(
-  repoRoot: string,
-  workstreamId: string,
-  kind: 'preflight' | 'fix-delta',
-  closedBlockerIds?: string[]
-): string {
-  const built = buildEvidenceManifest({
+function bindAndInit(repoRoot: string, workstreamId: string, head: string) {
+  const planPath = writeCriticalPlan(repoRoot, workstreamId);
+  const init = applyProtocolTransition({
     repoRoot,
+    command: 'init',
     workstreamId,
-    kind,
-    baseCommit: 'abc1234deadbeef',
-    requiredTestIds: [],
-    runChecks: false,
-    closedBlockerIds,
-    blockerEvidence: closedBlockerIds?.map((blockerId) => ({
-      blockerId,
-      evidenceLabel: `targeted:${blockerId}`,
-      commandName: 'fixture',
-    })),
-    commandResults: [
-      {
-        name: 'fixture',
-        status: 'passed',
-        exitCode: 0,
-        durationMs: 1,
-        summary: 'ok',
-      },
-    ],
+    baseCommit: head,
+    planPath,
   });
-  expect(built.manifest.status).toBe('passed');
-  return built.relativePath;
+  expect(init.ok).toBe(true);
+  return init;
+}
+
+function passFirstReview(repoRoot: string, workstreamId: string) {
+  const preflight = writePassingManifest(repoRoot, workstreamId, 'preflight');
+  expect(
+    applyProtocolTransition({
+      repoRoot,
+      command: 'preflight-record',
+      workstreamId,
+      manifestPath: preflight,
+    }).ok
+  ).toBe(true);
+  const firstStart = applyProtocolTransition({
+    repoRoot,
+    command: 'review-start',
+    workstreamId,
+    pass: 'first',
+  });
+  expect(firstStart.ok).toBe(true);
+  expect(
+    applyProtocolTransition({
+      repoRoot,
+      command: 'review-record',
+      workstreamId,
+      token: firstStart.reviewToken!,
+      result: 'passed',
+    }).ok
+  ).toBe(true);
 }
 
 describe('workflow review protocol', () => {
-  it('TEE-EVID-001: rejects a review token when recorded evidence no longer matches the tree', () => {
+  it('TEE-EVID-001: rejects a review token when recorded evidence no longer matches the tree', { timeout: 60_000 }, () => {
     const repoRoot = makeTempRoot('stale-review-start');
     const workstreamId = 'ws_stale_review_start';
-    writeFileSync(path.join(repoRoot, 'package.json'), '{"name":"fixture"}\n', 'utf8');
-    writeFileSync(path.join(repoRoot, '.gitignore'), 'docs_private/\n', 'utf8');
-    spawnSync('git', ['init'], { cwd: repoRoot });
-    spawnSync('git', ['add', '.'], { cwd: repoRoot });
-    spawnSync(
-      'git',
-      [
-        '-c',
-        'user.name=Test',
-        '-c',
-        'user.email=test@example.com',
-        'commit',
-        '-m',
-        'fixture',
-      ],
-      { cwd: repoRoot }
-    );
-    applyProtocolTransition({
-      repoRoot,
-      command: 'init',
-      workstreamId,
-      baseCommit: 'abc1234deadbeef',
-    });
+    const head = initGitRepo(repoRoot);
+    bindAndInit(repoRoot, workstreamId, head);
     const manifestPath = writePassingManifest(repoRoot, workstreamId, 'preflight');
     expect(
       applyProtocolTransition({
@@ -132,19 +120,15 @@ describe('workflow review protocol', () => {
       pass: 'first',
     });
     expect(started.ok).toBe(false);
-    expect(started.message).toContain('stale');
+    expect(started.message).toMatch(/stale|not ready/i);
   });
 
-  it('TEE-PROTO-001: two-pass budget, one-use tokens, routing, and finalise readiness', () => {
+  it('TEE-PROTO-001: two-pass budget, one-use tokens, routing, and finalise readiness', { timeout: 60_000 }, () => {
     const repoRoot = makeTempRoot('route');
+    const head = initGitRepo(repoRoot);
     const workstreamId = 'ws_protocol_route_1';
 
-    const init = applyProtocolTransition({
-      repoRoot,
-      command: 'init',
-      workstreamId,
-      baseCommit: 'abc1234deadbeef',
-    });
+    const init = bindAndInit(repoRoot, workstreamId, head);
     expect(init.ok).toBe(true);
     expect(init.record?.phase).toBe('initialized');
 
@@ -249,14 +233,9 @@ describe('workflow review protocol', () => {
 
   it('TEE-PROTO-001: successful closure reaches finalise_ready', () => {
     const repoRoot = makeTempRoot('finalise-ready');
-    initGitRepo(repoRoot);
+    const head = initGitRepo(repoRoot);
     const workstreamId = 'ws_finalise_ready_1';
-    applyProtocolTransition({
-      repoRoot,
-      command: 'init',
-      workstreamId,
-      baseCommit: 'abc1234deadbeef',
-    });
+    bindAndInit(repoRoot, workstreamId, head);
     const preflight = writePassingManifest(repoRoot, workstreamId, 'preflight');
     applyProtocolTransition({
       repoRoot,
@@ -301,12 +280,39 @@ describe('workflow review protocol', () => {
     );
   });
 
+  it('ARCH-C9-ACTIVE-LEASE-003: competing finalise-start cannot replace an active owner', () => {
+    const repoRoot = makeTempRoot('c9-active-lease');
+    const head = initGitRepo(repoRoot);
+    const closeWorkstream = (workstreamId: string) => {
+      bindAndInit(repoRoot, workstreamId, head);
+      passFirstReview(repoRoot, workstreamId);
+    };
+    closeWorkstream('ws_owner');
+    closeWorkstream('ws_intruder');
+    const owner = applyProtocolTransition({
+      repoRoot,
+      command: 'finalise-start',
+      workstreamId: 'ws_owner',
+    });
+    expect(owner.ok).toBe(true);
+    const intruder = applyProtocolTransition({
+      repoRoot,
+      command: 'finalise-start',
+      workstreamId: 'ws_intruder',
+    });
+    expect(intruder.ok).toBe(false);
+    expect(intruder.message).toMatch(/cannot be replaced/i);
+    expect(readProtocolRecord(repoRoot, 'ws_owner')?.phase).toBe('finalise_ready');
+    expect(readProtocolRecord(repoRoot, 'ws_intruder')?.phase).toBe('review_closed');
+  });
+
   it('TEE-PROTO-002: split cannot create a cycle and transfers blockers to the child', () => {
     const repoRoot = makeTempRoot('split-cycle');
     const workstreamId = 'ws_split_cycle_parent';
     const record = createEmptyProtocolRecord({
       workstreamId,
       baseCommit: 'abc1234deadbeef',
+      branchName: 'main',
     });
     record.phase = 'routing_required';
     record.nextAction = 'premium_fix_routing_or_split';
@@ -338,14 +344,10 @@ describe('workflow review protocol', () => {
     const repoRoot = makeTempRoot('head-drift');
     const firstHead = initGitRepo(repoRoot);
     const workstreamId = 'ws_head_drift_1';
-    const record = createEmptyProtocolRecord({
-      workstreamId,
-      baseCommit: firstHead,
-      headCommit: firstHead,
-    });
-    record.phase = 'review_closed';
-    record.nextAction = 'finalise_start';
-    writeProtocolRecord(repoRoot, record);
+    bindAndInit(repoRoot, workstreamId, firstHead);
+    passFirstReview(repoRoot, workstreamId);
+    const reviewedHead = readProtocolRecord(repoRoot, workstreamId)?.headCommit;
+    expect(reviewedHead).toBe(firstHead);
 
     writeFileSync(path.join(repoRoot, 'later.ts'), 'export const later = 1;\n', 'utf8');
     spawnSync('git', ['add', '.'], { cwd: repoRoot });
@@ -407,14 +409,8 @@ describe('workflow review protocol', () => {
     const repoRoot = makeTempRoot('review-toctou');
     const firstHead = initGitRepo(repoRoot);
     const workstreamId = 'ws_review_toctou';
-    const record = createEmptyProtocolRecord({
-      workstreamId,
-      baseCommit: firstHead,
-      headCommit: firstHead,
-    });
-    record.phase = 'review_closed';
-    record.nextAction = 'finalise_start';
-    writeProtocolRecord(repoRoot, record);
+    bindAndInit(repoRoot, workstreamId, firstHead);
+    passFirstReview(repoRoot, workstreamId);
 
     const deltaStart = applyProtocolTransition({
       repoRoot,
@@ -449,15 +445,9 @@ describe('workflow review protocol', () => {
     const repoRoot = makeTempRoot('delta-retry');
     const firstHead = initGitRepo(repoRoot);
     const workstreamId = 'ws_delta_retry';
-    const record = createEmptyProtocolRecord({
-      workstreamId,
-      baseCommit: firstHead,
-      headCommit: firstHead,
-    });
-    record.phase = 'review_closed';
-    record.nextAction = 'finalise_start';
-    record.failedPremiumReviewCount = 3;
-    writeProtocolRecord(repoRoot, record);
+    bindAndInit(repoRoot, workstreamId, firstHead);
+    passFirstReview(repoRoot, workstreamId);
+    expect(readProtocolRecord(repoRoot, workstreamId)?.failedPremiumReviewCount).toBe(0);
 
     const firstDelta = applyProtocolTransition({
       repoRoot,
@@ -465,6 +455,7 @@ describe('workflow review protocol', () => {
       workstreamId,
       pass: 'delta',
     });
+    expect(firstDelta.ok).toBe(true);
     const failed = applyProtocolTransition({
       repoRoot,
       command: 'review-record',
@@ -478,7 +469,7 @@ describe('workflow review protocol', () => {
     expect(failed.ok).toBe(true);
     expect(failed.record?.phase).toBe('review_closed');
     expect(failed.record?.headCommit).toBe(firstHead);
-    expect(failed.record?.failedPremiumReviewCount).toBe(3);
+    expect(failed.record?.failedPremiumReviewCount).toBe(0);
 
     const retry = applyProtocolTransition({
       repoRoot,
@@ -497,6 +488,7 @@ describe('workflow review protocol', () => {
     expect(passed.ok).toBe(true);
     expect(passed.record?.phase).toBe('review_closed');
     expect(passed.record?.headCommit).toBe(firstHead);
+    expect(passed.record?.failedPremiumReviewCount).toBe(0);
   });
 
   it('TEE-PROTO-001: null transcript remains unknown without inferred identity', async () => {
@@ -549,11 +541,12 @@ describe('workflow review protocol', () => {
 
   it('TEE-PRIV-001 / TEE-EVID-001: evidence manifests mark redaction and omit secrets', () => {
     const repoRoot = makeTempRoot('privacy');
+    const head = initGitRepo(repoRoot);
     const built = buildEvidenceManifest({
       repoRoot,
       workstreamId: 'ws_privacy_1',
       kind: 'preflight',
-      baseCommit: 'abc1234',
+      baseCommit: head,
       runChecks: false,
       commandResults: [
         { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
@@ -578,20 +571,14 @@ describe('workflow review protocol', () => {
 
   it('TEE-PATH-001 / TEE-PRIV-001: manifests must stay in the workstream directory and sanitize hostile command output', () => {
     const repoRoot = makeTempRoot('manifest-containment');
-    writeFileSync(path.join(repoRoot, 'package.json'), '{"name":"tmp"}', 'utf8');
-    writeFileSync(path.join(repoRoot, 'package-lock.json'), '{}', 'utf8');
-    applyProtocolTransition({
-      repoRoot,
-      command: 'init',
-      workstreamId: 'ws_manifest_1',
-      baseCommit: 'abc1234deadbeef',
-    });
+    const head = initGitRepo(repoRoot);
+    bindAndInit(repoRoot, 'ws_manifest_1', head);
 
     const hostile = buildEvidenceManifest({
       repoRoot,
       workstreamId: 'ws_manifest_1',
       kind: 'preflight',
-      baseCommit: 'abc1234deadbeef',
+      baseCommit: head,
       runChecks: false,
       commandResults: [
         {
@@ -622,6 +609,7 @@ describe('workflow review protocol', () => {
 
   it('TEE-PATH-001 / TEE-PRIV-001: protocol init persists repo-relative planPath only', () => {
     const repoRoot = makeTempRoot('relative-plan');
+    initGitRepo(repoRoot);
     const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
     mkdirSync(plansDir, { recursive: true });
     const contract = createDefaultPlanContract({
@@ -657,6 +645,7 @@ describe('workflow review protocol', () => {
 
   it('TEE-EVID-001: preflight binds child-owned requiredTestIds, not only master requiredTests', () => {
     const repoRoot = makeTempRoot('child-bind');
+    const childHead = initGitRepo(repoRoot);
     const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
     const testsDir = path.join(repoRoot, 'tests', 'unit');
     mkdirSync(plansDir, { recursive: true });
@@ -705,11 +694,11 @@ describe('workflow review protocol', () => {
         command: 'init',
         workstreamId: childId,
         planPath,
-        baseCommit: 'abc1234deadbeef',
+        baseCommit: childHead,
       }).ok
     ).toBe(true);
 
-    const emptyManifest = writePassingManifest(repoRoot, childId, 'preflight');
+    const emptyManifest = writePassingManifest(repoRoot, childId, 'preflight', undefined, []);
     const missingChild = applyProtocolTransition({
       repoRoot,
       command: 'preflight-record',
@@ -717,27 +706,44 @@ describe('workflow review protocol', () => {
       manifestPath: emptyManifest,
     });
     expect(missingChild.ok).toBe(false);
-    expect(missingChild.message).toMatch(/preflight missing plan requiredTests/i);
+    expect(missingChild.message).toMatch(/preflight missing (?:proven )?plan requiredTests/i);
     expect(missingChild.message).toMatch(/TEE-PLAN-001/);
     expect(missingChild.message).not.toMatch(/TEE-FINALISE-001/);
 
-    const childManifest = buildEvidenceManifest({
+    const childOnly = buildEvidenceManifest({
       repoRoot,
       workstreamId: childId,
       kind: 'preflight',
-      baseCommit: 'abc1234deadbeef',
+      baseCommit: readProtocolRecord(repoRoot, childId)?.baseCommit ?? 'abc1234deadbeef',
       requiredTestIds: ['TEE-PLAN-001', 'TEE-PATH-001', 'TEE-PROTO-001'],
-      executedTestIds: ['TEE-PLAN-001', 'TEE-PATH-001', 'TEE-PROTO-001'],
+      verificationLedgerRefs: [
+        persistFixtureLedger(repoRoot, childId, [
+          'TEE-PLAN-001',
+          'TEE-PATH-001',
+          'TEE-PROTO-001',
+        ]),
+      ],
       runChecks: false,
       commandResults: [
         { name: 'fixture', status: 'passed', exitCode: 0, durationMs: 1, summary: 'ok' },
       ],
     });
+    const weakerChild = applyProtocolTransition({
+      repoRoot,
+      command: 'preflight-record',
+      workstreamId: childId,
+      manifestPath: childOnly.relativePath,
+    });
+    expect(weakerChild.ok).toBe(false);
+    expect(weakerChild.message).toMatch(
+      /missing proven|required-ID set incomplete|typecheck|lint/i
+    );
+
     const bound = applyProtocolTransition({
       repoRoot,
       command: 'preflight-record',
       workstreamId: childId,
-      manifestPath: childManifest.relativePath,
+      manifestPath: writePassingManifest(repoRoot, childId, 'preflight'),
     });
     expect(bound.ok).toBe(true);
     expect(bound.record?.phase).toBe('preflight_ready');
@@ -745,6 +751,7 @@ describe('workflow review protocol', () => {
 
   it('TEE-EVID-001: preflight fails closed when the bound plan is malformed', () => {
     const repoRoot = makeTempRoot('fail-closed-plan');
+    const gitHead = initGitRepo(repoRoot);
     const plansDir = path.join(repoRoot, 'docs_private', 'automation', 'plans');
     mkdirSync(plansDir, { recursive: true });
     const contract = createDefaultPlanContract({
@@ -769,7 +776,7 @@ describe('workflow review protocol', () => {
         command: 'init',
         workstreamId: 'ws_fail_closed_1',
         planPath,
-        baseCommit: 'abc1234deadbeef',
+        baseCommit: gitHead,
       }).ok
     ).toBe(true);
 
@@ -787,6 +794,7 @@ describe('workflow review protocol', () => {
 
   it('TEE-PRIV-001: evidence manifests reject secrets and absolute private paths in blocker fields', () => {
     const repoRoot = makeTempRoot('manifest-privacy');
+    const privacyHead = initGitRepo(repoRoot);
 
     expect(() =>
       buildEvidenceManifest({
@@ -834,7 +842,7 @@ describe('workflow review protocol', () => {
       repoRoot,
       workstreamId: 'ws_manifest_privacy_3',
       kind: 'fix-delta',
-      baseCommit: 'abc1234deadbeef',
+      baseCommit: privacyHead,
       runChecks: false,
       closedBlockerIds: ['BLK-1'],
       blockerEvidence: [

@@ -10,22 +10,42 @@ import type {
   AutomationRunMetadata,
   AutomationRunStatus,
   AutomationStepLog,
+  WorkflowActiveFinaliseContext,
   WorkflowFinaliseCorrelation,
   WorkflowReviewState,
 } from './types';
 import {
   getWorkflowPaths,
-  loadWorkflowReviewState,
+  loadWorkflowReviewStateStrict,
   withWorkflowLock,
 } from './workflow-events';
 import {
   correlateFinaliseRun,
   shouldApplyFinaliseCorrelation,
 } from './workflow-finalise-correlation';
-import { commitFinaliseCorrelationStateAndProtocols } from './workflow-review-protocol';
+import {
+  commitFinaliseCorrelationStateAndProtocols,
+  getActiveFinaliseContext,
+  readProtocolRecord,
+  recoverIncompleteFinalisePassedCommit,
+} from './workflow-review-protocol';
+import { appendOwnedCommit, lastOwnedCommit, readWorkflowGitBinding } from './workflow-git-binding';
+import {
+  assertCapturedIdentityMatchesRunMemory,
+  assertGitMatchesCapturedC9Identity,
+  assertLiveFinaliseContextMatchesCaptured,
+  assertProtectedPushAuthorizationCurrent,
+  buildProtectedC9PushAuthorization,
+  buildProtectedC9RunIdentity,
+  capturedContextFromIdentity,
+  cloneActiveFinaliseContext,
+  persistProtectedC9RunIdentity,
+  protectedC9IdentityPath,
+  readProtectedC9RunIdentity,
+  type ProtectedC9PushAuthorization,
+} from './workflow-c9-run-identity';
 
-const REPO_ROOT = process.cwd();
-const AUTOMATION_ROOT = path.join(REPO_ROOT, 'docs_private', 'automation');
+const DEFAULT_REPO_ROOT = process.cwd();
 const MAX_STEP_OUTPUT_LENGTH = 500_000;
 
 interface AutomationRunOptions {
@@ -33,6 +53,8 @@ interface AutomationRunOptions {
   mode: string;
   args?: string[];
   expectedArtifacts?: AutomationExpectedArtifact[];
+  persist?: boolean;
+  repoRoot?: string;
 }
 
 interface LoggedCommandOptions {
@@ -62,9 +84,9 @@ function shouldUseShell(command: string): boolean {
   return !['git', 'powershell.exe', 'pwsh.exe'].includes(command.toLowerCase());
 }
 
-function runMetadataCommand(command: string, args: string[]): string {
+function runMetadataCommand(command: string, args: string[], repoRoot = DEFAULT_REPO_ROOT): string {
   const result = spawnSync(getExecutable(command), args, {
-    cwd: REPO_ROOT,
+    cwd: repoRoot,
     env: process.env,
     shell: shouldUseShell(command),
     encoding: 'utf8',
@@ -74,27 +96,178 @@ function runMetadataCommand(command: string, args: string[]): string {
   return typeof result.stdout === 'string' ? result.stdout.trim() : '';
 }
 
-function getMetadata(): AutomationRunMetadata {
-  const gitStatus = runMetadataCommand('git', ['status', '--porcelain']);
+function getMetadata(repoRoot = DEFAULT_REPO_ROOT): AutomationRunMetadata {
+  const gitStatus = runMetadataCommand('git', ['status', '--porcelain'], repoRoot);
 
   return {
-    branch: runMetadataCommand('git', ['branch', '--show-current']) || '(detached HEAD)',
-    commit: runMetadataCommand('git', ['rev-parse', '--short', 'HEAD']) || 'unknown',
+    branch: runMetadataCommand('git', ['branch', '--show-current'], repoRoot) || '(detached HEAD)',
+    commit: runMetadataCommand('git', ['rev-parse', '--short', 'HEAD'], repoRoot) || 'unknown',
     dirtyFileCount: gitStatus ? gitStatus.split(/\r?\n/u).filter(Boolean).length : 0,
     nodeVersion: process.version,
-    npmVersion: runMetadataCommand('npm', ['--version']) || 'unknown',
+    npmVersion: runMetadataCommand('npm', ['--version'], repoRoot) || 'unknown',
     platform: process.platform,
   };
 }
 
-export function readPostRunGitIdentity(): {
+export function readPostRunGitIdentity(repoRoot = DEFAULT_REPO_ROOT): {
   branchName: string;
   headCommit: string | null;
 } {
   return {
     branchName:
-      runMetadataCommand('git', ['branch', '--show-current']) || '(detached HEAD)',
-    headCommit: runMetadataCommand('git', ['rev-parse', 'HEAD']) || null,
+      runMetadataCommand('git', ['branch', '--show-current'], repoRoot) || '(detached HEAD)',
+    headCommit: runMetadataCommand('git', ['rev-parse', 'HEAD'], repoRoot) || null,
+  };
+}
+
+function loadProtectedC9Context(repoRoot: string): WorkflowActiveFinaliseContext | null {
+  const paths = getWorkflowPaths(repoRoot);
+  return getActiveFinaliseContext(loadWorkflowReviewStateStrict(paths.statePath));
+}
+
+export function assertPassedProtectedFinaliseC9Identity(params: {
+  persist: boolean;
+  scriptName: string;
+  mode?: string;
+  args?: string[];
+  repoRoot: string;
+  correlation?: WorkflowFinaliseCorrelation;
+  state?: WorkflowReviewState;
+  requiredActiveContext?: WorkflowActiveFinaliseContext | null;
+}): void {
+  if (!params.persist) return;
+  if (
+    !shouldApplyFinaliseCorrelation({
+      scriptName: params.scriptName,
+      mode: params.mode,
+      args: params.args,
+    })
+  ) {
+    return;
+  }
+
+  const active = params.requiredActiveContext ?? null;
+  if (!active) {
+    throw new Error('protected finalise C9 identity is missing; refuse finish(passed)');
+  }
+
+  if (
+    typeof active.workstreamId !== 'string' ||
+    !active.workstreamId ||
+    typeof active.checkpointId !== 'string' ||
+    !active.checkpointId ||
+    (active.activatedHeadCommit != null && typeof active.activatedHeadCommit !== 'string') ||
+    (active.ownedCommits != null && !Array.isArray(active.ownedCommits))
+  ) {
+    throw new Error('protected finalise C9 identity evidence is malformed; refuse finish(passed)');
+  }
+
+  const git = readWorkflowGitBinding(params.repoRoot);
+  if (git.detached || !git.branchName || !git.headCommit) {
+    throw new Error('protected finalise C9 git identity cannot be verified; refuse finish(passed)');
+  }
+
+  const correlation = params.correlation;
+  if (!correlation || typeof correlation !== 'object') {
+    throw new Error('protected finalise C9 identity is missing; refuse finish(passed)');
+  }
+  if (
+    correlation.identityStatus !== 'present' &&
+    correlation.identityStatus !== 'missing' &&
+    correlation.identityStatus !== 'unknown' &&
+    correlation.identityStatus !== undefined
+  ) {
+    throw new Error('protected finalise C9 identity evidence is malformed; refuse finish(passed)');
+  }
+  if (correlation.identityStatus !== 'present') {
+    if (active.activatedBranchName && git.branchName !== active.activatedBranchName) {
+      throw new Error('protected finalise C9 branch mismatch; refuse finish(passed)');
+    }
+    const expectedOwnedHead = lastOwnedCommit(
+      active.ownedCommits,
+      active.activatedHeadCommit ?? null
+    );
+    if (expectedOwnedHead && git.headCommit !== expectedOwnedHead) {
+      throw new Error('protected finalise C9 HEAD/owned-chain mismatch; refuse finish(passed)');
+    }
+    throw new Error(
+      `protected finalise C9 identityStatus=${correlation.identityStatus ?? 'missing'}; refuse finish(passed)`
+    );
+  }
+  if (correlation.matchedBy !== 'explicit_context') {
+    throw new Error('protected finalise C9 identity is mismatched; refuse finish(passed)');
+  }
+  if (
+    !Array.isArray(correlation.workstreamIds) ||
+    correlation.workstreamIds.length === 0 ||
+    typeof correlation.checkpointId !== 'string' ||
+    !correlation.checkpointId ||
+    typeof correlation.branchName !== 'string' ||
+    !correlation.branchName ||
+    typeof correlation.headCommit !== 'string' ||
+    !correlation.headCommit
+  ) {
+    throw new Error('protected finalise C9 identity evidence is malformed; refuse finish(passed)');
+  }
+  if (
+    correlation.workstreamIds[0] !== active.workstreamId ||
+    correlation.checkpointId !== active.checkpointId
+  ) {
+    throw new Error('protected finalise C9 checkpoint/workstream mismatch; refuse finish(passed)');
+  }
+  if (active.activatedBranchName && active.activatedBranchName !== correlation.branchName) {
+    throw new Error('protected finalise C9 branch mismatch; refuse finish(passed)');
+  }
+  if (git.branchName !== correlation.branchName) {
+    throw new Error('protected finalise C9 branch mismatch; refuse finish(passed)');
+  }
+  if (!active.activatedHeadCommit) {
+    throw new Error('protected finalise C9 HEAD/owned-chain mismatch; refuse finish(passed)');
+  }
+  const progressed = appendOwnedCommit({
+    repoRoot: params.repoRoot,
+    ownedCommits: active.ownedCommits ?? [active.activatedHeadCommit],
+    activatedHeadCommit: active.activatedHeadCommit,
+  });
+  if (!progressed.ok) {
+    throw new Error('protected finalise C9 HEAD/owned-chain mismatch; refuse finish(passed)');
+  }
+  const expectedHead = lastOwnedCommit(progressed.ownedCommits, active.activatedHeadCommit);
+  if (!expectedHead || correlation.headCommit !== expectedHead || git.headCommit !== expectedHead) {
+    throw new Error('protected finalise C9 HEAD/owned-chain mismatch; refuse finish(passed)');
+  }
+}
+
+export function computeFinaliseAutomationCorrelation(params: {
+  scriptName: string;
+  status: AutomationRunStatus;
+  runId: string;
+  repoRoot?: string;
+  state: WorkflowReviewState;
+  mode?: string;
+  args?: string[];
+}): WorkflowFinaliseCorrelation | undefined {
+  if (
+    !shouldApplyFinaliseCorrelation({
+      scriptName: params.scriptName,
+      mode: params.mode,
+      args: params.args,
+    })
+  ) {
+    return undefined;
+  }
+  const repoRoot = params.repoRoot ?? DEFAULT_REPO_ROOT;
+  const identity = readPostRunGitIdentity(repoRoot);
+  const result = correlateFinaliseRun({
+    state: params.state,
+    repoRoot,
+    finaliseRunId: params.runId,
+    finaliseOutcome: params.status === 'passed' ? 'passed' : 'failed',
+  });
+  return {
+    ...result.correlation,
+    resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
+    branchName: result.correlation.branchName || identity.branchName,
   };
 }
 
@@ -116,33 +289,37 @@ export function correlateFinaliseAutomationRun(params: {
   ) {
     return undefined;
   }
-  const repoRoot = params.repoRoot ?? REPO_ROOT;
-  const identity = readPostRunGitIdentity();
+  if (params.state) {
+    return computeFinaliseAutomationCorrelation({
+      scriptName: params.scriptName,
+      status: params.status,
+      runId: params.runId,
+      repoRoot: params.repoRoot,
+      state: params.state,
+      mode: params.mode,
+      args: params.args,
+    });
+  }
+  if (params.status === 'passed') {
+    throw new Error(
+      'passed finalise correlation cannot persist independently; use AutomationRun.finish after C9 validation'
+    );
+  }
+  const repoRoot = params.repoRoot ?? DEFAULT_REPO_ROOT;
+  const identity = readPostRunGitIdentity(repoRoot);
   const correlate = (state: WorkflowReviewState) =>
     correlateFinaliseRun({
       state,
       repoRoot,
       finaliseRunId: params.runId,
-      finaliseOutcome: params.status === 'passed' ? 'passed' : 'failed',
-      // Intentionally omit resultingCommit: correlation must read finish-time HEAD.
+      finaliseOutcome: 'failed',
     });
 
-  // Fail closed: lock / state-save / correlation errors must propagate so a finalise
-  // finish('passed') cannot silently report identityStatus=missing and clear repair gates.
-  if (params.state) {
-    const result = correlate(params.state);
-    return {
-      ...result.correlation,
-      resultingCommit: result.correlation.resultingCommit ?? identity.headCommit,
-      branchName: result.correlation.branchName || identity.branchName,
-    };
-  }
   const paths = getWorkflowPaths(repoRoot);
   return withWorkflowLock(paths.lockPath, () => {
-    const previousState = loadWorkflowReviewState(paths.statePath);
+    recoverIncompleteFinalisePassedCommit(repoRoot);
+    const previousState = loadWorkflowReviewStateStrict(paths.statePath);
     const result = correlate(previousState);
-    // State first, then protocol disk finalised — never leave irreversible finalised
-    // protocol.json when shared state did not persist.
     commitFinaliseCorrelationStateAndProtocols({
       repoRoot,
       statePath: paths.statePath,
@@ -184,7 +361,7 @@ function limitOutput(output: string): { output: string; truncated: boolean } {
   };
 }
 
-function renderMarkdown(log: AutomationRunLog): string {
+function renderMarkdown(log: AutomationRunLog, repoRoot = DEFAULT_REPO_ROOT): string {
   const lines = [
     `# ${log.scriptName} Run Log`,
     '',
@@ -253,13 +430,13 @@ function renderMarkdown(log: AutomationRunLog): string {
     }
     if (log.review.monthlyReviewGenerated && log.review.monthlyReviewPath) {
       lines.push('');
-      lines.push(`Monthly review: ${path.relative(REPO_ROOT, log.review.monthlyReviewPath)}`);
+      lines.push(`Monthly review: ${path.relative(repoRoot, log.review.monthlyReviewPath)}`);
     }
     if (log.review.monthlyReviewGenerated && log.review.monthlyPromptPath) {
-      lines.push(`Review prompt: ${path.relative(REPO_ROOT, log.review.monthlyPromptPath)}`);
+      lines.push(`Review prompt: ${path.relative(repoRoot, log.review.monthlyPromptPath)}`);
     }
     if (log.review.advisorReviewPath) {
-      lines.push(`Advisor review: ${path.relative(REPO_ROOT, log.review.advisorReviewPath)}`);
+      lines.push(`Advisor review: ${path.relative(repoRoot, log.review.advisorReviewPath)}`);
     }
     lines.push('');
   }
@@ -268,18 +445,38 @@ function renderMarkdown(log: AutomationRunLog): string {
 }
 
 export class AutomationRun {
+  private readonly persist: boolean;
+  private readonly repoRoot: string;
   private readonly runDirectory: string;
   private readonly reviewsDirectory: string;
   private readonly logPath: string;
   private readonly markdownPath: string;
+  private readonly capturedC9Context: WorkflowActiveFinaliseContext | null;
+  private readonly capturedC9WorkstreamId: string | null;
   private readonly log: Omit<AutomationRunLog, 'endedAt' | 'durationMs' | 'status' | 'artifacts'>;
 
   constructor(options: AutomationRunOptions) {
     const startedAt = new Date();
     const safeScriptName = options.scriptName.replace(/[^a-z0-9-]/giu, '-').toLowerCase();
-    this.runDirectory = path.join(AUTOMATION_ROOT, 'runs', safeScriptName);
-    this.reviewsDirectory = path.join(AUTOMATION_ROOT, 'reviews');
-    mkdirSync(this.runDirectory, { recursive: true });
+    this.persist = options.persist !== false;
+    this.repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
+    const loadedContext =
+      this.persist &&
+      shouldApplyFinaliseCorrelation({
+        scriptName: safeScriptName,
+        mode: options.mode,
+        args: options.args,
+      })
+        ? loadProtectedC9Context(this.repoRoot)
+        : null;
+    this.capturedC9Context = loadedContext ? cloneActiveFinaliseContext(loadedContext) : null;
+    this.capturedC9WorkstreamId = this.capturedC9Context?.workstreamId ?? null;
+    const automationRoot = path.join(this.repoRoot, 'docs_private', 'automation');
+    this.runDirectory = path.join(automationRoot, 'runs', safeScriptName);
+    this.reviewsDirectory = path.join(automationRoot, 'reviews');
+    if (this.persist) {
+      mkdirSync(this.runDirectory, { recursive: true });
+    }
 
     const id = `${startedAt.toISOString().replace(/[:.]/gu, '-')}-${process.pid}`;
     this.logPath = path.join(this.runDirectory, `${id}.json`);
@@ -290,10 +487,41 @@ export class AutomationRun {
       mode: options.mode,
       args: options.args ?? [],
       startedAt: startedAt.toISOString(),
-      metadata: getMetadata(),
+      metadata: getMetadata(this.repoRoot),
       expectedArtifacts: options.expectedArtifacts ?? [],
       steps: [],
     };
+    if (this.persist && this.capturedC9Context) {
+      const built = buildProtectedC9RunIdentity({
+        runId: this.log.id,
+        context: this.capturedC9Context,
+        capturedAt: this.log.startedAt,
+      });
+      if (built.ok) {
+        const persisted = persistProtectedC9RunIdentity({
+          runDirectory: this.runDirectory,
+          identity: built.identity,
+        });
+        if (!persisted.ok) {
+          throw new Error(persisted.message);
+        }
+      }
+    }
+  }
+
+  get runId(): string {
+    return this.log.id;
+  }
+
+  get protectedC9IdentityPath(): string {
+    return protectedC9IdentityPath(this.runDirectory, this.log.id);
+  }
+
+  loadCapturedC9Identity() {
+    return readProtectedC9RunIdentity({
+      runDirectory: this.runDirectory,
+      runId: this.log.id,
+    });
   }
 
   async step<T>(name: string, action: () => Promise<T> | T, metadata?: Record<string, unknown>): Promise<T> {
@@ -331,7 +559,7 @@ export class AutomationRun {
     const startedAt = new Date();
     const formattedCommand = formatCommand(command, args);
     const result = spawnSync(getExecutable(command), args, {
-      cwd: REPO_ROOT,
+      cwd: this.repoRoot,
       env: options.env ?? process.env,
       shell: shouldUseShell(command),
       encoding: 'utf8',
@@ -372,35 +600,251 @@ export class AutomationRun {
   private correlateWorkflowIfFinalise(
     status: AutomationRunStatus
   ): WorkflowFinaliseCorrelation | undefined {
+    if (!this.persist) return undefined;
     return correlateFinaliseAutomationRun({
       scriptName: this.log.scriptName,
       status,
       runId: this.log.id,
-      repoRoot: REPO_ROOT,
+      repoRoot: this.repoRoot,
       mode: this.log.mode,
       args: this.log.args,
     });
+  }
+
+  /**
+   * Validate captured C9 identity and the intended correlation in memory, then
+   * persist success-authoritative protocol/state only after every check passes.
+   */
+  private commitPassedProtectedFinaliseAfterC9Validation(): WorkflowFinaliseCorrelation {
+    const paths = getWorkflowPaths(this.repoRoot);
+    return withWorkflowLock(paths.lockPath, () => {
+      recoverIncompleteFinalisePassedCommit(this.repoRoot);
+      const captured = this.loadCapturedC9Identity();
+      let requiredActiveContext = this.capturedC9Context;
+      if (captured.ok) {
+        const memoryMatch = assertCapturedIdentityMatchesRunMemory({
+          identity: captured.identity,
+          runId: this.log.id,
+          capturedContext: this.capturedC9Context,
+          capturedWorkstreamId: this.capturedC9WorkstreamId,
+        });
+        if (!memoryMatch.ok) {
+          throw new Error(memoryMatch.message.replace('remote mutation', 'finish(passed)'));
+        }
+        requiredActiveContext = capturedContextFromIdentity(captured.identity);
+      } else if (this.capturedC9Context) {
+        const built = buildProtectedC9RunIdentity({
+          runId: this.log.id,
+          context: this.capturedC9Context,
+          capturedAt: this.log.startedAt,
+        });
+        if (built.ok) {
+          throw new Error(captured.message.replace('remote mutation', 'finish(passed)'));
+        }
+        requiredActiveContext = this.capturedC9Context;
+      } else {
+        throw new Error(captured.message.replace('remote mutation', 'finish(passed)'));
+      }
+
+      const previousState = loadWorkflowReviewStateStrict(paths.statePath);
+      const identity = readPostRunGitIdentity(this.repoRoot);
+      const computed = correlateFinaliseRun({
+        state: previousState,
+        repoRoot: this.repoRoot,
+        finaliseRunId: this.log.id,
+        finaliseOutcome: 'passed',
+      });
+      const correlation: WorkflowFinaliseCorrelation = {
+        ...computed.correlation,
+        resultingCommit: computed.correlation.resultingCommit ?? identity.headCommit,
+        branchName: computed.correlation.branchName || identity.branchName,
+      };
+      assertPassedProtectedFinaliseC9Identity({
+        persist: this.persist,
+        scriptName: this.log.scriptName,
+        mode: this.log.mode,
+        args: this.log.args,
+        repoRoot: this.repoRoot,
+        correlation,
+        state: previousState,
+        requiredActiveContext,
+      });
+      commitFinaliseCorrelationStateAndProtocols({
+        repoRoot: this.repoRoot,
+        statePath: paths.statePath,
+        previousState,
+        nextState: computed.state,
+        workstreamIds: correlation.workstreamIds,
+        fromProtectedFinish: true,
+      });
+      return correlation;
+    });
+  }
+
+  assertC9BeforeRemoteMutation(): ProtectedC9PushAuthorization | undefined {
+    if (!this.persist) return undefined;
+    if (
+      !shouldApplyFinaliseCorrelation({
+        scriptName: this.log.scriptName,
+        mode: this.log.mode,
+        args: this.log.args,
+      })
+    ) {
+      return undefined;
+    }
+    const captured = this.loadCapturedC9Identity();
+    if (!captured.ok) {
+      throw new Error(captured.message);
+    }
+    const memoryMatch = assertCapturedIdentityMatchesRunMemory({
+      identity: captured.identity,
+      runId: this.log.id,
+      capturedContext: this.capturedC9Context,
+      capturedWorkstreamId: this.capturedC9WorkstreamId,
+    });
+    if (!memoryMatch.ok) {
+      throw new Error(memoryMatch.message);
+    }
+    const gitMatch = assertGitMatchesCapturedC9Identity({
+      repoRoot: this.repoRoot,
+      identity: captured.identity,
+      expectedWorkstreamId: this.capturedC9WorkstreamId ?? captured.identity.workstreamId,
+    });
+    if (!gitMatch.ok) {
+      throw new Error(gitMatch.message);
+    }
+    const live = getActiveFinaliseContext(loadWorkflowReviewStateStrict(getWorkflowPaths(this.repoRoot).statePath));
+    const liveProtocol = readProtocolRecord(this.repoRoot, captured.identity.workstreamId);
+    const liveMatch = assertLiveFinaliseContextMatchesCaptured({
+      identity: captured.identity,
+      live,
+      protocolPhase: liveProtocol?.phase ?? null,
+      protocolCheckpointId: liveProtocol?.activeCheckpointId ?? null,
+      protocolWorkstreamId: liveProtocol?.workstreamId ?? null,
+      protocolBranchName: liveProtocol?.branchName ?? null,
+      protocolHeadCommit: liveProtocol?.headCommit ?? null,
+      protocolBaseCommit: liveProtocol?.baseCommit ?? null,
+      protocolReviewedTreeFingerprint: liveProtocol?.reviewedTreeFingerprint ?? null,
+    });
+    if (!liveMatch.ok) {
+      throw new Error(liveMatch.message);
+    }
+    const git = readWorkflowGitBinding(this.repoRoot);
+    const capturedContext = capturedContextFromIdentity(captured.identity);
+    const correlation: WorkflowFinaliseCorrelation = {
+      identityStatus: 'present',
+      matchedBy: 'explicit_context',
+      workstreamIds: [captured.identity.workstreamId],
+      checkpointId: captured.identity.checkpointId,
+      branchName: captured.identity.branchName,
+      headCommit: gitMatch.expectedHead,
+      resultingCommit: git.headCommit ?? gitMatch.expectedHead,
+    };
+    const state = loadWorkflowReviewStateStrict(getWorkflowPaths(this.repoRoot).statePath);
+    assertPassedProtectedFinaliseC9Identity({
+      persist: this.persist,
+      scriptName: this.log.scriptName,
+      mode: this.log.mode,
+      args: this.log.args,
+      repoRoot: this.repoRoot,
+      correlation,
+      state,
+      requiredActiveContext: capturedContext,
+    });
+    const authorization = buildProtectedC9PushAuthorization({
+      identity: captured.identity,
+      sourceCommit: gitMatch.expectedHead,
+    });
+    if (!authorization.ok) {
+      throw new Error(authorization.message);
+    }
+    return authorization.authorization;
+  }
+
+  assertAuthorizedC9PushStillValid(authorization: ProtectedC9PushAuthorization): void {
+    const captured = this.loadCapturedC9Identity();
+    if (!captured.ok) {
+      throw new Error(captured.message);
+    }
+    const gitMatch = assertGitMatchesCapturedC9Identity({
+      repoRoot: this.repoRoot,
+      identity: captured.identity,
+      expectedWorkstreamId: this.capturedC9WorkstreamId ?? captured.identity.workstreamId,
+    });
+    if (!gitMatch.ok) {
+      throw new Error(gitMatch.message);
+    }
+    if (gitMatch.expectedHead.toLowerCase() !== authorization.sourceCommit.toLowerCase()) {
+      throw new Error('C9-validated HEAD does not match push authorization source commit; refuse remote mutation');
+    }
+    const git = readWorkflowGitBinding(this.repoRoot);
+    const live = getActiveFinaliseContext(loadWorkflowReviewStateStrict(getWorkflowPaths(this.repoRoot).statePath));
+    const liveProtocol = readProtocolRecord(this.repoRoot, captured.identity.workstreamId);
+    const current = assertProtectedPushAuthorizationCurrent({
+      authorization,
+      headCommit: git.headCommit,
+      branchName: git.branchName,
+      identity: captured.identity,
+      live,
+      protocolPhase: liveProtocol?.phase ?? null,
+      protocolCheckpointId: liveProtocol?.activeCheckpointId ?? null,
+      protocolWorkstreamId: liveProtocol?.workstreamId ?? null,
+      protocolBranchName: liveProtocol?.branchName ?? null,
+      protocolHeadCommit: liveProtocol?.headCommit ?? null,
+      protocolBaseCommit: liveProtocol?.baseCommit ?? null,
+      protocolReviewedTreeFingerprint: liveProtocol?.reviewedTreeFingerprint ?? null,
+    });
+    if (!current.ok) {
+      throw new Error(current.message);
+    }
   }
 
   async finish(status: AutomationRunStatus, error?: unknown): Promise<void> {
     const endedAt = new Date();
     const artifacts = this.log.expectedArtifacts.map((artifact) => ({
       path: artifact.path,
-      exists: existsSync(path.join(REPO_ROOT, artifact.path)),
+      exists: existsSync(path.join(this.repoRoot, artifact.path)),
       required: artifact.required !== false,
     }));
     let workflowCorrelation: WorkflowFinaliseCorrelation | undefined;
-    try {
-      workflowCorrelation = this.correlateWorkflowIfFinalise(status);
-    } catch (correlationError) {
-      // Passed finalise must fail closed so repair-complete clearance cannot proceed.
-      // Failed finishes still write the run log without inventing a successful correlation.
-      if (status === 'passed' && this.log.scriptName === 'finalise') {
-        throw correlationError instanceof Error
-          ? correlationError
-          : new Error(String(correlationError));
+    const protectedPassed =
+      status === 'passed' &&
+      this.persist &&
+      shouldApplyFinaliseCorrelation({
+        scriptName: this.log.scriptName,
+        mode: this.log.mode,
+        args: this.log.args,
+      });
+    if (protectedPassed) {
+      // Validate C9 + correlation in memory, then persist success atomically.
+      workflowCorrelation = this.commitPassedProtectedFinaliseAfterC9Validation();
+    } else {
+      try {
+        workflowCorrelation = this.correlateWorkflowIfFinalise(status);
+      } catch (correlationError) {
+        // Passed finalise must fail closed so repair-complete clearance cannot proceed.
+        // Failed finishes still write the run log without inventing a successful correlation.
+        if (status === 'passed' && this.log.scriptName === 'finalise') {
+          throw correlationError instanceof Error
+            ? correlationError
+            : new Error(String(correlationError));
+        }
+        workflowCorrelation = undefined;
       }
-      workflowCorrelation = undefined;
+      if (status === 'passed') {
+        const paths = getWorkflowPaths(this.repoRoot);
+        const state = loadWorkflowReviewStateStrict(paths.statePath);
+        assertPassedProtectedFinaliseC9Identity({
+          persist: this.persist,
+          scriptName: this.log.scriptName,
+          mode: this.log.mode,
+          args: this.log.args,
+          repoRoot: this.repoRoot,
+          correlation: workflowCorrelation,
+          state,
+          requiredActiveContext: this.capturedC9Context,
+        });
+      }
     }
     const finalLog: AutomationRunLog = {
       ...this.log,
@@ -412,6 +856,11 @@ export class AutomationRun {
       workflowCorrelation,
     };
 
+    if (!this.persist) {
+      console.log(`Dry-run complete for ${this.log.scriptName}; no automation files were written.`);
+      return;
+    }
+
     writeFileSync(this.logPath, JSON.stringify(finalLog, null, 2), 'utf8');
     const review = reviewAutomationRun({
       runDirectory: this.runDirectory,
@@ -420,9 +869,9 @@ export class AutomationRun {
     });
     const reviewedLog = { ...finalLog, review };
     writeFileSync(this.logPath, JSON.stringify(reviewedLog, null, 2), 'utf8');
-    writeFileSync(this.markdownPath, renderMarkdown(reviewedLog), 'utf8');
+    writeFileSync(this.markdownPath, renderMarkdown(reviewedLog, this.repoRoot), 'utf8');
     console.log(formatReviewForConsole(review));
-    console.log(`Automation log written: ${path.relative(REPO_ROOT, this.markdownPath)}`);
+    console.log(`Automation log written: ${path.relative(this.repoRoot, this.markdownPath)}`);
 
     if (review.monthlyReviewGenerated && review.monthlyReview) {
       try {
@@ -433,7 +882,7 @@ export class AutomationRun {
           suggestionsPath: review.monthlyReview.suggestionsPath,
           suggestions: review.monthlyReview.suggestions,
           knowledgeDirectory: review.monthlyReview.knowledgeDirectory,
-          repoRoot: REPO_ROOT,
+          repoRoot: this.repoRoot,
         });
       } catch (followUpError) {
         try {

@@ -10,6 +10,7 @@ import type {
   WorkflowPlanArchitectureGateEvidence,
   WorkflowPlanContract,
   WorkflowPlanModels,
+  WorkflowRehomeProvenance,
   WorkflowRequiredTest,
   WorkflowReviewSource,
   WorkflowRisk,
@@ -169,6 +170,87 @@ export function resolveRequiredTestIdsForWorkstream(
 
 export function laneToLegacyRisk(lane: WorkflowLane): WorkflowRisk {
   return lane === 'critical' || lane === 'guarded' ? 'high' : 'routine';
+}
+
+const PLAN_COMMIT_SHA_RE = /^[0-9a-f]{7,64}$/i;
+const PLAN_SHA256_RE = /^[0-9a-f]{64}$/i;
+
+export function parseOptionalRehomeProvenance(
+  value: unknown
+): { provenance?: WorkflowRehomeProvenance; errors: string[] } {
+  if (value === undefined || value === null) {
+    return { errors: [] };
+  }
+  if (!isObject(value)) {
+    return { errors: ['rehomeProvenance must be an object'] };
+  }
+  const errors: string[] = [];
+  const schemaVersion = asString(value.schemaVersion);
+  const predecessorRootWorkstreamId = asString(value.predecessorRootWorkstreamId);
+  const predecessorDescendantWorkstreamId = asString(value.predecessorDescendantWorkstreamId);
+  const predecessorHeadCommit = asString(value.predecessorHeadCommit);
+  const predecessorReleaseContext = asString(value.predecessorReleaseContext);
+  const successorBranchName = asString(value.successorBranchName);
+  const successorBaselineCommit = asString(value.successorBaselineCommit);
+  const sourcePatchSha256 = asString(value.sourcePatchSha256);
+  const sourceProductTreeFingerprint = asString(value.sourceProductTreeFingerprint);
+  if (schemaVersion !== '1') errors.push('rehomeProvenance.schemaVersion must be "1"');
+  if (!predecessorRootWorkstreamId) errors.push('rehomeProvenance.predecessorRootWorkstreamId is required');
+  if (!predecessorDescendantWorkstreamId) {
+    errors.push('rehomeProvenance.predecessorDescendantWorkstreamId is required');
+  }
+  if (!predecessorHeadCommit || !PLAN_COMMIT_SHA_RE.test(predecessorHeadCommit)) {
+    errors.push('rehomeProvenance.predecessorHeadCommit must be a git commit hash');
+  }
+  if (!predecessorReleaseContext || !predecessorReleaseContext.includes('#')) {
+    errors.push('rehomeProvenance.predecessorReleaseContext must be path#branch');
+  }
+  if (!successorBranchName) errors.push('rehomeProvenance.successorBranchName is required');
+  if (!successorBaselineCommit || !PLAN_COMMIT_SHA_RE.test(successorBaselineCommit)) {
+    errors.push('rehomeProvenance.successorBaselineCommit must be a git commit hash');
+  }
+  if (!sourcePatchSha256 || !PLAN_SHA256_RE.test(sourcePatchSha256)) {
+    errors.push('rehomeProvenance.sourcePatchSha256 must be a sha256 hex digest');
+  }
+  if (!sourceProductTreeFingerprint || !PLAN_SHA256_RE.test(sourceProductTreeFingerprint)) {
+    errors.push('rehomeProvenance.sourceProductTreeFingerprint must be a sha256 hex digest');
+  }
+  if (value.predecessorPassedReview === true) {
+    errors.push('rehomeProvenance must not claim the predecessor passed review');
+  }
+  if (value.predecessorHeadIsAncestor === true) {
+    errors.push('rehomeProvenance must not claim the predecessor HEAD is an ancestor');
+  }
+  const sourceHeadCommit = asString(value.sourceHeadCommit);
+  const sourceBaselineCommit = asString(value.sourceBaselineCommit);
+  if (sourceHeadCommit && !PLAN_COMMIT_SHA_RE.test(sourceHeadCommit)) {
+    errors.push('rehomeProvenance.sourceHeadCommit must be a git commit hash');
+  }
+  if (sourceBaselineCommit && !PLAN_COMMIT_SHA_RE.test(sourceBaselineCommit)) {
+    errors.push('rehomeProvenance.sourceBaselineCommit must be a git commit hash');
+  }
+  if (errors.length > 0) return { errors };
+  return {
+    provenance: {
+      schemaVersion: '1',
+      status: 'declared',
+      predecessorRootWorkstreamId: predecessorRootWorkstreamId!,
+      predecessorDescendantWorkstreamId: predecessorDescendantWorkstreamId!,
+      predecessorHeadCommit: predecessorHeadCommit!,
+      predecessorReleaseContext: predecessorReleaseContext!,
+      successorBranchName: successorBranchName!,
+      successorBaselineCommit: successorBaselineCommit!,
+      sourcePatchSha256: sourcePatchSha256!,
+      sourceProductTreeFingerprint: sourceProductTreeFingerprint!,
+      sourceReleaseContext: asString(value.sourceReleaseContext) ?? undefined,
+      sourceHeadCommit: sourceHeadCommit ?? undefined,
+      sourceBaselineCommit: sourceBaselineCommit ?? undefined,
+      sourceReviewWorkstreamId: asString(value.sourceReviewWorkstreamId) ?? undefined,
+      predecessorHeadIsAncestor: false,
+      predecessorPassedReview: false,
+    },
+    errors: [],
+  };
 }
 
 function parseRequiredTests(value: unknown): { tests: WorkflowRequiredTest[]; errors: string[] } {
@@ -517,6 +599,8 @@ function parseNativeV2Contract(value: Record<string, unknown>): ParsedPlanContra
   if (critical && asString(value.reviewClosureProtocol) !== 'two-pass-v1') {
     errors.push('critical plans require reviewClosureProtocol two-pass-v1');
   }
+  const rehome = parseOptionalRehomeProvenance(value.rehomeProvenance);
+  errors.push(...rehome.errors);
 
   const finalReview = isObject(value.finalReview) ? value.finalReview : null;
   const finalReviewRequired = finalReview ? asBoolean(finalReview.required) : null;
@@ -619,6 +703,7 @@ function parseNativeV2Contract(value: Record<string, unknown>): ParsedPlanContra
       },
       reviewClosureProtocol:
         asString(value.reviewClosureProtocol) === 'two-pass-v1' ? 'two-pass-v1' : undefined,
+      rehomeProvenance: rehome.provenance,
       storage: storage
         ? {
             planRoot: asString(storage.planRoot) ?? FFTS_CANONICAL_PLAN_ROOT.replace(/\\/g, '/'),
@@ -655,7 +740,8 @@ function parseNativeV2Contract(value: Record<string, unknown>): ParsedPlanContra
         switchTiming: (models.models.implementation.switchTiming as WorkflowSwitchTiming) ??
           'after_plan_approval',
         rationale: 'Native V2.2 lane-based plan contract',
-        fallbackEscalation: 'Route or split after two failed premium review rounds.',
+        fallbackEscalation:
+          'Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget.',
       },
       initialParentTier: models.models.planning.tier,
       routingDecision:
@@ -777,6 +863,25 @@ export function pathHasSymlinkComponent(absolutePath: string): boolean {
       if (lstatSync(current).isSymbolicLink()) return true;
     } catch {
       return true;
+    }
+  }
+  return false;
+}
+
+/** Existing prefixes only: a not-yet-created leaf is not treated as a symlink. */
+export function pathHasExistingSymlinkComponent(absolutePath: string): boolean {
+  const normalized = path.normalize(absolutePath);
+  const { root } = path.parse(normalized);
+  const relative = path.relative(root, normalized);
+  if (!relative) return false;
+  let current = root;
+  for (const segment of relative.split(path.sep)) {
+    if (!segment) continue;
+    current = path.join(current, segment);
+    try {
+      if (lstatSync(current).isSymbolicLink()) return true;
+    } catch {
+      return false;
     }
   }
   return false;
@@ -1129,11 +1234,14 @@ export function createDefaultPlanContract(params: {
             'No executable, test, rule, configuration, or generated artifact depends on a sibling repository.',
             'Writers emit native V2.2 lane data and V4 completion markers; readers remain compatible with V1-V3 evidence.',
             'Missing, stale, malformed, or incomplete evidence is unknown, never passed.',
+            'Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget.',
+            'The active descendant owns remaining work. After two failed premium rounds, remaining work is routing, isolation, or proven removal from release — not another normal final-diff pass. A split child inherits the lineage-scoped budget and must not re-enter initialized / preflight to mint a new first review.',
           ],
           boundaries: [
             'Do not modify product UI, domain behavior, application schema, RLS, or production records in TEE core.',
             'Do not add push-authorizing aliases.',
             'Do not activate trusted fixerrors status in this workstream.',
+            'Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget.',
           ],
           rollback:
             'Disable/remove the stop hook and command integration first, then revert new writers while retaining mixed-version readers.',

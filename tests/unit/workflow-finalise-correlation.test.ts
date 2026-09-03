@@ -22,7 +22,9 @@ import {
 import type { WorkflowProtocolRecord, WorkflowWorkstreamRecord } from '@/scripts/automation/types';
 import {
   correlateFinaliseAutomationRun,
+  computeFinaliseAutomationCorrelation,
   readPostRunGitIdentity,
+  AutomationRun,
 } from '@/scripts/automation/logger';
 import {
   getFinaliseRepairCompletePath,
@@ -58,13 +60,34 @@ function makeProtocol(
   checkpointId: string | null = 'ckpt_explicit',
   extra: Partial<WorkflowProtocolRecord> = {}
 ): WorkflowProtocolRecord {
+  const updatedAt = extra.updatedAt ?? new Date().toISOString();
+  const headCommit = extra.headCommit ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const successPhase =
+    phase === 'review_closed' || phase === 'finalise_ready' || phase === 'finalised';
+  const treeFingerprint =
+    extra.reviewedTreeFingerprint ?? (successPhase ? 'b'.repeat(32) : undefined);
+  const reviewAttempts =
+    extra.reviewAttempts ??
+    (successPhase
+      ? [
+          {
+            pass: 'first' as const,
+            token: `rev_first_${workstreamId.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+            startedAt: updatedAt,
+            recordedAt: updatedAt,
+            result: 'passed' as const,
+            headCommit,
+            treeFingerprint: treeFingerprint!,
+          },
+        ]
+      : []);
   return {
     schemaVersion: '1',
     identityStatus: 'present',
     inheritedFailedReviewCount: extra.inheritedFailedReviewCount ?? 0,
     branchName: extra.branchName ?? 'main',
     baseCommit: extra.baseCommit ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    headCommit: extra.headCommit ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    headCommit,
     nextAction: extra.nextAction
       ?? (phase === 'finalise_ready'
         ? 'run_finalise'
@@ -72,11 +95,13 @@ function makeProtocol(
           ? 'use_split_workstream'
           : phase === 'review_closed'
             ? 'finalise_start'
-            : 'continue'),
+            : phase === 'finalised'
+              ? 'done'
+              : 'continue'),
     failedPremiumReviewCount: extra.failedPremiumReviewCount ?? 0,
     activeReviewToken: extra.activeReviewToken ?? null,
     activeReviewPass: extra.activeReviewPass ?? null,
-    reviewAttempts: extra.reviewAttempts ?? [],
+    reviewAttempts,
     blockerFamilies: extra.blockerFamilies ?? [],
     openBlockerIds: extra.openBlockerIds ?? [],
     evidenceManifestPath: extra.evidenceManifestPath ?? null,
@@ -84,7 +109,8 @@ function makeProtocol(
     activeCheckpointId: extra.activeCheckpointId ?? checkpointId,
     planPath: extra.planPath ?? null,
     sourceWorkstreamIds: extra.sourceWorkstreamIds,
-    updatedAt: extra.updatedAt ?? new Date().toISOString(),
+    reviewedTreeFingerprint: extra.reviewedTreeFingerprint ?? treeFingerprint ?? null,
+    updatedAt,
     workstreamId,
     phase,
   };
@@ -145,22 +171,41 @@ describe('workflow finalise correlation', () => {
     expect(rejected.correlation.matchedBy).toBe('none');
     expect(rejected.matched).toHaveLength(0);
 
+    const liveHead = (
+      spawnSync('git', ['rev-parse', 'HEAD'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        shell: false,
+      }).stdout ?? ''
+    ).trim();
+    const liveBranch = (
+      spawnSync('git', ['branch', '--show-current'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        shell: false,
+      }).stdout ?? ''
+    ).trim();
     const withContext = {
       ...singleState,
       protocolRecords: {
-        'ws-only': makeProtocol('ws-only', 'finalise_ready', 'ckpt_explicit'),
+        'ws-only': makeProtocol('ws-only', 'finalise_ready', 'ckpt_explicit', {
+          branchName: liveBranch,
+        }),
       },
       activeFinaliseContext: {
         workstreamId: 'ws-only',
         checkpointId: 'ckpt_explicit',
         activatedAt: new Date().toISOString(),
+        activatedHeadCommit: liveHead,
+        activatedBranchName: liveBranch,
+        ownedCommits: [liveHead],
       },
     };
     const explicit = resolveFinaliseWorkstreamMatches({
       state: withContext,
       repoRoot: process.cwd(),
-      branchName: 'main',
-      headCommit: 'zzzz',
+      branchName: liveBranch,
+      headCommit: liveHead,
     });
     expect(explicit.correlation.matchedBy).toBe('explicit_context');
     expect(explicit.correlation.workstreamIds).toEqual(['ws-only']);
@@ -232,7 +277,7 @@ describe('workflow finalise correlation', () => {
       false
     );
 
-    const loggerCorrelation = correlateFinaliseAutomationRun({
+    const loggerCorrelation = computeFinaliseAutomationCorrelation({
       scriptName: 'finalise',
       status: 'passed',
       runId: 'logger-finish',
@@ -328,6 +373,9 @@ describe('workflow finalise correlation', () => {
         workstreamId: 'ws_synth_1',
         checkpointId: 'ckpt_synth',
         activatedAt: new Date().toISOString(),
+        activatedHeadCommit: 'abc123',
+        activatedBranchName: 'main',
+        ownedCommits: ['abc123'],
       },
     };
     const matched = resolveFinaliseWorkstreamMatches({
@@ -408,7 +456,9 @@ describe('workflow finalise correlation', () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toMatch(/state-save-boom/i);
+    expect((thrown as Error).message).toMatch(
+      /cannot persist independently|use AutomationRun\.finish after C9/i
+    );
     // Fail closed: no successful correlation object is returned.
     expect(thrown).not.toHaveProperty('matchedBy', 'none');
 
@@ -427,19 +477,37 @@ describe('workflow finalise correlation', () => {
     saveSpy.mockRestore();
   });
 
-  it('TEE-FINALISE-001: state-save failure must not leave disk protocol falsely finalised', () => {
+  it('TEE-FINALISE-001: state-save failure must not leave disk protocol falsely finalised', async () => {
     const repoRoot = mkdtempSync(path.join(tmpdir(), 'finalise-atomic-'));
     tempRoots.push(repoRoot);
     mkdirSync(path.join(repoRoot, 'docs_private', 'automation'), { recursive: true });
+    writeFileSync(path.join(repoRoot, 'README.md'), 'fixture\n', 'utf8');
+    spawnSync('git', ['init', '-b', 'main'], { cwd: repoRoot, shell: false });
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'add', '.'],
+      { cwd: repoRoot, shell: false }
+    );
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'init'],
+      { cwd: repoRoot, shell: false }
+    );
+    const head = (
+      spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8', shell: false })
+        .stdout ?? ''
+    ).trim();
 
     const workstreamId = 'ws_atomic_1';
     const checkpointId = 'ckpt_atomic_1';
-    const ready = makeProtocol(workstreamId, 'finalise_ready', checkpointId);
+    const ready = makeProtocol(workstreamId, 'finalise_ready', checkpointId, {
+      headCommit: head,
+    });
     writeProtocolRecord(repoRoot, ready);
 
     const paths = getWorkflowPaths(repoRoot);
     let state = createEmptyWorkflowReviewState();
-    state = upsertWorkstreamRecord(state, openWorkstream(workstreamId, 'main', 'abc'));
+    state = upsertWorkstreamRecord(state, openWorkstream(workstreamId, 'main', head));
     state = {
       ...state,
       protocolRecords: { [workstreamId]: ready },
@@ -447,6 +515,9 @@ describe('workflow finalise correlation', () => {
         workstreamId,
         checkpointId,
         activatedAt: new Date().toISOString(),
+        activatedHeadCommit: head,
+        activatedBranchName: 'main',
+        ownedCommits: [head],
       },
     };
     saveWorkflowReviewState(paths.statePath, state);
@@ -464,7 +535,7 @@ describe('workflow finalise correlation', () => {
         runId: 'run-atomic-fail',
         repoRoot,
       })
-    ).toThrow(/state-save-after-outcome/i);
+    ).toThrow(/cannot persist independently|use AutomationRun\.finish after C9/i);
 
     saveSpy.mockRestore();
 
@@ -472,15 +543,17 @@ describe('workflow finalise correlation', () => {
     expect(diskProtocol?.phase).toBe('finalise_ready');
     expect(diskProtocol?.activeCheckpointId).toBe(checkpointId);
 
-    // Retry remains possible once state save works again.
+    // Retry remains possible through the canonical C9-protected finish path.
     expect(() => assertFinaliseAllowedForProtocol(repoRoot)).not.toThrow();
-    const retried = correlateFinaliseAutomationRun({
-      scriptName: 'finalise',
-      status: 'passed',
-      runId: 'run-atomic-retry',
-      repoRoot,
-    });
-    expect(retried?.matchedBy).toBe('explicit_context');
+    await expect(
+      new AutomationRun({
+        scriptName: 'finalise',
+        mode: 'run',
+        args: [],
+        persist: true,
+        repoRoot,
+      }).finish('passed')
+    ).resolves.toBeUndefined();
     expect(readProtocolRecord(repoRoot, workstreamId)?.phase).toBe('finalised');
     expect(readProtocolRecord(repoRoot, workstreamId)?.activeCheckpointId).toBeNull();
   });

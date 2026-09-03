@@ -122,6 +122,20 @@ export function loadWorkflowReviewState(statePath: string): WorkflowReviewState 
   return createEmptyWorkflowReviewState();
 }
 
+export function loadWorkflowReviewStateStrict(statePath: string): WorkflowReviewState {
+  if (!existsSync(statePath)) return createEmptyWorkflowReviewState();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(statePath, 'utf8')) as unknown;
+  } catch {
+    throw new Error('workflow review state is malformed; refuse to treat it as empty');
+  }
+  if (!isWorkflowReviewState(parsed)) {
+    throw new Error('workflow review state is malformed; refuse to treat it as empty');
+  }
+  return loadWorkflowReviewState(statePath);
+}
+
 export function upsertWorkstreamRecord(
   state: WorkflowReviewState,
   record: WorkflowWorkstreamRecord

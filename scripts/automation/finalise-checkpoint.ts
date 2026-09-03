@@ -71,6 +71,8 @@ export interface FinaliseCheckpointRecord {
   /** Live schema fingerprint from read-only catalog query, or 'unavailable'. */
   liveSchemaFingerprint: string;
   environmentFingerprint: string;
+  activatedHeadCommit?: string;
+  ownedCommits?: string[];
   steps: Partial<Record<FinaliseTaskKey, FinaliseCheckpointStep>>;
 }
 
@@ -651,15 +653,25 @@ export function createOrLoadFinaliseCheckpoint(params: {
     ids.workstreamId,
     ids.checkpointId
   );
-  if (existing) return existing;
+  if (existing) {
+    const currentHead = runGit(params.repoRoot, ['rev-parse', 'HEAD']) || 'unknown';
+    const owned = existing.ownedCommits ?? [existing.headCommit];
+    if (existing.headCommit !== currentHead && !owned.includes(currentHead)) {
+      throw new Error(
+        `finalise checkpoint ${params.checkpointId} is bound to ${existing.headCommit}; current HEAD is ${currentHead}. Do not reuse an old active finalise context for a newer Git state.`
+      );
+    }
+    return existing;
+  }
 
   const now = new Date().toISOString();
+  const headCommit = runGit(params.repoRoot, ['rev-parse', 'HEAD']) || 'unknown';
   const record: FinaliseCheckpointRecord = {
     schemaVersion: '1',
     checkpointId: ids.checkpointId,
     workstreamId: ids.workstreamId,
     branchName: runGit(params.repoRoot, ['branch', '--show-current']) || 'unknown',
-    headCommit: runGit(params.repoRoot, ['rev-parse', 'HEAD']) || 'unknown',
+    headCommit,
     createdAt: now,
     updatedAt: now,
     inputFingerprint: inputFingerprint(params.repoRoot),
@@ -667,6 +679,8 @@ export function createOrLoadFinaliseCheckpoint(params: {
     // TEE-NOLIVE-001: do not open a DB connection during checkpoint bind.
     liveSchemaFingerprint: 'unavailable',
     environmentFingerprint: environmentFingerprint(params.repoRoot),
+    activatedHeadCommit: headCommit,
+    ownedCommits: [headCommit],
     steps: {},
   };
   mkdirSync(getCheckpointDirectory(params.repoRoot, ids.workstreamId), { recursive: true });

@@ -8,7 +8,10 @@ import {
   formatFinaliseProtocolReadinessReport,
   getFinaliseProtocolReadiness,
 } from './automation/workflow-finalise-correlation';
-import type { WorkflowProtocolReviewPass } from './automation/types';
+import type {
+  WorkflowProtocolReviewPass,
+  WorkflowRouteDispositionTarget,
+} from './automation/types';
 
 function printUsage(): void {
   process.stdout.write(`Usage:
@@ -22,6 +25,16 @@ Commands:
     [--blocker-families a,b] [--blocker-ids a,b] [--sibling-surfaces a,b]
   fix-record --workstream <id> --manifest <path> [--closed-blocker-ids a,b]
   split --workstream <id> --new-workstream <id> [--narrower-partition] [--has-fix-delta]
+  route --workstream <id> --disposition removed_from_release|reverted|superseded|rehomed \\
+    --reason <text> [--implementation-commits a,b] [--revert-commit <sha>] \\
+    [--supersede-commit <sha>] [--successor-repo <path>] [--successor-branch <name>] \\
+    [--successor-baseline <sha>] [--predecessor-head <sha>]
+  rehome-bind --workstream <id> --predecessor-root <id> --predecessor-descendant <id> \\
+    --predecessor-head <sha> --predecessor-release-context <text> \\
+    --successor-baseline <sha> --successor-branch <name> \\
+    --source-patch-sha256 <hex> --source-fingerprint <hex> \\
+    --source-release-context <path#branch> --source-head <sha> --source-baseline <sha> \\
+    --source-review-workstream <id>
   finalise-start --workstream <id>
   status --workstream <id>
   status --blocking [--json]
@@ -88,6 +101,27 @@ async function main(): Promise<void> {
     narrowerPartition: hasFlag(args, '--narrower-partition'),
     hasFixDelta: hasFlag(args, '--has-fix-delta'),
     sourceWorkstreamIds: splitCsv(readFlag(args, '--source-workstreams')),
+    disposition: readFlag(args, '--disposition') as WorkflowRouteDispositionTarget | undefined,
+    reason: readFlag(args, '--reason'),
+    implementationCommits: splitCsv(readFlag(args, '--implementation-commits')),
+    revertCommit: readFlag(args, '--revert-commit'),
+    supersedeCommit: readFlag(args, '--supersede-commit'),
+    successorRepo: readFlag(args, '--successor-repo'),
+    successorBranch: readFlag(args, '--successor-branch'),
+    successorBaseline: readFlag(args, '--successor-baseline'),
+    predecessorHead: readFlag(args, '--predecessor-head'),
+    predecessorRootWorkstreamId: readFlag(args, '--predecessor-root'),
+    predecessorDescendantWorkstreamId: readFlag(args, '--predecessor-descendant'),
+    predecessorHeadCommit: readFlag(args, '--predecessor-head'),
+    predecessorReleaseContext: readFlag(args, '--predecessor-release-context'),
+    successorBaselineCommit: readFlag(args, '--successor-baseline'),
+    successorBranchName: readFlag(args, '--successor-branch'),
+    sourcePatchSha256: readFlag(args, '--source-patch-sha256'),
+    sourceProductTreeFingerprint: readFlag(args, '--source-fingerprint'),
+    sourceReleaseContext: readFlag(args, '--source-release-context'),
+    sourceHeadCommit: readFlag(args, '--source-head'),
+    sourceBaselineCommit: readFlag(args, '--source-baseline'),
+    sourceReviewWorkstreamId: readFlag(args, '--source-review-workstream'),
   });
 
   const payload = {

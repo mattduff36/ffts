@@ -15,7 +15,7 @@ For each original blocker ID: `closed`, `open`, or `regression`.
 Report only newly introduced risks outside the original set.
 Result must be `passed` or `failed`.
 
-A second failure transitions the workstream to `routing_required` (premium-fix-routing or split). A third review-start is rejected.
+A second failure transitions the lineage to `routing_required`. Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget. Remaining work is routing, isolation, or proven removal from release — not another normal final-diff pass.
 
 ## Recording
 

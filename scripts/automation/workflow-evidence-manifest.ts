@@ -5,6 +5,22 @@ import { spawnSync } from 'child_process';
 import { writeJsonAtomic } from './workflow-events';
 import { getProtocolDirectory } from './workflow-review-protocol';
 import { assertNoForbiddenPayload, sanitizeEvidenceLabel } from './workflow-privacy';
+import { computeWorkingTreeProductFingerprint } from './workflow-v24-disposition';
+import {
+  CANONICAL_SUITE_REQUIRED_TEST_ID,
+  EXACT_COMMAND_REQUIRED_TEST_IDS,
+  parseVitestJsonReporter,
+  proveCanonicalWorkflowSuite,
+  provenVitestCaseIds,
+  readAndValidateVerificationLedger,
+  requiredTestIdsForBlocker,
+  loadCanonicalWorkflowSuiteManifest,
+  loadCanonicalV24RequiredTestIds,
+  inspectCandidateGitScope,
+  listCandidateDiffPaths,
+  runVitestJsonAndPersistLedger,
+  verificationRunIsProofEligible,
+} from './workflow-verification-ledger';
 
 export type EvidenceManifestKind = 'preflight' | 'fix-delta';
 export type EvidenceCommandStatus = 'passed' | 'failed' | 'skipped' | 'unknown';
@@ -17,6 +33,9 @@ export interface EvidenceCommandResult {
   summary: string;
   command?: string;
   files?: string[];
+  headCommit?: string;
+  productTreeFingerprint?: string;
+  outputHash?: string;
 }
 
 export interface EvidenceTestMapping {
@@ -60,6 +79,14 @@ export interface WorkflowEvidenceManifest {
     evidenceLabel: string;
     commandName?: string;
   }>;
+  productTreeFingerprint?: string;
+  verificationLedgers?: Array<{
+    relativePath: string;
+    contentHash: string;
+    commandType: string;
+    reporterRelativePath?: string;
+    reporterOutputHash?: string;
+  }>;
   privacy: {
     redacted: true;
   };
@@ -77,6 +104,24 @@ function runGit(repoRoot: string, args: string[]): string {
   return (result.stdout ?? '').replace(/(?:\r?\n)+\s*$/u, '');
 }
 
+function runGitChecked(
+  repoRoot: string,
+  args: string[]
+): { ok: true; stdout: string } | { ok: false; message: string } {
+  const result = spawnSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (result.status !== 0) {
+    return { ok: false, message: `git ${args.join(' ')} failed` };
+  }
+  return {
+    ok: true,
+    stdout: (result.stdout ?? '').replace(/(?:\r?\n)+\s*$/u, ''),
+  };
+}
+
 function hashText(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 32);
 }
@@ -86,11 +131,14 @@ function hashFile(filePath: string): string {
   return hashText(readFileSync(filePath, 'utf8'));
 }
 
-function listDirtyPaths(repoRoot: string): string[] {
-  const output = runGit(repoRoot, ['status', '--porcelain', '-uall', '-z']);
-  if (!output) return [];
+function listDirtyPaths(
+  repoRoot: string
+): { ok: true; paths: string[] } | { ok: false; message: string } {
+  const listed = runGitChecked(repoRoot, ['status', '--porcelain', '-uall', '-z']);
+  if (!listed.ok) return listed;
+  if (!listed.stdout) return { ok: true, paths: [] };
   const paths: string[] = [];
-  const records = output.split('\0');
+  const records = listed.stdout.split('\0');
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
     if (!record) continue;
@@ -107,7 +155,20 @@ function listDirtyPaths(repoRoot: string): string[] {
     }
     paths.push(firstPath);
   }
-  return [...new Set(paths)].sort();
+  return {
+    ok: true,
+    paths: [...new Set(paths)]
+      .filter((relative) => !isWorkflowAutomationRelativePath(relative))
+      .sort(),
+  };
+}
+
+function isWorkflowAutomationRelativePath(relative: string): boolean {
+  const normalized = relative.replace(/\\/g, '/');
+  return (
+    normalized === 'docs_private/automation' ||
+    normalized.startsWith('docs_private/automation/')
+  );
 }
 
 export function getCurrentTreeFingerprint(repoRoot: string): {
@@ -116,13 +177,22 @@ export function getCurrentTreeFingerprint(repoRoot: string): {
   inputFingerprint: string;
   changedFiles: string[];
 } {
-  const headCommit = runGit(repoRoot, ['rev-parse', 'HEAD']) || 'unknown';
-  const changedFiles = listDirtyPaths(repoRoot);
+  const head = runGitChecked(repoRoot, ['rev-parse', 'HEAD']);
+  const dirty = listDirtyPaths(repoRoot);
+  if (!head.ok || !dirty.ok) {
+    const message = !head.ok ? head.message : !dirty.ok ? dirty.message : 'git verification failed';
+    return {
+      headCommit: 'unknown',
+      dirtyTreeHash: 'git-status-failed',
+      inputFingerprint: `git-error:${message}`,
+      changedFiles: ['__GIT_STATUS_FAILED__'],
+    };
+  }
   return {
-    headCommit,
-    dirtyTreeHash: hashText(changedFiles.join('\n')),
-    inputFingerprint: fingerprintInputs(repoRoot, changedFiles),
-    changedFiles,
+    headCommit: head.stdout || 'unknown',
+    dirtyTreeHash: hashText(dirty.paths.join('\n')),
+    inputFingerprint: fingerprintInputs(repoRoot, dirty.paths),
+    changedFiles: dirty.paths,
   };
 }
 
@@ -257,7 +327,19 @@ function discoverBehavioralTestIds(
   for (const root of testRoots) walk(root);
   const corpus = fileContents.join('\n');
 
+  const exactCommandIds = new Set<string>(Object.values(EXACT_COMMAND_REQUIRED_TEST_IDS));
+
   return ids.map((id) => {
+    const executed = executedIds.has(id);
+    if (exactCommandIds.has(id)) {
+      return {
+        id,
+        status: executed ? 'completed' : 'unresolved',
+        behavioral: true,
+        executed,
+        evidenceLabel: executed ? `exact-command-executed:${id}` : `exact-command-unexecuted:${id}`,
+      };
+    }
     const present = corpus.includes(id);
     // Behavioral if the ID appears in an it()/test() title, not only as a source string.
     const behavioral =
@@ -266,7 +348,6 @@ function discoverBehavioralTestIds(
         `(?:it|test|describe)\\(\\s*['\`"][^'\`"]*${id.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`,
         'u'
       ).test(corpus);
-    const executed = executedIds.has(id);
     return {
       id,
       status: behavioral && executed ? 'completed' : present ? 'unresolved' : 'missing',
@@ -297,6 +378,7 @@ export function buildEvidenceManifest(params: {
   blockerEvidence?: WorkflowEvidenceManifest['blockerEvidence'];
   commandResults?: EvidenceCommandResult[];
   executedTestIds?: string[];
+  verificationLedgerRefs?: WorkflowEvidenceManifest['verificationLedgers'];
   commandRunner?: EvidenceCommandRunner;
 }): { manifest: WorkflowEvidenceManifest; relativePath: string; absolutePath: string } {
   const tree = getCurrentTreeFingerprint(params.repoRoot);
@@ -307,10 +389,42 @@ export function buildEvidenceManifest(params: {
     params.baseCommit,
     headCommit
   );
-  const changedFiles = [...new Set([...baseHeadFiles, ...dirtyFiles])].sort();
+  const scoped = inspectCandidateGitScope(params.repoRoot, params.baseCommit || 'HEAD');
+  const scopedPaths = scoped.ok ? scoped.scope.all : [];
+  const changedFiles = [...new Set([...baseHeadFiles, ...dirtyFiles, ...scopedPaths])].sort();
+  const gitScopeFailed = !scoped.ok || dirtyFiles.includes('__GIT_STATUS_FAILED__');
   const dirtyTreeHash = tree.dirtyTreeHash;
   const inputFingerprint = tree.inputFingerprint;
-  const executedIds = new Set(params.executedTestIds ?? []);
+  const executedIds = new Set<string>();
+  const verificationLedgerRefs = [...(params.verificationLedgerRefs ?? [])];
+  const productTreeAtBuild = computeWorkingTreeProductFingerprint(params.repoRoot);
+  if (typeof productTreeAtBuild === 'string') {
+    for (const ref of verificationLedgerRefs) {
+      const validated = readAndValidateVerificationLedger({
+        repoRoot: params.repoRoot,
+        workstreamId: params.workstreamId,
+        relativePath: ref.relativePath,
+        expectedFingerprint: productTreeAtBuild,
+        expectedHeadCommit: headCommit,
+      });
+      if (!validated.ok) continue;
+      const eligible = verificationRunIsProofEligible({
+        record: validated.record,
+        reporterRaw: validated.reporterRaw,
+        expectedHeadCommit: headCommit,
+        expectedFingerprint: productTreeAtBuild,
+        requiredIds: params.requiredTestIds ?? [],
+      });
+      if (!eligible.ok) continue;
+      const caseProof = provenVitestCaseIds({
+        records: [validated.record],
+        requiredIds: params.requiredTestIds ?? [],
+      });
+      if (caseProof.ok) {
+        for (const id of caseProof.provenIds) executedIds.add(id);
+      }
+    }
+  }
   const sanitizeCommand = (command: EvidenceCommandResult): EvidenceCommandResult => ({
     ...command,
     summary: sanitizeEvidenceLabel(command.summary ?? ''),
@@ -376,18 +490,63 @@ export function buildEvidenceManifest(params: {
   }
   if (params.runRequiredTests && (params.requiredTestIds?.length ?? 0) > 0) {
     const ids = params.requiredTestIds ?? [];
-    // Vitest uses -t/--testNamePattern, not --grep.
-    const testRun = execute(params.repoRoot, 'required-tests', 'npm', [
-      'run',
-      'test:run',
-      '--',
-      '-t',
-      ids.join('|'),
-    ]);
-    commands.push(testRun);
-    if (testRun.status === 'passed') {
-      for (const id of ids) executedIds.add(id);
+    const proveCanonicalSet = ids.includes('TEE-V24-VERIFY-MANIFEST-001');
+    const requiredIds = proveCanonicalSet
+      ? [...new Set([...ids, ...loadCanonicalV24RequiredTestIds()])]
+      : ids;
+    const started = Date.now();
+    const persisted = runVitestJsonAndPersistLedger({
+      repoRoot: params.repoRoot,
+      workstreamId: params.workstreamId,
+      commandId: 'preflight-required-tests',
+      commandType: proveCanonicalSet ? 'vitest_suite' : 'vitest_case',
+      files: loadCanonicalWorkflowSuiteManifest().files,
+      extraArgs: proveCanonicalSet
+        ? []
+        : [
+            '-t',
+            ids.map((id) => id.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|'),
+            '--testTimeout=60000',
+          ],
+      requiredIds,
+    });
+    const proofEligible = persisted.ok
+      ? verificationRunIsProofEligible({
+          record: persisted.record,
+          reporterRaw: readFileSync(
+            path.join(params.repoRoot, persisted.reference.reporterRelativePath)
+          ),
+          expectedHeadCommit: headCommit,
+          expectedFingerprint: typeof productTreeAtBuild === 'string' ? productTreeAtBuild : '',
+          requiredIds,
+        })
+      : { ok: false as const, message: persisted.message };
+    commands.push({
+      name: 'required-tests',
+      status: persisted.ok && proofEligible.ok ? 'passed' : 'failed',
+      exitCode: persisted.ok && proofEligible.ok ? 0 : 1,
+      durationMs: Date.now() - started,
+      summary: persisted.ok
+        ? proofEligible.ok
+          ? `vitest ledger ${persisted.reference.contentHash}`
+          : proofEligible.message
+        : persisted.message,
+      command: 'vitest run --reporter=json',
+    });
+    if (persisted.ok && proofEligible.ok) {
+      verificationLedgerRefs.push(persisted.reference);
+      const caseProof = provenVitestCaseIds({
+        records: [persisted.record],
+        requiredIds,
+      });
+      if (caseProof.ok) {
+        for (const id of caseProof.provenIds) executedIds.add(id);
+      }
     }
+  }
+
+  for (const id of exactCommandProvenIds(commands, params.requiredTestIds ?? [])) {
+    executedIds.add(id);
   }
 
   const requiredTests = discoverBehavioralTestIds(
@@ -404,7 +563,12 @@ export function buildEvidenceManifest(params: {
     requiredTests.every(
       (test) => test.status === 'completed' && test.behavioral && test.executed
     );
-  const sanitizedCommands = commands.map(sanitizeCommand);
+  const sanitizedCommands = commands.map((command) => {
+    const cleaned = sanitizeCommand(command);
+    return typeof productTreeAtBuild === 'string'
+      ? bindEvidenceCommandToCandidate(cleaned, headCommit, productTreeAtBuild)
+      : cleaned;
+  });
   const commandViolations = assertNoForbiddenPayload(sanitizedCommands);
   if (commandViolations.length > 0) {
     throw new Error(`commandResults privacy violations: ${commandViolations.join('; ')}`);
@@ -445,6 +609,7 @@ export function buildEvidenceManifest(params: {
   let status: WorkflowEvidenceManifest['status'] = 'passed';
   if (!checksPassed || !testsReady || !liveOk || !fixEvidenceReady) status = 'failed';
   if (sanitizedCommands.some((command) => command.status === 'unknown')) status = 'unknown';
+  if (gitScopeFailed || typeof productTreeAtBuild === 'object') status = 'failed';
 
   const draft: Omit<WorkflowEvidenceManifest, 'contentHash' | 'bodyHash'> = {
     schemaVersion: '1',
@@ -468,6 +633,11 @@ export function buildEvidenceManifest(params: {
     liveVerification,
     closedBlockerIds: sanitizedClosedBlockerIds,
     blockerEvidence: sanitizedBlockerEvidence,
+    productTreeFingerprint: (() => {
+      const fingerprint = computeWorkingTreeProductFingerprint(params.repoRoot);
+      return typeof fingerprint === 'string' ? fingerprint : undefined;
+    })(),
+    verificationLedgers: verificationLedgerRefs,
     privacy: { redacted: true },
   };
 
@@ -502,4 +672,299 @@ export function readEvidenceManifest(filePath: string): WorkflowEvidenceManifest
   } catch {
     return null;
   }
+}
+
+function exactTypecheckCommand(command: EvidenceCommandResult): boolean {
+  const recorded = command.command ?? '';
+  return (
+    command.name === 'typecheck' &&
+    command.status === 'passed' &&
+    command.exitCode === 0 &&
+    (recorded === 'npm run typecheck' ||
+      recorded === 'npx tsc --noEmit' ||
+      recorded === 'tsc --noEmit')
+  );
+}
+
+export function bindEvidenceCommandToCandidate(
+  command: EvidenceCommandResult,
+  headCommit: string,
+  productTreeFingerprint: string
+): EvidenceCommandResult {
+  return {
+    ...command,
+    headCommit,
+    productTreeFingerprint,
+    outputHash: hashText(`${command.command ?? ''}\n${command.exitCode}\n${command.summary}`),
+  };
+}
+
+function commandBoundToCandidate(
+  command: EvidenceCommandResult,
+  headCommit: string,
+  productTreeFingerprint: string
+): boolean {
+  return (
+    command.headCommit === headCommit &&
+    command.productTreeFingerprint === productTreeFingerprint &&
+    typeof command.outputHash === 'string' &&
+    command.outputHash.length > 0
+  );
+}
+
+export function assertCandidateTypecheckLintEvidence(params: {
+  repoRoot: string;
+  baseCommit: string;
+  headCommit: string;
+  productTreeFingerprint: string;
+  commands: EvidenceCommandResult[];
+}): { ok: true } | { ok: false; message: string } {
+  const typecheck = params.commands.find((command) => command.name === 'typecheck');
+  if (!typecheck || !exactTypecheckCommand(typecheck)) {
+    return { ok: false, message: 'candidate typecheck evidence is missing or invalid' };
+  }
+  if (!commandBoundToCandidate(typecheck, params.headCommit, params.productTreeFingerprint)) {
+    return { ok: false, message: 'typecheck evidence is stale vs current HEAD/fingerprint' };
+  }
+  const oxlint = params.commands.find((command) => command.name === 'oxlint-changed');
+  const eslint = params.commands.find((command) => command.name === 'eslint-changed');
+  if (!oxlint || !eslint) {
+    return { ok: false, message: 'candidate lint evidence is missing; oxlint and eslint are required' };
+  }
+  if (
+    !commandBoundToCandidate(oxlint, params.headCommit, params.productTreeFingerprint) ||
+    !commandBoundToCandidate(eslint, params.headCommit, params.productTreeFingerprint)
+  ) {
+    return { ok: false, message: 'lint evidence is stale vs current HEAD/fingerprint' };
+  }
+  return assertManifestLintCoverage({
+    repoRoot: params.repoRoot,
+    baseCommit: params.baseCommit,
+    commands: params.commands,
+  });
+}
+
+function exactLintCommand(command: EvidenceCommandResult, kind: 'oxlint' | 'eslint'): boolean {
+  const expectedName = kind === 'oxlint' ? 'oxlint-changed' : 'eslint-changed';
+  const expectedPrefix = kind === 'oxlint' ? 'npx oxlint --' : 'npx eslint --';
+  if (command.name !== expectedName) return false;
+  if (typeof command.command !== 'string' || !command.command.startsWith(expectedPrefix)) {
+    return false;
+  }
+  if (command.status === 'skipped') {
+    return command.exitCode === null && command.summary === 'no changed lintable files';
+  }
+  return command.status === 'passed' && command.exitCode === 0;
+}
+
+function lintFilesClaimedByCommand(
+  command: EvidenceCommandResult,
+  kind: 'oxlint' | 'eslint'
+): string[] {
+  const prefix = kind === 'oxlint' ? 'npx oxlint --' : 'npx eslint --';
+  const fromFiles = (command.files ?? []).map((file) => file.replace(/\\/g, '/'));
+  const argv =
+    typeof command.command === 'string' && command.command.startsWith(prefix)
+      ? command.command
+          .slice(prefix.length)
+          .trim()
+          .split(/\s+/u)
+          .filter(Boolean)
+          .map((file) => file.replace(/\\/g, '/'))
+      : [];
+  return [...new Set([...fromFiles, ...argv])];
+}
+
+export function assertManifestLintCoverage(params: {
+  repoRoot: string;
+  baseCommit: string;
+  commands: EvidenceCommandResult[];
+}): { ok: true } | { ok: false; message: string } {
+  const oxlint = params.commands.find((command) => command.name === 'oxlint-changed');
+  const eslint = params.commands.find((command) => command.name === 'eslint-changed');
+  if (!oxlint && !eslint) {
+    return {
+      ok: false,
+      message: 'candidate lint evidence missing; oxlint and eslint are required',
+    };
+  }
+  if (!oxlint || !eslint) {
+    return {
+      ok: false,
+      message: 'changed-file lint claim is incomplete; both oxlint and eslint are required',
+    };
+  }
+  const listed = listCandidateDiffPaths(params.repoRoot, params.baseCommit);
+  if (!listed.ok) return listed;
+  const scoped = inspectCandidateGitScope(params.repoRoot, params.baseCommit);
+  if (!scoped.ok) return scoped;
+  const lintable = [
+    ...new Set([...listed.paths, ...scoped.scope.committed, ...scoped.scope.staged]),
+  ]
+    .filter((relative) => isLintableFile(relative))
+    .sort();
+  if (lintable.length === 0) {
+    if (!exactLintCommand(oxlint, 'oxlint') || !exactLintCommand(eslint, 'eslint')) {
+      return { ok: false, message: 'changed-file lint commands are invalid' };
+    }
+    return { ok: true };
+  }
+  if (
+    !exactLintCommand(oxlint, 'oxlint') ||
+    !exactLintCommand(eslint, 'eslint') ||
+    oxlint.status === 'skipped' ||
+    eslint.status === 'skipped'
+  ) {
+    return { ok: false, message: 'changed-file lint did not pass for the candidate diff' };
+  }
+  const oxlintFiles = new Set(lintFilesClaimedByCommand(oxlint, 'oxlint'));
+  const eslintFiles = new Set(lintFilesClaimedByCommand(eslint, 'eslint'));
+  if (
+    lintable.some((relative) => !oxlintFiles.has(relative) || !eslintFiles.has(relative))
+  ) {
+    return {
+      ok: false,
+      message: 'changed-file lint does not cover the complete lintable candidate diff',
+    };
+  }
+  return { ok: true };
+}
+
+function exactCommandProvenIds(commands: EvidenceCommandResult[], requiredIds: string[]): string[] {
+  const proven: string[] = [];
+  if (requiredIds.includes(EXACT_COMMAND_REQUIRED_TEST_IDS.TYPECHECK)) {
+    if (commands.some(exactTypecheckCommand)) {
+      proven.push(EXACT_COMMAND_REQUIRED_TEST_IDS.TYPECHECK);
+    }
+  }
+  if (requiredIds.includes(EXACT_COMMAND_REQUIRED_TEST_IDS.LINT)) {
+    const oxlint = commands.find((command) => command.name === 'oxlint-changed');
+    const eslint = commands.find((command) => command.name === 'eslint-changed');
+    if (
+      oxlint &&
+      eslint &&
+      exactLintCommand(oxlint, 'oxlint') &&
+      exactLintCommand(eslint, 'eslint')
+    ) {
+      proven.push(EXACT_COMMAND_REQUIRED_TEST_IDS.LINT);
+    }
+  }
+  return proven;
+}
+
+export function recomputeManifestProvenIds(params: {
+  repoRoot: string;
+  workstreamId: string;
+  parsed: Record<string, unknown>;
+  extraRequiredIds?: string[];
+}): { ok: true; executedIds: Set<string> } | { ok: false; message: string } {
+  type VerificationLedgerRecord =
+    import('./workflow-verification-ledger').VerificationLedgerRecord;
+
+  const productTree = computeWorkingTreeProductFingerprint(params.repoRoot);
+  if (typeof productTree === 'object') return { ok: false, message: productTree.error };
+  const tree = getCurrentTreeFingerprint(params.repoRoot);
+  if (
+    typeof params.parsed.productTreeFingerprint === 'string' &&
+    params.parsed.productTreeFingerprint !== productTree
+  ) {
+    return { ok: false, message: 'manifest productTreeFingerprint is stale vs current tree' };
+  }
+  const refs = Array.isArray(params.parsed.verificationLedgers)
+    ? params.parsed.verificationLedgers
+    : [];
+  const records: VerificationLedgerRecord[] = [];
+  for (const entry of refs) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, message: 'verification ledger reference is malformed' };
+    }
+    const row = entry as Record<string, unknown>;
+    if (typeof row.relativePath !== 'string' || typeof row.contentHash !== 'string') {
+      return { ok: false, message: 'verification ledger reference is incomplete' };
+    }
+    const validated = readAndValidateVerificationLedger({
+      repoRoot: params.repoRoot,
+      workstreamId: params.workstreamId,
+      relativePath: row.relativePath,
+      expectedFingerprint: productTree,
+      expectedHeadCommit: tree.headCommit,
+    });
+    if (!validated.ok) return validated;
+    if (validated.record.contentHash !== row.contentHash) {
+      return { ok: false, message: 'verification ledger reference hash mismatch' };
+    }
+    const eligible = verificationRunIsProofEligible({
+      record: validated.record,
+      reporterRaw: validated.reporterRaw,
+      expectedHeadCommit: tree.headCommit,
+      expectedFingerprint: productTree,
+    });
+    if (!eligible.ok) {
+      return {
+        ok: false,
+        message: `verification ledger is not proof-eligible: ${eligible.message}`,
+      };
+    }
+    records.push(validated.record);
+  }
+  const requiredIds = Array.isArray(params.parsed.requiredTests)
+    ? params.parsed.requiredTests
+        .map((entry) =>
+          entry && typeof entry === 'object' ? (entry as Record<string, unknown>).id : null
+        )
+        .filter((id): id is string => typeof id === 'string')
+    : [];
+  const closed = Array.isArray(params.parsed.closedBlockerIds)
+    ? params.parsed.closedBlockerIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const idsToProve = [
+    ...new Set([
+      ...requiredIds,
+      ...(params.extraRequiredIds ?? []),
+      ...closed.flatMap((id) => requiredTestIdsForBlocker(id)),
+    ]),
+  ];
+  const caseProof = provenVitestCaseIds({ records, requiredIds: idsToProve });
+  if (!caseProof.ok) return caseProof;
+  const executedIds = new Set(caseProof.provenIds);
+  const commands = Array.isArray(params.parsed.commands)
+    ? (params.parsed.commands as EvidenceCommandResult[])
+    : [];
+  for (const id of exactCommandProvenIds(commands, idsToProve)) executedIds.add(id);
+  if (requiredIds.includes(CANONICAL_SUITE_REQUIRED_TEST_ID)) {
+    const suiteRecord = records.find((record) => record.commandType === 'vitest_suite');
+    const suiteRef = refs.find(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        (entry as Record<string, unknown>).contentHash === suiteRecord?.contentHash
+    ) as Record<string, unknown> | undefined;
+    if (!suiteRecord || typeof suiteRef?.relativePath !== 'string') {
+      return { ok: false, message: 'canonical workflow suite ledger is missing' };
+    }
+    const reporter = readAndValidateVerificationLedger({
+      repoRoot: params.repoRoot,
+      workstreamId: params.workstreamId,
+      relativePath: suiteRef.relativePath,
+      expectedFingerprint: productTree,
+      expectedHeadCommit: tree.headCommit,
+    });
+    if (!reporter.ok) return reporter;
+    const parsedReporter = parseVitestJsonReporter(reporter.reporterRaw);
+    if (!parsedReporter.ok) return parsedReporter;
+    const suiteEligible = verificationRunIsProofEligible({
+      record: suiteRecord,
+      reporterRaw: reporter.reporterRaw,
+      expectedHeadCommit: tree.headCommit,
+      expectedFingerprint: productTree,
+    });
+    if (!suiteEligible.ok) return suiteEligible;
+    const suiteProof = proveCanonicalWorkflowSuite({
+      record: suiteRecord,
+      reporterSuccess: parsedReporter.success,
+    });
+    if (!suiteProof.ok) return suiteProof;
+    executedIds.add(CANONICAL_SUITE_REQUIRED_TEST_ID);
+  }
+  return { ok: true, executedIds };
 }

@@ -59,7 +59,7 @@ maintenance history, scheduling assignments, movements, checks, groups, or other
 dependencies. Follow `docs/guides/FLEET_INVENTORY_SAMPLE_DATA_RUNBOOK.md`. Never run apply or
 destructive cleanup without the exact confirmation token and explicit operator approval.
 
-## TEE V2.2 Workflow Enforcement
+## TEE V2.4 Workflow Enforcement
 
 FFTS enforces Token-Efficient Engineering V2.2 inside the repository. The global TEE skill remains outside Git and has a separate manual rollback path.
 
@@ -95,9 +95,9 @@ Model registry version: `ffts-tee-model-registry-v1`.
 - `lib/config/release-history.json`
 - `docs_private/release-log.md`
 
-The Markdown release log is the only tracked file under `docs_private/`. If release generation unexpectedly fails after the product commit, finalise blocks the push, preserves the local commit and generated files, and prints exact recovery commands.
+The Markdown release log is the only tracked file under `docs_private/`. If release generation unexpectedly fails after the product commit, finalise blocks the push, preserves the local commit and generated files, and prints exact recovery commands. Authorised `--push` uses the C9-validated full SHA to `origin` `refs/heads/main` (`<sha>:refs/heads/main`). It does not use bare `git push`, mutable `HEAD`, or ambient upstream configuration.
 
-Exact finalise checkpointing reuses prior passed steps only when content/command/environment/artifact fingerprints match. Protocol-managed CRITICAL runs bind `activeFinaliseContext` after `workflow-protocol finalise-start`. Valid `split` ancestors are parked historical records; only the active descendant/leaf owns remaining finalise obligation. Orphan/malformed splits still block. `finalise-start` requires current `HEAD` to match the reviewed `headCommit`; drifted HEAD must refresh via `workflow-protocol review-start --pass delta`. Inspect blockers with `npm run workflow-protocol -- status --blocking`. Ordinary runs use `docs_private/automation/finalise-cache/`. The 45-minute mtime skip path remains an explicit compatibility fallback only (`allowLegacyMtimeFallback`).
+Exact finalise checkpointing reuses prior passed steps only when content/command/environment/artifact fingerprints match. Protocol-managed CRITICAL runs bind `activeFinaliseContext` after `workflow-protocol finalise-start`. Valid `split` ancestors are parked historical records. The active descendant owns remaining work; after two failed premium rounds that remainder is routing, isolation, or proven removal from release — not another normal final-diff pass. Orphan/malformed splits still block. Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget. `finalise-start` requires current `HEAD` to match the reviewed `headCommit`; drifted HEAD must refresh via `workflow-protocol review-start --pass delta`. Inspect blockers with `npm run workflow-protocol -- status --blocking`. Ordinary runs use `docs_private/automation/finalise-cache/`. The 45-minute mtime skip path remains an explicit compatibility fallback only (`allowLegacyMtimeFallback`).
 
 `npm run finalise:repair` re-runs only a fresh allowlisted failed step (`build`, `test:run`, `testsuite`) from `docs_private/automation/finalise-last-failure.json`. Migrations, database validation, commit, push, stale, and unknown failures are refused. Successful repair writes `finalise-repair-complete.json` (awaiting closure) and blocks another repair until the original `npm run finalise` / `finalise:full` clears that gate. Open CRITICAL protocol workstreams that are not `finalise_ready` block mutating finalise; `--help` / `--dry-run` never apply finalise completion correlation.
 

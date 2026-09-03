@@ -12,6 +12,7 @@ import {
   resolvePlanPath,
   resolveRequiredTestIdsForWorkstream,
 } from './automation/workflow-plan-contract';
+import { resolveCanonicalReviewRequiredIds } from './automation/workflow-v24-required-id-set';
 
 function readFlag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -93,7 +94,9 @@ async function main(): Promise<void> {
     }
     const contract = extractPlanContractMarker(readFileSync(resolved.absolutePath, 'utf8'));
     if (contract.status === 'present' && contract.contract) {
-      requiredTestIds = resolveRequiredTestIdsForWorkstream(contract.contract, workstreamId);
+      requiredTestIds = resolveCanonicalReviewRequiredIds(
+        resolveRequiredTestIdsForWorkstream(contract.contract, workstreamId)
+      );
     }
   }
 

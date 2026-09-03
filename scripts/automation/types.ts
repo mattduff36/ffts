@@ -340,7 +340,99 @@ export type WorkflowProtocolPhase =
   | 'routing_required'
   | 'split'
   | 'finalise_ready'
-  | 'finalised';
+  | 'finalised'
+  | 'removed_from_release'
+  | 'reverted'
+  | 'superseded'
+  | 'rehomed';
+
+export type WorkflowRouteDispositionTarget =
+  | 'removed_from_release'
+  | 'reverted'
+  | 'superseded'
+  | 'rehomed';
+
+export type WorkflowRouteGitEvidenceKind =
+  | 'absent_from_release_range'
+  | 'full_revert'
+  | 'safe_supersede'
+  | 'isolated_successor';
+
+export interface WorkflowRouteGitEvidence {
+  kind: WorkflowRouteGitEvidenceKind;
+  baselineCommit: string;
+  releaseHeadCommit: string;
+  implementationCommits: string[];
+  revertCommit?: string;
+  supersedeCommit?: string;
+  successorBranch?: string;
+  successorBaseline?: string;
+  successorRepoCanonicalPath?: string;
+  predecessorHead?: string;
+  predecessorHeadIsAncestor?: boolean;
+  latestLegalReviewCandidateHead?: string;
+  canonVersion?: 'tee-v24-rehome-evidence-v2';
+  evidenceHash: string;
+}
+
+export interface WorkflowRouteDisposition {
+  schemaVersion: '1';
+  command: 'route';
+  recordedAt: string;
+  target: WorkflowRouteDispositionTarget;
+  reason: string;
+  gitEvidence: WorkflowRouteGitEvidence;
+}
+
+export type WorkflowRehomeProvenanceStatus = 'declared' | 'bound';
+
+export interface WorkflowRehomeProvenance {
+  schemaVersion: '1';
+  status: WorkflowRehomeProvenanceStatus;
+  predecessorRootWorkstreamId: string;
+  predecessorDescendantWorkstreamId: string;
+  predecessorHeadCommit: string;
+  predecessorReleaseContext: string;
+  successorBranchName: string;
+  successorBaselineCommit: string;
+  successorWorktreeCanonicalPath?: string;
+  sourcePatchSha256: string;
+  sourceProductTreeFingerprint: string;
+  sourceReleaseContext?: string;
+  sourceHeadCommit?: string;
+  sourceBaselineCommit?: string;
+  sourceReviewWorkstreamId?: string;
+  sourceImplementationCommits?: string[];
+  predecessorBranchResolvedSha?: string;
+  predecessorHeadIsAncestor: false;
+  predecessorPassedReview: false;
+  boundAt?: string;
+  evidence?: {
+    canonVersion: 'tee-v24-rehome-evidence-v2';
+    currentHead: string;
+    currentBranch: string;
+    successorBaseline: string;
+    successorBranchName?: string;
+    predecessorHead: string;
+    predecessorBranchResolvedSha: string;
+    predecessorRootWorkstreamId?: string;
+    predecessorDescendantWorkstreamId?: string;
+    sourceHeadCommit: string;
+    sourceBaselineCommit: string;
+    sourceBranchName?: string;
+    sourceReleaseContext?: string;
+    sourceReviewWorkstreamId?: string;
+    sourcePatchSha256: string;
+    sourceProductTreeFingerprint: string;
+    implementationCommits: string[];
+    latestLegalReviewCandidateHead?: string;
+    mergeBaseCheck: 'predecessor_head_not_ancestor';
+    isolationDecision?: 'predecessor_head_not_ancestor';
+    predecessorHeadIsAncestor?: false;
+    predecessorExhausted: true;
+    evidenceHash: string;
+  };
+}
 
 export type WorkflowProtocolReviewPass = 'first' | 'closure' | 'delta';
 
@@ -453,6 +545,7 @@ export interface WorkflowPlanContract {
   };
   reviewClosureProtocol?: WorkflowReviewClosureProtocol;
   storage?: WorkflowPlanStorage;
+  rehomeProvenance?: WorkflowRehomeProvenance;
 }
 
 export interface WorkflowFinding {
@@ -559,6 +652,7 @@ export interface WorkflowProtocolReviewAttempt {
   token: string;
   startedAt: string;
   headCommit?: string | null;
+  treeFingerprint?: string | null;
   result?: 'passed' | 'failed';
   blockerFamilies?: string[];
   blockerIds?: string[];
@@ -581,12 +675,15 @@ export interface WorkflowProtocolRecord {
   activeReviewToken: string | null;
   activeReviewPass: WorkflowProtocolReviewPass | null;
   reviewAttempts: WorkflowProtocolReviewAttempt[];
+  reviewedTreeFingerprint?: string | null;
   blockerFamilies: string[];
   openBlockerIds: string[];
   evidenceManifestPath: string | null;
   fixDeltaManifestPath: string | null;
   activeCheckpointId: string | null;
   planPath: string | null;
+  rehomeProvenance?: WorkflowRehomeProvenance | null;
+  routeDisposition?: WorkflowRouteDisposition | null;
   updatedAt: string;
 }
 
@@ -594,6 +691,10 @@ export interface WorkflowActiveFinaliseContext {
   workstreamId: string;
   checkpointId: string;
   activatedAt: string;
+  activatedHeadCommit?: string | null;
+  activatedBranchName?: string | null;
+  activatedTreeFingerprint?: string | null;
+  ownedCommits?: string[];
 }
 
 export interface WorkflowReviewState {

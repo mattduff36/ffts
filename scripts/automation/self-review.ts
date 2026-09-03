@@ -18,20 +18,31 @@ import type {
 
 const RECENT_RUN_LIMIT = 20;
 
+function isAutomationRunLog(value: unknown): value is AutomationRunLog {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Partial<AutomationRunLog>;
+  return (
+    typeof row.id === 'string' &&
+    typeof row.scriptName === 'string' &&
+    typeof row.startedAt === 'string' &&
+    Array.isArray(row.steps)
+  );
+}
+
 function readRunLogs(runDirectory: string): AutomationRunLog[] {
   if (!existsSync(runDirectory)) return [];
 
   return readdirSync(runDirectory)
-    .filter((fileName) => fileName.endsWith('.json'))
+    .filter((fileName) => fileName.endsWith('.json') && !fileName.endsWith('.c9-identity.json'))
     .map((fileName) => path.join(runDirectory, fileName))
     .map((filePath) => {
       try {
-        return JSON.parse(readFileSync(filePath, 'utf8')) as AutomationRunLog;
+        return JSON.parse(readFileSync(filePath, 'utf8')) as unknown;
       } catch {
         return null;
       }
     })
-    .filter((log): log is AutomationRunLog => log !== null)
+    .filter(isAutomationRunLog)
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 

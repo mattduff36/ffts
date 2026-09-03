@@ -16,17 +16,30 @@ import {
 } from './workflow-plan-contract';
 import {
   getWorkflowPaths,
-  loadWorkflowReviewState,
+  loadWorkflowReviewStateStrict,
   upsertWorkstreamRecord,
 } from './workflow-events';
 import {
   applyFinaliseProtocolOutcome,
   getActiveFinaliseContext,
   getProtocolRecordPath,
+  hasIncompleteFinalisePassedCommit,
   isWorkflowProtocolRecord,
   readProtocolRecord,
   resolveProtocolPlanAbsolutePath,
+  reviewAuthorizesProtectedFinalise,
 } from './workflow-review-protocol';
+import {
+  latestLegalFinalDiffAttempt,
+  validateCurrentV24ProtocolRecord,
+} from './workflow-v24-protocol-validator';
+import {
+  inspectCommitAncestry,
+  isNonReleaseDispositionPhase,
+  lineageBudgetExhausted,
+  revalidateRouteDisposition,
+} from './workflow-v24-disposition';
+import { lastOwnedCommit, readWorkflowGitBinding } from './workflow-git-binding';
 
 function runGit(repoRoot: string, args: string[]): string | null {
   const result = spawnSync('git', args, {
@@ -43,18 +56,15 @@ export function isGitAncestor(params: {
   ancestorCommit: string;
   descendantCommit: string;
 }): boolean {
-  if (!params.ancestorCommit || !params.descendantCommit) return false;
-  if (params.ancestorCommit === params.descendantCommit) return true;
-  const result = spawnSync(
-    'git',
-    ['merge-base', '--is-ancestor', params.ancestorCommit, params.descendantCommit],
-    {
-      cwd: params.repoRoot,
-      encoding: 'utf8',
-      shell: false,
-    }
+  const inspection = inspectCommitAncestry(
+    params.repoRoot,
+    params.ancestorCommit,
+    params.descendantCommit
   );
-  return result.status === 0;
+  if (inspection.status === 'error') {
+    throw new Error(inspection.message);
+  }
+  return inspection.status === 'ancestor';
 }
 
 function resolveProtocolRecord(
@@ -70,19 +80,33 @@ function resolveProtocolRecord(
 
 /** Discover protocol.json records on disk even when state.protocolRecords is partial. */
 export function listDiskProtocolWorkstreamIds(repoRoot: string): string[] {
+  return listDiskProtocolInventory(repoRoot).safeWorkstreamIds;
+}
+
+export function listDiskProtocolInventory(repoRoot: string): {
+  safeWorkstreamIds: string[];
+  unsafeDirectoryNames: string[];
+} {
   const root = path.join(repoRoot, 'docs_private', 'automation', 'workstreams');
-  if (!existsSync(root)) return [];
-  const ids: string[] = [];
+  if (!existsSync(root)) return { safeWorkstreamIds: [], unsafeDirectoryNames: [] };
+  const safeWorkstreamIds: string[] = [];
+  const unsafeDirectoryNames: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const safe = assertSafeOpaqueId(entry.name, 'workstreamId');
-    if (!safe.ok) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const directory = path.join(root, entry.name);
-    if (pathHasSymlinkComponent(directory)) continue;
+    if (pathHasSymlinkComponent(directory) || entry.isSymbolicLink()) {
+      unsafeDirectoryNames.push(entry.name);
+      continue;
+    }
+    const safe = assertSafeOpaqueId(entry.name, 'workstreamId');
+    if (!safe.ok) {
+      unsafeDirectoryNames.push(entry.name);
+      continue;
+    }
     if (!existsSync(path.join(directory, 'protocol.json'))) continue;
-    ids.push(safe.value);
+    safeWorkstreamIds.push(safe.value);
   }
-  return ids;
+  return { safeWorkstreamIds, unsafeDirectoryNames };
 }
 
 function collectProtocolWorkstreamIds(
@@ -140,6 +164,8 @@ export type WorkflowProtocolLineageRole =
   | 'orphan_split'
   | 'finalised'
   | 'non_critical'
+  | 'other_branch'
+  | 'non_release_disposition'
   | 'malformed';
 
 export interface WorkflowProtocolHeadDrift {
@@ -244,6 +270,28 @@ function protocolCommand(workstreamId: string, command: string, extra = ''): str
   return `npx tsx scripts/workflow-protocol.ts ${command} --workstream ${workstreamId}${extra}`;
 }
 
+function protocolDiskStateDiverges(
+  disk: WorkflowProtocolRecord,
+  fromState: WorkflowProtocolRecord
+): boolean {
+  return (
+    JSON.stringify({
+      phase: disk.phase,
+      headCommit: disk.headCommit,
+      activeCheckpointId: disk.activeCheckpointId,
+      nextAction: disk.nextAction,
+      sourceWorkstreamIds: [...(disk.sourceWorkstreamIds ?? [])].sort(),
+    }) !==
+    JSON.stringify({
+      phase: fromState.phase,
+      headCommit: fromState.headCommit,
+      activeCheckpointId: fromState.activeCheckpointId,
+      nextAction: fromState.nextAction,
+      sourceWorkstreamIds: [...(fromState.sourceWorkstreamIds ?? [])].sort(),
+    })
+  );
+}
+
 function loadGatedProtocol(
   repoRoot: string,
   state: WorkflowReviewState,
@@ -252,21 +300,37 @@ function loadGatedProtocol(
   | { status: 'missing' }
   | { status: 'unreadable' }
   | { status: 'malformed' }
+  | { status: 'divergence'; protocol: WorkflowProtocolRecord }
   | { status: 'ok'; protocol: WorkflowProtocolRecord } {
   const diskPath = getProtocolRecordPath(repoRoot, workstreamId);
+  const fromState = state.protocolRecords?.[workstreamId];
   if (existsSync(diskPath)) {
     try {
       const parsed = JSON.parse(readFileSync(diskPath, 'utf8')) as unknown;
       if (!isWorkflowProtocolRecord(parsed)) return { status: 'malformed' };
+      if (
+        parsed.phase === 'review_closed' ||
+        parsed.phase === 'finalise_ready' ||
+        parsed.phase === 'finalised'
+      ) {
+        if (!validateCurrentV24ProtocolRecord(parsed).ok) return { status: 'malformed' };
+      }
+      if (
+        fromState &&
+        isWorkflowProtocolRecord(fromState) &&
+        protocolDiskStateDiverges(parsed, fromState)
+      ) {
+        return { status: 'divergence', protocol: parsed };
+      }
       return { status: 'ok', protocol: parsed };
     } catch {
       return { status: 'unreadable' };
     }
   }
-  const fromState = state.protocolRecords?.[workstreamId];
   if (fromState && isWorkflowProtocolRecord(fromState)) {
-    return { status: 'ok', protocol: fromState };
+    return { status: 'divergence', protocol: fromState };
   }
+  if (fromState) return { status: 'malformed' };
   return { status: 'missing' };
 }
 
@@ -325,8 +389,10 @@ function makeBlocker(params: {
  */
 export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinaliseProtocolReadiness {
   const paths = getWorkflowPaths(repoRoot);
-  const state = loadWorkflowReviewState(paths.statePath);
-  const currentHead = runGit(repoRoot, ['rev-parse', 'HEAD']);
+  const state = loadWorkflowReviewStateStrict(paths.statePath);
+  const git = readWorkflowGitBinding(repoRoot);
+  const currentHead = git.headCommit;
+  const currentBranch = git.branchName;
   const active = getActiveFinaliseContext(state);
   const lineages: WorkflowProtocolReadinessBlocker[] = [];
   const blockingWorkstreams: WorkflowProtocolReadinessBlocker[] = [];
@@ -337,12 +403,16 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
   const loaded: Array<{
     workstreamId: string;
     protocol: WorkflowProtocolRecord | null;
-    loadStatus: 'ok' | 'missing' | 'unreadable' | 'malformed';
+    loadStatus: 'ok' | 'missing' | 'unreadable' | 'malformed' | 'divergence';
   }> = [];
   for (const workstreamId of collectProtocolWorkstreamIds(repoRoot, state)) {
     const loadedRecord = loadGatedProtocol(repoRoot, state, workstreamId);
-    if (loadedRecord.status === 'ok') {
-      loaded.push({ workstreamId, protocol: loadedRecord.protocol, loadStatus: 'ok' });
+    if (loadedRecord.status === 'ok' || loadedRecord.status === 'divergence') {
+      loaded.push({
+        workstreamId,
+        protocol: loadedRecord.protocol,
+        loadStatus: loadedRecord.status,
+      });
     } else {
       loaded.push({
         workstreamId,
@@ -363,6 +433,41 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
     blockingWorkstreams.push(blocker);
     suggestedActions.push(...blocker.suggestedCommands);
   };
+
+  const inventory = listDiskProtocolInventory(repoRoot);
+  for (const name of inventory.unsafeDirectoryNames) {
+    pushBlocker(
+      makeBlocker({
+        workstreamId: name,
+        role: 'malformed',
+        phase: 'unknown',
+        message: `protocol directory ${name} is unsafe or malformed; refuse finalise`,
+      })
+    );
+  }
+
+  if (existsSync(path.join(repoRoot, '.git')) && (git.detached || !currentBranch)) {
+    pushBlocker(
+      makeBlocker({
+        workstreamId: 'git-binding',
+        role: 'malformed',
+        phase: 'unknown',
+        message: 'HEAD is detached or the current branch is missing; refuse finalise',
+      })
+    );
+  }
+
+  if (hasIncompleteFinalisePassedCommit(repoRoot)) {
+    pushBlocker(
+      makeBlocker({
+        workstreamId: 'finalise-passed-commit',
+        role: 'malformed',
+        phase: 'unknown',
+        message:
+          'incomplete protected finalise passed commit; refuse finalise until the pending transaction is recovered',
+      })
+    );
+  }
 
   if (active) {
     const protocol = byId.get(active.workstreamId);
@@ -408,6 +513,19 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       );
       continue;
     }
+    if (row.loadStatus === 'divergence') {
+      pushBlocker(
+        makeBlocker({
+          workstreamId: row.workstreamId,
+          role: 'malformed',
+          phase: row.protocol?.phase ?? 'unknown',
+          message: `protocol record for ${row.workstreamId} diverges from workflow review state; refuse finalise`,
+          protocol: row.protocol,
+          byId,
+        })
+      );
+      continue;
+    }
     const protocol = row.protocol;
     if (!protocol) continue;
 
@@ -415,7 +533,56 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       byId.has(id)
     );
 
+    if (isNonReleaseDispositionPhase(protocol.phase)) {
+      const disposition = revalidateRouteDisposition({ repoRoot, record: protocol });
+      if (!disposition.ok) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'malformed',
+            phase: protocol.phase,
+            message: `non-release disposition for ${protocol.workstreamId} failed Git evidence revalidation: ${disposition.message}`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      lineages.push(
+        makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'non_release_disposition',
+          phase: protocol.phase,
+          message: `workstream ${protocol.workstreamId} is routed as ${protocol.phase}; not approval and not independently finalised`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+        })
+      );
+      continue;
+    }
+
+    const parentId = immediateParentId(protocol);
+    if (parentId && !byId.has(parentId)) {
+      pushBlocker(
+        makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'malformed',
+          phase: protocol.phase,
+          message: `CRITICAL workstream ${protocol.workstreamId} has dangling parent ${parentId}; protocol integrity error`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+        })
+      );
+      continue;
+    }
+
     if (protocol.phase === 'finalised') {
+      if (hasIncompleteFinalisePassedCommit(repoRoot)) {
+        continue;
+      }
       lineages.push(
         makeBlocker({
           workstreamId: protocol.workstreamId,
@@ -452,6 +619,20 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
             role: 'orphan_split',
             phase: protocol.phase,
             message: `CRITICAL workstream ${protocol.workstreamId} is in phase split with no valid child continuation (orphan split); protocol integrity error`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      if (childWorkstreamIds.length > 1) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'orphan_split',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} is in phase split with ambiguous children ${childWorkstreamIds.join(', ')}; protocol integrity error`,
             protocol,
             byId,
             childWorkstreamIds,
@@ -515,6 +696,42 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       continue;
     }
 
+    if (protocol.phase === 'routing_required' || lineageBudgetExhausted(protocol)) {
+      pushBlocker(
+        makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'active_leaf',
+          phase: protocol.phase,
+          message: `CRITICAL workstream ${protocol.workstreamId} has exhausted its lineage premium review budget (phase ${protocol.phase}); route, isolate, or prove removal from release`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+          suggestedCommands: [
+            protocolCommand(protocol.workstreamId, 'route', ' --disposition <target> --reason <text>'),
+          ],
+        })
+      );
+      continue;
+    }
+
+    const boundToOtherBranch = Boolean(
+      protocol.branchName && currentBranch && protocol.branchName !== currentBranch
+    );
+    if (boundToOtherBranch && active?.workstreamId !== protocol.workstreamId) {
+      lineages.push(
+        makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'other_branch',
+          phase: protocol.phase,
+          message: `workstream ${protocol.workstreamId} is bound to branch ${protocol.branchName}; current branch is ${currentBranch}`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+        })
+      );
+      continue;
+    }
+
     if (protocol.phase === 'finalise_ready') {
       const contextMatches = Boolean(
         active &&
@@ -535,6 +752,35 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
             suggestedCommands: [
               protocolCommand(protocol.workstreamId, 'finalise-start'),
             ],
+          })
+        );
+        continue;
+      }
+      const latestLegal = latestLegalFinalDiffAttempt(protocol);
+      if (!latestLegal.ok) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'malformed',
+            phase: protocol.phase,
+            message: `protocol record for ${protocol.workstreamId} has malformed legal final-diff ordering; refuse finalise`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      if (!reviewAuthorizesProtectedFinalise(protocol)) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'active_leaf',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} latest legal premium final-diff attempt does not authorize protected finalise`,
+            protocol,
+            byId,
+            childWorkstreamIds,
           })
         );
         continue;
@@ -705,7 +951,9 @@ function explicitContextIsValid(
   repoRoot: string,
   state: WorkflowReviewState,
   workstreamId: string,
-  checkpointId: string
+  checkpointId: string,
+  branchName: string,
+  headCommit: string
 ): { ok: true; protocol: WorkflowProtocolRecord } | { ok: false; reason: string } {
   const protocol = resolveProtocolRecord(repoRoot, state, workstreamId);
   if (!protocol) {
@@ -716,6 +964,38 @@ function explicitContextIsValid(
   }
   if (protocol.activeCheckpointId !== checkpointId) {
     return { ok: false, reason: 'checkpoint-mismatch' };
+  }
+  const active = getActiveFinaliseContext(state);
+  if (!active || active.workstreamId !== workstreamId || active.checkpointId !== checkpointId) {
+    return { ok: false, reason: 'active-context-mismatch' };
+  }
+  if (!branchName || branchName === 'unknown' || branchName === 'HEAD') {
+    return { ok: false, reason: 'missing-branch' };
+  }
+  if (!headCommit) {
+    return { ok: false, reason: 'missing-head' };
+  }
+  if (protocol.branchName && protocol.branchName !== branchName) {
+    return { ok: false, reason: 'branch-mismatch' };
+  }
+  if (!active.activatedHeadCommit) {
+    return { ok: false, reason: 'missing-activated-head' };
+  }
+  if (active.activatedBranchName && active.activatedBranchName !== branchName) {
+    return { ok: false, reason: 'activated-branch-mismatch' };
+  }
+  const expectedHead = lastOwnedCommit(active.ownedCommits, active.activatedHeadCommit);
+  if (!expectedHead || headCommit !== expectedHead) {
+    return { ok: false, reason: 'owned-head-mismatch' };
+  }
+  if (existsSync(path.join(repoRoot, '.git'))) {
+    const git = readWorkflowGitBinding(repoRoot);
+    if (git.detached || !git.branchName || !git.headCommit) {
+      return { ok: false, reason: 'git-binding' };
+    }
+    if (git.branchName !== branchName || git.headCommit !== headCommit) {
+      return { ok: false, reason: 'live-git-mismatch' };
+    }
   }
   return { ok: true, protocol };
 }
@@ -735,7 +1015,9 @@ export function resolveFinaliseWorkstreamMatches(params: {
       params.repoRoot,
       params.state,
       active.workstreamId,
-      active.checkpointId
+      active.checkpointId,
+      params.branchName,
+      params.headCommit
     );
     if (!validity.ok) {
       return {

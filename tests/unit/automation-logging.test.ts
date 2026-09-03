@@ -168,7 +168,7 @@ describe('automation logging helpers', () => {
         runId: 'run-log-corr',
         repoRoot,
       })
-    ).toThrow(/lock-or-state-failure/i);
+    ).toThrow(/cannot persist independently|use AutomationRun\.finish after C9/i);
 
     expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(true);
     expect(

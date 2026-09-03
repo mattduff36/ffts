@@ -6,6 +6,12 @@ import pg from 'pg';
 import { parseCommitsFromMessages, selectPrimaryCommitMessage } from '../lib/config/release-version-logic';
 import { AutomationRun } from './automation/logger';
 import {
+  buildExplicitProtectedPushArgv,
+  FFTS_PROTECTED_PUSH_DESTINATION_REF,
+  FFTS_PROTECTED_PUSH_REMOTE,
+  type ProtectedC9PushAuthorization,
+} from './automation/workflow-c9-run-identity';
+import {
   type FinaliseModeKey,
   createOrLoadFinaliseCheckpoint,
   markOrdinaryFinaliseStep,
@@ -18,6 +24,10 @@ import {
   writeFinaliseFailureArtifact,
 } from './automation/finalise-failure';
 import { assertFinaliseAllowedForProtocol, formatFinaliseProtocolReadinessReport, getFinaliseProtocolReadiness } from './automation/workflow-finalise-correlation';
+import {
+  assertFinaliseProductCommitAllowed,
+  recordFinaliseOwnedCommit,
+} from './automation/workflow-review-protocol';
 import { checkFinaliseBlockingActivity, formatBlockingActivity } from './finalise-activity-guard';
 import {
   getSkippableFinaliseTasks,
@@ -903,24 +913,17 @@ function commitAllChanges(commitMessage: string): boolean {
   return true;
 }
 
-function pushCurrentBranch(): string {
-  const branch = getCurrentBranch();
-  if (!branch) {
-    throw new Error('Cannot push from a detached HEAD state');
-  }
-
-  const upstream = runCommand('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], {
+function pushAuthorizedC9Ref(authorization: ProtectedC9PushAuthorization): string {
+  const argv = buildExplicitProtectedPushArgv(authorization);
+  runCommand('git', argv);
+  const remote = runCommand('git', ['ls-remote', authorization.remoteName, authorization.destinationRef], {
     captureOutput: true,
-    allowFailure: true,
   });
-
-  if (upstream.status === 0 && upstream.stdout.trim().length > 0) {
-    runCommand('git', ['push']);
-    return branch;
+  const remoteSha = (remote.stdout.trim().split(/\s+/u)[0] ?? '').toLowerCase();
+  if (remoteSha !== authorization.sourceCommit.toLowerCase()) {
+    throw new Error('post-push remote SHA does not match authorised source commit; refuse to treat push as successful');
   }
-
-  runCommand('git', ['push', '-u', 'origin', 'HEAD']);
-  return branch;
+  return `${authorization.remoteName} ${authorization.destinationRef}`;
 }
 
 function printHelp(): void {
@@ -957,28 +960,21 @@ function assertNoBlockingCursorActivity(): void {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const finaliseMode = getFinaliseModeKey(options);
+
+  if (options.help) {
+    printHelp();
+    return;
+  }
+
   const run = new AutomationRun({
     scriptName: 'finalise',
     mode: getPushModeDescription(options),
     args: process.argv.slice(2),
+    persist: !options.dryRun,
   });
   automationRun = run;
 
-  const activeProtocolContext = resolveActiveProtocolFinaliseContext(REPO_ROOT);
-  if (activeProtocolContext) {
-    createOrLoadFinaliseCheckpoint({
-      repoRoot: REPO_ROOT,
-      workstreamId: activeProtocolContext.workstreamId,
-      checkpointId: activeProtocolContext.checkpointId,
-    });
-  }
-
   try {
-    if (options.help) {
-      printHelp();
-      await run.finish('passed');
-      return;
-    }
 
     await run.step('Check for blocking Cursor activity', () => assertNoBlockingCursorActivity());
 
@@ -1072,12 +1068,21 @@ async function main(): Promise<void> {
         }`
       );
       console.log('Release version: would update locally before push if a bump is due');
-      console.log(`Push: ${options.push ? 'would push current branch' : 'skipped'}`);
+      console.log(`Push: ${options.push ? `would push the authorised SHA to ${FFTS_PROTECTED_PUSH_REMOTE} ${FFTS_PROTECTED_PUSH_DESTINATION_REF}` : 'skipped'}`);
       if (!protocolReadiness.allowed) {
         throw new Error(formatFinaliseProtocolReadinessReport(protocolReadiness));
       }
       await run.finish('passed');
       return;
+    }
+
+    const activeProtocolContext = resolveActiveProtocolFinaliseContext(REPO_ROOT);
+    if (activeProtocolContext) {
+      createOrLoadFinaliseCheckpoint({
+        repoRoot: REPO_ROOT,
+        workstreamId: activeProtocolContext.workstreamId,
+        checkpointId: activeProtocolContext.checkpointId,
+      });
     }
 
     console.log(`Starting finalise workflow (${getPushModeDescription(options)})`);
@@ -1258,7 +1263,17 @@ async function main(): Promise<void> {
     console.log('\n==> Commit workspace changes');
     printProgress('Committing workspace changes if needed...', 90);
     const committed = await timeFinaliseStep(timingEntries, 'Commit workspace changes', () =>
-      run.step('Commit workspace changes', () => commitAllChanges(changeSummary.commitMessage), {
+      run.step('Commit workspace changes', () => {
+        assertFinaliseProductCommitAllowed(REPO_ROOT);
+        const didCommit = commitAllChanges(changeSummary.commitMessage);
+        if (didCommit) {
+          const owned = recordFinaliseOwnedCommit(REPO_ROOT);
+          if (!owned.ok) {
+            throw new Error(owned.message);
+          }
+        }
+        return didCommit;
+      }, {
         plannedCommitMessage: changeSummary.commitMessage,
       })
     );
@@ -1279,8 +1294,15 @@ async function main(): Promise<void> {
     try {
       releaseVersion = await timeFinaliseStep(timingEntries, 'Bump release version locally', () =>
         run.step('Create release version commit', () => {
+          assertFinaliseProductCommitAllowed(REPO_ROOT);
           runCommand('npm', ['run', 'version:bump', '--', releaseBeforeSha, releaseAfterSha]);
           const version = commitReleaseVersionChanges(releasePrimaryCommitMessage);
+          if (version) {
+            const owned = recordFinaliseOwnedCommit(REPO_ROOT);
+            if (!owned.ok) {
+              throw new Error(owned.message);
+            }
+          }
           assertReleaseMetadataConsistency(REPO_ROOT);
           return version;
         }, {
@@ -1306,18 +1328,27 @@ async function main(): Promise<void> {
       95
     );
 
-    let pushedBranch: string | null = null;
+    let pushedRef: string | null = null;
     if (options.push) {
-      console.log('\n==> Push current branch');
-      printProgress(`Pushing branch ${branch || '(detached HEAD)'}...`, 97);
-      pushedBranch = await timeFinaliseStep(timingEntries, 'Push current branch', () =>
-        run.step('Push current branch', () => pushCurrentBranch(), {
-          branch: branch || null,
+      const authorization = run.assertC9BeforeRemoteMutation();
+      if (!authorization) {
+        throw new Error('protected C9 push authorization is missing; refuse remote mutation');
+      }
+      console.log('\n==> Push authorised SHA to origin/main');
+      printProgress(`Pushing ${authorization.sourceCommit} to ${FFTS_PROTECTED_PUSH_REMOTE} ${FFTS_PROTECTED_PUSH_DESTINATION_REF}...`, 97);
+      pushedRef = await timeFinaliseStep(timingEntries, 'Push authorised SHA to origin/main', () =>
+        run.step('Push authorised SHA to origin/main', () => {
+          run.assertAuthorizedC9PushStillValid(authorization);
+          return pushAuthorizedC9Ref(authorization);
+        }, {
+          sourceCommit: authorization.sourceCommit,
+          remoteName: authorization.remoteName,
+          destinationRef: authorization.destinationRef,
         })
       );
-      printProgress(`Pushed ${pushedBranch}.`, 99);
+      printProgress(`Pushed ${pushedRef}.`, 99);
     } else {
-      console.log('\n==> Push current branch');
+      console.log('\n==> Push authorised SHA to origin/main');
       printProgress('Skipped for non-push finalise.', 99);
     }
 
@@ -1336,7 +1367,7 @@ async function main(): Promise<void> {
     );
     console.log(`- Commit: ${committed ? 'created' : 'skipped'}`);
     console.log(`- Release version: ${releaseVersion ? `bumped to ${releaseVersion}` : 'unchanged'}`);
-    console.log(`- Push: ${pushedBranch ? `pushed ${pushedBranch}` : 'skipped'}`);
+    console.log(`- Push: ${pushedRef ? `pushed ${pushedRef}` : 'skipped'}`);
     run.recordStep({
       name: 'Record finalise outcomes',
       status: 'passed',
@@ -1348,8 +1379,9 @@ async function main(): Promise<void> {
         productCommitSha,
         releaseCommit: releaseVersion ? 'created' : 'skipped',
         releaseVersion,
-        push: pushedBranch ? 'completed' : options.push ? 'failed' : 'skipped',
-        pushedBranch,
+        push: pushedRef ? 'completed' : options.push ? 'failed' : 'skipped',
+        pushedRef,
+        destinationRef: FFTS_PROTECTED_PUSH_DESTINATION_REF,
       },
     });
     console.log('\n==> Timing summary');

@@ -99,7 +99,7 @@ export function buildWorkflowFindings(params: {
         'action',
         'failed',
         'Premium review budget exhausted',
-        'Second failed premium review requires premium-fix-routing or an explicit workstream split. Further review-start transitions are rejected.',
+        'Second failed premium review exhausts the lineage-scoped budget. Route, isolate, remove, revert, or evidence-backed supersede. Routing or split does not reset this budget. Do not launch a third premium review for the same CRITICAL continuation.',
         [
           `protocolPhase:${protocolPhase ?? 'unknown'}`,
           `failedPremiumReviewCount:${failedPremiumReviewCount ?? 'unknown'}`,

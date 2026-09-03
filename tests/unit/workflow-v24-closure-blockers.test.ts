@@ -284,6 +284,92 @@ describe('closure required-ID and review-readiness blockers', () => {
           ],
         },
       ],
+      [
+        'pass token mismatch',
+        {
+          ...valid,
+          phase: 'review_closed',
+          nextAction: 'finalise_start',
+          headCommit: head,
+          reviewedTreeFingerprint: 'e'.repeat(32),
+          reviewAttempts: [
+            {
+              pass: 'first',
+              token: 'rev_closure_fffff',
+              startedAt: valid.updatedAt,
+              recordedAt: valid.updatedAt,
+              result: 'passed',
+              headCommit: head,
+              treeFingerprint: 'e'.repeat(32),
+            },
+          ],
+        },
+      ],
+      [
+        'duplicate review tokens',
+        {
+          ...valid,
+          phase: 'review_closed',
+          nextAction: 'finalise_start',
+          failedPremiumReviewCount: 1,
+          headCommit: head,
+          reviewedTreeFingerprint: 'f'.repeat(32),
+          reviewAttempts: [
+            {
+              pass: 'first',
+              token: 'rev_first_shared',
+              startedAt: valid.updatedAt,
+              recordedAt: valid.updatedAt,
+              result: 'failed',
+              blockerFamilies: ['x'],
+              blockerIds: ['y'],
+              siblingSurfaces: ['z'],
+              headCommit: head,
+              treeFingerprint: 'f'.repeat(32),
+            },
+            {
+              pass: 'closure',
+              token: 'rev_first_shared',
+              startedAt: valid.updatedAt,
+              recordedAt: valid.updatedAt,
+              result: 'passed',
+              headCommit: head,
+              treeFingerprint: 'f'.repeat(32),
+            },
+          ],
+        },
+      ],
+      [
+        'inherited exhaustion with duplicate first',
+        {
+          ...valid,
+          phase: 'routing_required',
+          nextAction: 'route_or_isolate',
+          failedPremiumReviewCount: 2,
+          inheritedFailedReviewCount: 2,
+          reviewAttempts: [
+            {
+              pass: 'first',
+              token: 'rev_first_gggg',
+              startedAt: valid.updatedAt,
+              recordedAt: valid.updatedAt,
+              result: 'failed',
+              blockerFamilies: ['x'],
+              blockerIds: ['y'],
+              siblingSurfaces: ['z'],
+            },
+            {
+              pass: 'first',
+              token: 'rev_first_hhhh',
+              startedAt: valid.updatedAt,
+              recordedAt: valid.updatedAt,
+              result: 'passed',
+              headCommit: head,
+              treeFingerprint: 'g'.repeat(32),
+            },
+          ],
+        },
+      ],
     ];
 
     for (const [label, mutated] of mutations) {

@@ -18,6 +18,12 @@ const COMMIT_RE = /^[0-9a-f]{7,64}$/iu;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,120}$/u;
 const TOKEN_RE = /^rev_(first|closure|delta)_[A-Za-z0-9_-]{1,80}$/u;
 const REVIEW_PASSES = new Set<WorkflowProtocolReviewPass>(['first', 'closure', 'delta']);
+
+function tokenDeclaresPass(token: string, pass: WorkflowProtocolReviewPass): boolean {
+  const match = /^rev_(first|closure|delta)_/u.exec(token);
+  return match?.[1] === pass;
+}
+
 const ACTIVE_REVIEW_PHASES = new Set<WorkflowProtocolPhase>([
   'first_review',
   'closure_review',
@@ -84,6 +90,9 @@ function validateAttemptStructure(
   }
   if (typeof attempt.token !== 'string' || !TOKEN_RE.test(attempt.token)) {
     return { ok: false, message: `reviewAttempts[${index}].token is invalid` };
+  }
+  if (!tokenDeclaresPass(attempt.token, attempt.pass as WorkflowProtocolReviewPass)) {
+    return { ok: false, message: `reviewAttempts[${index}].token does not match pass` };
   }
   if (!isIsoTimestamp(attempt.startedAt)) {
     return { ok: false, message: `reviewAttempts[${index}].startedAt is invalid` };
@@ -267,25 +276,35 @@ export type LatestLegalFinalDiffAttemptResult =
  * Considers `first`, then `closure` only if legally used.
  * Architecture, economical challenge, fix-delta, route, split, historical
  * non-final-diff attempts, and illegal extra first/closure rows are not
- * current premium final-diff authority. Duplicate or impossible ordering
- * fails closed.
+ * current premium final-diff authority. Duplicate tokens, pass/token
+ * mismatches, or impossible ordering fail closed.
+ * Inherited exhaustion (≥2) yields no current authority after the local
+ * first/closure list is proven well-formed. It does not skip that proof.
  */
 export function latestLegalFinalDiffAttempt(
   record: Pick<WorkflowProtocolRecord, 'reviewAttempts' | 'inheritedFailedReviewCount'>
 ): LatestLegalFinalDiffAttemptResult {
   const inherited = record.inheritedFailedReviewCount;
-  if (inherited >= 2) {
-    return { ok: true, attempt: null };
-  }
-
+  const seenTokens = new Set<string>();
   let first: WorkflowProtocolReviewAttempt | undefined;
   let closure: WorkflowProtocolReviewAttempt | undefined;
   let firstIndex = -1;
   let closureIndex = -1;
 
   for (const [index, attempt] of record.reviewAttempts.entries()) {
+    if (seenTokens.has(attempt.token)) {
+      return { ok: false, message: 'duplicate review token' };
+    }
+    seenTokens.add(attempt.token);
+    if (!tokenDeclaresPass(attempt.token, attempt.pass)) {
+      return { ok: false, message: 'review token does not match pass' };
+    }
+
     if (attempt.pass === 'first') {
-      if (inherited >= 1 || first || closure) {
+      if (first || closure) {
+        return { ok: false, message: 'impossible first/closure attempt ordering' };
+      }
+      if (inherited === 1) {
         return { ok: false, message: 'impossible first/closure attempt ordering' };
       }
       first = attempt;
@@ -309,6 +328,10 @@ export function latestLegalFinalDiffAttempt(
 
   if (first && closure && closureIndex < firstIndex) {
     return { ok: false, message: 'impossible first/closure attempt ordering' };
+  }
+
+  if (inherited >= 2) {
+    return { ok: true, attempt: null };
   }
 
   return { ok: true, attempt: closure ?? first ?? null };

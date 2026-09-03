@@ -307,6 +307,86 @@ describe('latest legal final-diff authority', () => {
     expect(latestLegalFinalDiffAttempt(closureThenFirst).ok).toBe(false);
     expect(validateCurrentV24ProtocolRecord(closureThenFirst).ok).toBe(false);
     expectNotAuthorized(closureThenFirst);
+
+    const duplicateToken = makeRecord({
+      phase: 'finalise_ready',
+      failedPremiumReviewCount: 1,
+      reviewAttempts: [
+        failedAttempt('first', { token: 'rev_first_sharedtoken' }),
+        passedAttempt('closure', { token: 'rev_first_sharedtoken' }),
+      ],
+    });
+    expect(latestLegalFinalDiffAttempt(duplicateToken).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(duplicateToken).ok).toBe(false);
+    expectNotAuthorized(duplicateToken);
+    const duplicateRoot = writeReadinessFixture('duplicate-token', duplicateToken, {
+      workstreamId: duplicateToken.workstreamId,
+      checkpointId: 'ckpt_latest',
+    });
+    expect(getFinaliseProtocolReadiness(duplicateRoot).allowed).toBe(false);
+  });
+
+  it('latest-legal: pass and token mismatch cannot authorize finalise', () => {
+    const mismatchedFirst = makeRecord({
+      phase: 'finalise_ready',
+      reviewAttempts: [
+        passedAttempt('first', { token: 'rev_closure_spoofedfirst' }),
+      ],
+    });
+    expect(latestLegalFinalDiffAttempt(mismatchedFirst).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(mismatchedFirst).ok).toBe(false);
+    expectNotAuthorized(mismatchedFirst);
+    const mismatchRoot = writeReadinessFixture('token-pass-mismatch', mismatchedFirst, {
+      workstreamId: mismatchedFirst.workstreamId,
+      checkpointId: 'ckpt_latest',
+    });
+    expect(getFinaliseProtocolReadiness(mismatchRoot).allowed).toBe(false);
+
+    const mismatchedClosure = makeRecord({
+      phase: 'finalise_ready',
+      failedPremiumReviewCount: 1,
+      reviewAttempts: [
+        failedAttempt('first', { token: 'rev_first_real' }),
+        passedAttempt('closure', { token: 'rev_first_notclosure' }),
+      ],
+    });
+    expect(latestLegalFinalDiffAttempt(mismatchedClosure).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(mismatchedClosure).ok).toBe(false);
+    expectNotAuthorized(mismatchedClosure);
+  });
+
+  it('latest-legal: inherited exhaustion still fail-closes malformed local attempts', () => {
+    const duplicateFirst = makeRecord({
+      workstreamId: 'ws_latest_inherited_dup_first',
+      phase: 'routing_required',
+      inheritedFailedReviewCount: 2,
+      failedPremiumReviewCount: 2,
+      reviewedTreeFingerprint: null,
+      activeCheckpointId: null,
+      reviewAttempts: [
+        failedAttempt('first', { token: 'rev_first_histone' }),
+        passedAttempt('first', { token: 'rev_first_histtwo' }),
+      ],
+    });
+    expect(latestLegalFinalDiffAttempt(duplicateFirst).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(duplicateFirst).ok).toBe(false);
+    expectNotAuthorized(duplicateFirst);
+
+    const mismatched = makeRecord({
+      workstreamId: 'ws_latest_inherited_mismatch',
+      phase: 'finalise_ready',
+      inheritedFailedReviewCount: 2,
+      failedPremiumReviewCount: 2,
+      reviewAttempts: [passedAttempt('first', { token: 'rev_closure_inheritedspoof' })],
+    });
+    expect(latestLegalFinalDiffAttempt(mismatched).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(mismatched).ok).toBe(false);
+    expectNotAuthorized(mismatched);
+    const repoRoot = writeReadinessFixture('inherited-malformed', mismatched, {
+      workstreamId: mismatched.workstreamId,
+      checkpointId: 'ckpt_latest',
+    });
+    expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 
   it('latest-legal: routing_required after latest failure is rejected', () => {
@@ -509,6 +589,16 @@ describe('latest legal final-diff authority', () => {
     writeProtocolRecord(repoRoot, mutated);
     expect(validateCurrentV24ProtocolRecord(mutated).ok).toBe(false);
     expect(reviewAuthorizesProtectedFinalise(mutated)).toBe(false);
+    expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
+
+    const spoofed: WorkflowProtocolRecord = {
+      ...valid,
+      reviewAttempts: [passedAttempt('first', { token: 'rev_closure_spoofedlatest' })],
+    };
+    writeProtocolRecord(repoRoot, spoofed);
+    expect(latestLegalFinalDiffAttempt(spoofed).ok).toBe(false);
+    expect(validateCurrentV24ProtocolRecord(spoofed).ok).toBe(false);
+    expect(reviewAuthorizesProtectedFinalise(spoofed)).toBe(false);
     expect(getFinaliseProtocolReadiness(repoRoot).allowed).toBe(false);
   });
 });

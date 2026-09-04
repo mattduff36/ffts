@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.4.1",
+    "updateKind": "minor",
+    "title": "Workflow improvements",
+    "description": "Prove leftover required IDs after the canonical suite.",
+    "summary": "Prove leftover required IDs after the canonical suite.",
+    "details": [
+      "Updated app reliability, with changes to automated tests."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T15:20:03.779Z"
+  },
+  {
     "version": "0926.4.0",
     "updateKind": "major",
     "title": "Workflow update",

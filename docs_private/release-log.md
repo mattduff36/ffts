@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.4.1
+
+**GIT COMMIT MESSAGE**
+`fix(workflow): prove leftover required IDs after the canonical suite`
+
+**PUSHED AT**
+2026-09-04T15:20:03.779Z
+
+**WHAT CHANGED**
+Prove leftover required IDs after the canonical suite.
+
+**VERSION HISTORY DETAILS**
+- Updated app reliability, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): prove leftover required IDs after the canonical suite`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.4.0
 
 **GIT COMMIT MESSAGE**

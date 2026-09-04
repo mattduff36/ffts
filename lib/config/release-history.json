@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.3.2",
+    "updateKind": "minor",
+    "title": "Workflow improvements",
+    "description": "Allow intended Scheduling product candidates through SCOPE-001.",
+    "summary": "Allow intended Scheduling product candidates through SCOPE-001.",
+    "details": [
+      "Updated app reliability, with changes to automated tests."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T12:59:21.056Z"
+  },
+  {
     "version": "0926.3.1",
     "updateKind": "minor",
     "title": "Scheduling improvements",

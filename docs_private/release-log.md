@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.3.2
+
+**GIT COMMIT MESSAGE**
+`fix(workflow): allow intended Scheduling product candidates through SCOPE-001`
+
+**PUSHED AT**
+2026-09-04T12:59:21.056Z
+
+**WHAT CHANGED**
+Allow intended Scheduling product candidates through SCOPE-001.
+
+**VERSION HISTORY DETAILS**
+- Updated app reliability, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): allow intended Scheduling product candidates through SCOPE-001`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.3.1
 
 **GIT COMMIT MESSAGE**

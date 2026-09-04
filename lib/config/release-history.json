@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.3.1",
+    "updateKind": "minor",
+    "title": "Scheduling improvements",
+    "description": "Measure SCOPE-001 against origin/main. Allow ordinary finalise to finish without CRITICAL C9. Restore viewport-height fill for the manager board.",
+    "summary": "Measure SCOPE-001 against origin/main. Allow ordinary finalise to finish without CRITICAL C9. Restore viewport-height fill for the manager board.",
+    "details": [
+      "Updated sign in, with changes to automated tests."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T12:44:51.117Z"
+  },
+  {
     "version": "0926.3.0",
     "updateKind": "major",
     "title": "Scheduling update",

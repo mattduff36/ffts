@@ -2,6 +2,29 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.3.1
+
+**GIT COMMIT MESSAGE**
+`fix(scheduling): restore viewport-height fill for the manager board`
+
+**PUSHED AT**
+2026-09-04T12:44:51.117Z
+
+**WHAT CHANGED**
+Measure SCOPE-001 against origin/main. Allow ordinary finalise to finish without CRITICAL C9. Restore viewport-height fill for the manager board.
+
+**VERSION HISTORY DETAILS**
+- Updated sign in, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `test(workflow): measure SCOPE-001 against origin/main`
+- `fix(workflow): allow ordinary finalise to finish without CRITICAL C9`
+- `fix(scheduling): restore viewport-height fill for the manager board`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.3.0
 
 **GIT COMMIT MESSAGE**

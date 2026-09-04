@@ -1,5 +1,6 @@
 import type { Viewport } from "next";
 import { Inter } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AppProviders } from "@/lib/providers/app-providers";
 import { templateConfig } from "@/lib/config/template-config";
 import "./globals.css";
@@ -67,6 +68,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <AppProviders shouldLoadAnalytics={shouldLoadAnalytics}>{children}</AppProviders>
+        {shouldLoadAnalytics ? <SpeedInsights /> : null}
       </body>
     </html>
   );

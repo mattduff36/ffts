@@ -2,6 +2,29 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.4.0
+
+**GIT COMMIT MESSAGE**
+`feat(workflow): show hierarchical progress for every verification stage`
+
+**PUSHED AT**
+2026-09-04T13:22:56.090Z
+
+**WHAT CHANGED**
+Drop unused progress weight local. Keep optional test-progress names assignable. Show hierarchical progress for every verification stage.
+
+**VERSION HISTORY DETAILS**
+- Updated reports, with changes to automation scripts.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): drop unused progress weight local`
+- `fix(workflow): keep optional test-progress names assignable`
+- `feat(workflow): show hierarchical progress for every verification stage`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.3.2
 
 **GIT COMMIT MESSAGE**

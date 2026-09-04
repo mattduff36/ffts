@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.4.0",
+    "updateKind": "major",
+    "title": "Workflow update",
+    "description": "Drop unused progress weight local. Keep optional test-progress names assignable. Show hierarchical progress for every verification stage.",
+    "summary": "Drop unused progress weight local. Keep optional test-progress names assignable. Show hierarchical progress for every verification stage.",
+    "details": [
+      "Updated reports, with changes to automation scripts."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T13:22:56.090Z"
+  },
+  {
     "version": "0926.3.2",
     "updateKind": "minor",
     "title": "Workflow improvements",

@@ -58,6 +58,33 @@ const ETA_MIN_FRACTION = 0.15;
 const LABEL_WIDTH = 20;
 const BAR_WIDTH = 10;
 const ANSI_CLEAR_DOWN = '\u001b[J';
+export const ANSI_ENTER_ALT_SCREEN = '\u001b[?1049h';
+export const ANSI_LEAVE_ALT_SCREEN = '\u001b[?1049l';
+export const ANSI_HIDE_CURSOR = '\u001b[?25l';
+export const ANSI_SHOW_CURSOR = '\u001b[?25h';
+export const ANSI_CURSOR_HOME = '\u001b[H';
+export const ANSI_ERASE_SCREEN = '\u001b[2J';
+
+export function shouldUseAlternateScreen(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.TEE_VERIFY_PROGRESS_ALT === '0' || env.TEE_VERIFY_PROGRESS_ALT === 'off') return false;
+  if (env.TERM === 'dumb') return false;
+  return true;
+}
+
+export function ttyLiveStartSequence(useAlternateScreen = true): string {
+  if (useAlternateScreen) {
+    return `${ANSI_ENTER_ALT_SCREEN}${ANSI_HIDE_CURSOR}${ANSI_ERASE_SCREEN}${ANSI_CURSOR_HOME}`;
+  }
+  return `${ANSI_HIDE_CURSOR}${ANSI_ERASE_SCREEN}${ANSI_CURSOR_HOME}`;
+}
+
+export function ttyLiveRefreshPrefix(): string {
+  return `${ANSI_CURSOR_HOME}${ANSI_CLEAR_DOWN}`;
+}
+
+export function ttyLiveRestoreSequence(useAlternateScreen = true): string {
+  return useAlternateScreen ? `${ANSI_SHOW_CURSOR}${ANSI_LEAVE_ALT_SCREEN}` : ANSI_SHOW_CURSOR;
+}
 
 export function clampPercent(value: number): number {
   if (!Number.isFinite(value) || value < 0) return 0;
@@ -360,14 +387,19 @@ export function createVerifyProgressReporter(options: {
   now?: () => number;
   heartbeatMs?: number;
   ci?: boolean;
+  useAlternateScreen?: boolean;
+  onRestore?: () => void;
 }): VerifyProgressReporter {
   const startedAt = (options.now ?? Date.now)();
   const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const machineSafe = options.ci === true || options.isTty !== true;
+  const useAlternateScreen = options.useAlternateScreen !== false;
   let lastPercent = 0;
   let lastHeartbeatAt = startedAt;
   let lastPaint = '';
   let lastLineCount = 0;
+  let liveStarted = false;
+  let terminalRestored = false;
   let snapshot: VerifyProgressSnapshot = {
     title: options.title,
     candidate: options.candidate,
@@ -414,9 +446,30 @@ export function createVerifyProgressReporter(options: {
       lastLineCount = frameLineCount(record);
       return;
     }
-    write(`${ttyRedrawPrefix(lastLineCount)}${record}`);
+    if (!liveStarted) {
+      write(`${ttyLiveStartSequence(useAlternateScreen)}${record}`);
+      liveStarted = true;
+      lastPaint = record;
+      lastLineCount = frameLineCount(record);
+      return;
+    }
+    if (next.terminal) {
+      restoreTerminal();
+      write(record);
+      lastPaint = record;
+      lastLineCount = frameLineCount(record);
+      return;
+    }
+    write(`${ttyLiveRefreshPrefix()}${record}`);
     lastPaint = record;
     lastLineCount = frameLineCount(record);
+  };
+
+  const restoreTerminal = (): void => {
+    if (machineSafe || !liveStarted || terminalRestored) return;
+    write(ttyLiveRestoreSequence(useAlternateScreen));
+    terminalRestored = true;
+    options.onRestore?.();
   };
 
   const mergeStage = (id: string, patch: Partial<WorkflowStageProgress>): WorkflowStageProgress[] => {
@@ -550,6 +603,7 @@ export function createVerifyProgressReporter(options: {
         false
       );
     },
+    restoreTerminal,
   };
 }
 
@@ -576,6 +630,7 @@ export interface VerifyProgressReporter {
     stages?: WorkflowStageProgress[];
   }) => VerifyProgressSnapshot | null;
   complete: (result: 'PASS' | 'FAIL', message?: string) => VerifyProgressSnapshot;
+  restoreTerminal: () => void;
 }
 
 export function shouldUseMachineProgress(env: NodeJS.ProcessEnv, isTty: boolean | undefined): boolean {

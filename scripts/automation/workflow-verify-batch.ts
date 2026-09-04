@@ -35,6 +35,7 @@ import {
 import {
   applyTestSuiteProgress,
   createVerifyProgressReporter,
+  shouldUseAlternateScreen,
   shouldUseMachineProgress,
   type VerifyProgressReporter,
 } from './workflow-verify-progress';
@@ -496,13 +497,47 @@ export function createHumanVerifyProgress(params: {
   const env = params.env ?? process.env;
   if (env.TEE_VERIFY_PROGRESS === 'off') return undefined;
   const machine = shouldUseMachineProgress(env, params.stderrIsTty ?? process.stderr.isTTY);
-  return createVerifyProgressReporter({
+  const reporter = createVerifyProgressReporter({
     title: params.title,
     candidate: params.candidate,
     stream: process.stderr,
     isTty: !machine,
     ci: machine,
+    useAlternateScreen: shouldUseAlternateScreen(env),
   });
+  if (!machine) {
+    attachLiveProgressTerminalGuards(reporter);
+  }
+  return reporter;
+}
+
+export function attachLiveProgressTerminalGuards(
+  reporter: Pick<VerifyProgressReporter, 'restoreTerminal'>
+): () => void {
+  const restore = (): void => {
+    reporter.restoreTerminal();
+  };
+  const onSigint = (): void => {
+    restore();
+    process.kill(process.pid, 'SIGINT');
+  };
+  const onSigterm = (): void => {
+    restore();
+    process.kill(process.pid, 'SIGTERM');
+  };
+  process.once('exit', restore);
+  process.once('SIGINT', onSigint);
+  process.once('SIGTERM', onSigterm);
+  process.once('uncaughtException', restore);
+  process.once('unhandledRejection', restore);
+  return () => {
+    process.removeListener('exit', restore);
+    process.removeListener('SIGINT', onSigint);
+    process.removeListener('SIGTERM', onSigterm);
+    process.removeListener('uncaughtException', restore);
+    process.removeListener('unhandledRejection', restore);
+    restore();
+  };
 }
 
 export function proveRequiredIdsExact(params: {

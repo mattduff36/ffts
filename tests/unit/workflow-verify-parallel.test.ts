@@ -11,11 +11,20 @@ import {
   formatProgressRecord,
   monotonicPercent,
   parseVitestProgressLine,
+  shouldUseAlternateScreen,
+  shouldUseMachineProgress,
   stageBarFraction,
   stageCompletedWeight,
+  ttyLiveRefreshPrefix,
+  ttyLiveRestoreSequence,
+  ttyLiveStartSequence,
   ttyRedrawPrefix,
   workflowWeightTotals,
 } from '@/scripts/automation/workflow-verify-progress';
+import {
+  createHumanVerifyProgress,
+  proveRequiredIdsExact,
+} from '@/scripts/automation/workflow-verify-batch';
 import {
   resolveTeeVerifyJobs,
   runCapturedProcess,
@@ -23,7 +32,6 @@ import {
   type VerifyCandidate,
   type VerifyStage,
 } from '@/scripts/automation/workflow-verify-runner';
-import { proveRequiredIdsExact } from '@/scripts/automation/workflow-verify-batch';
 
 const CANDIDATE: VerifyCandidate = { headCommit: 'abc123def456', fingerprint: 'fp-1' };
 
@@ -549,6 +557,104 @@ describe('TEE verification progress', () => {
     expect(rendered).toMatch(/Production build\s+\[[█░]+\] 2\/8 RUNNING/);
     expect(rendered).toMatch(/Release finish\s+\[░+\] WAITING/);
     expect(rendered).not.toMatch(/Release finish[^\n]*PASS/);
+  });
+
+  it('TEE-VERIFY-LIVE-TTY-025: TTY enters live mode and later frames replace instead of appending', () => {
+    const chunks: string[] = [];
+    const reporter = createVerifyProgressReporter({
+      title: 'Preflight',
+      stream: { write: (chunk) => chunks.push(chunk) },
+      isTty: true,
+      ci: false,
+    });
+    const result = { exitCode: 0, ok: true };
+    reporter.update({ message: 'Running', percent: 10 });
+    reporter.update({ message: 'Running', percent: 40 });
+    const text = chunks.join('');
+    expect(text.startsWith(ttyLiveStartSequence(true))).toBe(true);
+    expect(text).toContain(ttyLiveRefreshPrefix());
+    expect(text).not.toContain('cls');
+    expect((text.match(/Preflight/g) || []).length).toBeGreaterThan(1);
+    expect(text.indexOf(ttyLiveRefreshPrefix())).toBeGreaterThan(text.indexOf(ttyLiveStartSequence(true)));
+    expect(result).toEqual({ exitCode: 0, ok: true });
+  });
+
+  it('TEE-VERIFY-LIVE-PASS-026: final PASS restores the terminal and prints one permanent frame', () => {
+    const chunks: string[] = [];
+    const reporter = createVerifyProgressReporter({
+      title: 'Preflight',
+      stream: { write: (chunk) => chunks.push(chunk) },
+      isTty: true,
+      ci: false,
+    });
+    reporter.update({ message: 'Running', percent: 20 });
+    reporter.complete('PASS', 'Preflight');
+    const text = chunks.join('');
+    expect(text).toContain(ttyLiveRestoreSequence(true));
+    expect(text).toMatch(/100% PASS/);
+    expect(text.lastIndexOf(ttyLiveRestoreSequence(true))).toBeLessThan(text.lastIndexOf('100% PASS'));
+    reporter.restoreTerminal();
+    expect(chunks.join('')).toBe(text);
+  });
+
+  it('TEE-VERIFY-LIVE-FAIL-027: final FAIL restores the terminal', () => {
+    const chunks: string[] = [];
+    const reporter = createVerifyProgressReporter({
+      title: 'Preflight',
+      stream: { write: (chunk) => chunks.push(chunk) },
+      isTty: true,
+      ci: false,
+    });
+    reporter.update({ message: 'Running', percent: 20 });
+    reporter.complete('FAIL', 'Preflight');
+    const text = chunks.join('');
+    expect(text).toContain(ttyLiveRestoreSequence(true));
+    expect(text).toMatch(/100% FAIL/);
+  });
+
+  it('TEE-VERIFY-LIVE-THROW-028: exception restore leaves the terminal usable', () => {
+    const chunks: string[] = [];
+    const reporter = createVerifyProgressReporter({
+      title: 'Preflight',
+      stream: { write: (chunk) => chunks.push(chunk) },
+      isTty: true,
+      ci: false,
+    });
+    reporter.update({ message: 'Running', percent: 20 });
+    try {
+      throw new Error('display-only crash');
+    } catch {
+      reporter.restoreTerminal();
+    }
+    expect(chunks.join('')).toContain(ttyLiveRestoreSequence(true));
+  });
+
+  it('TEE-VERIFY-LIVE-DISABLED-029: progress off remains supported and display cannot change a result', () => {
+    const result = { exitCode: 7, ok: false };
+    expect(
+      createHumanVerifyProgress({
+        title: 'Preflight',
+        env: { TEE_VERIFY_PROGRESS: 'off' },
+        stderrIsTty: true,
+      })
+    ).toBeUndefined();
+    expect(shouldUseMachineProgress({ TEE_VERIFY_PROGRESS: 'plain' }, true)).toBe(true);
+    expect(shouldUseAlternateScreen({ TERM: 'dumb' })).toBe(false);
+    expect(shouldUseAlternateScreen({ TEE_VERIFY_PROGRESS_ALT: '0' })).toBe(false);
+    expect(ttyLiveStartSequence(false)).not.toContain('\u001b[?1049h');
+    const progressSource = readFileSync(
+      path.join(path.resolve(__dirname, '..', '..'), 'scripts/automation/workflow-verify-progress.ts'),
+      'utf8'
+    );
+    const batchSource = readFileSync(
+      path.join(path.resolve(__dirname, '..', '..'), 'scripts/automation/workflow-verify-batch.ts'),
+      'utf8'
+    );
+    expect(progressSource).not.toMatch(/spawnSync\(\s*['"]cls['"]/);
+    expect(batchSource).toContain('attachLiveProgressTerminalGuards');
+    expect(batchSource).toContain("process.once('SIGINT'");
+    expect(batchSource).toContain("process.once('uncaughtException'");
+    expect(result).toEqual({ exitCode: 7, ok: false });
   });
 });
 

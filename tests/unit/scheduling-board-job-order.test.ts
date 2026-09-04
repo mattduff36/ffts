@@ -55,6 +55,13 @@ class FakeQuery implements PromiseLike<QueryResult> {
     return this;
   }
 
+  maybeSingle() {
+    return Promise.resolve({
+      data: Array.isArray(this.result.data) ? this.result.data[0] ?? null : null,
+      error: null,
+    });
+  }
+
   then<TResult1 = QueryResult, TResult2 = never>(
     onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null

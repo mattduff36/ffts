@@ -41,7 +41,7 @@ describe('schedule board quick-add migration', () => {
 
   it('SCH-TEAM-DOCS-001 documents current day-team buckets and keeps templates deferred', () => {
     expect(docs).toContain('Future Enhancements (Deferred)');
-    expect(docs).toContain('Team 1–3');
+    expect(docs).toContain('Expanding team-bucket editor and leaders on extra teams 6–10');
     expect(docs).toContain('Saved team templates');
     expect(docs).toContain('Weekly-view team buckets');
     expect(docs).not.toContain('Team-based booking: compose a day team once');

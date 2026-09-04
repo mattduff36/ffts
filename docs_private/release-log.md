@@ -2,6 +2,29 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.5.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): persist standing team leaders and expand daily buckets`
+
+**PUSHED AT**
+2026-09-04T16:34:13.564Z
+
+**WHAT CHANGED**
+Reject standing leaders that would overflow a full daily slot. Persist standing team leaders and expand daily buckets.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to automation scripts and data storage.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `fix(scheduling): reject standing leaders that would overflow a full daily slot`
+- `feat(scheduling): persist standing team leaders and expand daily buckets`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.4.1
 
 **GIT COMMIT MESSAGE**

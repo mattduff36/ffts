@@ -1,5 +1,21 @@
 [
   {
+    "version": "0926.5.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Reject standing leaders that would overflow a full daily slot. Persist standing team leaders and expand daily buckets.",
+    "summary": "Reject standing leaders that would overflow a full daily slot. Persist standing team leaders and expand daily buckets.",
+    "details": [
+      "Updated data storage, with changes to automation scripts and data storage.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Expand daily buckets"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T16:34:13.564Z"
+  },
+  {
     "version": "0926.4.1",
     "updateKind": "minor",
     "title": "Workflow improvements",

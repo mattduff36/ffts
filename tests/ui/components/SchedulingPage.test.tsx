@@ -87,6 +87,17 @@ describe('SchedulingPage access states', () => {
       'flex-col',
       'overflow-hidden'
     );
+    expect(screen.getByTestId('scheduling-viewport')).toHaveClass(
+      'h-full',
+      'min-h-0',
+      'flex-1'
+    );
+    expect(screen.getByTestId('scheduling-viewport').style.height).toBe('');
+    expect(screen.getByTestId('scheduling-scaled-content')).toHaveClass(
+      'h-full',
+      'min-h-0',
+      'flex-1'
+    );
   });
 
   it('asks for a wider screen on mobile instead of rendering the board', async () => {
@@ -116,27 +127,11 @@ describe('SchedulingPage access states', () => {
 
   it('scales the manager board when the content area is between 67% and 100% of min width', async () => {
     const originalWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-    const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
-    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      bottom: 0,
-      right: 0,
-      width: 0,
-      height: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
       configurable: true,
       get() {
         return Math.round(SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX * 0.8);
       },
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      value: 800,
     });
 
     try {
@@ -145,22 +140,16 @@ describe('SchedulingPage access states', () => {
         await screen.findByText('Manager scheduling board for manager-1')
       ).toBeInTheDocument();
       expect(screen.getByTestId('scheduling-viewport')).toHaveAttribute('data-fit-mode', 'scaled');
-      expect(screen.getByTestId('scheduling-viewport')).toHaveStyle({ height: '800px' });
+      expect(screen.getByTestId('scheduling-viewport').style.height).toBe('');
       expect(screen.getByTestId('scheduling-scaled-content')).toHaveStyle({
         transform: 'scale(0.8)',
-        height: '1000px',
+        height: '125%',
       });
     } finally {
-      rectSpy.mockRestore();
       if (originalWidth) {
         Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalWidth);
       } else {
         delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-      }
-      if (originalInnerHeight) {
-        Object.defineProperty(window, 'innerHeight', originalInnerHeight);
-      } else {
-        delete (window as { innerHeight?: number }).innerHeight;
       }
     }
   });

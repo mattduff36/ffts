@@ -1296,12 +1296,19 @@ describe('SchedulingManagerBoard', () => {
     const jobsGuidance = screen.getByText(/Drag a queued job onto a date/);
     expect(jobsGuidance).toBeInTheDocument();
     expect(screen.getByTestId('schedule-manager-board-root')).toHaveClass('h-full', 'flex-1');
-    expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
-      'h-full',
-      'grid-cols-[350px_minmax(0,1fr)]'
+    expect(screen.getByTestId('schedule-manager-board-root').className).toContain(
+      '[&>:first-child]:flex-1'
+    );
+    expect(screen.getByTestId('schedule-manager-board-root').className).not.toContain(
+      '[&>*]:flex-1'
     );
     expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
+      'grid-cols-[350px_minmax(0,1fr)]'
+    );
+    expect(screen.getByTestId('schedule-manager-layout')).not.toHaveClass('h-full');
+    expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
       'flex-1',
+      'min-h-0',
       'grid-rows-[minmax(0,1fr)]'
     );
     expect(screen.getByTestId('schedule-resources-panel')).toHaveClass(

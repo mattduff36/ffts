@@ -21,10 +21,8 @@ import { cn } from '@/lib/utils/cn';
 import { SchedulingManagerBoard } from './components/SchedulingManagerBoard';
 import { schedulingControlStyles } from './components/scheduling-control-styles';
 import {
-  getRemainingViewportHeight,
   getSchedulingViewportFit,
   measureSchedulingMinContentWidth,
-  readMainBottomInset,
   SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX,
   SCHEDULING_MOBILE_MAX_WIDTH_PX,
 } from './components/scheduling-viewport-fit';
@@ -65,7 +63,6 @@ function SchedulingManagerViewport({
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [availableWidth, setAvailableWidth] = useState(0);
-  const [availableHeight, setAvailableHeight] = useState(0);
   const [minContentWidth, setMinContentWidth] = useState(SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX);
   const [isMobile, setIsMobile] = useState(false);
   const [ready, setReady] = useState(false);
@@ -81,13 +78,6 @@ function SchedulingManagerViewport({
     const syncViewport = () => {
       setIsMobile(Boolean(media?.matches));
       setAvailableWidth(viewport.clientWidth);
-      setAvailableHeight(
-        getRemainingViewportHeight({
-          top: viewport.getBoundingClientRect().top,
-          viewportHeight: window.innerHeight,
-          bottomInset: readMainBottomInset(viewport),
-        })
-      );
       const content = contentRef.current;
       if (content) {
         setMinContentWidth(measureSchedulingMinContentWidth(content));
@@ -133,27 +123,21 @@ function SchedulingManagerViewport({
     return () => observer?.disconnect();
   }, [fit.mode, ready]);
 
-  const canvasHeight = availableHeight > 0
-    ? (fit.mode === 'scaled' ? availableHeight / fit.scale : availableHeight)
+  const scaledStyle: CSSProperties | undefined = ready && fit.mode === 'scaled'
+    ? {
+        width: minContentWidth,
+        height: `${100 / fit.scale}%`,
+        transform: `scale(${fit.scale})`,
+        transformOrigin: 'top left',
+      }
     : undefined;
-  const scaledStyle: CSSProperties = {
-    height: canvasHeight,
-    ...(ready && fit.mode === 'scaled'
-      ? {
-          width: minContentWidth,
-          transform: `scale(${fit.scale})`,
-          transformOrigin: 'top left',
-        }
-      : {}),
-  };
 
   return (
     <div
       ref={viewportRef}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
       data-testid="scheduling-viewport"
       data-fit-mode={ready ? fit.mode : 'pending'}
-      style={availableHeight > 0 ? { height: availableHeight } : undefined}
     >
       {!ready ? (
         <PageLoader message="Loading scheduling..." />
@@ -162,7 +146,11 @@ function SchedulingManagerViewport({
       ) : (
         <div
           ref={contentRef}
-          className="flex min-h-0 flex-1 flex-col [&>*]:flex [&>*]:h-full [&>*]:min-h-0 [&>*]:flex-1 [&>*]:flex-col"
+          className={
+            ready && fit.mode === 'scaled'
+              ? 'flex min-h-0 shrink-0 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col'
+              : 'flex h-full min-h-0 flex-1 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col'
+          }
           data-testid="scheduling-scaled-content"
           style={scaledStyle}
         >

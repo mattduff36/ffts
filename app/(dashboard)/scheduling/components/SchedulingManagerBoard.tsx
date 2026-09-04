@@ -5801,7 +5801,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   return (
     <div
-      className="flex h-full min-h-0 flex-1 flex-col [&>*]:flex [&>*]:h-full [&>*]:min-h-0 [&>*]:flex-1 [&>*]:flex-col"
+      className="flex h-full min-h-0 flex-1 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col"
       data-testid="schedule-manager-board-root"
     >
       <DragDropProvider
@@ -6040,7 +6040,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       }}
     >
       <div
-        className="flex h-full min-h-0 flex-col gap-4 overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden"
         onClick={handleBoardClick}
         onPointerMoveCapture={(event) => {
           latestPointerClientX.current = event.clientX;
@@ -6110,7 +6110,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         </div>
 
         <div
-          className="grid h-full min-h-0 flex-1 grid-cols-[350px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4"
+          className="grid min-h-0 flex-1 grid-cols-[350px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4"
           data-testid="schedule-manager-layout"
         >
           <ResourcesReturnDropCard>
@@ -6613,7 +6613,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               <div
                 ref={dailyTimelineViewportRef}
                 className={cn(
-                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain select-none md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto',
+                  'hidden overflow-y-hidden rounded-lg border border-border overscroll-x-contain select-none md:flex md:h-0 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto',
                   view === SCHEDULING_BOARD_VIEWS.weekly
                     && 'scrollbar-hidden overflow-x-auto',
                   view === SCHEDULING_BOARD_VIEWS.daily

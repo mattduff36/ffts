@@ -218,8 +218,7 @@ export function consumeVitestProgressFile(
 export function applyTestSuiteProgress(
   current: Pick<WorkflowStageProgress, 'completed' | 'total' | 'current' | 'failures'>,
   event: TestSuiteProgressEvent
-): Required<Pick<WorkflowStageProgress, 'completed' | 'current'>> &
-  Pick<WorkflowStageProgress, 'total' | 'failures'> {
+): Pick<WorkflowStageProgress, 'completed' | 'total' | 'current' | 'failures'> {
   const knownTotal =
     event.total != null
       ? event.total

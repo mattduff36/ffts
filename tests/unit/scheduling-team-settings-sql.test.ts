@@ -34,13 +34,13 @@ describe('schedule team settings SQL contract', () => {
 
   it('sched-team-settings-atomic validates shrink and leaders before mutation', () => {
     const shrinkCheck = sql.indexOf('TEAM_SLOT_IN_USE');
+    const saveFn = sql.indexOf('save_schedule_team_settings_v1');
+    const saveCapacity = sql.indexOf("RAISE EXCEPTION 'TEAM_SLOT_FULL'", saveFn);
     const deleteLeaders = sql.indexOf('DELETE FROM public.schedule_team_slot_leaders');
     expect(shrinkCheck).toBeGreaterThan(-1);
-    expect(deleteLeaders).toBeGreaterThan(shrinkCheck);
+    expect(saveCapacity).toBeGreaterThan(saveFn);
+    expect(deleteLeaders).toBeGreaterThan(saveCapacity);
     expect(sql).toContain('v_profile = ANY (v_seen)');
-  });
-
-  it('sched-team-capacity-leader reserves one seat for a standing leader', () => {
     expect(sql).toContain('v_effective_count := v_target_count + CASE WHEN v_slot_has_leader THEN 1 ELSE 0 END');
     expect(sql).toContain('IF v_effective_count >= 6 THEN');
   });

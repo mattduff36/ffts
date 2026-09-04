@@ -317,6 +317,7 @@ DECLARE
   v_slot SMALLINT;
   v_profile UUID;
   v_seen UUID[] := ARRAY[]::UUID[];
+  v_leader_slots SMALLINT[] := ARRAY[]::SMALLINT[];
   v_placeholder BOOLEAN;
   v_occupied INTEGER;
   v_row public.schedule_team_settings%ROWTYPE;
@@ -383,6 +384,7 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
     v_seen := array_append(v_seen, v_profile);
+    v_leader_slots := array_append(v_leader_slots, v_slot);
 
     SELECT profiles.is_placeholder
     INTO v_placeholder
@@ -393,6 +395,23 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
   END LOOP;
+
+  -- A new standing leader on a slot that already has six daily members
+  -- (and is not one of those members) would become seven effective people.
+  IF cardinality(v_leader_slots) > 0 AND EXISTS (
+    SELECT 1
+    FROM public.schedule_day_team_members AS members
+    WHERE members.slot_index = ANY (v_leader_slots)
+      AND (
+        cardinality(v_seen) = 0
+        OR NOT (members.profile_id = ANY (v_seen))
+      )
+    GROUP BY members.work_date, members.slot_index
+    HAVING COUNT(*) > 5
+  ) THEN
+    RAISE EXCEPTION 'TEAM_SLOT_FULL'
+      USING ERRCODE = 'P0001';
+  END IF;
 
   INSERT INTO public.schedule_team_settings (id, visible_slot_count, updated_by, updated_at)
   VALUES (TRUE, p_visible_slot_count, p_actor_user_id, NOW())

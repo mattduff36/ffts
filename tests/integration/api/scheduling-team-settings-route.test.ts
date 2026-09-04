@@ -76,6 +76,22 @@ describe('PUT /api/scheduling/team-settings', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
+  it('maps TEAM_SLOT_FULL from the settings RPC to 409', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'TEAM_SLOT_FULL', code: 'P0001' },
+    });
+    const { PUT } = await import('@/app/api/scheduling/team-settings/route');
+    const response = await PUT(put({
+      visible_slot_count: 5,
+      leaders: [{ slot_index: 1, profile_id: '22222222-2222-4222-8222-222222222222' }],
+    }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'This team already has six employees on at least one day. Remove a member before adding a standing leader.',
+    });
+  });
+
   it('sched-team-settings-persist saves through the locked RPC', async () => {
     const { PUT } = await import('@/app/api/scheduling/team-settings/route');
     const response = await PUT(put({

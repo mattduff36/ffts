@@ -31,6 +31,12 @@ export function mapTeamSettingsRpcError(error: { code?: string; message?: string
   if (message.includes('TEAM_SLOT_IN_USE')) {
     return { status: 409, error: 'Remove employees from extra teams before hiding those buckets.' };
   }
+  if (message.includes('TEAM_SLOT_FULL')) {
+    return {
+      status: 409,
+      error: 'This team already has six employees on at least one day. Remove a member before adding a standing leader.',
+    };
+  }
   if (message.includes('TEAM_LEADER_LOCKED')) {
     return { status: 409, error: 'Change this team leader in Settings instead.' };
   }

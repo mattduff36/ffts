@@ -1,8 +1,12 @@
 # /fap
 
-`fap` / `/fap` is the short alias for `finalise and push`. It authorizes `npm run finalise:push`.
+`fap` / `/fap` implements the global operator contract:
 
-Local commit is not release-ready, and release-ready is not a push. This alias is an authorized push phrase.
+`fap` = `finalise and push` = COMPLETE_AND_RELEASE(normal)
+
+This alias is an authorized push phrase for the current explicit invocation only. Quoted, negated, historical, or file-mentioned occurrences do not authorize push.
+
+Local commit is not release-ready, and release-ready is not a push. This alias authorizes `npm run finalise:push`.
 
 1. Before pushing, state the branch and a short summary of the commits and changed files that will be pushed.
 2. Check for an active Agent Review or finalise terminal and wait if one is running.

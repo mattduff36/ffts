@@ -29,6 +29,8 @@ describe('TEE V2.2 FFTS project context', () => {
       path.join(root, '.cursor', 'rules', 'finalise-commands.mdc'),
       'utf8'
     );
+    expect(fap).toMatch(/COMPLETE_AND_RELEASE\(normal\)/);
+    expect(ffap).toMatch(/COMPLETE_AND_RELEASE\(full\)/);
     expect(fap).toMatch(/authorizes `npm run finalise:push`/iu);
     expect(ffap).toMatch(/authorizes `npm run finalise:full:push`/iu);
     expect(fap).toMatch(/authorized push phrase/iu);
@@ -150,6 +152,8 @@ describe('TEE V2.2 FFTS project context', () => {
     expect(finaliseFull).toMatch(/finalise:repair/);
     expect(fap).toMatch(/finalise:repair/);
     expect(ffap).toMatch(/finalise:repair/);
+    expect(fap).toMatch(/COMPLETE_AND_RELEASE\(normal\)/);
+    expect(ffap).toMatch(/COMPLETE_AND_RELEASE\(full\)/);
     expect(finalise).toMatch(/Never push/iu);
     expect(finaliseFull).toMatch(/Never push/iu);
     expect(finalise).not.toMatch(/push to GitHub/iu);

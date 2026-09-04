@@ -961,7 +961,7 @@ describe('workflow liveness hardening', () => {
     expect(readFileSync(paths.statePath, 'utf8')).toBe('{not-json');
   });
 
-  it('T-FFAP-NO-PUSH: dry-run does not correlate; local finalise aliases stay distinct from push', () => {
+  it('T-FINALISE-DRY-RUN-NO-CORRELATE: dry-run does not correlate; local finalise aliases stay distinct from push', () => {
     expect(
       shouldApplyFinaliseCorrelation({
         scriptName: 'finalise',

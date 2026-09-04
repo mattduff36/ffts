@@ -65,9 +65,28 @@ export const ANSI_SHOW_CURSOR = '\u001b[?25h';
 export const ANSI_CURSOR_HOME = '\u001b[H';
 export const ANSI_ERASE_SCREEN = '\u001b[2J';
 
+export function isCursorInteractiveProgressHost(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.CI === 'true' || env.CI === '1') return false;
+  if (env.TEE_VERIFY_PROGRESS === 'off' || env.TEE_VERIFY_PROGRESS === 'plain') return false;
+  if (env.TEE_VERIFY_PROGRESS === 'live') return true;
+  const program = (env.TERM_PROGRAM ?? '').toLowerCase();
+  if (program === 'vscode' || program === 'cursor') return true;
+  return Boolean(env.CURSOR_AGENT && env.VSCODE_PID);
+}
+
+export function resolveProgressIsTty(params: {
+  env?: NodeJS.ProcessEnv;
+  stdoutIsTty?: boolean;
+  stderrIsTty?: boolean;
+}): boolean {
+  const env = params.env ?? process.env;
+  if (params.stderrIsTty === true || params.stdoutIsTty === true) return true;
+  return isCursorInteractiveProgressHost(env);
+}
+
 export function shouldUseAlternateScreen(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.TEE_VERIFY_PROGRESS_ALT === '0' || env.TEE_VERIFY_PROGRESS_ALT === 'off') return false;
-  if (env.TERM === 'dumb') return false;
+  if (env.TERM === 'dumb' && !isCursorInteractiveProgressHost(env)) return false;
   return true;
 }
 
@@ -631,6 +650,8 @@ export interface VerifyProgressReporter {
 export function shouldUseMachineProgress(env: NodeJS.ProcessEnv, isTty: boolean | undefined): boolean {
   if (env.TEE_VERIFY_PROGRESS === 'off' || env.TEE_VERIFY_PROGRESS === 'plain') return true;
   if (env.CI === 'true' || env.CI === '1') return true;
+  if (env.TEE_VERIFY_PROGRESS === 'live') return false;
+  if (isCursorInteractiveProgressHost(env)) return false;
   return isTty !== true;
 }
 

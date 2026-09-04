@@ -35,6 +35,7 @@ import {
 import {
   applyTestSuiteProgress,
   createVerifyProgressReporter,
+  resolveProgressIsTty,
   shouldUseAlternateScreen,
   shouldUseMachineProgress,
   type VerifyProgressReporter,
@@ -288,6 +289,8 @@ export async function runEvidenceVerificationBatch(params: {
               ? undefined
               : proofEligible.message
             : persisted.message,
+          stdout: persisted.ok ? undefined : persisted.stdout,
+          stderr: persisted.ok ? undefined : persisted.stderr,
           candidate: params.candidate,
         };
       },
@@ -492,11 +495,17 @@ export function createHumanVerifyProgress(params: {
   title: string;
   candidate?: string;
   env?: NodeJS.ProcessEnv;
+  stdoutIsTty?: boolean;
   stderrIsTty?: boolean;
 }): VerifyProgressReporter | undefined {
   const env = params.env ?? process.env;
   if (env.TEE_VERIFY_PROGRESS === 'off') return undefined;
-  const machine = shouldUseMachineProgress(env, params.stderrIsTty ?? process.stderr.isTTY);
+  const interactive = resolveProgressIsTty({
+    env,
+    stdoutIsTty: params.stdoutIsTty ?? Boolean(process.stdout.isTTY),
+    stderrIsTty: params.stderrIsTty ?? Boolean(process.stderr.isTTY),
+  });
+  const machine = shouldUseMachineProgress(env, interactive);
   const reporter = createVerifyProgressReporter({
     title: params.title,
     candidate: params.candidate,

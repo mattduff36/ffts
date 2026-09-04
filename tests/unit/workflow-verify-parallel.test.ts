@@ -11,6 +11,8 @@ import {
   formatProgressRecord,
   monotonicPercent,
   parseVitestProgressLine,
+  isCursorInteractiveProgressHost,
+  resolveProgressIsTty,
   shouldUseAlternateScreen,
   shouldUseMachineProgress,
   stageBarFraction,
@@ -641,7 +643,16 @@ describe('TEE verification progress', () => {
       })
     ).toBeUndefined();
     expect(shouldUseMachineProgress({ TEE_VERIFY_PROGRESS: 'plain' }, true)).toBe(true);
+    expect(shouldUseMachineProgress({ TEE_VERIFY_PROGRESS: 'live' }, false)).toBe(false);
+    expect(shouldUseMachineProgress({ CI: 'true', TEE_VERIFY_PROGRESS: 'live' }, true)).toBe(true);
+    expect(shouldUseMachineProgress({ CURSOR_AGENT: '1', VSCODE_PID: '1' }, false)).toBe(false);
+    expect(shouldUseMachineProgress({ CI: '1', CURSOR_AGENT: '1', VSCODE_PID: '1' }, true)).toBe(true);
+    expect(isCursorInteractiveProgressHost({ TERM_PROGRAM: 'vscode' })).toBe(true);
+    expect(isCursorInteractiveProgressHost({ TERM_PROGRAM: 'vscode', CI: 'true' })).toBe(false);
+    expect(resolveProgressIsTty({ stdoutIsTty: true, stderrIsTty: false })).toBe(true);
+    expect(resolveProgressIsTty({ stdoutIsTty: false, stderrIsTty: false, env: {} })).toBe(false);
     expect(shouldUseAlternateScreen({ TERM: 'dumb' })).toBe(false);
+    expect(shouldUseAlternateScreen({ TERM: 'dumb', CURSOR_AGENT: '1', VSCODE_PID: '1' })).toBe(true);
     expect(shouldUseAlternateScreen({ TEE_VERIFY_PROGRESS_ALT: '0' })).toBe(false);
     expect(ttyLiveStartSequence(false)).not.toContain('\u001b[?1049h');
     const progressSource = readFileSync(

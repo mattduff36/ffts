@@ -1688,8 +1688,10 @@ type VitestLedgerRunResult =
       record: VerificationLedgerRecord;
       reference: VerificationLedgerReference;
       reporterSuccess: boolean;
+      stdout?: string;
+      stderr?: string;
     }
-  | { ok: false; message: string };
+  | { ok: false; message: string; stdout?: string; stderr?: string };
 
 const VITEST_PROGRESS_REPORTER = fileURLToPath(
   new URL('./workflow-vitest-progress-reporter.cjs', import.meta.url)
@@ -1878,13 +1880,18 @@ export async function runVitestJsonAndPersistLedgerAsync(
     status: number | null;
     signal: NodeJS.Signals | null;
     error?: Error;
+    stdout: string;
+    stderr: string;
   }>((resolve) => {
     const child = spawn(process.execPath, spawnArgs, {
       cwd: params.repoRoot,
       env: childEnv,
       shell: false,
       windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let stdout = '';
+    let stderr = '';
     let seenProgressLines = 0;
     const drain = (): void => {
       if (!progressTemp || !params.onTestProgress) return;
@@ -1892,12 +1899,18 @@ export async function runVitestJsonAndPersistLedgerAsync(
     };
     const timer = progressTemp ? setInterval(drain, 200) : null;
     timer?.unref?.();
-    child.stdout?.resume();
-    child.stderr?.resume();
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
     child.on('error', (error) => {
       if (timer) clearInterval(timer);
       drain();
-      resolve({ status: null, signal: null, error });
+      resolve({ status: null, signal: null, error, stdout, stderr });
     });
     child.on('close', (code, signal) => {
       if (timer) clearInterval(timer);
@@ -1905,6 +1918,8 @@ export async function runVitestJsonAndPersistLedgerAsync(
       resolve({
         status: typeof code === 'number' ? code : null,
         signal: signal ?? null,
+        stdout,
+        stderr,
       });
     });
   });
@@ -1915,14 +1930,18 @@ export async function runVitestJsonAndPersistLedgerAsync(
       /* display sidecar */
     }
   }
-  return finishVitestLedgerRun({
-    run: params,
-    before: prepared.before,
-    runnerVersion: prepared.runnerVersion,
-    reporterTemp: prepared.reporterTemp,
-    args: prepared.args,
-    startedAt,
-    completedAt: new Date().toISOString(),
-    result,
-  });
+  return {
+    ...finishVitestLedgerRun({
+      run: params,
+      before: prepared.before,
+      runnerVersion: prepared.runnerVersion,
+      reporterTemp: prepared.reporterTemp,
+      args: prepared.args,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      result,
+    }),
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }

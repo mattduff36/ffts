@@ -27,7 +27,11 @@ import { assertFinaliseAllowedForProtocol, formatFinaliseProtocolReadinessReport
 import { captureVerificationIdentity } from './automation/workflow-verification-ledger';
 import { runVerifyBatch } from './automation/workflow-verify-runner';
 import { createHumanVerifyProgress } from './automation/workflow-verify-batch';
-import { createFinaliseWorkflowStages, type VerifyProgressReporter } from './automation/workflow-verify-progress';
+import {
+  createFinaliseWorkflowStages,
+  shouldUseMachineProgress,
+  type VerifyProgressReporter,
+} from './automation/workflow-verify-progress';
 import {
   assertFinaliseProductCommitAllowed,
   recordFinaliseOwnedCommit,
@@ -175,6 +179,7 @@ interface ProcessInfo {
 interface RunCommandOptions {
   allowFailure?: boolean;
   captureOutput?: boolean;
+  printCapturedOnFailure?: boolean;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -255,6 +260,14 @@ function appendManagedOutput(managedProcess: ManagedProcess, chunk: string | Buf
   }
 }
 
+function liveDashboardOwnsDisplay(): boolean {
+  if (!finaliseWorkflowProgress) return false;
+  return !shouldUseMachineProgress(
+    process.env,
+    Boolean(process.stdout.isTTY) || Boolean(process.stderr.isTTY)
+  );
+}
+
 function runCommand(command: string, args: string[], options: RunCommandOptions = {}): CommandResult {
   if (automationRun) {
     return automationRun.runCommand(command, args, options);
@@ -272,6 +285,12 @@ function runCommand(command: string, args: string[], options: RunCommandOptions 
   const stderr = typeof result.stderr === 'string' ? result.stderr : '';
 
   if (!options.allowFailure && result.status !== 0) {
+    if (options.printCapturedOnFailure) {
+      const diagnostic = [stderr, stdout].filter((chunk) => chunk.trim().length > 0).join('\n').trim();
+      if (diagnostic) {
+        process.stderr.write(`${diagnostic}\n`);
+      }
+    }
     const renderedCommand = [command, ...args.map(quoteArg)].join(' ');
     const executionError = result.error instanceof Error ? `: ${result.error.message}` : '';
     throw new Error(`Command failed (${renderedCommand})${executionError}`);
@@ -1345,7 +1364,11 @@ async function main(): Promise<void> {
               command: 'npm run test:run',
               action: () =>
                 timeFinaliseStep(timingEntries, 'Run Vitest test run', () =>
-                  runCommand('npm', ['run', 'test:run'], { env: localTestEnv })
+                  runCommand('npm', ['run', 'test:run'], {
+                    env: localTestEnv,
+                    captureOutput: liveDashboardOwnsDisplay(),
+                    printCapturedOnFailure: true,
+                  })
                 ),
             });
             printProgress('Vitest test run passed.', 72);
@@ -1361,7 +1384,11 @@ async function main(): Promise<void> {
               command: 'npm run testsuite',
               action: () =>
                 timeFinaliseStep(timingEntries, 'Run API and Playwright testsuite', () =>
-                  runCommand('npm', ['run', 'testsuite'], { env: localTestEnv })
+                  runCommand('npm', ['run', 'testsuite'], {
+                    env: localTestEnv,
+                    captureOutput: liveDashboardOwnsDisplay(),
+                    printCapturedOnFailure: true,
+                  })
                 ),
             });
             printProgress('Full automated test suite passed.', 84);

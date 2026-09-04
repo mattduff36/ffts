@@ -391,6 +391,7 @@ describe('required-ID leftover execution', () => {
     expect(execution).toContain('runVitestJsonAndPersistLedgerAsync');
     expect(execution).not.toMatch(/runCapturedProcess\(\{[\s\S]*command: 'npx'/);
     expect(ledger).toContain('spawn(process.execPath');
+    expect(ledger).toContain("stdio: ['ignore', 'pipe', 'pipe']");
     expect(batch).toContain('runLeftoverRequiredIdStage');
     expect(batch.indexOf('const batch = await runVerifyBatch')).toBeLessThan(
       batch.indexOf('runLeftoverRequiredIdStage({')

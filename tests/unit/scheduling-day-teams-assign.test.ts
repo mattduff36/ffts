@@ -25,6 +25,7 @@ const alreadyId = '66666666-6666-4666-8666-666666666666';
 function createAdmin(options: {
   members?: string[];
   memberRows?: Array<{ work_date: string; slot_index: number; profile_id: string }>;
+  leaders?: Array<{ slot_index: number; profile_id: string }>;
   alreadyOnVisit: string[];
   visitStartsAt?: string;
   rpcErrorFor?: string;
@@ -93,6 +94,12 @@ function createAdmin(options: {
       },
       order: () => result,
       maybeSingle: async () => {
+        if (table === 'schedule_team_settings') {
+          return {
+            data: { visible_slot_count: 5, updated_by: 'manager-1', updated_at: '2026-09-01T08:00:00.000Z' },
+            error: null,
+          };
+        }
         if (table === 'schedule_visits') {
           if (filters.id && filters.id !== visitId) {
             return { data: null, error: null };
@@ -115,6 +122,12 @@ function createAdmin(options: {
       then: (
         resolve: (value: { data: unknown; error: null }) => unknown
       ) => {
+        if (table === 'schedule_team_slot_leaders') {
+          return Promise.resolve(resolve({
+            data: options.leaders || [],
+            error: null,
+          }));
+        }
         if (table === 'schedule_day_team_members') {
           memberQueries.push({ ...filters });
           const workDate = filters.work_date;
@@ -146,8 +159,10 @@ function createAdmin(options: {
         if (table === 'profiles') {
           const profileIn = filters.id_in;
           const allowed = Array.isArray(profileIn) ? new Set(profileIn) : null;
-          const ids = memberRows
-            .map((row) => row.profile_id)
+          const ids = [
+            ...memberRows.map((row) => row.profile_id),
+            ...(options.leaders || []).map((row) => row.profile_id),
+          ].filter((id, index, all) => all.indexOf(id) === index)
             .filter((id) => allowed == null || allowed.has(id));
           return Promise.resolve(resolve({
             data: ids.map((id) => ({
@@ -289,34 +304,67 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
     expect(result.partial_error).toMatch(/already be on the visit|try the rest/i);
   });
 
-  it('TEAM-SNAPSHOT-001 assigns the gesture-time member snapshot instead of live membership', async () => {
+  it('sched-team-server-authoritative assigns live membership and ignores client snapshots', async () => {
     const snapshotId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const requestId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const admin = createAdmin({
-      members: [clearId, busyId],
+      members: [clearId],
       alreadyOnVisit: [],
     });
     const result = await assignDayTeamToVisit(admin, {
       visitId,
       slotIndex: 1,
       actorUserId: 'manager-1',
-      memberIds: [snapshotId],
       memberRequestIds: { [snapshotId]: requestId },
     });
     if ('status' in result) throw new Error(result.error);
-    expect(admin.memberQueries).toEqual([]);
+    expect(admin.memberQueries.length).toBeGreaterThan(0);
     expect(admin.rpc).toHaveBeenCalledWith(
-      'create_schedule_assignment_v2',
-      expect.objectContaining({
-        p_resource_id: snapshotId,
-        p_request_id: requestId,
-      })
-    );
-    expect(admin.rpc).not.toHaveBeenCalledWith(
       'create_schedule_assignment_v1',
       expect.objectContaining({ p_resource_id: clearId })
     );
-    expect(result.assignments.map((item) => item.profile_id)).toEqual([snapshotId]);
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v2',
+      expect.objectContaining({ p_resource_id: snapshotId })
+    );
+    expect(result.assignments.map((item) => item.profile_id)).toEqual([clearId]);
+  });
+
+  it('rejects assigning a hidden extra slot', async () => {
+    const admin = createAdmin({
+      members: [clearId],
+      memberRows: [{ work_date: '2026-09-01', slot_index: 6, profile_id: clearId }],
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 6,
+      actorUserId: 'manager-1',
+    });
+    expect(result).toEqual({
+      status: 400,
+      error: 'Choose a visible team bucket.',
+    });
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.anything()
+    );
+  });
+
+  it('sched-team-assign-leader includes the standing leader from settings', async () => {
+    const leaderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const admin = createAdmin({
+      members: [clearId],
+      leaders: [{ slot_index: 1, profile_id: leaderId }],
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments.map((item) => item.profile_id)).toEqual([leaderId, clearId]);
   });
 
   it('replays a committed member request even when they are already on the visit', async () => {
@@ -346,7 +394,6 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
       visitId,
       slotIndex: 1,
       actorUserId: 'manager-1',
-      memberIds: [clearId],
       memberRequestIds: { [clearId]: requestId },
     });
     if ('status' in result) throw new Error(result.error);

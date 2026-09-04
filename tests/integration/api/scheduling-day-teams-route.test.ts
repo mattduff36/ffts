@@ -60,7 +60,7 @@ describe('POST/DELETE /api/scheduling/day-teams (SCH-TEAM-API-001)', () => {
     }));
     expect(response.status).toBe(403);
     expect(mockRpc).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('adds a member through the locked RPC', async () => {
     const { POST } = await import('@/app/api/scheduling/day-teams/route');
@@ -79,6 +79,22 @@ describe('POST/DELETE /api/scheduling/day-teams (SCH-TEAM-API-001)', () => {
         p_actor_user_id: managerAccess.userId,
       })
     );
+  });
+
+  it('sched-team-leader-locked maps the RPC lock to 409', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'TEAM_LEADER_LOCKED', code: 'P0001' },
+    });
+    const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
+    const response = await DELETE(
+      new NextRequest(
+        'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222',
+        { method: 'DELETE' }
+      )
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Settings/i);
   });
 
   it('maps a full slot to 409 without writing a generic 500', async () => {

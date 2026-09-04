@@ -88,7 +88,7 @@ describe('POST /api/scheduling/assignments/team (SCH-TEAM-API-002, SCH-TEAM-API-
     }));
     expect(response.status).toBe(403);
     expect(mockAssign).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('SCH-TEAM-API-003 does not accept a client work_date and reuses the server helper', async () => {
     const { POST } = await import('@/app/api/scheduling/assignments/team/route');

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildEmployeeCapacity, buildEmployeeDaySessions } from '@/lib/server/scheduling-capacity';
 import { absenceCoversWorkDate, isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { loadScheduleDayTeams } from '@/lib/server/scheduling-day-teams';
+import { loadScheduleTeamSettings } from '@/lib/server/scheduling-team-settings';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import {
   enumerateScheduleDates,
@@ -342,6 +343,7 @@ export async function loadSchedulingBoard(
   );
   const jobsById = new Map(jobs.map((job) => [job.id, job]));
   const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
+  const teamSettings = await loadScheduleTeamSettings(admin, employeesById);
   const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
   const weekDates = enumerateScheduleDates(weekStart, weekEnd);
@@ -392,7 +394,8 @@ export async function loadSchedulingBoard(
       shifts,
     }),
     plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
-    day_teams: await loadScheduleDayTeams(admin, weekStart, weekEnd, employeesById),
+    team_settings: teamSettings,
+    day_teams: await loadScheduleDayTeams(admin, weekStart, weekEnd, employeesById, teamSettings),
   };
 }
 

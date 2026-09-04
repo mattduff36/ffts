@@ -7,6 +7,7 @@ import {
   OCCUPANCY_STRIP_END_MINUTES,
   OCCUPANCY_STRIP_START_MINUTES,
   buildEmployeeOccupancySegments,
+  mergeTeamOccupancySegments,
 } from '@/lib/utils/scheduling-occupancy';
 import type {
   ScheduleEmployeeAssignment,
@@ -217,6 +218,38 @@ describe('employee occupancy segments', () => {
         state: 'available',
       },
     ]);
+  });
+
+  it('merges team occupancy with booked winning over unavailable', () => {
+    const merged = mergeTeamOccupancySegments([
+      [{
+        startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+        endMinutes: OCCUPANCY_AM_END_MINUTES,
+        state: 'unavailable',
+      }, {
+        startMinutes: OCCUPANCY_AM_END_MINUTES,
+        endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+        state: 'available',
+      }],
+      [{
+        startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+        endMinutes: OCCUPANCY_EARLY_BUFFER_END_MINUTES,
+        state: 'available',
+      }, {
+        startMinutes: OCCUPANCY_EARLY_BUFFER_END_MINUTES,
+        endMinutes: OCCUPANCY_AM_END_MINUTES,
+        state: 'booked',
+      }, {
+        startMinutes: OCCUPANCY_AM_END_MINUTES,
+        endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+        state: 'available',
+      }],
+    ]);
+    expect(merged.some((segment) => (
+      segment.state === 'booked'
+      && segment.startMinutes === OCCUPANCY_EARLY_BUFFER_END_MINUTES
+      && segment.endMinutes === OCCUPANCY_AM_END_MINUTES
+    ))).toBe(true);
   });
 
   it('treats missing sessions as both AM and PM working', () => {

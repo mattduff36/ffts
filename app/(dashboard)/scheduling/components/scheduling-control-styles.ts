@@ -17,6 +17,18 @@ export const schedulingControlStyles = {
     'border border-sky-700/60 bg-sky-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-sky-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
   resourceEmployee:
     'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+  dayTeamTints: [
+    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-emerald-700/60 bg-emerald-950/35 text-emerald-50 shadow-sm hover:border-emerald-500/70 hover:bg-emerald-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-green-700/60 bg-green-950/35 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-lime-700/60 bg-lime-950/30 text-lime-50 shadow-sm hover:border-lime-500/70 hover:bg-lime-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-cyan-700/60 bg-cyan-950/30 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-cyan-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-teal-600/70 bg-teal-900/40 text-teal-50 shadow-sm hover:border-teal-400/70 hover:bg-teal-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-emerald-600/70 bg-emerald-900/40 text-emerald-50 shadow-sm hover:border-emerald-400/70 hover:bg-emerald-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-green-600/70 bg-green-900/40 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-lime-600/70 bg-lime-900/35 text-lime-50 shadow-sm hover:border-lime-400/70 hover:bg-lime-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+    'border border-cyan-600/70 bg-cyan-900/35 text-cyan-50 shadow-sm hover:border-cyan-400/70 hover:bg-cyan-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+  ] as const,
   resourcePlant:
     'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
 } as const;

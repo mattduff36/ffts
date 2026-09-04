@@ -123,6 +123,41 @@ export function formatOccupancySummary(segments: ScheduleOccupancySegment[]): st
   return `Available ${formatOccupancyClock(OCCUPANCY_STRIP_START_MINUTES)}–${formatOccupancyClock(OCCUPANCY_STRIP_END_MINUTES)}`;
 }
 
+export function mergeTeamOccupancySegments(
+  memberSegments: ScheduleOccupancySegment[][]
+): ScheduleOccupancySegment[] {
+  let segments: ScheduleOccupancySegment[] = [{
+    startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+    endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+    state: 'available',
+  }];
+  for (const member of memberSegments) {
+    for (const segment of member) {
+      if (segment.state === 'unavailable') {
+        segments = overlayOccupancyState(
+          segments,
+          segment.startMinutes,
+          segment.endMinutes,
+          'unavailable'
+        );
+      }
+    }
+  }
+  for (const member of memberSegments) {
+    for (const segment of member) {
+      if (segment.state === 'booked') {
+        segments = overlayOccupancyState(
+          segments,
+          segment.startMinutes,
+          segment.endMinutes,
+          'booked'
+        );
+      }
+    }
+  }
+  return segments;
+}
+
 export function buildEmployeeOccupancySegments(input: {
   profileId: string;
   workDate: string;

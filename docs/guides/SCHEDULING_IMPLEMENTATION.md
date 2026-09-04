@@ -8,7 +8,7 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 - Managers can create quoted work from the board, reserve Project Numbers, place open Projects onto the calendar, and use **Quick add** for emergency jobs.
 - Quick add creates a formal Project Number, schedule job, and timed visit in one step for an existing customer/site. No quote or RAMS document upload is required.
 - Resource cards expose a dedicated drag handle for touch-first drag-and-drop. Selecting a visit and tapping a resource remains supported.
-- Daily **Team 1–3** buckets let managers assemble an organisation-shared crew of up to six employees for the selected date, then drag the whole bucket onto a timed visit. Conflicted people are skipped and reported; the bucket stays filled. This is independent of org team filters.
+- Daily team buckets (default five, up to ten via Settings) let managers assemble an organisation-shared crew of up to six employees, including a standing team leader, for the selected date, then drag the whole bucket onto a timed visit. Leaders persist in settings and are implicit members every day. Employees appear in Resources or a bucket, never both. Conflicted people are skipped and reported; the bucket stays filled. This is independent of org team filters.
 - Board mutations update the local cache immediately and reconcile with the server in the background.
 
 ## Optimistic mutation contract
@@ -37,6 +37,7 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 
 These ideas are intentionally deferred and must not be treated as current scope:
 
+- Expanding team-bucket editor and leaders on extra teams 6–10.
 - Saved team templates and standing multi-day crews for emergency call-outs.
 - Weekly-view team buckets.
 - Cross-tab realtime schedule synchronisation.

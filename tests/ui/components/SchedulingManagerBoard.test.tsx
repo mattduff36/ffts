@@ -124,6 +124,7 @@ const {
   mockAddDayTeamMember,
   mockRemoveDayTeamMember,
   mockAssignDayTeam,
+  mockSaveTeamSettings,
 } = vi.hoisted(() => ({
   dndState: {
     onDragEnd: undefined as ((event: DragEndEvent) => void) | undefined,
@@ -163,6 +164,7 @@ const {
   mockAddDayTeamMember: vi.fn(),
   mockRemoveDayTeamMember: vi.fn(),
   mockAssignDayTeam: vi.fn(),
+  mockSaveTeamSettings: vi.fn(),
 }));
 
 vi.mock('@dnd-kit/dom', () => ({
@@ -275,6 +277,7 @@ vi.mock('@/lib/client/scheduling', async () => {
     addScheduleDayTeamMember: mockAddDayTeamMember,
     removeScheduleDayTeamMember: mockRemoveDayTeamMember,
     assignScheduleDayTeam: mockAssignDayTeam,
+    saveScheduleTeamSettings: mockSaveTeamSettings,
   };
 });
 
@@ -1562,6 +1565,107 @@ describe('SchedulingManagerBoard', () => {
     expect(await screen.findByText('Daily job board')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-day-team-buckets-desktop')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-day-team-buckets-mobile')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-day-team-slot-desktop-1')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-day-team-slot-desktop-5')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-day-team-slot-desktop-6')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-settings-button')).toBeInTheDocument();
+  });
+
+  it('opens Settings and persists an extra unnamed team', async () => {
+    prepareDailyBoard();
+    mockSaveTeamSettings.mockResolvedValue({
+      settings: {
+        visible_slot_count: 6,
+        leaders: [],
+        updated_by: 'manager-1',
+        updated_at: '2026-09-01T08:00:00.000Z',
+      },
+    });
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-settings-button'));
+    expect(screen.getByTestId('schedule-team-settings-dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-team-add-extra'));
+    fireEvent.click(screen.getByTestId('schedule-team-settings-save'));
+    await waitFor(() => expect(mockSaveTeamSettings).toHaveBeenCalledWith({
+      visible_slot_count: 6,
+      leaders: [
+        { slot_index: 1, profile_id: null },
+        { slot_index: 2, profile_id: null },
+        { slot_index: 3, profile_id: null },
+        { slot_index: 4, profile_id: null },
+        { slot_index: 5, profile_id: null },
+      ],
+    }));
+    expect(await screen.findByTestId('schedule-day-team-slot-desktop-6')).toBeInTheDocument();
+    expect(screen.getAllByText('Team 6').length).toBeGreaterThan(0);
+  });
+
+  it('hides leaders and that day’s members from Employees', async () => {
+    const today = prepareDailyBoard();
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: getSchedulingWeek(today),
+      jobs: [{
+        ...board.jobs[0],
+        start_date: getSchedulingWeek(today).start,
+        end_date: getSchedulingWeek(today).end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+      resources: {
+        ...board.resources,
+        employees: [
+          ...board.resources.employees,
+          {
+            id: 'employee-3',
+            full_name: 'Chris West',
+            employee_id: 'E003',
+            team_id: 'team-1',
+            team_name: 'Arborists',
+          },
+        ],
+      },
+      team_settings: {
+        visible_slot_count: 5,
+        leaders: [{
+          slot_index: 1,
+          profile_id: 'employee-1',
+          employee: board.resources.employees[0],
+        }],
+        updated_by: 'manager-1',
+        updated_at: `${today}T08:00:00.000Z`,
+      },
+      day_teams: [{
+        date: today,
+        slots: [{
+          work_date: today,
+          slot_index: 2,
+          members: [{
+            work_date: today,
+            slot_index: 2,
+            profile_id: 'employee-2',
+            employee: board.resources.employees[1],
+            added_by: 'manager-1',
+            created_at: `${today}T08:00:00.000Z`,
+          }],
+        }],
+      }],
+    });
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    expect(screen.getAllByText("Alex S's team").length).toBeGreaterThan(0);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.queryByTestId('schedule-resource-employee-employee-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-employee-employee-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-employee-employee-3')).toBeInTheDocument();
   });
 
   it('occupancy-strip-daily-employees shows occupancy on Daily employee cards only', async () => {
@@ -1653,6 +1757,8 @@ describe('SchedulingManagerBoard', () => {
           },
           { work_date: today, slot_index: 2, members: [] },
           { work_date: today, slot_index: 3, members: [] },
+          { work_date: today, slot_index: 4, members: [] },
+          { work_date: today, slot_index: 5, members: [] },
         ],
       }],
     });
@@ -1690,7 +1796,6 @@ describe('SchedulingManagerBoard', () => {
     await waitFor(() => expect(mockAssignDayTeam).toHaveBeenCalledWith({
       visit_id: 'visit-1',
       slot_index: 1,
-      member_ids: ['employee-2'],
       member_request_ids: {
         'employee-2': expect.any(String),
       },

@@ -229,7 +229,20 @@ export interface SchedulePlantUnavailability {
   plant?: SchedulePlantResource | null;
 }
 
-export type ScheduleDayTeamSlotIndex = 1 | 2 | 3;
+export type ScheduleDayTeamSlotIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export interface ScheduleTeamSlotLeader {
+  slot_index: ScheduleDayTeamSlotIndex;
+  profile_id: string;
+  employee: ScheduleEmployeeResource | null;
+}
+
+export interface ScheduleTeamSettings {
+  visible_slot_count: number;
+  leaders: ScheduleTeamSlotLeader[];
+  updated_by: string | null;
+  updated_at: string | null;
+}
 
 export interface ScheduleDayTeamMember {
   work_date: string;
@@ -238,6 +251,7 @@ export interface ScheduleDayTeamMember {
   employee: ScheduleEmployeeResource | null;
   added_by: string | null;
   created_at: string;
+  is_leader?: boolean;
 }
 
 export interface ScheduleDayTeamSlot {
@@ -276,8 +290,9 @@ export interface SchedulingBoardPayload {
   };
   employee_capacity: ScheduleDayCapacity[];
   employee_day_sessions?: ScheduleEmployeeDaySession[];
-  plant_unavailability: SchedulePlantUnavailability[];
+    plant_unavailability: SchedulePlantUnavailability[];
   day_teams: ScheduleDayTeams[];
+  team_settings?: ScheduleTeamSettings;
 }
 
 export interface ScheduleEmployeeCapacity {

@@ -6,12 +6,14 @@ import type {
   ScheduleJob,
   SchedulePlantUnavailability,
   ScheduleProjectCandidate,
+  ScheduleTeamSettings,
   ScheduleQuoteCandidate,
   ScheduleVisit,
   ScheduleVisitBacklogItem,
   SchedulingBoardPayload,
 } from '@/types/scheduling';
 import {
+  buildScheduleDayTeams,
   removeScheduleDayTeamMember as removeDayTeamMemberFromBoard,
   upsertScheduleDayTeamMember,
 } from '@/lib/utils/scheduling-day-teams';
@@ -73,6 +75,21 @@ export function patchBoardWithDayTeamMember(
   member: ScheduleDayTeamMember
 ): SchedulingBoardPayload {
   return upsertScheduleDayTeamMember(board, member);
+}
+
+export function patchBoardWithTeamSettings(
+  board: SchedulingBoardPayload,
+  settings: ScheduleTeamSettings
+): SchedulingBoardPayload {
+  const dates = (board.day_teams || []).map((entry) => entry.date);
+  const storedMembers = (board.day_teams || []).flatMap((entry) =>
+    entry.slots.flatMap((slot) => slot.members)
+  ).filter((member) => member.is_leader !== true);
+  return {
+    ...board,
+    team_settings: settings,
+    day_teams: buildScheduleDayTeams(dates, storedMembers, settings),
+  };
 }
 
 export function patchBoardRemoveDayTeamMember(

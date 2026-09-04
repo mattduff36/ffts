@@ -43,6 +43,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Settings,
   Trash2,
   Tractor,
   Users,
@@ -96,6 +97,7 @@ import {
   scheduleQueuedVisit,
   saveQuoteSchedule,
   savePlantUnavailability,
+  saveScheduleTeamSettings,
   saveScheduleJob,
   saveScheduleVisit,
   SchedulingApiError,
@@ -119,6 +121,7 @@ import {
   patchBoardWithAssignment,
   patchBoardWithDayTeamMember,
   patchBoardRemoveDayTeamMember,
+  patchBoardWithTeamSettings,
   patchBoardWithQuickAdd,
   patchBoardWithVisit,
   removeProjectCandidateFromQueue,
@@ -178,16 +181,24 @@ import {
 } from '@/lib/config/scheduling-view-preference';
 import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
-import { slotsForScheduleDate } from '@/lib/utils/scheduling-day-teams';
+import {
+  profileIdsHiddenFromScheduleResources,
+  standingLeaderProfileIds,
+  slotsForScheduleDate,
+  teamSettingsFromBoard,
+} from '@/lib/utils/scheduling-day-teams';
 import {
   buildEmployeeOccupancySegments,
-  formatOccupancySummary,
+  mergeTeamOccupancySegments,
 } from '@/lib/utils/scheduling-occupancy';
 import { ScheduleDayTeamBuckets, type ScheduleDayTeamDragData } from './ScheduleDayTeamBuckets';
+import { ScheduleTeamSettingsDialog } from './ScheduleTeamSettingsDialog';
 import {
-  ResourceOccupancyLegend,
-  ResourceOccupancyStrip,
-} from './ResourceOccupancyStrip';
+  ResourceCard,
+  ResourceDragCue,
+  useDragSafeActivation,
+} from './ScheduleResourceCard';
+import { ResourceOccupancyLegend } from './ResourceOccupancyStrip';
 import {
   buildScheduleBoardRows,
   filterHiddenBoardAssignments,
@@ -209,6 +220,7 @@ import {
 import {
   enumerateScheduleDates,
   formatScheduleEmployeeCompactName,
+  formatScheduleTeamName,
   formatScheduleDate,
   formatScheduleVisitTime,
   getScheduleQuoteEndDate,
@@ -253,17 +265,6 @@ import { schedulingControlStyles } from './scheduling-control-styles';
 import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
 import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
-
-interface ResourceCardProps {
-  resource: SelectedScheduleResource;
-  subtitle: string;
-  metadata: string;
-  selected: boolean;
-  dragEnabled: boolean;
-  warning?: string;
-  occupancySegments?: ScheduleOccupancySegment[];
-  onSelect: () => void;
-}
 
 const RESOURCE_GUIDANCE_CLASS =
   'rounded-md border border-dashed border-slate-700 bg-slate-950/40 p-2 text-xs leading-relaxed text-slate-300';
@@ -406,41 +407,6 @@ interface DndAnnouncementEvent {
   canceled?: boolean;
 }
 
-function useDragSafeActivation(isDragging: boolean, onActivate: () => void) {
-  const didDrag = useRef(false);
-
-  useEffect(() => {
-    if (isDragging) didDrag.current = true;
-  }, [isDragging]);
-
-  function handleClick(event: MouseEvent<HTMLButtonElement>) {
-    if (didDrag.current) {
-      didDrag.current = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    onActivate();
-  }
-
-  function resetDragState() {
-    if (!isDragging) didDrag.current = false;
-  }
-
-  return { handleClick, resetDragState };
-}
-
-function ResourceDragCue({ testId }: { testId: string }) {
-  return (
-    <GripVertical
-      aria-hidden="true"
-      focusable="false"
-      data-testid={testId}
-      className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground"
-    />
-  );
-}
-
 /** Must render inside DragDropProvider so the droppable registers with the manager. */
 function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
   const { ref, isDropTarget } = useDroppable({
@@ -462,151 +428,6 @@ function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
     >
       {children}
     </Card>
-  );
-}
-
-function resourceCardTint(type: SelectedScheduleResource['type']): string {
-  return type === 'employee'
-    ? schedulingControlStyles.resourceEmployee
-    : schedulingControlStyles.resourcePlant;
-}
-
-function ResourceCard({
-  resource,
-  subtitle,
-  metadata,
-  selected,
-  dragEnabled,
-  warning,
-  occupancySegments,
-  onSelect,
-}: ResourceCardProps) {
-  if (dragEnabled) {
-    return (
-      <DraggableResourceCard
-        resource={resource}
-        subtitle={subtitle}
-        metadata={metadata}
-        selected={selected}
-        warning={warning}
-        occupancySegments={occupancySegments}
-        onSelect={onSelect}
-      />
-    );
-  }
-
-  const occupancyLabel = occupancySegments
-    ? formatOccupancySummary(occupancySegments)
-    : undefined;
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      aria-label={`${selected ? 'Selected' : 'Select'} ${resource.label}${occupancyLabel ? `. ${occupancyLabel}` : ''}`}
-      title={occupancyLabel}
-      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
-      className={cn(
-        'relative flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left transition',
-        selected
-          ? schedulingControlStyles.primary
-          : resourceCardTint(resource.type)
-      )}
-    >
-      <ResourceDragCue testId="schedule-resource-drag-cue" />
-      <span className="min-w-0 flex-1 space-y-0.5">
-        <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
-          {resource.label}
-        </span>
-        <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
-          {subtitle}
-        </span>
-        <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
-          {metadata}
-        </span>
-      </span>
-      {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
-      {occupancySegments ? (
-        <ResourceOccupancyStrip resourceId={resource.id} segments={occupancySegments} />
-      ) : null}
-    </button>
-  );
-}
-
-function DraggableResourceCard({
-  resource,
-  subtitle,
-  metadata,
-  selected,
-  warning,
-  occupancySegments,
-  onSelect,
-}: Omit<ResourceCardProps, 'dragEnabled'>) {
-  const { ref, handleRef, isDragging } = useDraggable({
-    id: `resource:${resource.type}:${resource.id}`,
-    type: 'schedule-resource',
-    data: { resource },
-  });
-  const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
-  const occupancyLabel = occupancySegments
-    ? formatOccupancySummary(occupancySegments)
-    : undefined;
-
-  return (
-    <button
-      ref={(node) => {
-        ref(node);
-        handleRef(node);
-      }}
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        handleClick(event);
-      }}
-      onPointerDown={resetDragState}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') resetDragState();
-      }}
-      aria-pressed={selected}
-      aria-label={`${resource.label}: select resource or drag to a timed visit${occupancyLabel ? `. ${occupancyLabel}` : ''}`}
-      title={occupancyLabel || 'Tap to assign, or drag to a timed visit'}
-      data-testid={`schedule-resource-${resource.type}-${resource.id}`}
-      className={cn(
-        'relative flex min-h-11 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition',
-        selected
-          ? schedulingControlStyles.primary
-          : resourceCardTint(resource.type),
-        isDragging && 'cursor-grabbing opacity-40'
-      )}
-      style={{ touchAction: 'none' }}
-    >
-      <span
-        data-testid={`schedule-resource-drag-handle-${resource.type}-${resource.id}`}
-        className="flex min-h-11 min-w-11 touch-none items-center justify-center self-stretch"
-        style={{ touchAction: 'none' }}
-        aria-hidden="true"
-      >
-        <ResourceDragCue testId="schedule-resource-drag-cue" />
-      </span>
-      <span className="flex min-w-0 flex-1 items-center gap-2 p-2 pl-0">
-        <span className="min-w-0 flex-1 space-y-0.5">
-          <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
-            {resource.label}
-          </span>
-          <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
-            {subtitle}
-          </span>
-          <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-300')} title={metadata}>
-            {metadata}
-          </span>
-        </span>
-        {warning ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" aria-label={warning} /> : null}
-      </span>
-      {occupancySegments ? (
-        <ResourceOccupancyStrip resourceId={resource.id} segments={occupancySegments} />
-      ) : null}
-    </button>
   );
 }
 
@@ -2142,6 +1963,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [projectPlacementDraft, setProjectPlacementDraft] =
     useState<CreateProjectScheduleJobInput | null>(null);
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
+  const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
+  const [teamSettingsSaving, setTeamSettingsSaving] = useState(false);
   const [plantBlockDraft, setPlantBlockDraft] =
     useState<SavePlantUnavailabilityInput | null>(null);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
@@ -3086,14 +2909,33 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   const matchingEmployees = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
+    const hidden = profileIdsHiddenFromScheduleResources(board, selectedDate);
     return (board?.resources.employees || []).filter(
       (employee) =>
+        !hidden.has(employee.id) &&
         (teamFilter === 'all' || employee.team_id === teamFilter) &&
         (!search ||
           employee.full_name.toLowerCase().includes(search) ||
           (employee.employee_id || '').toLowerCase().includes(search))
     );
-  }, [board, resourceSearch, teamFilter]);
+  }, [board, resourceSearch, selectedDate, teamFilter]);
+  const dayTeamOccupancyBySlot = useMemo(() => {
+    const settings = teamSettingsFromBoard(board);
+    const occupancy: Partial<Record<ScheduleDayTeamSlotIndex, ScheduleOccupancySegment[]>> = {};
+    for (const slot of slotsForScheduleDate(board?.day_teams, selectedDate, settings)) {
+      occupancy[slot.slot_index] = mergeTeamOccupancySegments(
+        slot.members.map((member) =>
+          buildEmployeeOccupancySegments({
+            profileId: member.profile_id,
+            workDate: selectedDate,
+            assignments: board?.assignments || [],
+            sessions: board?.employee_day_sessions,
+          })
+        )
+      );
+    }
+    return occupancy;
+  }, [board, selectedDate]);
   const matchingPlant = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
     return (board?.resources.plant || []).filter(
@@ -4684,6 +4526,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.error('That employee is no longer available.');
       return;
     }
+    if (standingLeaderProfileIds(teamSettingsFromBoard(board)).has(resource.id)) {
+      toast.info('Change this team leader in Settings instead.');
+      return;
+    }
     const mutationKey = `day-team:${workDate}`;
     const mutationEpoch = beginMutation(mutationKey);
     if (mutationEpoch == null) return;
@@ -4769,6 +4615,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     slotIndex: ScheduleDayTeamSlotIndex,
     profileId: string
   ) {
+    if (standingLeaderProfileIds(teamSettingsFromBoard(board)).has(profileId)) {
+      toast.info('Change this team leader in Settings instead.');
+      return;
+    }
     const workDate = selectedDate;
     const mutationKey = `day-team:${workDate}`;
     const mutationEpoch = beginMutation(mutationKey);
@@ -4815,6 +4665,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
+  async function handleTeamSettingsSave(input: {
+    visible_slot_count: number;
+    leaders: Array<{ slot_index: number; profile_id: string | null }>;
+  }) {
+    if (!board) return;
+    setTeamSettingsSaving(true);
+    try {
+      const result = await saveScheduleTeamSettings(input);
+      setBoardBaseData((current) => patchBoardWithTeamSettings(current, result.settings));
+      setTeamSettingsOpen(false);
+      toast.success('Team settings saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save team settings');
+    } finally {
+      setTeamSettingsSaving(false);
+    }
+  }
+
   async function assignDayTeamToBoardVisit(
     target: ActiveVisitTarget,
     slotIndex: ScheduleDayTeamSlotIndex
@@ -4826,7 +4694,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this new visit to finish saving before assigning a team.');
       return;
     }
-    const members = slotsForScheduleDate(board?.day_teams, selectedDate)
+    const members = slotsForScheduleDate(
+      board?.day_teams,
+      selectedDate,
+      teamSettingsFromBoard(board)
+    )
       .find((slot) => slot.slot_index === slotIndex)
       ?.members || [];
     if (members.length === 0) {
@@ -4900,7 +4772,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           const result = await assignScheduleDayTeam({
             visit_id: target.visit.id,
             slot_index: slotIndex,
-            member_ids: memberIds,
             member_request_ids: memberRequestIds,
           });
           if (result.assignments.length > 0) {
@@ -6104,6 +5975,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Quick add
                 </Button>
+                <Button
+                  variant="outline"
+                  className={schedulingControlStyles.outline}
+                  onClick={() => setTeamSettingsOpen(true)}
+                  data-testid="schedule-settings-button"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
               </>
             )}
           />
@@ -6474,7 +6354,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <div className="hidden md:block">
                   <ScheduleDayTeamBuckets
                     workDate={selectedDate}
-                    slots={slotsForScheduleDate(board.day_teams, selectedDate)}
+                    slots={slotsForScheduleDate(
+                      board.day_teams,
+                      selectedDate,
+                      teamSettingsFromBoard(board)
+                    )}
+                    teamSettings={teamSettingsFromBoard(board)}
+                    occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="desktop"
                     onRemoveMember={removeEmployeeFromDayTeam}
                   />
@@ -6928,7 +6814,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 {view === SCHEDULING_BOARD_VIEWS.daily ? (
                   <ScheduleDayTeamBuckets
                     workDate={selectedDate}
-                    slots={slotsForScheduleDate(board.day_teams, selectedDate)}
+                    slots={slotsForScheduleDate(
+                      board.day_teams,
+                      selectedDate,
+                      teamSettingsFromBoard(board)
+                    )}
+                    teamSettings={teamSettingsFromBoard(board)}
+                    occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="mobile"
                     onRemoveMember={removeEmployeeFromDayTeam}
                   />
@@ -7164,7 +7056,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           </div>
         ) : draggedDayTeam ? (
           <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">
-            Team {draggedDayTeam.slotIndex}
+            {formatScheduleTeamName(
+              teamSettingsFromBoard(board).leaders.find(
+                (leader) => leader.slot_index === draggedDayTeam.slotIndex
+              )?.employee?.full_name,
+              draggedDayTeam.slotIndex
+            )}
           </div>
         ) : draggedResource ? (
           <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">
@@ -7315,6 +7212,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             />
           ) : null}
         </>
+      ) : null}
+      {board ? (
+        <ScheduleTeamSettingsDialog
+          open={teamSettingsOpen}
+          onOpenChange={setTeamSettingsOpen}
+          employees={board.resources.employees}
+          settings={teamSettingsFromBoard(board)}
+          dayTeams={board.day_teams}
+          saving={teamSettingsSaving}
+          onSave={handleTeamSettingsSave}
+        />
       ) : null}
       {unavailabilityOpen ? (
         <PlantUnavailabilityDialog

@@ -11,6 +11,7 @@ import type {
   ScheduleVisitBacklogPreview,
   EnqueueScheduleVisitResult,
   ScheduleQueuedVisitResult,
+  ScheduleTeamSettings,
   SchedulingBoardPayload,
   SchedulingConflict,
   SchedulingContext,
@@ -397,7 +398,7 @@ export async function createScheduleAssignment(
 
 export async function addScheduleDayTeamMember(input: {
   work_date: string;
-  slot_index: 1 | 2 | 3;
+  slot_index: number;
   profile_id: string;
 }): Promise<{ member: Record<string, unknown> }> {
   assertNoProvisionalIds(input);
@@ -412,7 +413,7 @@ export async function addScheduleDayTeamMember(input: {
 
 export async function removeScheduleDayTeamMember(input: {
   work_date: string;
-  slot_index: 1 | 2 | 3;
+  slot_index: number;
   profile_id: string;
 }): Promise<{ success: boolean }> {
   assertNoProvisionalIds(input);
@@ -444,10 +445,22 @@ export interface DayTeamAssignResult {
   partial?: boolean;
 }
 
+export async function saveScheduleTeamSettings(input: {
+  visible_slot_count: number;
+  leaders: Array<{ slot_index: number; profile_id: string | null }>;
+}): Promise<{ settings: ScheduleTeamSettings }> {
+  return readResponse(
+    await fetch('/api/scheduling/team-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
 export async function assignScheduleDayTeam(input: {
   visit_id: string;
-  slot_index: 1 | 2 | 3;
-  member_ids?: string[];
+  slot_index: number;
   member_request_ids?: Record<string, string>;
 }): Promise<DayTeamAssignResult> {
   assertNoProvisionalIds(input);

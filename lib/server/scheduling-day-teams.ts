@@ -6,9 +6,13 @@ import {
 } from '@/lib/server/scheduling-assignment-idempotency';
 import { loadEmployeeCapacityForDates } from '@/lib/server/scheduling-assignment-capacity';
 import { detectEmployeeConflicts } from '@/lib/server/scheduling-conflicts';
+import { loadScheduleTeamSettings } from '@/lib/server/scheduling-team-settings';
 import {
   buildScheduleDayTeams,
+  defaultScheduleTeamSettings,
   isScheduleDayTeamSlotIndex,
+  isVisibleScheduleDayTeamSlotIndex,
+  leaderBySlotIndex,
   mapDayTeamMemberRow,
 } from '@/lib/utils/scheduling-day-teams';
 import { enumerateScheduleDates, getScheduleVisitDate } from '@/lib/utils/scheduling';
@@ -19,6 +23,7 @@ import type {
   ScheduleDayTeamSlotIndex,
   ScheduleDayTeams,
   ScheduleEmployeeResource,
+  ScheduleTeamSettings,
   ScheduleVisit,
   SchedulingConflict,
 } from '@/types/scheduling';
@@ -61,8 +66,11 @@ export function mapDayTeamRpcError(error: { code?: string; message?: string }): 
   if (message.includes('TEAM_SLOT_FULL')) {
     return { status: 409, error: 'This team already has six employees.' };
   }
+  if (message.includes('TEAM_LEADER_LOCKED')) {
+    return { status: 409, error: 'Change this team leader in Settings instead.' };
+  }
   if (message.includes('TEAM_SLOT_INVALID')) {
-    return { status: 400, error: 'Choose Team 1, Team 2, or Team 3.' };
+    return { status: 400, error: 'Choose a visible team bucket.' };
   }
   if (message.includes('TEAM_PROFILE_INVALID')) {
     return { status: 400, error: 'Choose an active employee for this team.' };
@@ -74,7 +82,8 @@ export async function loadScheduleDayTeams(
   admin: SupabaseClient,
   weekStart: string,
   weekEnd: string,
-  employeesById: Map<string, ScheduleEmployeeResource>
+  employeesById: Map<string, ScheduleEmployeeResource>,
+  settings: ScheduleTeamSettings = defaultScheduleTeamSettings()
 ): Promise<ScheduleDayTeams[]> {
   const dates = enumerateScheduleDates(weekStart, weekEnd);
   const result = await admin
@@ -86,14 +95,14 @@ export async function loadScheduleDayTeams(
     .order('created_at');
   if (result.error) {
     if (isMissingDayTeamsRelation(result.error)) {
-      return buildScheduleDayTeams(dates, []);
+      return buildScheduleDayTeams(dates, [], settings);
     }
     throw result.error;
   }
   const members = ((result.data || []) as Array<Record<string, unknown>>)
     .map((row) => mapDayTeamMemberRow(row, employeesById))
     .filter((row): row is ScheduleDayTeamMember => Boolean(row));
-  return buildScheduleDayTeams(dates, members);
+  return buildScheduleDayTeams(dates, members, settings);
 }
 
 export interface DayTeamSkippedMember {
@@ -151,7 +160,6 @@ export async function assignDayTeamToVisit(
     visitId: string;
     slotIndex: ScheduleDayTeamSlotIndex;
     actorUserId: string;
-    memberIds?: string[];
     memberRequestIds?: Record<string, string>;
   }
 ): Promise<AssignDayTeamResult | { status: number; error: string }> {
@@ -167,21 +175,26 @@ export async function assignDayTeamToVisit(
   }
 
   const workDate = getScheduleVisitDate(visit.starts_at);
-  let uniqueProfileIds = Array.from(new Set(input.memberIds || []));
-  if (!input.memberIds) {
-    const membersResult = await admin
-      .from('schedule_day_team_members')
-      .select('work_date, slot_index, profile_id, added_by, created_at')
-      .eq('work_date', workDate)
-      .eq('slot_index', input.slotIndex)
-      .order('created_at');
-    if (membersResult.error) throw membersResult.error;
-    uniqueProfileIds = Array.from(
-      new Set(
-        ((membersResult.data || []) as Array<{ profile_id: string }>).map((row) => row.profile_id)
-      )
-    );
+  const settings = await loadScheduleTeamSettings(admin, new Map());
+  if (!isVisibleScheduleDayTeamSlotIndex(input.slotIndex, settings.visible_slot_count)) {
+    return { status: 400, error: 'Choose a visible team bucket.' };
   }
+  const membersResult = await admin
+    .from('schedule_day_team_members')
+    .select('work_date, slot_index, profile_id, added_by, created_at')
+    .eq('work_date', workDate)
+    .eq('slot_index', input.slotIndex)
+    .order('created_at');
+  if (membersResult.error) throw membersResult.error;
+  const leader = leaderBySlotIndex(settings, input.slotIndex);
+  const uniqueProfileIds = Array.from(
+    new Set([
+      ...(leader ? [leader.profile_id] : []),
+      ...((membersResult.data || []) as Array<{ profile_id: string }>)
+        .map((row) => row.profile_id)
+        .filter((profileId) => profileId !== leader?.profile_id),
+    ])
+  );
   if (uniqueProfileIds.length === 0) {
     const capacity = await loadEmployeeCapacityForDates(admin, [workDate]);
     return {

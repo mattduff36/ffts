@@ -50,6 +50,15 @@ export function formatScheduleEmployeeCompactName(fullName: string): string {
   return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0).toUpperCase()}`;
 }
 
+export function formatScheduleTeamName(
+  leaderFullName: string | null | undefined,
+  slotIndex: number
+): string {
+  const compact = leaderFullName ? formatScheduleEmployeeCompactName(leaderFullName) : '';
+  if (!compact || compact === 'Employee') return `Team ${slotIndex}`;
+  return `${compact}'s team`;
+}
+
 export function formatScheduleDate(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }

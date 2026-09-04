@@ -15,6 +15,7 @@ alwaysApply: true
 - Keep functions typed and focused; update targeted tests when behavior changes.
 - Do not expose environment values or secrets.
 - Keep all workflows self-contained in FFTS. Do not add runtime, test, script, rule, or configuration dependencies on sibling repositories.
+- Do not create sibling FFTS worktrees or recovery/release folders by default. Prefer this checkout, normal branches, and in-place fixes. A separate worktree is allowed only when the user explicitly asks or it is genuinely impossible to proceed safely here; explain why first, keep it temporary, and remove it before completion.
 - `npm run fixerrors` (and `--no-clear`) is the non-destructive export/analysis path. Trusted cleanup uses only the exact printed bound command under `fixerrors-exact-snapshot-v1`. Debug UI / `clear-all-error-logs` clears remain untrusted.
 - Run application builds only when the user authorizes a test build. Project-specific rules override generic TEE when stricter.
 - Local commit is not release-ready, and release-ready is not a push. Do not hand-edit workflow protocol JSON.

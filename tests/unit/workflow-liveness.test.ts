@@ -980,8 +980,12 @@ describe('workflow liveness hardening', () => {
     const ffap = readFileSync(path.join(process.cwd(), '.cursor/commands/ffap.md'), 'utf8');
     expect(finalise).toMatch(/not push/i);
     expect(finaliseFull).toMatch(/not push/i);
-    expect(fap).toMatch(/finalise:push/);
-    expect(ffap).toMatch(/finalise:full:push/);
+    expect(fap).toMatch(/Ordinary \(non-CRITICAL\) completion: run `npm run finalise`/);
+    expect(ffap).toMatch(/Ordinary \(non-CRITICAL\) completion: run `npm run finalise:full`/);
+    expect(fap).toContain('Do not run `npm run finalise:push`');
+    expect(ffap).toContain('Do not run `npm run finalise:full:push`');
+    expect(fap).toMatch(/Protected CRITICAL \/ C9 completion[\s\S]*npm run finalise:push/);
+    expect(ffap).toMatch(/Protected CRITICAL \/ C9 completion[\s\S]*npm run finalise:full:push/);
   });
 });
 

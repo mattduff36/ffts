@@ -7,9 +7,9 @@ alwaysApply: true
 
 - Map `finalise` to `npm run finalise`.
 - Map `finalise full` to `npm run finalise:full`.
-- Map `finalise and push` and `fap` / `/fap` to `npm run finalise:push`.
-- Map `finalise full and push` and `ffap` / `/ffap` to `npm run finalise:full:push`.
-- Use `npm run finalise:push` or `npm run finalise:full:push` only when the user wrote an authorized push phrase (`finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, `finalise:push`, or `push to GitHub` as applicable). These aliases implement the global COMPLETE_AND_RELEASE contract and must not be redefined as local-only.
+- Map `finalise and push` and `fap` / `/fap` to COMPLETE_AND_RELEASE(normal): ordinary work runs `npm run finalise`, then a normal fetch/ancestry check and fast-forward push. Protected CRITICAL / C9 work uses `npm run finalise:push`.
+- Map `finalise full and push` and `ffap` / `/ffap` to COMPLETE_AND_RELEASE(full): ordinary work runs `npm run finalise:full`, then a normal fetch/ancestry check and fast-forward push. Protected CRITICAL / C9 work uses `npm run finalise:full:push`.
+- Use those authorized push phrases (`finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, `finalise:push`, or `push to GitHub` as applicable) only when the user wrote them as the current action. They implement the global COMPLETE_AND_RELEASE contract and must not be redefined as local-only. Do not invoke `finalise:push` / `finalise:full:push` for ordinary work; those scripts keep refusing ordinary `--push` before mutation.
 - Before any push, report the branch, commits, and changed files that will be pushed.
 - Check for an existing finalise process before starting another.
 - Never push after a failed build, test, cleanup, commit, or release-metadata step.

@@ -20,8 +20,12 @@ import {
   withWorkflowLock,
 } from './workflow-events';
 import {
+  buildOrdinaryFinaliseCorrelation,
   correlateFinaliseRun,
+  resolveProtectedFinaliseC9Authority,
+  revalidateCapturedC9Authority,
   shouldApplyFinaliseCorrelation,
+  type ProtectedFinaliseC9Authority,
 } from './workflow-finalise-correlation';
 import {
   commitFinaliseCorrelationStateAndProtocols,
@@ -118,11 +122,6 @@ export function readPostRunGitIdentity(repoRoot = DEFAULT_REPO_ROOT): {
       runMetadataCommand('git', ['branch', '--show-current'], repoRoot) || '(detached HEAD)',
     headCommit: runMetadataCommand('git', ['rev-parse', 'HEAD'], repoRoot) || null,
   };
-}
-
-function loadProtectedC9Context(repoRoot: string): WorkflowActiveFinaliseContext | null {
-  const paths = getWorkflowPaths(repoRoot);
-  return getActiveFinaliseContext(loadWorkflowReviewStateStrict(paths.statePath));
 }
 
 export function assertPassedProtectedFinaliseC9Identity(params: {
@@ -453,6 +452,8 @@ export class AutomationRun {
   private readonly markdownPath: string;
   private readonly capturedC9Context: WorkflowActiveFinaliseContext | null;
   private readonly capturedC9WorkstreamId: string | null;
+  private readonly capturedC9Authority: ProtectedFinaliseC9Authority | null;
+  private readonly capturedC9IdentityError: string | null;
   private readonly log: Omit<AutomationRunLog, 'endedAt' | 'durationMs' | 'status' | 'artifacts'>;
 
   constructor(options: AutomationRunOptions) {
@@ -460,15 +461,18 @@ export class AutomationRun {
     const safeScriptName = options.scriptName.replace(/[^a-z0-9-]/giu, '-').toLowerCase();
     this.persist = options.persist !== false;
     this.repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
-    const loadedContext =
+    const appliesProtectedFinalise =
       this.persist &&
       shouldApplyFinaliseCorrelation({
         scriptName: safeScriptName,
         mode: options.mode,
         args: options.args,
-      })
-        ? loadProtectedC9Context(this.repoRoot)
-        : null;
+      });
+    this.capturedC9Authority = appliesProtectedFinalise
+      ? resolveProtectedFinaliseC9Authority({ repoRoot: this.repoRoot })
+      : null;
+    const loadedContext =
+      this.capturedC9Authority?.kind === 'required' ? this.capturedC9Authority.context : null;
     this.capturedC9Context = loadedContext ? cloneActiveFinaliseContext(loadedContext) : null;
     this.capturedC9WorkstreamId = this.capturedC9Context?.workstreamId ?? null;
     const automationRoot = path.join(this.repoRoot, 'docs_private', 'automation');
@@ -491,13 +495,18 @@ export class AutomationRun {
       expectedArtifacts: options.expectedArtifacts ?? [],
       steps: [],
     };
-    if (this.persist && this.capturedC9Context) {
+    let capturedC9IdentityError: string | null = null;
+    if (this.persist && this.capturedC9Authority?.kind === 'required' && !this.capturedC9Context) {
+      capturedC9IdentityError = 'protected finalise C9 identity is missing';
+    } else if (this.persist && this.capturedC9Context) {
       const built = buildProtectedC9RunIdentity({
         runId: this.log.id,
         context: this.capturedC9Context,
         capturedAt: this.log.startedAt,
       });
-      if (built.ok) {
+      if (!built.ok) {
+        capturedC9IdentityError = built.message;
+      } else {
         const persisted = persistProtectedC9RunIdentity({
           runDirectory: this.runDirectory,
           identity: built.identity,
@@ -507,6 +516,7 @@ export class AutomationRun {
         }
       }
     }
+    this.capturedC9IdentityError = capturedC9IdentityError;
   }
 
   get runId(): string {
@@ -517,11 +527,92 @@ export class AutomationRun {
     return protectedC9IdentityPath(this.runDirectory, this.log.id);
   }
 
+  getCapturedC9Authority(): ProtectedFinaliseC9Authority | null {
+    return this.capturedC9Authority;
+  }
+
+  usesProtectedC9Binding(): boolean {
+    return this.capturedC9Authority?.kind === 'required';
+  }
+
   loadCapturedC9Identity() {
     return readProtectedC9RunIdentity({
       runDirectory: this.runDirectory,
       runId: this.log.id,
     });
+  }
+
+  private requireCapturedAuthorityForProtectedFinalise(
+    action: 'finish(passed)' | 'mutation' | 'remote mutation' = 'mutation'
+  ): ProtectedFinaliseC9Authority {
+    if (!this.capturedC9Authority) {
+      throw new Error(`protected finalise C9 authority is missing; refuse ${action}`);
+    }
+    if (this.capturedC9Authority.kind === 'unknown') {
+      throw new Error(`${this.capturedC9Authority.message}; refuse ${action}`);
+    }
+    const live = resolveProtectedFinaliseC9Authority({ repoRoot: this.repoRoot });
+    const checked = revalidateCapturedC9Authority({
+      captured: this.capturedC9Authority,
+      live,
+    });
+    if (!checked.ok) {
+      throw new Error(`${checked.message}; refuse ${action}`);
+    }
+    return checked.effective;
+  }
+
+  assertProtectedFinaliseAuthorityBeforeMutation(params: { pushRequested?: boolean } = {}): void {
+    if (!this.persist) return;
+    if (
+      !shouldApplyFinaliseCorrelation({
+        scriptName: this.log.scriptName,
+        mode: this.log.mode,
+        args: this.log.args,
+      })
+    ) {
+      return;
+    }
+    const authority = this.requireCapturedAuthorityForProtectedFinalise('mutation');
+    if (authority.kind === 'not_required' && params.pushRequested) {
+      throw new Error(
+        'ordinary finalise cannot use protected C9 push; refuse --push before mutation'
+      );
+    }
+    if (authority.kind !== 'required') {
+      return;
+    }
+    if (this.capturedC9IdentityError) {
+      throw new Error(`${this.capturedC9IdentityError}; refuse mutation`);
+    }
+    if (!this.capturedC9Context) {
+      throw new Error('protected finalise C9 identity is missing; refuse mutation');
+    }
+    const captured = this.loadCapturedC9Identity();
+    if (!captured.ok) {
+      throw new Error(`${captured.message}; refuse mutation`);
+    }
+    const memoryMatch = assertCapturedIdentityMatchesRunMemory({
+      identity: captured.identity,
+      runId: this.log.id,
+      capturedContext: this.capturedC9Context,
+      capturedWorkstreamId: this.capturedC9WorkstreamId,
+    });
+    if (!memoryMatch.ok) {
+      throw new Error(memoryMatch.message.replace('remote mutation', 'mutation'));
+    }
+    const live = getActiveFinaliseContext(
+      loadWorkflowReviewStateStrict(getWorkflowPaths(this.repoRoot).statePath)
+    );
+    if (
+      !live ||
+      live.workstreamId !== captured.identity.workstreamId ||
+      live.checkpointId !== captured.identity.checkpointId
+    ) {
+      throw new Error(
+        'live finalise owner drifted from captured authority; refuse mutation'
+      );
+    }
   }
 
   async step<T>(name: string, action: () => Promise<T> | T, metadata?: Record<string, unknown>): Promise<T> {
@@ -601,6 +692,16 @@ export class AutomationRun {
     status: AutomationRunStatus
   ): WorkflowFinaliseCorrelation | undefined {
     if (!this.persist) return undefined;
+    if (this.capturedC9Authority?.kind === 'not_required') {
+      const identity = readPostRunGitIdentity(this.repoRoot);
+      return buildOrdinaryFinaliseCorrelation({
+        branchName: identity.branchName,
+        headCommit: identity.headCommit,
+      });
+    }
+    if (this.capturedC9Authority?.kind === 'unknown') {
+      return undefined;
+    }
     return correlateFinaliseAutomationRun({
       scriptName: this.log.scriptName,
       status,
@@ -691,6 +792,12 @@ export class AutomationRun {
       })
     ) {
       return undefined;
+    }
+    const authority = this.requireCapturedAuthorityForProtectedFinalise('remote mutation');
+    if (authority.kind === 'not_required') {
+      throw new Error(
+        'ordinary finalise cannot use protected C9 push; refuse remote mutation'
+      );
     }
     const captured = this.loadCapturedC9Identity();
     if (!captured.ok) {
@@ -807,17 +914,25 @@ export class AutomationRun {
       required: artifact.required !== false,
     }));
     let workflowCorrelation: WorkflowFinaliseCorrelation | undefined;
-    const protectedPassed =
-      status === 'passed' &&
+    const protectedFinalise =
       this.persist &&
       shouldApplyFinaliseCorrelation({
         scriptName: this.log.scriptName,
         mode: this.log.mode,
         args: this.log.args,
       });
+    const protectedPassed = status === 'passed' && protectedFinalise;
     if (protectedPassed) {
-      // Validate C9 + correlation in memory, then persist success atomically.
-      workflowCorrelation = this.commitPassedProtectedFinaliseAfterC9Validation();
+      const authority = this.requireCapturedAuthorityForProtectedFinalise('finish(passed)');
+      if (authority.kind === 'not_required') {
+        const identity = readPostRunGitIdentity(this.repoRoot);
+        workflowCorrelation = buildOrdinaryFinaliseCorrelation({
+          branchName: identity.branchName,
+          headCommit: identity.headCommit,
+        });
+      } else {
+        workflowCorrelation = this.commitPassedProtectedFinaliseAfterC9Validation();
+      }
     } else {
       try {
         workflowCorrelation = this.correlateWorkflowIfFinalise(status);

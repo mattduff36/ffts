@@ -80,6 +80,18 @@ function recordFinaliseCheckpointStep(params: {
   exitCode?: number | null;
   artifactPaths?: string[];
 }): void {
+  if (automationRun && !automationRun.usesProtectedC9Binding()) {
+    markOrdinaryFinaliseStep({
+      repoRoot: REPO_ROOT,
+      mode: params.mode,
+      task: params.task,
+      status: params.status,
+      command: params.command,
+      exitCode: params.exitCode,
+      artifactPaths: params.artifactPaths,
+    });
+    return;
+  }
   const active = resolveActiveProtocolFinaliseContext(REPO_ROOT);
   if (active) {
     markFinaliseCheckpointStep({
@@ -988,6 +1000,9 @@ async function main(): Promise<void> {
       await run.step('Validate protocol finalise gate', () => {
         assertFinaliseAllowedForProtocol(REPO_ROOT);
       });
+      await run.step('Validate captured finalise C9 authority', () => {
+        run.assertProtectedFinaliseAuthorityBeforeMutation({ pushRequested: options.push });
+      });
     } else {
       await run.step('Inspect protocol finalise readiness', () => {
         console.log('\n==> Protocol readiness');
@@ -1076,7 +1091,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    const activeProtocolContext = resolveActiveProtocolFinaliseContext(REPO_ROOT);
+    const activeProtocolContext =
+      run.usesProtectedC9Binding() ? resolveActiveProtocolFinaliseContext(REPO_ROOT) : null;
     if (activeProtocolContext) {
       createOrLoadFinaliseCheckpoint({
         repoRoot: REPO_ROOT,
@@ -1264,9 +1280,12 @@ async function main(): Promise<void> {
     printProgress('Committing workspace changes if needed...', 90);
     const committed = await timeFinaliseStep(timingEntries, 'Commit workspace changes', () =>
       run.step('Commit workspace changes', () => {
-        assertFinaliseProductCommitAllowed(REPO_ROOT);
+        run.assertProtectedFinaliseAuthorityBeforeMutation({ pushRequested: options.push });
+        if (run.usesProtectedC9Binding()) {
+          assertFinaliseProductCommitAllowed(REPO_ROOT);
+        }
         const didCommit = commitAllChanges(changeSummary.commitMessage);
-        if (didCommit) {
+        if (didCommit && run.usesProtectedC9Binding()) {
           const owned = recordFinaliseOwnedCommit(REPO_ROOT);
           if (!owned.ok) {
             throw new Error(owned.message);
@@ -1294,10 +1313,13 @@ async function main(): Promise<void> {
     try {
       releaseVersion = await timeFinaliseStep(timingEntries, 'Bump release version locally', () =>
         run.step('Create release version commit', () => {
-          assertFinaliseProductCommitAllowed(REPO_ROOT);
+          run.assertProtectedFinaliseAuthorityBeforeMutation({ pushRequested: options.push });
+          if (run.usesProtectedC9Binding()) {
+            assertFinaliseProductCommitAllowed(REPO_ROOT);
+          }
           runCommand('npm', ['run', 'version:bump', '--', releaseBeforeSha, releaseAfterSha]);
           const version = commitReleaseVersionChanges(releasePrimaryCommitMessage);
-          if (version) {
+          if (version && run.usesProtectedC9Binding()) {
             const owned = recordFinaliseOwnedCommit(REPO_ROOT);
             if (!owned.ok) {
               throw new Error(owned.message);

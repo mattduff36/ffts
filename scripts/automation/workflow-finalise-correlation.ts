@@ -2,12 +2,14 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import type {
+  WorkflowActiveFinaliseContext,
   WorkflowFinaliseCorrelation,
   WorkflowProtocolPhase,
   WorkflowProtocolRecord,
   WorkflowReviewState,
   WorkflowWorkstreamRecord,
 } from './types';
+import { cloneActiveFinaliseContext } from './workflow-c9-run-identity';
 import {
   assertSafeOpaqueId,
   extractPlanContractMarker,
@@ -134,11 +136,7 @@ function workstreamRecordFromProtocol(
   };
 }
 
-/** Protocol-managed workstreams are CRITICAL two-pass unless a plan explicitly says otherwise. */
-export function isCriticalProtocolWorkstream(
-  repoRoot: string,
-  protocol: WorkflowProtocolRecord
-): boolean {
+function livePlanIsCritical(repoRoot: string, protocol: WorkflowProtocolRecord): boolean {
   if (!protocol.planPath) {
     return true;
   }
@@ -155,6 +153,21 @@ export function isCriticalProtocolWorkstream(
   } catch {
     return true;
   }
+}
+
+/**
+ * Protocol-managed workstreams are CRITICAL unless init bound them otherwise.
+ * A later plan-lane edit cannot downgrade a CRITICAL binding. Missing legacy
+ * `boundPlanCriticality` fails closed to CRITICAL.
+ */
+export function isCriticalProtocolWorkstream(
+  repoRoot: string,
+  protocol: WorkflowProtocolRecord
+): boolean {
+  if (protocol.boundPlanCriticality !== 'not_critical') {
+    return true;
+  }
+  return livePlanIsCritical(repoRoot, protocol);
 }
 
 export type WorkflowProtocolLineageRole =
@@ -1143,6 +1156,137 @@ export function shouldApplyFinaliseCorrelation(params: {
     return false;
   }
   return true;
+}
+
+export type ProtectedFinaliseC9Authority =
+  | {
+      kind: 'required';
+      workstreamId: string;
+      checkpointId: string;
+      context: WorkflowActiveFinaliseContext;
+    }
+  | { kind: 'not_required' }
+  | { kind: 'unknown'; message: string };
+
+function isUsableActiveFinaliseBinding(
+  active: WorkflowActiveFinaliseContext | null
+): active is WorkflowActiveFinaliseContext & { workstreamId: string; checkpointId: string } {
+  return Boolean(
+    active &&
+      typeof active.workstreamId === 'string' &&
+      active.workstreamId &&
+      typeof active.checkpointId === 'string' &&
+      active.checkpointId
+  );
+}
+
+/**
+ * Canonical decision for whether a persisting finalise run requires CRITICAL C9
+ * identity. This is C9 applicability, not an invented FAST/STANDARD/GUARDED label.
+ *
+ * Fail-closed: missing C9 files never establish not_required. Any successful
+ * finalise-start binding remains required, even if the bound plan claims a
+ * non-CRITICAL lane.
+ */
+export function resolveProtectedFinaliseC9Authority(params: {
+  repoRoot: string;
+  state?: WorkflowReviewState;
+}): ProtectedFinaliseC9Authority {
+  let state: WorkflowReviewState;
+  try {
+    state = params.state ?? loadWorkflowReviewStateStrict(getWorkflowPaths(params.repoRoot).statePath);
+  } catch (error) {
+    return {
+      kind: 'unknown',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'workflow review state is unreadable; refuse C9 authority decision',
+    };
+  }
+
+  const active = getActiveFinaliseContext(state);
+  if (active) {
+    if (!isUsableActiveFinaliseBinding(active)) {
+      return {
+        kind: 'unknown',
+        message: 'active finalise context is malformed; refuse C9 authority decision',
+      };
+    }
+    return {
+      kind: 'required',
+      workstreamId: active.workstreamId,
+      checkpointId: active.checkpointId,
+      context: cloneActiveFinaliseContext(active),
+    };
+  }
+
+  let readiness: WorkflowFinaliseProtocolReadiness;
+  try {
+    readiness = getFinaliseProtocolReadiness(params.repoRoot);
+  } catch (error) {
+    return {
+      kind: 'unknown',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'protocol readiness cannot be evaluated; refuse C9 authority decision',
+    };
+  }
+
+  if (!readiness.allowed) {
+    return {
+      kind: 'unknown',
+      message:
+        'finalise C9 authority is unbound and protocol readiness is not allowed; refuse to treat the run as ordinary',
+    };
+  }
+
+  return { kind: 'not_required' };
+}
+
+export function revalidateCapturedC9Authority(params: {
+  captured: ProtectedFinaliseC9Authority;
+  live: ProtectedFinaliseC9Authority;
+}): { ok: true; effective: ProtectedFinaliseC9Authority } | { ok: false; message: string } {
+  if (params.captured.kind === 'unknown') {
+    return { ok: false, message: params.captured.message };
+  }
+  if (params.live.kind === 'unknown' && params.captured.kind !== 'required') {
+    return { ok: false, message: params.live.message };
+  }
+  if (params.captured.kind === 'required') {
+    if (params.live.kind === 'not_required') {
+      return {
+        ok: false,
+        message:
+          'captured C9 authority is required; live finalise context is missing; refuse to downgrade',
+      };
+    }
+    return { ok: true, effective: params.captured };
+  }
+  if (params.live.kind === 'required') {
+    return {
+      ok: false,
+      message:
+        'captured ordinary finalise cannot adopt a later activeFinaliseContext; refuse C9 contamination',
+    };
+  }
+  return { ok: true, effective: params.captured };
+}
+
+export function buildOrdinaryFinaliseCorrelation(params: {
+  branchName: string;
+  headCommit: string | null;
+}): WorkflowFinaliseCorrelation {
+  return {
+    workstreamIds: [],
+    matchedBy: 'none',
+    branchName: params.branchName,
+    headCommit: params.headCommit,
+    resultingCommit: params.headCommit,
+    checkpointId: null,
+  };
 }
 
 export function correlateFinaliseRun(params: {

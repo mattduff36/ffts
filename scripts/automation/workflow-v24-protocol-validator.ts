@@ -247,6 +247,13 @@ export function validateWorkflowProtocolRecordStructure(
     return fail('planPath is invalid');
   }
   if (
+    candidate.boundPlanCriticality != null &&
+    candidate.boundPlanCriticality !== 'critical' &&
+    candidate.boundPlanCriticality !== 'not_critical'
+  ) {
+    return fail('boundPlanCriticality is invalid');
+  }
+  if (
     candidate.reviewedTreeFingerprint != null &&
     (typeof candidate.reviewedTreeFingerprint !== 'string' || !candidate.reviewedTreeFingerprint.trim())
   ) {

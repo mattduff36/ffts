@@ -14,6 +14,7 @@
     "tests/unit/workflow-v24-first-fix.test.ts",
     "tests/unit/workflow-v24-reinit.test.ts",
     "tests/unit/workflow-v24-c9-finish.test.ts",
+    "tests/unit/workflow-v24-lane-c9-authority.test.ts",
     "tests/unit/workflow-v24-c9-context-swap.test.ts",
     "tests/unit/workflow-v24-c9-push-binding.test.ts",
     "tests/unit/workflow-v24-bound-provenance.test.ts",

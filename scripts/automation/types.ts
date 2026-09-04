@@ -682,6 +682,8 @@ export interface WorkflowProtocolRecord {
   fixDeltaManifestPath: string | null;
   activeCheckpointId: string | null;
   planPath: string | null;
+  /** Immutable at init. Missing legacy records fail closed to CRITICAL. */
+  boundPlanCriticality?: 'critical' | 'not_critical' | null;
   rehomeProvenance?: WorkflowRehomeProvenance | null;
   routeDisposition?: WorkflowRouteDisposition | null;
   updatedAt: string;

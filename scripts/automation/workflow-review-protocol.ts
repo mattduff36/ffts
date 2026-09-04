@@ -165,6 +165,7 @@ export function createEmptyProtocolRecord(params: {
   branchName?: string | null;
   headCommit?: string | null;
   planPath?: string | null;
+  boundPlanCriticality?: 'critical' | 'not_critical' | null;
   sourceWorkstreamIds?: string[];
   inheritedFailedReviewCount?: number;
   rehomeProvenance?: WorkflowRehomeProvenance | null;
@@ -191,6 +192,7 @@ export function createEmptyProtocolRecord(params: {
     fixDeltaManifestPath: null,
     activeCheckpointId: null,
     planPath: params.planPath ?? null,
+    boundPlanCriticality: params.boundPlanCriticality ?? 'critical',
     rehomeProvenance: params.rehomeProvenance ?? null,
     routeDisposition: null,
     updatedAt: nowIso(params.now),
@@ -353,6 +355,11 @@ function mergeInitializedSecurityBindings(params: {
       baseCommit: existing.baseCommit || params.incomingBaseCommit,
       headCommit: existing.headCommit ?? params.incomingHeadCommit,
       planPath: existingPlanPath ?? incomingPlanPath,
+      boundPlanCriticality:
+        existing.boundPlanCriticality === 'critical' ||
+        existing.boundPlanCriticality == null
+          ? 'critical'
+          : existing.boundPlanCriticality,
       rehomeProvenance: existing.rehomeProvenance ?? params.incomingRehome,
     },
   };
@@ -860,6 +867,7 @@ export function reduceProtocolInit(params: {
   let workstreamId = params.workstreamId?.trim() || '';
   let sourceWorkstreamIds = params.sourceWorkstreamIds;
   let planPath = params.planPath ?? null;
+  let boundPlanCriticality: 'critical' | 'not_critical' = 'critical';
   let inheritedFailedReviewCount = 0;
   let rehomeProvenance: WorkflowRehomeProvenance | null = null;
 
@@ -908,6 +916,7 @@ export function reduceProtocolInit(params: {
         predecessorHeadIsAncestor: false,
       };
     }
+    boundPlanCriticality = isCriticalPlanContract(parsed.contract) ? 'critical' : 'not_critical';
     if (
       isCriticalPlanContract(parsed.contract) &&
       parsed.contract.reviewClosureProtocol &&
@@ -995,6 +1004,7 @@ export function reduceProtocolInit(params: {
     branchName: git.binding.branchName,
     headCommit: git.binding.headCommit,
     planPath,
+    boundPlanCriticality,
     sourceWorkstreamIds,
     inheritedFailedReviewCount,
     rehomeProvenance,
@@ -1484,6 +1494,8 @@ export function reduceSplit(params: {
     branchName: current.branchName,
     headCommit: current.headCommit,
     planPath: current.planPath,
+    boundPlanCriticality:
+      current.boundPlanCriticality === 'not_critical' ? 'not_critical' : 'critical',
     sourceWorkstreamIds: [current.workstreamId, ...(current.sourceWorkstreamIds ?? [])],
     inheritedFailedReviewCount: inheritBudget,
     now: params.now,

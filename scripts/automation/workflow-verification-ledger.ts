@@ -863,12 +863,33 @@ export function proveRequiredIdsAgainstCandidate(params: {
   return { ok: true, provenIds: [...proof.provenIds].sort() };
 }
 
-const FORBIDDEN_RELEASE_PATH_PREFIXES = [
+const FORBIDDEN_AUTOMATION_PREFIX = 'docs_private/automation/';
+const SCHEDULING_PRODUCT_PREFIXES = [
   'app/(dashboard)/scheduling/',
   'tests/ui/components/Scheduling',
   'tests/unit/scheduling-',
-  'docs_private/automation/',
 ];
+const WORKFLOW_RUNTIME_PREFIXES = [
+  'scripts/automation/',
+  'scripts/finalise.ts',
+  'scripts/review-preflight.ts',
+  'scripts/workflow-protocol.ts',
+  'tests/unit/workflow-',
+];
+
+function pathHasPrefix(relative: string, prefix: string): boolean {
+  return prefix.endsWith('/') || prefix.endsWith('-')
+    ? relative.startsWith(prefix)
+    : relative === prefix;
+}
+
+function isSchedulingProductPath(relative: string): boolean {
+  return SCHEDULING_PRODUCT_PREFIXES.some((prefix) => pathHasPrefix(relative, prefix));
+}
+
+function isWorkflowRuntimePath(relative: string): boolean {
+  return WORKFLOW_RUNTIME_PREFIXES.some((prefix) => pathHasPrefix(relative, prefix));
+}
 
 export interface CandidateGitScope {
   committed: string[];
@@ -1013,13 +1034,21 @@ export function assertReleaseDiffExcludesForbiddenPaths(
 ): { ok: true; paths: string[] } | { ok: false; message: string } {
   const listed = listCandidateDiffPaths(repoRoot, baselineCommit);
   if (!listed.ok) return listed;
-  const forbidden = listed.paths.filter((relative) =>
-    FORBIDDEN_RELEASE_PATH_PREFIXES.some((prefix) => relative.startsWith(prefix))
+  const leakedAutomation = listed.paths.filter((relative) =>
+    relative.startsWith(FORBIDDEN_AUTOMATION_PREFIX)
   );
-  if (forbidden.length > 0) {
+  if (leakedAutomation.length > 0) {
     return {
       ok: false,
-      message: `candidate diff includes forbidden paths: ${forbidden.join(', ')}`,
+      message: `candidate diff includes forbidden paths: ${leakedAutomation.join(', ')}`,
+    };
+  }
+  const scheduling = listed.paths.filter((relative) => isSchedulingProductPath(relative));
+  const workflowRuntime = listed.paths.filter((relative) => isWorkflowRuntimePath(relative));
+  if (scheduling.length > 0 && workflowRuntime.length > 0) {
+    return {
+      ok: false,
+      message: `candidate diff mixes workflow-runtime and unrelated scheduling product paths: ${[...workflowRuntime, ...scheduling].join(', ')}`,
     };
   }
   return { ok: true, paths: listed.paths };

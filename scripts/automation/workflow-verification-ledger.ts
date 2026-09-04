@@ -1678,6 +1678,8 @@ type VitestLedgerRunParams = {
   git?: GitCommandRunner;
   vitestInstallRoot?: string;
   onTestProgress?: (event: TestSuiteProgressEvent) => void;
+  vitestProject?: string | false;
+  configFile?: string;
 };
 
 type VitestLedgerRunResult =
@@ -1729,9 +1731,13 @@ function prepareVitestLedgerRun(params: VitestLedgerRunParams):
     '--passWithNoTests=false',
     '--globals',
     '--no-cache',
-    ...(existsSync(path.join(params.repoRoot, 'vitest.workspace.ts'))
-      ? ['--project=integration']
-      : []),
+    ...(params.configFile
+      ? ['--config', params.configFile]
+      : params.vitestProject === false
+        ? []
+        : existsSync(path.join(params.repoRoot, 'vitest.workspace.ts'))
+          ? [`--project=${params.vitestProject ?? 'integration'}`]
+          : []),
     ...extraArgs,
   ];
   const childEnv = { ...process.env };

@@ -629,14 +629,41 @@ export function createPreflightWorkflowStages(params: {
       id: 'required-tests',
       label: 'Workflow tests',
       status: 'waiting',
-      weight: 48,
+      weight: 36,
       elapsedMs: 0,
       parentId: 'verification-batch',
       measure: 'tests',
     });
   }
+  if (params.runRequiredTests) {
+    stages.push(
+      {
+        id: 'required-id-discovery',
+        label: 'Required-ID discovery',
+        status: 'waiting',
+        weight: 4,
+        elapsedMs: 0,
+        measure: 'count',
+      },
+      {
+        id: 'leftover-tests',
+        label: 'Leftover tests',
+        status: 'waiting',
+        weight: 10,
+        elapsedMs: 0,
+        measure: 'count',
+      }
+    );
+  }
   stages.push(
-    { id: 'required-id-proof', label: 'Required-ID proof', status: 'waiting', weight: 8, elapsedMs: 0 },
+    {
+      id: 'required-id-proof',
+      label: 'Required-ID proof',
+      status: 'waiting',
+      weight: 8,
+      elapsedMs: 0,
+      measure: 'count',
+    },
     { id: 'manifest', label: 'Manifest generation', status: 'waiting', weight: 6, elapsedMs: 0 },
     { id: 'evidence-convergence', label: 'Evidence convergence', status: 'waiting', weight: 6, elapsedMs: 0 },
     { id: 'preflight-record', label: 'Preflight record', status: 'waiting', weight: 4, elapsedMs: 0 }

@@ -19,6 +19,11 @@ import {
   verificationRunIsProofEligible,
 } from './workflow-verification-ledger';
 import {
+  leftoverRequiredCaseIds,
+  resolvePreflightExecutionRequiredIds,
+  runLeftoverRequiredIdStage,
+} from './workflow-required-id-execution';
+import {
   resolveTeeVerifyJobs,
   runCapturedProcess,
   runVerifyBatch,
@@ -206,7 +211,7 @@ export async function runEvidenceVerificationBatch(params: {
     stages.push({
       id: 'required-tests',
       label: 'Workflow tests',
-      weight: 48,
+          weight: 36,
       kind: 'readonly',
       async run() {
         const started = Date.now();
@@ -317,8 +322,64 @@ export async function runEvidenceVerificationBatch(params: {
     }
   }
 
+  let nextBatch = batch;
+  if (
+    params.runRequiredTests &&
+    (params.requiredTestIds?.length ?? 0) > 0 &&
+    !batch.drifted
+  ) {
+    params.progress?.updateStage('verification-batch', {
+      status: batch.ok ? 'pass' : 'fail',
+    });
+    const requiredIds = resolvePreflightExecutionRequiredIds(params.requiredTestIds ?? []);
+    const leftover = await runLeftoverRequiredIdStage({
+      repoRoot: params.repoRoot,
+      workstreamId: params.workstreamId,
+      requiredTestIds: params.requiredTestIds ?? [],
+      completedIds: executedTestIds,
+      candidate: params.candidate,
+      jobs,
+      progress: params.progress,
+      readCandidate: params.readCandidate,
+    });
+    if (leftover.command) {
+      commands.push(leftover.command);
+    }
+    executedTestIds.push(...leftover.completedIds);
+    verificationLedgerRefs.push(...leftover.verificationLedgerRefs);
+    if (!leftover.ok) {
+      const leftoverFailure: VerifyStageResult<EvidenceCommandResult> = {
+        id: 'leftover-tests',
+        label: 'Leftover tests',
+        kind: 'readonly',
+        ok: false,
+        status: 'fail',
+        durationMs: leftover.command?.durationMs ?? 0,
+        message: leftover.message,
+        value: leftover.command,
+      };
+      nextBatch = {
+        ...batch,
+        ok: false,
+        results: [...batch.results, leftoverFailure],
+        failures: [...batch.failures, leftoverFailure],
+      };
+    }
+    const proven = new Set(executedTestIds);
+    const missingCases = leftoverRequiredCaseIds({
+      requiredIds,
+      completedIds: [...proven],
+    });
+    params.progress?.updateStage('required-id-proof', {
+      status: missingCases.length === 0 && leftover.ok ? 'pass' : 'fail',
+      measure: 'count',
+      completed: requiredIds.length - missingCases.length,
+      total: requiredIds.length,
+    });
+  }
+
   return {
-    batch,
+    batch: nextBatch,
     commands: bindBatchCommandsToCandidate(commands, params.candidate),
     executedTestIds: [...new Set(executedTestIds)],
     verificationLedgerRefs,
@@ -382,12 +443,20 @@ export async function runAndBuildEvidenceManifest(params: {
   if (executed.batch.drifted) {
     throw new Error('candidate drift during verification batch; evidence was not aggregated');
   }
+  const parallelFailed = executed.batch.failures.some((row) => row.id !== 'leftover-tests');
   params.progress?.updateStage('verification-batch', {
-    status: executed.batch.ok ? 'pass' : 'fail',
+    status: executed.batch.drifted || parallelFailed ? 'fail' : 'pass',
   });
-  params.progress?.updateStage('required-id-proof', { status: 'running' });
+  const requiredIds = resolvePreflightExecutionRequiredIds(params.requiredTestIds ?? []);
+  const missingCases = leftoverRequiredCaseIds({
+    requiredIds,
+    completedIds: executed.executedTestIds,
+  });
   params.progress?.updateStage('required-id-proof', {
-    status: executed.batch.ok ? 'pass' : 'fail',
+    status: missingCases.length === 0 && executed.batch.ok ? 'pass' : 'fail',
+    measure: 'count',
+    completed: requiredIds.length - missingCases.length,
+    total: requiredIds.length,
   });
   params.progress?.updateStage('manifest', { status: 'running' });
   const built = buildEvidenceManifest({

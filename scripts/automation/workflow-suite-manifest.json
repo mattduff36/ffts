@@ -8,6 +8,7 @@
     "tests/unit/workflow-liveness.test.ts",
     "tests/unit/workflow-plan-contract.test.ts",
     "tests/unit/workflow-review-protocol.test.ts",
+    "tests/unit/workflow-required-id-execution.test.ts",
     "tests/unit/workflow-review.test.ts",
     "tests/unit/workflow-v24-budget.test.ts",
     "tests/unit/workflow-v24-fd-git-003.test.ts",

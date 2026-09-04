@@ -117,7 +117,7 @@ describe('TEE V2.4 wording and compatibility', () => {
   });
 
   it('TEE-V24-SCOPE-001: unrelated scheduling dirty files and stashes are not part of this runtime change set', () => {
-    const baseline = '1ba32f3e49cef9edbe79b971833c9c11cc4112f1';
+    const baseline = 'origin/main';
     const scope = assertReleaseDiffExcludesForbiddenPaths(process.cwd(), baseline);
     expect(scope.ok, scope.ok ? '' : scope.message).toBe(true);
     expect(

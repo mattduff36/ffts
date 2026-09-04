@@ -2,6 +2,28 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.5.1
+
+**GIT COMMIT MESSAGE**
+`fix(workflow): redraw hierarchical progress as one live TTY frame`
+
+**PUSHED AT**
+2026-09-04T17:04:15.674Z
+
+**WHAT CHANGED**
+Restore the live TTY dashboard on SIGINT and drop unused redraw state. Redraw hierarchical progress as one live TTY frame.
+
+**VERSION HISTORY DETAILS**
+- Updated app reliability, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): restore the live TTY dashboard on SIGINT and drop unused redraw state`
+- `fix(workflow): redraw hierarchical progress as one live TTY frame`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.5.0
 
 **GIT COMMIT MESSAGE**

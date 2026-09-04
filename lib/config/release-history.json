@@ -1,5 +1,21 @@
 [
   {
+    "version": "0926.5.1",
+    "updateKind": "minor",
+    "title": "Workflow improvements",
+    "description": "Restore the live TTY dashboard on SIGINT and drop unused redraw state. Redraw hierarchical progress as one live TTY frame.",
+    "summary": "Restore the live TTY dashboard on SIGINT and drop unused redraw state. Redraw hierarchical progress as one live TTY frame.",
+    "details": [
+      "Updated app reliability, with changes to automated tests."
+    ],
+    "areas": [
+      "Restore the live TTY dashboard on SIGINT",
+      "Drop unused redraw state. Redraw hierarchical progress as one live TTY frame"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-04T17:04:15.674Z"
+  },
+  {
     "version": "0926.5.0",
     "updateKind": "major",
     "title": "Scheduling update",

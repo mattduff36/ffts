@@ -311,7 +311,6 @@ function formatStageRow(stage: WorkflowStageProgress, indent: string): string[] 
 
 export function formatProgressRecord(snapshot: VerifyProgressSnapshot): string {
   const stages = stagesFromSnapshot(snapshot);
-  const weights = workflowWeightTotals(stages);
   const percent = String(snapshot.percent).padStart(3, ' ');
   const elapsed = formatElapsedClock(snapshot.elapsedMs);
   const eta =

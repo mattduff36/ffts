@@ -24,6 +24,10 @@ import {
   writeFinaliseFailureArtifact,
 } from './automation/finalise-failure';
 import { assertFinaliseAllowedForProtocol, formatFinaliseProtocolReadinessReport, getFinaliseProtocolReadiness } from './automation/workflow-finalise-correlation';
+import { captureVerificationIdentity } from './automation/workflow-verification-ledger';
+import { runVerifyBatch } from './automation/workflow-verify-runner';
+import { createHumanVerifyProgress } from './automation/workflow-verify-batch';
+import { createFinaliseWorkflowStages, type VerifyProgressReporter } from './automation/workflow-verify-progress';
 import {
   assertFinaliseProductCommitAllowed,
   recordFinaliseOwnedCommit,
@@ -57,6 +61,7 @@ const NEXT_BUILD_ARTIFACT_PATH = path.join(NEXT_BUILD_DIR, 'BUILD_ID');
 const RELEASE_VERSION_JSON_PATH = path.join(REPO_ROOT, 'lib/config/release-version.json');
 const DEV_SERVER_PORT = 4000;
 let automationRun: AutomationRun | null = null;
+let finaliseWorkflowProgress: VerifyProgressReporter | undefined;
 
 interface FinaliseOptions {
   full: boolean;
@@ -412,6 +417,29 @@ function getPushModeDescription(options: FinaliseOptions): string {
 }
 
 function printProgress(message: string, percent: number): void {
+  if (finaliseWorkflowProgress) {
+    if (percent >= 28 && percent <= 50) {
+      const completed = Math.max(
+        finaliseWorkflowProgress.snapshot().stages.find((stage) => stage.id === 'production-build')?.completed ?? 0,
+        percent >= 50 ? BUILD_PROGRESS_MILESTONES.length + 2 : percent >= 32 ? 1 : 0
+      );
+      finaliseWorkflowProgress.updateStage('production-build', {
+        status: percent >= 50 ? 'pass' : 'running',
+        measure: 'count',
+        completed,
+        total: BUILD_PROGRESS_MILESTONES.length + 2,
+      });
+    } else if (percent >= 84) {
+      finaliseWorkflowProgress.updateStage('release-finish', {
+        status: percent >= 100 ? 'pass' : 'running',
+      });
+    }
+    if (percent >= 100) {
+      finaliseWorkflowProgress.complete('PASS', message);
+      return;
+    }
+    return;
+  }
   console.log(`- ${message} [${percent}% complete]`);
 }
 
@@ -497,6 +525,12 @@ function handleBuildProgressLine(line: string, printedMilestones: Set<number>): 
     if (!milestone.patterns.some((pattern) => pattern.test(line))) return;
 
     printedMilestones.add(index);
+    finaliseWorkflowProgress?.updateStage('production-build', {
+      status: 'running',
+      measure: 'count',
+      completed: printedMilestones.size + 1,
+      total: BUILD_PROGRESS_MILESTONES.length + 2,
+    });
     printProgress(milestone.message, milestone.percent);
   });
 }
@@ -988,36 +1022,116 @@ async function main(): Promise<void> {
 
   try {
 
-    await run.step('Check for blocking Cursor activity', () => assertNoBlockingCursorActivity());
-
-    const unmergedFiles = getUnmergedFiles();
-    if (unmergedFiles.length > 0) {
-      throw new Error(`Resolve merge conflicts before finalising: ${unmergedFiles.join(', ')}`);
+    const identity = captureVerificationIdentity(REPO_ROOT);
+    const candidate = identity.ok
+      ? { headCommit: identity.headCommit, fingerprint: identity.productTreeFingerprint }
+      : { headCommit: 'unknown', fingerprint: 'unknown' };
+    finaliseWorkflowProgress = createHumanVerifyProgress({
+      title: 'TEE finalise',
+      candidate: candidate.headCommit.slice(0, 12),
+    });
+    finaliseWorkflowProgress?.setStages(createFinaliseWorkflowStages());
+    let protocolReadiness: ReturnType<typeof getFinaliseProtocolReadiness> | undefined;
+    const readonlyProbes = await runVerifyBatch<unknown>({
+      candidate,
+      progress: finaliseWorkflowProgress ?? undefined,
+      stages: [
+        {
+          id: 'activity',
+          label: 'Cursor activity',
+          weight: 2,
+          kind: 'readonly',
+          run: () => {
+            try {
+              assertNoBlockingCursorActivity();
+              return { ok: true, candidate };
+            } catch (error) {
+              return {
+                ok: false,
+                candidate,
+                message: error instanceof Error ? error.message : String(error),
+              };
+            }
+          },
+        },
+        {
+          id: 'unmerged',
+          label: 'Git cleanliness',
+          weight: 3,
+          kind: 'readonly',
+          run: () => {
+            const files = getUnmergedFiles();
+            return {
+              ok: files.length === 0,
+              candidate,
+              value: files,
+              message:
+                files.length > 0
+                  ? `Resolve merge conflicts before finalising: ${files.join(', ')}`
+                  : undefined,
+            };
+          },
+        },
+        {
+          id: 'protocol',
+          label: 'Protocol readiness',
+          weight: 4,
+          kind: 'readonly',
+          run: () => {
+            protocolReadiness = getFinaliseProtocolReadiness(REPO_ROOT);
+            return { ok: true, candidate, value: protocolReadiness };
+          },
+        },
+        {
+          id: 'release-meta',
+          label: 'Release metadata',
+          weight: 3,
+          kind: 'readonly',
+          run: () => {
+            try {
+              assertReleaseMetadataTracking(REPO_ROOT);
+              assertReleaseMetadataConsistency(REPO_ROOT);
+              return { ok: true, candidate };
+            } catch (error) {
+              return {
+                ok: false,
+                candidate,
+                message: error instanceof Error ? error.message : String(error),
+              };
+            }
+          },
+        },
+      ],
+    });
+    for (const failure of readonlyProbes.failures) {
+      throw new Error(failure.message ?? `${failure.label} failed`);
     }
 
-    const protocolReadiness = getFinaliseProtocolReadiness(REPO_ROOT);
+    await run.step('Check for blocking Cursor activity', () => undefined);
+
+    const resolvedProtocolReadiness = protocolReadiness ?? getFinaliseProtocolReadiness(REPO_ROOT);
     if (!options.dryRun) {
+      finaliseWorkflowProgress?.updateStage('finalise-start', { status: 'running' });
       await run.step('Validate protocol finalise gate', () => {
         assertFinaliseAllowedForProtocol(REPO_ROOT);
       });
       await run.step('Validate captured finalise C9 authority', () => {
         run.assertProtectedFinaliseAuthorityBeforeMutation({ pushRequested: options.push });
       });
+      finaliseWorkflowProgress?.updateStage('finalise-start', { status: 'pass' });
     } else {
       await run.step('Inspect protocol finalise readiness', () => {
         console.log('\n==> Protocol readiness');
-        console.log(formatFinaliseProtocolReadinessReport(protocolReadiness));
+        console.log(formatFinaliseProtocolReadinessReport(resolvedProtocolReadiness));
       });
     }
 
-    await run.step('Validate release metadata tracking', () => {
-      assertReleaseMetadataTracking(REPO_ROOT);
-      assertReleaseMetadataConsistency(REPO_ROOT);
-    });
+    await run.step('Validate release metadata tracking', () => undefined);
 
     const changedFileStats = getChangedFileStats();
     const changedFiles = changedFileStats.map((entry) => entry.path);
     const pendingMigrationFiles = getPendingMigrationFiles(changedFiles);
+    finaliseWorkflowProgress?.updateStage('migration-inventory', { status: 'pass' });
     const shouldRunDbValidate = pendingMigrationFiles.some((relativePath) => migrationNeedsDbValidate(relativePath));
     const devServerProcesses = getRepoDevServerProcesses();
     const branch = getCurrentBranch();
@@ -1084,8 +1198,8 @@ async function main(): Promise<void> {
       );
       console.log('Release version: would update locally before push if a bump is due');
       console.log(`Push: ${options.push ? `would push the authorised SHA to ${FFTS_PROTECTED_PUSH_REMOTE} ${FFTS_PROTECTED_PUSH_DESTINATION_REF}` : 'skipped'}`);
-      if (!protocolReadiness.allowed) {
-        throw new Error(formatFinaliseProtocolReadinessReport(protocolReadiness));
+      if (!resolvedProtocolReadiness.allowed) {
+        throw new Error(formatFinaliseProtocolReadinessReport(resolvedProtocolReadiness));
       }
       await run.finish('passed');
       return;
@@ -1421,10 +1535,12 @@ async function main(): Promise<void> {
     // Clear repair/failure gates only after successful final logging.
     clearFinaliseRepairClosureArtifacts(closureIdentity);
   } catch (error) {
+    finaliseWorkflowProgress?.complete('FAIL', 'Finalise');
     await run.finish('failed', error);
     throw error;
   } finally {
     automationRun = null;
+    finaliseWorkflowProgress = undefined;
   }
 }
 

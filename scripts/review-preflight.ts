@@ -13,6 +13,14 @@ import {
   resolveRequiredTestIdsForWorkstream,
 } from './automation/workflow-plan-contract';
 import { resolveCanonicalReviewRequiredIds } from './automation/workflow-v24-required-id-set';
+import {
+  createHumanVerifyProgress,
+  formatVerificationFailure,
+  runAndBuildEvidenceManifest,
+} from './automation/workflow-verify-batch';
+import { collectPremiumPacketEvidence } from './automation/workflow-premium-packet';
+import { captureVerificationIdentity } from './automation/workflow-verification-ledger';
+import { createPreflightWorkflowStages } from './automation/workflow-verify-progress';
 
 function readFlag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -29,6 +37,8 @@ function printUsage(): void {
   npm run review:preflight -- --workstream <id> [--plan <path>] [--profile <name>] [--skip-checks]
 
 Creates a content-addressed preflight evidence manifest and records it on the protocol workstream.
+Independent read-only checks may run concurrently (TEE_VERIFY_JOBS, default 3; 1 = serial).
+Progress is written to stderr and is not evidence. JSON on stdout remains the machine result.
 FFTS ships no live-product default inventory profile. Unknown profiles are rejected.
 `);
 }
@@ -100,15 +110,63 @@ async function main(): Promise<void> {
     }
   }
 
-  const built = buildEvidenceManifest({
-    repoRoot,
-    workstreamId,
-    kind: 'preflight',
-    baseCommit: protocol.baseCommit,
-    requiredTestIds,
-    runChecks: !skipChecks,
-    runRequiredTests: !skipChecks && requiredTestIds.length > 0,
-  });
+  const identity = captureVerificationIdentity(repoRoot);
+  if (!identity.ok) {
+    throw new Error(identity.message);
+  }
+  const runChecks = !skipChecks;
+  const runRequiredTests = !skipChecks && requiredTestIds.length > 0;
+  const progress = skipChecks
+    ? undefined
+    : createHumanVerifyProgress({
+        title: `TEE preflight — ${workstreamId}`,
+        candidate: identity.headCommit.slice(0, 12),
+      });
+  progress?.setStages(createPreflightWorkflowStages({ runChecks, runRequiredTests }));
+  progress?.updateStage('candidate-capture', { status: 'running' });
+  progress?.updateStage('candidate-capture', { status: 'pass', elapsedMs: 0 });
+  progress?.updateStage('protocol-validation', { status: 'running' });
+  progress?.updateStage('protocol-validation', { status: 'pass' });
+
+  const built = skipChecks
+    ? {
+        ...buildEvidenceManifest({
+          repoRoot,
+          workstreamId,
+          kind: 'preflight',
+          baseCommit: protocol.baseCommit,
+          requiredTestIds,
+          runChecks: false,
+          runRequiredTests: false,
+          frozenCandidate: {
+            headCommit: identity.headCommit,
+            productTreeFingerprint: identity.productTreeFingerprint,
+          },
+        }),
+        batch: null,
+      }
+    : await runAndBuildEvidenceManifest({
+        repoRoot,
+        workstreamId,
+        kind: 'preflight',
+        baseCommit: protocol.baseCommit,
+        requiredTestIds,
+        runChecks,
+        runRequiredTests,
+        progress,
+      });
+
+  if (built.batch) {
+    for (const failure of built.batch.failures) {
+      process.stderr.write(formatVerificationFailure(failure));
+    }
+    if (built.batch.drifted) {
+      process.stderr.write('candidate drift during preflight; evidence was not aggregated\n');
+    }
+    process.stderr.write(
+      `TEE_VERIFY_JOBS=${built.batch.jobs} (${built.batch.serial ? 'serial' : 'parallel'})\n`
+    );
+  }
 
   if (built.manifest.status !== 'passed') {
     process.stdout.write(
@@ -131,12 +189,28 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  progress?.updateStage('preflight-record', { status: 'running' });
   const recorded = applyProtocolTransition({
     repoRoot,
     command: 'preflight-record',
     workstreamId,
     manifestPath: built.relativePath,
   });
+  progress?.updateStage('preflight-record', { status: recorded.ok ? 'pass' : 'fail' });
+
+  const packet = await collectPremiumPacketEvidence({
+    repoRoot,
+    workstreamId,
+    candidate: {
+      headCommit: identity.headCommit,
+      fingerprint: identity.productTreeFingerprint,
+    },
+  });
+  if (!packet.ok) {
+    process.stderr.write(`premium packet evidence: ${packet.message}\n`);
+  }
+
+  progress?.complete(recorded.ok ? 'PASS' : 'FAIL', 'Preflight');
 
   process.stdout.write(
     `${JSON.stringify(

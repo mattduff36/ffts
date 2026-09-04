@@ -71,6 +71,8 @@ npm run review:preflight -- --workstream <id> [--plan <path>]
 npm run workflow-review
 ```
 
+Long-running review preflight and fix-delta verification run independent read-only checks concurrently after the candidate is frozen. Set `TEE_VERIFY_JOBS=3` (default) or `TEE_VERIFY_JOBS=1` for serial fallback. Concurrency is scheduling only and is not review or finalise evidence. Progress prints to stderr as a hierarchical stage dashboard on a TTY; non-TTY and CI stay newline-safe without control codes. JSON manifests and protocol records stay machine-clean. Authority-changing steps (`preflight-record`, `fix-record`, `finalise-start`, finish, push) stay serial. The canonical workflow suite remains one process because its fixtures are not proven isolated for sharding.
+
 Canonical private artifact roots (ignored, repository-local):
 
 - `docs_private/automation/plans/`

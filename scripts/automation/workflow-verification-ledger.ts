@@ -2,10 +2,11 @@ import { createHash, randomBytes } from 'crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { writeJsonAtomic } from './workflow-events';
 import { pathHasExistingSymlinkComponent } from './workflow-plan-contract';
+import { consumeVitestProgressFile, type TestSuiteProgressEvent } from './workflow-verify-progress';
 import {
   computeWorkingTreeProductFingerprint,
   gitHeadCommit,
@@ -1664,7 +1665,7 @@ export function captureVerificationIdentity(
   return captureCandidateIdentity(repoRoot, git);
 }
 
-export function runVitestJsonAndPersistLedger(params: {
+type VitestLedgerRunParams = {
   repoRoot: string;
   workstreamId: string;
   commandId: string;
@@ -1675,14 +1676,31 @@ export function runVitestJsonAndPersistLedger(params: {
   expectedSuiteManifestHash?: string;
   persist?: boolean;
   git?: GitCommandRunner;
-  spawn?: typeof spawnSync;
   vitestInstallRoot?: string;
-}):
+  onTestProgress?: (event: TestSuiteProgressEvent) => void;
+};
+
+type VitestLedgerRunResult =
   | {
       ok: true;
       record: VerificationLedgerRecord;
       reference: VerificationLedgerReference;
       reporterSuccess: boolean;
+    }
+  | { ok: false; message: string };
+
+const VITEST_PROGRESS_REPORTER = fileURLToPath(
+  new URL('./workflow-vitest-progress-reporter.cjs', import.meta.url)
+);
+
+function prepareVitestLedgerRun(params: VitestLedgerRunParams):
+  | {
+      ok: true;
+      before: { headCommit: string; productTreeFingerprint: string };
+      runnerVersion: string;
+      reporterTemp: string;
+      args: string[];
+      childEnv: NodeJS.ProcessEnv;
     }
   | { ok: false; message: string } {
   const before = captureCandidateIdentity(params.repoRoot, params.git);
@@ -1716,29 +1734,35 @@ export function runVitestJsonAndPersistLedger(params: {
       : []),
     ...extraArgs,
   ];
-  const startedAt = new Date().toISOString();
-  const spawn = params.spawn ?? spawnSync;
   const childEnv = { ...process.env };
   for (const key of Object.keys(childEnv)) {
     if (key === 'VITEST' || key.startsWith('VITEST_') || key.startsWith('VITE_TEST')) {
       delete childEnv[key];
     }
   }
-  const result = spawn(process.execPath, args, {
-    cwd: params.repoRoot,
-    encoding: 'utf8',
-    shell: false,
-    env: childEnv,
-    windowsHide: true,
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  const completedAt = new Date().toISOString();
-  const after = captureCandidateIdentity(params.repoRoot, params.git);
+  return { ok: true, before, runnerVersion, reporterTemp, args, childEnv };
+}
+
+function finishVitestLedgerRun(params: {
+  run: VitestLedgerRunParams;
+  before: { headCommit: string; productTreeFingerprint: string };
+  runnerVersion: string;
+  reporterTemp: string;
+  args: string[];
+  startedAt: string;
+  completedAt: string;
+  result: {
+    status: number | null;
+    signal: NodeJS.Signals | null;
+    error?: Error;
+  };
+}): VitestLedgerRunResult {
+  const after = captureCandidateIdentity(params.run.repoRoot, params.run.git);
   if (!after.ok) return after;
-  if (result.error) {
-    return { ok: false, message: `vitest spawn failed: ${result.error.message}` };
+  if (params.result.error) {
+    return { ok: false, message: `vitest spawn failed: ${params.result.error.message}` };
   }
-  const processTermination = classifySpawnSyncTermination(result);
+  const processTermination = classifySpawnSyncTermination(params.result);
   if (processTermination.kind !== 'exit') {
     return {
       ok: false,
@@ -1746,45 +1770,153 @@ export function runVitestJsonAndPersistLedger(params: {
     };
   }
   const persisted = persistVerificationLedgerFromReporterFile({
-    repoRoot: params.repoRoot,
-    workstreamId: params.workstreamId,
-    commandId: params.commandId,
-    commandType: params.commandType,
+    repoRoot: params.run.repoRoot,
+    workstreamId: params.run.workstreamId,
+    commandId: params.run.commandId,
+    commandType: params.run.commandType,
     command: process.execPath,
-    args,
-    cwd: params.repoRoot,
-    startedAt,
-    completedAt,
+    args: params.args,
+    cwd: params.run.repoRoot,
+    startedAt: params.startedAt,
+    completedAt: params.completedAt,
     exitCode: processTermination.exitCode ?? 1,
     processTermination,
     runnerName: 'vitest',
-    runnerVersion,
-    reporterAbsolutePath: reporterTemp,
-    requiredIds: params.requiredIds,
+    runnerVersion: params.runnerVersion,
+    reporterAbsolutePath: params.reporterTemp,
+    requiredIds: params.run.requiredIds,
     expectedSuiteManifestHash:
-      params.expectedSuiteManifestHash ??
-      (params.commandType === 'vitest_suite' ? hashCanonicalWorkflowSuiteManifest() : undefined),
-    persist: params.persist,
-    git: params.git,
-    beforeIdentity: before,
+      params.run.expectedSuiteManifestHash ??
+      (params.run.commandType === 'vitest_suite' ? hashCanonicalWorkflowSuiteManifest() : undefined),
+    persist: params.run.persist,
+    git: params.run.git,
+    beforeIdentity: params.before,
     afterIdentity: after,
   });
-  const reporterRaw = existsSync(reporterTemp) ? readFileSync(reporterTemp) : null;
-  if (existsSync(reporterTemp)) {
+  const reporterRaw = existsSync(params.reporterTemp) ? readFileSync(params.reporterTemp) : null;
+  if (existsSync(params.reporterTemp)) {
     try {
-      unlinkSync(reporterTemp);
+      unlinkSync(params.reporterTemp);
     } catch {
       /* the hashed reporter copy is the durable artifact */
     }
   }
   if (!persisted.ok) return persisted;
   const parsed = parseVitestJsonReporter(
-    params.persist === false
+    params.run.persist === false
       ? reporterRaw ?? Buffer.alloc(0)
-      : readFileSync(path.join(params.repoRoot, persisted.reference.reporterRelativePath))
+      : readFileSync(path.join(params.run.repoRoot, persisted.reference.reporterRelativePath))
   );
   return {
     ...persisted,
     reporterSuccess: parsed.ok ? parsed.success : false,
   };
+}
+
+export function runVitestJsonAndPersistLedger(params: {
+  repoRoot: string;
+  workstreamId: string;
+  commandId: string;
+  commandType: VerificationLedgerCommandType;
+  files: string[];
+  extraArgs?: string[];
+  requiredIds?: string[];
+  expectedSuiteManifestHash?: string;
+  persist?: boolean;
+  git?: GitCommandRunner;
+  spawn?: typeof spawnSync;
+  vitestInstallRoot?: string;
+}): VitestLedgerRunResult {
+  const prepared = prepareVitestLedgerRun(params);
+  if (!prepared.ok) return prepared;
+  const startedAt = new Date().toISOString();
+  const spawnImpl = params.spawn ?? spawnSync;
+  const result = spawnImpl(process.execPath, prepared.args, {
+    cwd: params.repoRoot,
+    encoding: 'utf8',
+    shell: false,
+    env: prepared.childEnv,
+    windowsHide: true,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  return finishVitestLedgerRun({
+    run: params,
+    before: prepared.before,
+    runnerVersion: prepared.runnerVersion,
+    reporterTemp: prepared.reporterTemp,
+    args: prepared.args,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    result,
+  });
+}
+
+export async function runVitestJsonAndPersistLedgerAsync(
+  params: VitestLedgerRunParams
+): Promise<VitestLedgerRunResult> {
+  const prepared = prepareVitestLedgerRun(params);
+  if (!prepared.ok) return prepared;
+  const startedAt = new Date().toISOString();
+  const progressTemp =
+    params.onTestProgress != null
+      ? path.join(tmpdir(), `ffts-vitest-progress-${randomBytes(8).toString('hex')}.ndjson`)
+      : null;
+  const childEnv = { ...prepared.childEnv };
+  const spawnArgs = [...prepared.args];
+  if (progressTemp) {
+    childEnv.TEE_VITEST_PROGRESS_FILE = progressTemp;
+    spawnArgs.push(`--reporter=${VITEST_PROGRESS_REPORTER}`);
+    writeFileSync(progressTemp, '', 'utf8');
+  }
+  const result = await new Promise<{
+    status: number | null;
+    signal: NodeJS.Signals | null;
+    error?: Error;
+  }>((resolve) => {
+    const child = spawn(process.execPath, spawnArgs, {
+      cwd: params.repoRoot,
+      env: childEnv,
+      shell: false,
+      windowsHide: true,
+    });
+    let seenProgressLines = 0;
+    const drain = (): void => {
+      if (!progressTemp || !params.onTestProgress) return;
+      seenProgressLines = consumeVitestProgressFile(progressTemp, seenProgressLines, params.onTestProgress);
+    };
+    const timer = progressTemp ? setInterval(drain, 200) : null;
+    timer?.unref?.();
+    child.stdout?.resume();
+    child.stderr?.resume();
+    child.on('error', (error) => {
+      if (timer) clearInterval(timer);
+      drain();
+      resolve({ status: null, signal: null, error });
+    });
+    child.on('close', (code, signal) => {
+      if (timer) clearInterval(timer);
+      drain();
+      resolve({
+        status: typeof code === 'number' ? code : null,
+        signal: signal ?? null,
+      });
+    });
+  });
+  if (progressTemp) {
+    try {
+      unlinkSync(progressTemp);
+    } catch {
+      /* display sidecar */
+    }
+  }
+  return finishVitestLedgerRun({
+    run: params,
+    before: prepared.before,
+    runnerVersion: prepared.runnerVersion,
+    reporterTemp: prepared.reporterTemp,
+    args: prepared.args,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    result,
+  });
 }

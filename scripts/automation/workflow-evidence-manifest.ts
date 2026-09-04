@@ -380,9 +380,15 @@ export function buildEvidenceManifest(params: {
   executedTestIds?: string[];
   verificationLedgerRefs?: WorkflowEvidenceManifest['verificationLedgers'];
   commandRunner?: EvidenceCommandRunner;
+  frozenCandidate?: {
+    headCommit: string;
+    productTreeFingerprint: string;
+    dirtyTreeHash?: string;
+    inputFingerprint?: string;
+  };
 }): { manifest: WorkflowEvidenceManifest; relativePath: string; absolutePath: string } {
   const tree = getCurrentTreeFingerprint(params.repoRoot);
-  const headCommit = tree.headCommit;
+  const headCommit = params.frozenCandidate?.headCommit ?? tree.headCommit;
   const dirtyFiles = tree.changedFiles;
   const baseHeadFiles = listBaseToHeadChangedFiles(
     params.repoRoot,
@@ -393,11 +399,17 @@ export function buildEvidenceManifest(params: {
   const scopedPaths = scoped.ok ? scoped.scope.all : [];
   const changedFiles = [...new Set([...baseHeadFiles, ...dirtyFiles, ...scopedPaths])].sort();
   const gitScopeFailed = !scoped.ok || dirtyFiles.includes('__GIT_STATUS_FAILED__');
-  const dirtyTreeHash = tree.dirtyTreeHash;
-  const inputFingerprint = tree.inputFingerprint;
+  const dirtyTreeHash = params.frozenCandidate?.dirtyTreeHash ?? tree.dirtyTreeHash;
+  const inputFingerprint = params.frozenCandidate?.inputFingerprint ?? tree.inputFingerprint;
   const executedIds = new Set<string>();
   const verificationLedgerRefs = [...(params.verificationLedgerRefs ?? [])];
-  const productTreeAtBuild = computeWorkingTreeProductFingerprint(params.repoRoot);
+  const currentProductTree = computeWorkingTreeProductFingerprint(params.repoRoot);
+  const productTreeAtBuild = params.frozenCandidate?.productTreeFingerprint ?? currentProductTree;
+  const frozenDrifted =
+    params.frozenCandidate != null &&
+    (tree.headCommit !== params.frozenCandidate.headCommit ||
+      typeof currentProductTree === 'object' ||
+      currentProductTree !== params.frozenCandidate.productTreeFingerprint);
   if (typeof productTreeAtBuild === 'string') {
     for (const ref of verificationLedgerRefs) {
       const validated = readAndValidateVerificationLedger({
@@ -609,7 +621,7 @@ export function buildEvidenceManifest(params: {
   let status: WorkflowEvidenceManifest['status'] = 'passed';
   if (!checksPassed || !testsReady || !liveOk || !fixEvidenceReady) status = 'failed';
   if (sanitizedCommands.some((command) => command.status === 'unknown')) status = 'unknown';
-  if (gitScopeFailed || typeof productTreeAtBuild === 'object') status = 'failed';
+  if (gitScopeFailed || frozenDrifted || typeof productTreeAtBuild === 'object') status = 'failed';
 
   const draft: Omit<WorkflowEvidenceManifest, 'contentHash' | 'bodyHash'> = {
     schemaVersion: '1',
@@ -633,10 +645,12 @@ export function buildEvidenceManifest(params: {
     liveVerification,
     closedBlockerIds: sanitizedClosedBlockerIds,
     blockerEvidence: sanitizedBlockerEvidence,
-    productTreeFingerprint: (() => {
-      const fingerprint = computeWorkingTreeProductFingerprint(params.repoRoot);
-      return typeof fingerprint === 'string' ? fingerprint : undefined;
-    })(),
+    productTreeFingerprint: params.frozenCandidate
+      ? params.frozenCandidate.productTreeFingerprint
+      : (() => {
+          const fingerprint = computeWorkingTreeProductFingerprint(params.repoRoot);
+          return typeof fingerprint === 'string' ? fingerprint : undefined;
+        })(),
     verificationLedgers: verificationLedgerRefs,
     privacy: { redacted: true },
   };

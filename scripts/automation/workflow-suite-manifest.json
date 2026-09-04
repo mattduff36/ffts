@@ -29,6 +29,7 @@
     "tests/unit/workflow-v24-closure-blockers.test.ts",
     "tests/unit/workflow-v24-latest-legal-attempt.test.ts",
     "tests/unit/workflow-v24-wording-compat.test.ts",
-    "tests/unit/workflow-verification-ledger.test.ts"
+    "tests/unit/workflow-verification-ledger.test.ts",
+    "tests/unit/workflow-verify-parallel.test.ts"
   ]
 }

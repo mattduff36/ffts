@@ -397,7 +397,6 @@ export function createVerifyProgressReporter(options: {
   let lastPercent = 0;
   let lastHeartbeatAt = startedAt;
   let lastPaint = '';
-  let lastLineCount = 0;
   let liveStarted = false;
   let terminalRestored = false;
   let snapshot: VerifyProgressSnapshot = {
@@ -443,26 +442,22 @@ export function createVerifyProgressReporter(options: {
     if (machineSafe) {
       write(record);
       lastPaint = record;
-      lastLineCount = frameLineCount(record);
       return;
     }
     if (!liveStarted) {
       write(`${ttyLiveStartSequence(useAlternateScreen)}${record}`);
       liveStarted = true;
       lastPaint = record;
-      lastLineCount = frameLineCount(record);
       return;
     }
     if (next.terminal) {
       restoreTerminal();
       write(record);
       lastPaint = record;
-      lastLineCount = frameLineCount(record);
       return;
     }
     write(`${ttyLiveRefreshPrefix()}${record}`);
     lastPaint = record;
-    lastLineCount = frameLineCount(record);
   };
 
   const restoreTerminal = (): void => {

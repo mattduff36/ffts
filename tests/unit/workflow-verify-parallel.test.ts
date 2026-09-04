@@ -22,6 +22,7 @@ import {
   workflowWeightTotals,
 } from '@/scripts/automation/workflow-verify-progress';
 import {
+  attachLiveProgressTerminalGuards,
   createHumanVerifyProgress,
   proveRequiredIdsExact,
 } from '@/scripts/automation/workflow-verify-batch';
@@ -591,6 +592,7 @@ describe('TEE verification progress', () => {
     reporter.complete('PASS', 'Preflight');
     const text = chunks.join('');
     expect(text).toContain(ttyLiveRestoreSequence(true));
+    expect(text).toContain('\u001b[?25h');
     expect(text).toMatch(/100% PASS/);
     expect(text.lastIndexOf(ttyLiveRestoreSequence(true))).toBeLessThan(text.lastIndexOf('100% PASS'));
     reporter.restoreTerminal();
@@ -655,6 +657,43 @@ describe('TEE verification progress', () => {
     expect(batchSource).toContain("process.once('SIGINT'");
     expect(batchSource).toContain("process.once('uncaughtException'");
     expect(result).toEqual({ exitCode: 7, ok: false });
+  });
+
+  it('TEE-VERIFY-LIVE-SIGINT-030: SIGINT restores the terminal then re-raises without changing the result', () => {
+    const chunks: string[] = [];
+    const reporter = createVerifyProgressReporter({
+      title: 'Preflight',
+      stream: { write: (chunk) => chunks.push(chunk) },
+      isTty: true,
+      ci: false,
+    });
+    const result = { exitCode: 0, ok: true };
+    reporter.update({ message: 'Running', percent: 20 });
+    const raised: NodeJS.Signals[] = [];
+    const originalKill = process.kill.bind(process);
+    const sigintBefore = process.listenerCount('SIGINT');
+    const dispose = attachLiveProgressTerminalGuards(reporter);
+    const handler = process.listeners('SIGINT').at(-1);
+    process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
+      if (pid === process.pid && signal === 'SIGINT') {
+        raised.push('SIGINT');
+        return true;
+      }
+      return originalKill(pid, signal as NodeJS.Signals);
+    }) as typeof process.kill;
+    try {
+      expect(typeof handler).toBe('function');
+      handler?.call(process);
+      const text = chunks.join('');
+      expect(text).toContain(ttyLiveRestoreSequence(true));
+      expect(text).toContain('\u001b[?25h');
+      expect(raised).toEqual(['SIGINT']);
+      expect(result).toEqual({ exitCode: 0, ok: true });
+    } finally {
+      process.kill = originalKill;
+      dispose();
+    }
+    expect(process.listenerCount('SIGINT')).toBe(sigintBefore);
   });
 });
 

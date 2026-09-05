@@ -5,6 +5,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -15,7 +16,9 @@ import type { ErrorLogEntry } from './fixerrors';
 import { TRUSTED_OPERATIONAL_ACTIONS } from './automation/trusted-operational-actions';
 
 export const ERROR_FETCH_PAGE_SIZE = 200;
-export const ERROR_DELETE_BATCH_SIZE = 100;
+export const ERROR_ARCHIVE_BATCH_SIZE = 100;
+export const ERROR_DELETE_BATCH_SIZE = ERROR_ARCHIVE_BATCH_SIZE;
+export const ERROR_LOG_RETENTION_MONTHS = 12;
 export const ERROR_SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
 export const ERROR_SNAPSHOT_PATH = resolve(
   process.cwd(),
@@ -37,6 +40,8 @@ const OPERATION = TRUSTED_OPERATIONAL_ACTIONS.fixerrors;
 
 const SET_NULL_COLLATERAL_NOTE =
   'service_health_events.updated_at may change via trigger when recovery_error_log_id is SET NULL';
+const CASCADE_COLLATERAL_NOTE =
+  'error_log_alerts rows are deleted by ON DELETE CASCADE during expired archived retention';
 
 export interface PgClientLike {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -50,30 +55,29 @@ export type ErrorSnapshotBoundary = {
   id: string;
 };
 
-export type ErrorSnapshotCleanupCollateral = {
+export type ErrorLogRetentionCollateral = {
+  cascadedAlertCount: number;
   userUsageEventsNulled: number;
   serviceHealthEventsNulled: number;
   notes: string[];
 };
 
-export type ErrorSnapshotCleanupStatus =
+export type ErrorSnapshotReconciliationState =
   | 'not_started'
-  | 'in_progress'
-  | 'rejected'
-  | 'rolled_back'
-  | 'committed'
-  | 'committed_unverified'
+  | 'archived'
+  | 'already_archived'
+  | 'failed'
   | 'indeterminate';
 
 export type ErrorSnapshotCleanup = {
-  status: ErrorSnapshotCleanupStatus;
+  status: 'not_started' | 'in_progress' | 'completed' | 'failed' | 'indeterminate';
   attemptedAt: string | null;
   completedAt: string | null;
-  deletedErrorLogIds: string[];
-  deletedAlertIds: string[];
+  archivedErrorLogIds: string[];
   attemptedErrorLogIds: string[];
+  reconciliationState: ErrorSnapshotReconciliationState;
+  remainingActiveCount: number | null;
   error: string | null;
-  collateral: ErrorSnapshotCleanupCollateral;
 };
 
 export type ErrorSnapshotDependencies = {
@@ -83,7 +87,7 @@ export type ErrorSnapshotDependencies = {
 };
 
 export type ErrorSnapshotExport = {
-  version: 1;
+  version: 3;
   commandId: 'fixerrors';
   safetyContract: string;
   snapshotId: string;
@@ -117,6 +121,12 @@ export type SnapshotIo = {
   read(path: string): string;
 };
 
+export type LegacySnapshotScanFs = {
+  exists(path: string): boolean;
+  read(path: string): string;
+  list(directory: string): string[];
+};
+
 export type SnapshotLock = {
   acquire(lockPath: string, snapshotId: string): () => void;
 };
@@ -133,11 +143,13 @@ export type CleanupConfirmation = {
 
 export type ErrorLogClearResult = {
   clearedCount: number;
+  /** @deprecated Archive never deletes alerts; retained until fixerrors.ts v4 lands. */
   clearedAlertCount: number;
   remainingCount: number;
-  deletedErrorLogIds: string[];
-  deletedAlertIds: string[];
-  collateral: ErrorSnapshotCleanupCollateral;
+  archivedErrorLogIds: string[];
+  reconciliationState: 'archived' | 'already_archived';
+  /** @deprecated Archive has no FK collateral; retention reports real collateral. */
+  collateral: ErrorLogRetentionCollateral;
 };
 
 type ForeignKeyContract = {
@@ -159,9 +171,17 @@ type SchemaCatalog = {
     dataType: string;
     notNull: boolean;
     ordinalPosition: number;
+    defaultExpression: string | null;
   }>;
+  checkConstraints: CheckConstraintContract[];
   foreignKeys: ForeignKeyContract[];
   triggers: TriggerContract[];
+};
+
+type CheckConstraintContract = {
+  constraintName: string;
+  definition: string;
+  validated: boolean;
 };
 
 export type FixerrorsRelationConfig = {
@@ -248,6 +268,19 @@ export function __testOnlyConfigureFixerrorsRelations(
   activeRelations = relations ?? DEFAULT_FIXERRORS_RELATIONS;
 }
 
+const DEFAULT_LEGACY_SNAPSHOT_SCAN_FS: LegacySnapshotScanFs = {
+  exists(path) {
+    return existsSync(path);
+  },
+  read(path) {
+    return readFileSync(path, 'utf8');
+  },
+  list(directory) {
+    if (!existsSync(directory)) return [];
+    return readdirSync(directory).map((name) => resolve(directory, name));
+  },
+};
+
 const DEFAULT_SNAPSHOT_IO: SnapshotIo = {
   writeAtomic(path, content) {
     mkdirSync(dirname(path), { recursive: true });
@@ -313,6 +346,15 @@ function isUuid(value: string): boolean {
   );
 }
 
+function requireSnapshotUuid(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !isUuid(value)) {
+    throw new Error(
+      `Production error snapshot contains an invalid ${field}; cleanup blocked`
+    );
+  }
+  return value;
+}
+
 export function getErrorSnapshotArtifactPath(snapshotId: string): string {
   if (!isUuid(snapshotId)) {
     throw new Error('Invalid fixerrors snapshot identifier');
@@ -336,12 +378,72 @@ function safeErrorMessage(error: unknown): string {
   return message.replace(/\s+/gu, ' ').slice(0, 500);
 }
 
-function normalizeTimestamp(value: unknown, field: string): string {
+const SNAPSHOT_TIMESTAMPTZ_TEXT_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"';
+const SNAPSHOT_TIMESTAMP_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})Z$/u;
+
+function snapshotTimestamptzTextSql(
+  column: 'created_at' | 'timestamp',
+  qualifier?: string
+): string {
+  const reference = qualifier ? `${qualifier}.${column}` : column;
+  return `to_char(${reference} AT TIME ZONE 'UTC', '${SNAPSHOT_TIMESTAMPTZ_TEXT_FORMAT}')`;
+}
+
+const ERROR_LOG_SNAPSHOT_PROJECTION = `
+            error_logs.id::text AS id,
+            ${snapshotTimestamptzTextSql('timestamp', 'error_logs')} AS timestamp,
+            ${snapshotTimestamptzTextSql('created_at', 'error_logs')} AS created_at,
+            error_logs.error_message,
+            error_logs.error_stack,
+            error_logs.error_type,
+            error_logs.user_id,
+            error_logs.user_email,
+            error_logs.page_url,
+            error_logs.user_agent,
+            error_logs.component_name,
+            error_logs.additional_data
+`;
+
+function normalizeOperationalTimestamp(value: unknown, field: string): string {
   const parsed = value instanceof Date ? value : new Date(String(value));
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`Production error snapshot contains invalid ${field}; cleanup blocked`);
   }
   return parsed.toISOString();
+}
+
+function canonicalizeSnapshotTimestamp(value: unknown, field: string): string {
+  if (value instanceof Date) {
+    throw new Error(
+      `Production error snapshot contains a Date-typed ${field}; cleanup blocked`
+    );
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`Production error snapshot contains invalid ${field}; cleanup blocked`);
+  }
+  const match = SNAPSHOT_TIMESTAMP_PATTERN.exec(value);
+  if (!match) {
+    throw new Error(`Production error snapshot contains invalid ${field}; cleanup blocked`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const verified = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    verified.getUTCFullYear() !== year ||
+    verified.getUTCMonth() !== month - 1 ||
+    verified.getUTCDate() !== day ||
+    verified.getUTCHours() !== hour ||
+    verified.getUTCMinutes() !== minute ||
+    verified.getUTCSeconds() !== second
+  ) {
+    throw new Error(`Production error snapshot contains invalid ${field}; cleanup blocked`);
+  }
+  return value;
 }
 
 function isValidIsoTimestamp(value: unknown): value is string {
@@ -358,8 +460,8 @@ function normalizeErrorRow(row: Record<string, unknown>): ErrorLogEntry {
   }
   return {
     id: row.id,
-    timestamp: normalizeTimestamp(row.timestamp, 'timestamp'),
-    created_at: normalizeTimestamp(row.created_at, 'created_at'),
+    timestamp: canonicalizeSnapshotTimestamp(row.timestamp, 'timestamp'),
+    created_at: canonicalizeSnapshotTimestamp(row.created_at, 'created_at'),
     error_message: String(row.error_message ?? ''),
     error_stack: row.error_stack == null ? null : String(row.error_stack),
     error_type: String(row.error_type ?? ''),
@@ -443,40 +545,29 @@ function isValidDependencies(
   return true;
 }
 
-function emptyCollateral(): ErrorSnapshotCleanupCollateral {
+function emptyCleanup(): ErrorSnapshotCleanup {
   return {
+    status: 'not_started',
+    attemptedAt: null,
+    completedAt: null,
+    archivedErrorLogIds: [],
+    attemptedErrorLogIds: [],
+    reconciliationState: 'not_started',
+    remainingActiveCount: null,
+    error: null,
+  };
+}
+
+function emptyRetentionCollateral(): ErrorLogRetentionCollateral {
+  return {
+    cascadedAlertCount: 0,
     userUsageEventsNulled: 0,
     serviceHealthEventsNulled: 0,
     notes: [],
   };
 }
 
-function emptyCleanup(): ErrorSnapshotCleanup {
-  return {
-    status: 'not_started',
-    attemptedAt: null,
-    completedAt: null,
-    deletedErrorLogIds: [],
-    deletedAlertIds: [],
-    attemptedErrorLogIds: [],
-    error: null,
-    collateral: emptyCollateral(),
-  };
-}
-
-function isValidCollateral(
-  collateral: ErrorSnapshotCleanupCollateral | undefined
-): collateral is ErrorSnapshotCleanupCollateral {
-  if (!collateral) return false;
-  return (
-    Number.isSafeInteger(collateral.userUsageEventsNulled) &&
-    collateral.userUsageEventsNulled >= 0 &&
-    Number.isSafeInteger(collateral.serviceHealthEventsNulled) &&
-    collateral.serviceHealthEventsNulled >= 0 &&
-    Array.isArray(collateral.notes) &&
-    collateral.notes.every((note) => typeof note === 'string')
-  );
-}
+const ACTIVE_ERROR_LOG_PREDICATE = `error_logs.status = 'active'`;
 
 /** Non-authoritative connection-string helper; not used for snapshot binding. */
 export function createDatabaseTargetFingerprint(connectionString: string): string {
@@ -616,6 +707,82 @@ function triggerKey(trigger: TriggerContract): string {
   return `${trigger.table}.${trigger.triggerName}`;
 }
 
+function normalizeCatalogExpression(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
+function checkConstraintKey(constraint: CheckConstraintContract): string {
+  return [
+    constraint.constraintName,
+    normalizeCatalogExpression(constraint.definition),
+    constraint.validated ? 'validated' : 'not-validated',
+  ].join('.');
+}
+
+const EXPECTED_CHECK_CONSTRAINT_NAMES = new Set([
+  'error_logs_status_check',
+  'error_logs_status_archived_at_consistency',
+]);
+const EXPECTED_STATUS_CHECK_DEFINITION =
+  "CHECK (status = ANY (ARRAY['active'::text, 'archived'::text]))";
+const EXPECTED_STATUS_ARCHIVE_CONSISTENCY_DEFINITION =
+  "CHECK (status = 'active'::text AND archived_at IS NULL OR status = 'archived'::text AND archived_at IS NOT NULL)";
+
+function assertArchiveColumnContract(catalog: SchemaCatalog): void {
+  const status = catalog.columns.find((column) => column.columnName === 'status');
+  const archivedAt = catalog.columns.find(
+    (column) => column.columnName === 'archived_at'
+  );
+  if (
+    !status ||
+    status.dataType !== 'text' ||
+    !status.notNull ||
+    normalizeCatalogExpression(status.defaultExpression ?? '') !== "'active'::text" ||
+    !archivedAt ||
+    archivedAt.dataType !== 'timestamp with time zone' ||
+    archivedAt.notNull ||
+    archivedAt.defaultExpression !== null
+  ) {
+    throw new Error('error_logs archive column safety contract changed; cleanup blocked');
+  }
+}
+
+function assertExpectedCheckConstraints(
+  constraints: CheckConstraintContract[]
+): void {
+  const names = new Set(constraints.map((constraint) => constraint.constraintName));
+  if (
+    names.size !== EXPECTED_CHECK_CONSTRAINT_NAMES.size ||
+    [...names].some((name) => !EXPECTED_CHECK_CONSTRAINT_NAMES.has(name)) ||
+    constraints.some(
+      (constraint) =>
+        !constraint.validated ||
+        !normalizeCatalogExpression(constraint.definition).startsWith('CHECK (')
+    )
+  ) {
+    throw new Error('error_logs check-constraint safety contract changed; cleanup blocked');
+  }
+  const statusDefinition = normalizeCatalogExpression(
+    constraints.find(
+      (constraint) => constraint.constraintName === 'error_logs_status_check'
+    )?.definition ?? ''
+  );
+  const consistencyDefinition = normalizeCatalogExpression(
+    constraints.find(
+      (constraint) =>
+        constraint.constraintName ===
+        'error_logs_status_archived_at_consistency'
+    )?.definition ?? ''
+  );
+  if (
+    statusDefinition !== EXPECTED_STATUS_CHECK_DEFINITION ||
+    consistencyDefinition !==
+      EXPECTED_STATUS_ARCHIVE_CONSISTENCY_DEFINITION
+  ) {
+    throw new Error('error_logs check-constraint safety contract changed; cleanup blocked');
+  }
+}
+
 function assertExpectedTriggers(triggers: TriggerContract[]): void {
   const expectedKeys = new Set(getRelations().expectedTriggers.map(triggerKey));
   const actualKeys = new Set(triggers.map(triggerKey));
@@ -631,6 +798,9 @@ function computeSchemaFingerprint(catalog: SchemaCatalog): string {
   return sha256(
     JSON.stringify({
       columns: catalog.columns,
+      checkConstraints: [...catalog.checkConstraints]
+        .map(checkConstraintKey)
+        .sort((left, right) => left.localeCompare(right)),
       foreignKeys: [...catalog.foreignKeys]
         .map(foreignKeyKey)
         .sort((left, right) => left.localeCompare(right)),
@@ -720,15 +890,43 @@ function buildSchemaColumnsSql(): string {
     column_row.attname AS column_name,
     format_type(column_row.atttypid, column_row.atttypmod) AS data_type,
     column_row.attnotnull AS not_null,
-    column_row.attnum AS ordinal_position
+    column_row.attnum AS ordinal_position,
+    pg_get_expr(default_row.adbin, default_row.adrelid) AS default_expression
   FROM pg_attribute column_row
   JOIN pg_class table_row ON table_row.oid = column_row.attrelid
   JOIN pg_namespace schema_row ON schema_row.oid = table_row.relnamespace
+  LEFT JOIN pg_attrdef default_row
+    ON default_row.adrelid = column_row.attrelid
+   AND default_row.adnum = column_row.attnum
   WHERE schema_row.nspname = '${schema}'
     AND table_row.relname = '${table}'
     AND column_row.attnum > 0
     AND NOT column_row.attisdropped
   ORDER BY column_row.attnum
+`;
+}
+
+function buildCheckConstraintCatalogSql(): string {
+  const relations = getRelations();
+  const schema = assertSafeSqlIdentifier(relations.schema, 'schema');
+  const table = assertSafeSqlIdentifier(relations.errorLogsTable, 'errorLogsTable');
+  return `
+  /* fixerrors:check-constraint-catalog */
+  SELECT
+    constraint_row.conname AS constraint_name,
+    pg_get_constraintdef(constraint_row.oid, true) AS definition,
+    constraint_row.convalidated AS validated
+  FROM pg_constraint constraint_row
+  JOIN pg_class table_row ON table_row.oid = constraint_row.conrelid
+  JOIN pg_namespace schema_row ON schema_row.oid = table_row.relnamespace
+  WHERE constraint_row.contype = 'c'
+    AND schema_row.nspname = '${schema}'
+    AND table_row.relname = '${table}'
+    AND constraint_row.conname IN (
+      'error_logs_status_check',
+      'error_logs_status_archived_at_consistency'
+    )
+  ORDER BY constraint_row.conname
 `;
 }
 
@@ -738,7 +936,13 @@ async function fetchSchemaCatalog(client: PgClientLike): Promise<SchemaCatalog> 
     data_type: unknown;
     not_null: unknown;
     ordinal_position: unknown;
+    default_expression: unknown;
   }>(buildSchemaColumnsSql());
+  const checkConstraintsResult = await client.query<{
+    constraint_name: unknown;
+    definition: unknown;
+    validated: unknown;
+  }>(buildCheckConstraintCatalogSql());
   const foreignKeysResult = await client.query<Record<string, unknown>>(buildFkCatalogSql());
   const triggersResult = await client.query<{
     table_name: unknown;
@@ -751,6 +955,13 @@ async function fetchSchemaCatalog(client: PgClientLike): Promise<SchemaCatalog> 
       dataType: String(row.data_type),
       notNull: Boolean(row.not_null),
       ordinalPosition: Number(row.ordinal_position),
+      defaultExpression:
+        row.default_expression == null ? null : String(row.default_expression),
+    })),
+    checkConstraints: checkConstraintsResult.rows.map((row) => ({
+      constraintName: String(row.constraint_name),
+      definition: String(row.definition),
+      validated: Boolean(row.validated),
     })),
     foreignKeys: parseForeignKeyRows(foreignKeysResult.rows),
     triggers: triggersResult.rows.map((row) => ({
@@ -771,6 +982,8 @@ function assertSchemaCatalogContract(catalog: SchemaCatalog): string {
     }))
   );
   assertExpectedTriggers(catalog.triggers);
+  assertArchiveColumnContract(catalog);
+  assertExpectedCheckConstraints(catalog.checkConstraints);
   if (catalog.columns.length === 0) {
     throw new Error('error_logs schema catalog is empty; cleanup blocked');
   }
@@ -845,7 +1058,7 @@ export async function fetchProductionErrorSnapshot(
     }>(
       '/* fixerrors:transaction-time */ SELECT transaction_timestamp() AS transaction_started_at'
     );
-    const transactionStartedAt = normalizeTimestamp(
+    const transactionStartedAt = normalizeOperationalTimestamp(
       transactionResult.rows[0]?.transaction_started_at,
       'transaction timestamp'
     );
@@ -858,16 +1071,22 @@ export async function fetchProductionErrorSnapshot(
       created_at: unknown;
     }>(`
       /* fixerrors:snapshot-boundary */
-      SELECT id, created_at
+      SELECT
+        error_logs.id::text AS id,
+        ${snapshotTimestamptzTextSql('created_at', 'error_logs')} AS created_at
       FROM ${qualifiedTable(relations.errorLogsTable)}
-      ORDER BY created_at DESC, id DESC
+      WHERE ${ACTIVE_ERROR_LOG_PREDICATE}
+      ORDER BY error_logs.created_at DESC, error_logs.id DESC
       LIMIT 1
     `);
     const boundaryRow = boundaryResult.rows[0];
     const boundary = boundaryRow
       ? {
-          id: String(boundaryRow.id),
-          createdAt: normalizeTimestamp(boundaryRow.created_at, 'boundary created_at'),
+          id: requireSnapshotUuid(boundaryRow.id, 'boundary ID'),
+          createdAt: canonicalizeSnapshotTimestamp(
+            boundaryRow.created_at,
+            'boundary created_at'
+          ),
         }
       : null;
 
@@ -875,10 +1094,11 @@ export async function fetchProductionErrorSnapshot(
       `
         /* fixerrors:snapshot-count */
         SELECT COUNT(*)::text AS count
-        FROM ${qualifiedTable(relations.errorLogsTable)}
-        WHERE (
+        FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs
+        WHERE ${ACTIVE_ERROR_LOG_PREDICATE}
+        AND (
           $1::timestamptz IS NULL
-          OR ROW(created_at, id) <= ROW($1::timestamptz, $2::uuid)
+          OR ROW(error_logs.created_at, error_logs.id) <= ROW($1::timestamptz, $2::uuid)
         )
       `,
       [boundary?.createdAt ?? null, boundary?.id ?? null]
@@ -898,28 +1118,18 @@ export async function fetchProductionErrorSnapshot(
         `
           /* fixerrors:snapshot-page */
           SELECT
-            id,
-            timestamp,
-            created_at,
-            error_message,
-            error_stack,
-            error_type,
-            user_id,
-            user_email,
-            page_url,
-            user_agent,
-            component_name,
-            additional_data
-          FROM ${qualifiedTable(relations.errorLogsTable)}
-          WHERE (
+            ${ERROR_LOG_SNAPSHOT_PROJECTION}
+          FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs
+          WHERE ${ACTIVE_ERROR_LOG_PREDICATE}
+          AND (
             $1::timestamptz IS NULL
-            OR ROW(created_at, id) <= ROW($1::timestamptz, $2::uuid)
+            OR ROW(error_logs.created_at, error_logs.id) <= ROW($1::timestamptz, $2::uuid)
           )
           AND (
             $3::timestamptz IS NULL
-            OR ROW(created_at, id) > ROW($3::timestamptz, $4::uuid)
+            OR ROW(error_logs.created_at, error_logs.id) > ROW($3::timestamptz, $4::uuid)
           )
-          ORDER BY created_at ASC, id ASC
+          ORDER BY error_logs.created_at ASC, error_logs.id ASC
           LIMIT $5
         `,
         [
@@ -979,7 +1189,7 @@ export async function fetchProductionErrorSnapshot(
       ErrorSnapshotExport,
       'manifestChecksum'
     > = {
-      version: 1,
+      version: 3,
       commandId: 'fixerrors',
       safetyContract: OPERATION.safetyContract,
       snapshotId: randomUUID(),
@@ -1049,44 +1259,42 @@ export function verifyErrorSnapshot(
       typeof verified.analysis.reportChecksum === 'string' &&
       verified.analysis.reportChecksum.length === 64 &&
       isValidIsoTimestamp(verified.analysis.completedAt));
-  const validCleanupStatuses = new Set<ErrorSnapshotCleanupStatus>([
+  const validCleanupStatuses = new Set([
     'not_started',
     'in_progress',
-    'rejected',
-    'rolled_back',
-    'committed',
-    'committed_unverified',
+    'completed',
+    'failed',
+    'indeterminate',
+  ]);
+  const validReconciliationStates = new Set<ErrorSnapshotReconciliationState>([
+    'not_started',
+    'archived',
+    'already_archived',
+    'failed',
     'indeterminate',
   ]);
   const cleanup = verified.cleanup;
   const cleanupArraysValid =
     cleanup &&
-    Array.isArray(cleanup.deletedErrorLogIds) &&
-    cleanup.deletedErrorLogIds.every((id) => typeof id === 'string') &&
-    new Set(cleanup.deletedErrorLogIds).size ===
-      cleanup.deletedErrorLogIds.length &&
-    Array.isArray(cleanup.deletedAlertIds) &&
-    cleanup.deletedAlertIds.every((id) => typeof id === 'string') &&
-    new Set(cleanup.deletedAlertIds).size === cleanup.deletedAlertIds.length &&
+    Array.isArray(cleanup.archivedErrorLogIds) &&
+    cleanup.archivedErrorLogIds.every((id) => typeof id === 'string') &&
+    new Set(cleanup.archivedErrorLogIds).size ===
+      cleanup.archivedErrorLogIds.length &&
     Array.isArray(cleanup.attemptedErrorLogIds) &&
     cleanup.attemptedErrorLogIds.every((id) => typeof id === 'string') &&
     new Set(cleanup.attemptedErrorLogIds).size ===
       cleanup.attemptedErrorLogIds.length &&
-    cleanup.deletedErrorLogIds.every((id) => uniqueIds.has(id)) &&
-    cleanup.deletedAlertIds.every((id) => uniqueIds.has(id)) &&
+    cleanup.archivedErrorLogIds.every((id) => uniqueIds.has(id)) &&
     cleanup.attemptedErrorLogIds.every((id) => uniqueIds.has(id)) &&
-    (cleanup.error === null || typeof cleanup.error === 'string') &&
-    isValidCollateral(cleanup.collateral);
+    validReconciliationStates.has(cleanup.reconciliationState) &&
+    (cleanup.remainingActiveCount === null ||
+      (Number.isSafeInteger(cleanup.remainingActiveCount) &&
+        cleanup.remainingActiveCount >= 0)) &&
+    (cleanup.error === null || typeof cleanup.error === 'string');
   const emptyCleanupArrays =
     cleanupArraysValid &&
-    cleanup.deletedErrorLogIds.length === 0 &&
-    cleanup.deletedAlertIds.length === 0 &&
+    cleanup.archivedErrorLogIds.length === 0 &&
     cleanup.attemptedErrorLogIds.length === 0;
-  const emptyCollateralState =
-    cleanupArraysValid &&
-    cleanup.collateral.userUsageEventsNulled === 0 &&
-    cleanup.collateral.serviceHealthEventsNulled === 0 &&
-    cleanup.collateral.notes.length === 0;
   const cleanupStateValid =
     cleanupArraysValid &&
     (
@@ -1094,35 +1302,38 @@ export function verifyErrorSnapshot(
         cleanup.attemptedAt === null &&
         cleanup.completedAt === null &&
         cleanup.error === null &&
-        emptyCleanupArrays &&
-        emptyCollateralState) ||
+        cleanup.reconciliationState === 'not_started' &&
+        cleanup.remainingActiveCount === null &&
+        emptyCleanupArrays) ||
       (cleanup.status === 'in_progress' &&
         isValidIsoTimestamp(cleanup.attemptedAt) &&
         cleanup.completedAt === null &&
         cleanup.error === null &&
-        emptyCleanupArrays &&
-        emptyCollateralState) ||
-      (cleanup.status === 'committed' &&
+        cleanup.reconciliationState === 'not_started' &&
+        cleanup.remainingActiveCount === null &&
+        emptyCleanupArrays) ||
+      (cleanup.status === 'completed' &&
         isValidIsoTimestamp(cleanup.attemptedAt) &&
         isValidIsoTimestamp(cleanup.completedAt) &&
         cleanup.error === null &&
+        (cleanup.reconciliationState === 'archived' ||
+          cleanup.reconciliationState === 'already_archived') &&
+        Number.isSafeInteger(cleanup.remainingActiveCount) &&
         cleanup.attemptedErrorLogIds.length === ids.length &&
         cleanup.attemptedErrorLogIds.every((id, index) => id === ids[index]) &&
-        cleanup.deletedErrorLogIds.length === ids.length &&
-        cleanup.deletedErrorLogIds.every((id, index) => id === ids[index])) ||
-      ((cleanup.status === 'rejected' ||
-        cleanup.status === 'rolled_back' ||
-        cleanup.status === 'indeterminate' ||
-        cleanup.status === 'committed_unverified') &&
+        cleanup.archivedErrorLogIds.length === ids.length &&
+        cleanup.archivedErrorLogIds.every((id, index) => id === ids[index])) ||
+      ((cleanup.status === 'failed' || cleanup.status === 'indeterminate') &&
         isValidIsoTimestamp(cleanup.attemptedAt) &&
         cleanup.completedAt === null &&
         typeof cleanup.error === 'string' &&
         cleanup.error.length > 0 &&
-        cleanup.deletedErrorLogIds.length === 0 &&
-        cleanup.deletedAlertIds.length === 0)
+        cleanup.archivedErrorLogIds.length === 0 &&
+        cleanup.remainingActiveCount === null &&
+        cleanup.reconciliationState === cleanup.status)
     );
   const structurallyValid =
-    verified.version === 1 &&
+    verified.version === 3 &&
     verified.commandId === 'fixerrors' &&
     verified.safetyContract === OPERATION.safetyContract &&
     verified.table === relationTableName() &&
@@ -1238,24 +1449,24 @@ export function markSnapshotCleanupNotRequired(
   }
   const completedAt = now.toISOString();
   return withCleanupState(snapshot, {
-    status: 'committed',
+    status: 'completed',
     attemptedAt: completedAt,
     completedAt,
-    deletedErrorLogIds: [],
-    deletedAlertIds: [],
+    archivedErrorLogIds: [],
     attemptedErrorLogIds: [],
+    reconciliationState: 'already_archived',
+    remainingActiveCount: 0,
     error: null,
-    collateral: emptyCollateral(),
   });
 }
 
 export class ErrorCleanupTransactionError extends Error {
-  readonly outcome: 'rejected' | 'rolled_back' | 'indeterminate';
+  readonly outcome: 'failed' | 'indeterminate';
   readonly attemptedErrorLogIds: string[];
 
   constructor(
     message: string,
-    outcome: 'rejected' | 'rolled_back' | 'indeterminate',
+    outcome: 'failed' | 'indeterminate',
     attemptedErrorLogIds: string[]
   ) {
     super(message);
@@ -1265,6 +1476,18 @@ export class ErrorCleanupTransactionError extends Error {
   }
 }
 
+async function countRemainingActiveRows(client: PgClientLike): Promise<number> {
+  const relations = getRelations();
+  const remaining = await client.query<{ count: unknown }>(
+    `/* fixerrors:remaining-count */ SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs WHERE ${ACTIVE_ERROR_LOG_PREDICATE}`
+  );
+  const remainingCount = Number(remaining.rows[0]?.count ?? Number.NaN);
+  if (!Number.isSafeInteger(remainingCount) || remainingCount < 0) {
+    throw new Error('Remaining active error log count is invalid; cleanup rolled back');
+  }
+  return remainingCount;
+}
+
 async function clearProductionErrorLogs(
   client: PgClientLike,
   snapshot: ErrorSnapshotExport
@@ -1272,7 +1495,8 @@ async function clearProductionErrorLogs(
   const verified = verifyErrorSnapshot(snapshot);
   if (
     verified.analysis.status !== 'completed' ||
-    verified.cleanup.status !== 'in_progress'
+    (verified.cleanup.status !== 'in_progress' &&
+      verified.cleanup.status !== 'indeterminate')
   ) {
     throw new Error(
       'Cleanup requires a verified analyzed snapshot with durable in-progress evidence'
@@ -1282,7 +1506,6 @@ async function clearProductionErrorLogs(
   const targetIds = verified.exactIds;
   const attemptedErrorLogIds: string[] = [];
   let commitAttempted = false;
-  let mutationsStarted = false;
 
   await client.query('/* fixerrors:cleanup-begin */ BEGIN ISOLATION LEVEL SERIALIZABLE');
   try {
@@ -1310,22 +1533,16 @@ async function clearProductionErrorLogs(
       if (schemaFingerprint !== verified.schemaFingerprint) {
         throw new Error('Snapshot schema fingerprint mismatch; cleanup blocked');
       }
-      const remaining = await client.query<{ count: unknown }>(
-        `/* fixerrors:remaining-count */ SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogsTable)}`
-      );
-      const remainingCount = Number(remaining.rows[0]?.count ?? Number.NaN);
-      if (!Number.isSafeInteger(remainingCount) || remainingCount < 0) {
-        throw new Error('Remaining error log count is invalid; cleanup rolled back');
-      }
+      const remainingCount = await countRemainingActiveRows(client);
       commitAttempted = true;
       await client.query('/* fixerrors:cleanup-commit */ COMMIT');
       return {
         clearedCount: 0,
         clearedAlertCount: 0,
         remainingCount,
-        deletedErrorLogIds: [],
-        deletedAlertIds: [],
-        collateral: emptyCollateral(),
+        archivedErrorLogIds: [],
+        reconciliationState: 'already_archived',
+        collateral: emptyRetentionCollateral(),
       };
     }
 
@@ -1334,30 +1551,26 @@ async function clearProductionErrorLogs(
       `
         /* fixerrors:lock-target-rows */
         SELECT
-          id,
-          timestamp,
-          created_at,
-          error_message,
-          error_stack,
-          error_type,
-          user_id,
-          user_email,
-          page_url,
-          user_agent,
-          component_name,
-          additional_data
-        FROM ${qualifiedTable(relations.errorLogsTable)}
-        WHERE id = ANY($1::uuid[])
-        ORDER BY created_at ASC, id ASC
+          ${ERROR_LOG_SNAPSHOT_PROJECTION},
+          error_logs.status::text AS status
+        FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs
+        WHERE error_logs.id = ANY($1::uuid[])
+        ORDER BY error_logs.created_at ASC, error_logs.id ASC
         FOR UPDATE
       `,
       [targetIds]
     );
+    if (currentRowsResult.rows.length !== targetIds.length) {
+      throw new Error('Verified snapshot rows changed or are missing; cleanup blocked');
+    }
     const currentRows = currentRowsResult.rows.map(normalizeErrorRow);
-    if (
-      currentRows.length !== targetIds.length ||
-      snapshotChecksum(currentRows) !== verified.checksum
-    ) {
+    const statuses = currentRowsResult.rows.map((row) => String(row.status ?? ''));
+    const allActive = statuses.every((status) => status === 'active');
+    const allArchived = statuses.every((status) => status === 'archived');
+    if (!allActive && !allArchived) {
+      throw new Error('Verified snapshot rows have mixed archive state; cleanup blocked');
+    }
+    if (snapshotChecksum(currentRows) !== verified.checksum) {
       throw new Error('Verified snapshot rows changed or are missing; cleanup blocked');
     }
 
@@ -1366,103 +1579,65 @@ async function clearProductionErrorLogs(
       throw new Error('Snapshot schema fingerprint mismatch; cleanup blocked');
     }
 
-    const liveDependencies = await inventorySnapshotDependencies(client, targetIds);
-    if (
-      liveDependencies.alertErrorLogIds.length !==
-        verified.dependencies.alertErrorLogIds.length ||
-      liveDependencies.alertErrorLogIds.some(
-        (id, index) => id !== verified.dependencies.alertErrorLogIds[index]
-      ) ||
-      liveDependencies.userUsageEventsReferencing !==
-        verified.dependencies.userUsageEventsReferencing ||
-      liveDependencies.serviceHealthEventsReferencing !==
-        verified.dependencies.serviceHealthEventsReferencing
-    ) {
-      throw new Error(
-        'Snapshot dependency inventory changed after export; cleanup blocked'
-      );
+    if (allArchived) {
+      const remainingCount = await countRemainingActiveRows(client);
+      commitAttempted = true;
+      await client.query('/* fixerrors:cleanup-commit */ COMMIT');
+      return {
+        clearedCount: targetIds.length,
+        clearedAlertCount: 0,
+        remainingCount,
+        archivedErrorLogIds: [...targetIds],
+        reconciliationState: 'already_archived',
+        collateral: emptyRetentionCollateral(),
+      };
     }
 
-    const collateral: ErrorSnapshotCleanupCollateral = {
-      userUsageEventsNulled: liveDependencies.userUsageEventsReferencing,
-      serviceHealthEventsNulled: liveDependencies.serviceHealthEventsReferencing,
-      notes:
-        liveDependencies.serviceHealthEventsReferencing > 0 ||
-        liveDependencies.userUsageEventsReferencing > 0
-          ? [SET_NULL_COLLATERAL_NOTE]
-          : [],
-    };
-
-    const expectedAlertIds = liveDependencies.alertErrorLogIds;
-
-    mutationsStarted = true;
-    const deletedAlerts = await client.query<{ error_log_id: unknown }>(
-      `
-        /* fixerrors:delete-alerts */
-        DELETE FROM ${qualifiedTable(relations.errorLogAlertsTable)}
-        WHERE error_log_id = ANY($1::uuid[])
-        RETURNING error_log_id
-      `,
-      [targetIds]
-    );
-    const deletedAlertIds = deletedAlerts.rows
-      .map((row) => String(row.error_log_id))
-      .sort();
-    if (
-      deletedAlertIds.length !== expectedAlertIds.length ||
-      deletedAlertIds.some((id, index) => id !== expectedAlertIds[index])
-    ) {
-      throw new Error('Dependent diagnostic alert deletion mismatch; cleanup rolled back');
-    }
-
-    const deletedErrorLogIds: string[] = [];
+    const archivedErrorLogIds: string[] = [];
     for (
       let index = 0;
       index < targetIds.length;
-      index += ERROR_DELETE_BATCH_SIZE
+      index += ERROR_ARCHIVE_BATCH_SIZE
     ) {
-      const batchIds = targetIds.slice(index, index + ERROR_DELETE_BATCH_SIZE);
+      const batchIds = targetIds.slice(index, index + ERROR_ARCHIVE_BATCH_SIZE);
       attemptedErrorLogIds.push(...batchIds);
-      const deleted = await client.query<{ id: unknown }>(
+      const archived = await client.query<{ id: unknown }>(
         `
-          /* fixerrors:delete-error-batch */
-          DELETE FROM ${qualifiedTable(relations.errorLogsTable)}
+          /* fixerrors:archive-error-batch */
+          UPDATE ${qualifiedTable(relations.errorLogsTable)}
+          SET status = 'archived',
+              archived_at = NOW()
           WHERE id = ANY($1::uuid[])
+            AND status = 'active'
           RETURNING id
         `,
         [batchIds]
       );
-      const deletedIds = deleted.rows.map((row) => String(row.id));
-      const deletedIdSet = new Set(deletedIds);
+      const archivedIds = archived.rows.map((row) => String(row.id));
+      const archivedIdSet = new Set(archivedIds);
       if (
-        deletedIds.length !== batchIds.length ||
-        deletedIdSet.size !== batchIds.length ||
-        batchIds.some((id) => !deletedIdSet.has(id))
+        archivedIds.length !== batchIds.length ||
+        archivedIdSet.size !== batchIds.length ||
+        batchIds.some((id) => !archivedIdSet.has(id))
       ) {
         throw new Error(
-          `Deleted ${deletedIds.length} of ${batchIds.length} exported error logs; cleanup rolled back`
+          `Archived ${archivedIds.length} of ${batchIds.length} exported error logs; cleanup rolled back`
         );
       }
-      deletedErrorLogIds.push(...batchIds);
+      archivedErrorLogIds.push(...batchIds);
     }
 
-    const remaining = await client.query<{ count: unknown }>(
-      `/* fixerrors:remaining-count */ SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogsTable)}`
-    );
-    const remainingCount = Number(remaining.rows[0]?.count ?? Number.NaN);
-    if (!Number.isSafeInteger(remainingCount) || remainingCount < 0) {
-      throw new Error('Remaining error log count is invalid; cleanup rolled back');
-    }
+    const remainingCount = await countRemainingActiveRows(client);
 
     commitAttempted = true;
     await client.query('/* fixerrors:cleanup-commit */ COMMIT');
     return {
-      clearedCount: deletedErrorLogIds.length,
-      clearedAlertCount: deletedAlertIds.length,
+      clearedCount: archivedErrorLogIds.length,
+      clearedAlertCount: 0,
       remainingCount,
-      deletedErrorLogIds,
-      deletedAlertIds,
-      collateral,
+      archivedErrorLogIds,
+      reconciliationState: 'archived',
+      collateral: emptyRetentionCollateral(),
     };
   } catch (error) {
     if (!commitAttempted) {
@@ -1477,7 +1652,7 @@ async function clearProductionErrorLogs(
       }
       throw new ErrorCleanupTransactionError(
         `Cleanup transaction rolled back: ${safeErrorMessage(error)}`,
-        mutationsStarted ? 'rolled_back' : 'rejected',
+        'failed',
         attemptedErrorLogIds
       );
     }
@@ -1506,6 +1681,7 @@ type VerifiedSnapshotCleanupCoreOptions = {
   io?: SnapshotIo;
   lock?: SnapshotLock;
   lockPath?: string;
+  lockAlreadyHeld?: boolean;
   now?: Date;
 };
 
@@ -1524,11 +1700,13 @@ async function executeVerifiedSnapshotCleanupCore(
   const analysisPath = options.analysisPath ?? ERROR_ANALYSIS_PATH;
   const io = options.io ?? DEFAULT_SNAPSHOT_IO;
   const now = options.now ?? new Date();
-  const releaseLock = acquireErrorSnapshotArtifactLock(
-    options.confirmation.snapshotId,
-    options.lock ?? DEFAULT_SNAPSHOT_LOCK,
-    options.lockPath ?? ERROR_SNAPSHOT_PATH
-  );
+  const releaseLock = options.lockAlreadyHeld
+    ? () => undefined
+    : acquireErrorSnapshotArtifactLock(
+        options.confirmation.snapshotId,
+        options.lock ?? DEFAULT_SNAPSHOT_LOCK,
+        options.lockPath ?? ERROR_SNAPSHOT_PATH
+      );
   const persist = (snapshot: ErrorSnapshotExport): ErrorSnapshotExport => {
     const verified = writeAndVerifyErrorSnapshot(snapshot, snapshotPath, io);
     if (latestSnapshotPath && latestSnapshotPath !== snapshotPath) {
@@ -1583,56 +1761,57 @@ async function executeVerifiedSnapshotCleanupCore(
     if (sha256(reportContent) !== snapshot.analysis.reportChecksum) {
       throw new Error('Error analysis artifact verification failed; cleanup blocked');
     }
-    if (snapshot.cleanup.status === 'committed') {
+    if (snapshot.cleanup.status === 'completed') {
       throw new Error('Snapshot cleanup has already completed');
     }
-    if (
-      snapshot.cleanup.status === 'in_progress' ||
-      snapshot.cleanup.status === 'indeterminate' ||
-      snapshot.cleanup.status === 'committed_unverified'
-    ) {
-      throw new Error('Snapshot cleanup outcome requires manual investigation');
-    }
 
-    const attemptedAt = now.toISOString();
-    const inProgress = persist(
-      withCleanupState(snapshot, {
-        ...emptyCleanup(),
-        status: 'in_progress',
-        attemptedAt,
-      })
-    );
+    const resumeExistingAttempt =
+      snapshot.cleanup.status === 'in_progress' ||
+      snapshot.cleanup.status === 'indeterminate';
+    const attemptedAt =
+      resumeExistingAttempt && isValidIsoTimestamp(snapshot.cleanup.attemptedAt)
+        ? snapshot.cleanup.attemptedAt
+        : now.toISOString();
+    const inProgress = resumeExistingAttempt
+      ? snapshot
+      : persist(
+          withCleanupState(snapshot, {
+            ...emptyCleanup(),
+            status: 'in_progress',
+            attemptedAt,
+          })
+        );
     try {
       const result = await clearProductionErrorLogs(options.client, inProgress);
       const completed = withCleanupState(inProgress, {
-        status: 'committed',
+        status: 'completed',
         attemptedAt,
         completedAt: new Date().toISOString(),
-        deletedErrorLogIds: result.deletedErrorLogIds,
-        deletedAlertIds: result.deletedAlertIds,
-        attemptedErrorLogIds: result.deletedErrorLogIds,
+        archivedErrorLogIds: result.archivedErrorLogIds,
+        attemptedErrorLogIds: result.archivedErrorLogIds,
+        reconciliationState: result.reconciliationState,
+        remainingActiveCount: result.remainingCount,
         error: null,
-        collateral: result.collateral,
       });
       try {
         persist(completed);
       } catch (artifactError) {
-        const unverified = withCleanupState(inProgress, {
-          status: 'committed_unverified',
+        const indeterminate = withCleanupState(inProgress, {
+          status: 'indeterminate',
           attemptedAt,
           completedAt: null,
-          deletedErrorLogIds: [],
-          deletedAlertIds: [],
-          attemptedErrorLogIds: result.deletedErrorLogIds,
+          archivedErrorLogIds: [],
+          attemptedErrorLogIds: result.archivedErrorLogIds,
+          reconciliationState: 'indeterminate',
+          remainingActiveCount: null,
           error: `Post-commit artifact update failed: ${safeErrorMessage(artifactError)}`,
-          collateral: result.collateral,
         });
         try {
-          persist(unverified);
+          persist(indeterminate);
         } catch {
           // The durable in-progress artifact still prevents a second cleanup attempt.
         }
-        throw new Error('Cleanup committed but audit outcome is unverified');
+        throw new Error('Cleanup committed but audit outcome is indeterminate');
       }
       return result;
     } catch (error) {
@@ -1641,11 +1820,11 @@ async function executeVerifiedSnapshotCleanupCore(
         status: error.outcome,
         attemptedAt,
         completedAt: null,
-        deletedErrorLogIds: [],
-        deletedAlertIds: [],
+        archivedErrorLogIds: [],
         attemptedErrorLogIds: error.attemptedErrorLogIds,
+        reconciliationState: error.outcome,
+        remainingActiveCount: null,
         error: safeErrorMessage(error),
-        collateral: emptyCollateral(),
       });
       try {
         persist(outcome);
@@ -1663,11 +1842,13 @@ export function executeVerifiedSnapshotCleanup(options: {
   client: PgClientLike;
   confirmation: CleanupConfirmation;
   databaseTargetFingerprint: string;
+  lockAlreadyHeld?: boolean;
 }): Promise<ErrorLogClearResult> {
   return executeVerifiedSnapshotCleanupCore({
     client: options.client,
     confirmation: options.confirmation,
     databaseTargetFingerprint: options.databaseTargetFingerprint,
+    lockAlreadyHeld: options.lockAlreadyHeld === true,
   });
 }
 
@@ -1679,4 +1860,438 @@ export function __testOnlyExecuteVerifiedSnapshotCleanup(
     throw new Error('The fixerrors cleanup test harness is unavailable');
   }
   return executeVerifiedSnapshotCleanupCore(options);
+}
+
+export function assertNoClearRejected(args: readonly string[]): void {
+  if (
+    args.some(
+      (argument) =>
+        argument === '--no-clear' || argument.startsWith('--no-clear=')
+    )
+  ) {
+    throw new Error(
+      '--no-clear is not supported by fixerrors v4; the registered command archives its exact analyzed snapshot'
+    );
+  }
+}
+
+function parseSnapshotArtifactJson(raw: string): {
+  version?: unknown;
+  safetyContract?: unknown;
+} | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const row = parsed as { version?: unknown; safetyContract?: unknown };
+    if (row.version === undefined && row.safetyContract === undefined) {
+      return null;
+    }
+    return row;
+  } catch {
+    return null;
+  }
+}
+
+function isLeftoverLegacySnapshot(artifact: {
+  version?: unknown;
+  safetyContract?: unknown;
+}): boolean {
+  if (
+    typeof artifact.safetyContract === 'string' &&
+    artifact.safetyContract !== OPERATION.safetyContract
+  ) {
+    return true;
+  }
+  return artifact.version !== undefined && artifact.version !== 3;
+}
+
+function collectLegacySnapshotScanPaths(fs: LegacySnapshotScanFs): string[] {
+  const directoryFiles = fs
+    .list(ERROR_SNAPSHOT_DIRECTORY)
+    .filter((path) => path.endsWith('.json'));
+  return [...new Set([ERROR_SNAPSHOT_PATH, ...directoryFiles])];
+}
+
+/**
+ * Filesystem-only leftover scan for every fixerrors entrypoint. Opens no
+ * database connection and rejects leftover v1/v2/v3 artifacts before DB setup.
+ */
+export function assertNoLeftoverLegacySnapshots(
+  fs: LegacySnapshotScanFs = DEFAULT_LEGACY_SNAPSHOT_SCAN_FS
+): void {
+  for (const artifactPath of collectLegacySnapshotScanPaths(fs)) {
+    if (!fs.exists(artifactPath)) continue;
+    const artifact = parseSnapshotArtifactJson(fs.read(artifactPath));
+    if (artifact && isLeftoverLegacySnapshot(artifact)) {
+      throw new Error(
+        'rejects leftover v1/v2/v3 fixerrors snapshots before any database connection'
+      );
+    }
+  }
+}
+
+export function assertFixerrorsEntrypointPreconditions(
+  args: readonly string[],
+  fs: LegacySnapshotScanFs = DEFAULT_LEGACY_SNAPSHOT_SCAN_FS
+): void {
+  assertNoClearRejected(args);
+  assertNoLeftoverLegacySnapshots(fs);
+}
+
+function assertConfirmationMatchesSnapshot(
+  confirmation: CleanupConfirmation,
+  snapshot: ErrorSnapshotExport
+): void {
+  if (
+    snapshot.snapshotId !== confirmation.snapshotId ||
+    snapshot.checksum !== confirmation.checksum ||
+    snapshot.rowCount !== confirmation.rowCount ||
+    snapshot.databaseTargetFingerprint !==
+      confirmation.databaseTargetFingerprint ||
+    snapshot.expiresAt !== confirmation.expiresAt ||
+    snapshot.safetyContract !== confirmation.safetyContract ||
+    snapshot.manifestChecksum !== confirmation.manifestChecksum
+  ) {
+    throw new Error('Cleanup confirmation does not match the verified snapshot manifest');
+  }
+}
+
+/**
+ * Filesystem-only preflight for crash-recovery cleanup. This deliberately opens
+ * no database connection and rejects every pre-v4 artifact before DB startup.
+ */
+function assertLocalV4SnapshotCore(
+  confirmation: CleanupConfirmation,
+  snapshotPath: string,
+  io: SnapshotIo
+): ErrorSnapshotExport {
+  const raw = JSON.parse(io.read(snapshotPath)) as {
+    version?: unknown;
+    safetyContract?: unknown;
+  };
+  if (
+    raw.version !== 3 ||
+    raw.safetyContract !== OPERATION.safetyContract
+  ) {
+    throw new Error(
+      'Crash recovery rejects leftover v1/v2/v3 fixerrors snapshots; export a fresh v4 snapshot'
+    );
+  }
+  const snapshot = verifyErrorSnapshot(raw);
+  assertConfirmationMatchesSnapshot(confirmation, snapshot);
+  return snapshot;
+}
+
+export function assertLocalV4SnapshotOrThrow(
+  confirmation: CleanupConfirmation
+): ErrorSnapshotExport {
+  return assertLocalV4SnapshotCore(
+    confirmation,
+    getErrorSnapshotArtifactPath(confirmation.snapshotId),
+    DEFAULT_SNAPSHOT_IO
+  );
+}
+
+/** @internal Test-only filesystem-preflight harness; unavailable outside Vitest. */
+export function __testOnlyAssertLocalV4SnapshotOrThrow(options: {
+  confirmation: CleanupConfirmation;
+  snapshotPath: string;
+  io: SnapshotIo;
+}): ErrorSnapshotExport {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('The fixerrors local snapshot test harness is unavailable');
+  }
+  return assertLocalV4SnapshotCore(
+    options.confirmation,
+    options.snapshotPath,
+    options.io
+  );
+}
+
+export type ErrorLogRetentionResult = {
+  eligibleCount: number;
+  purgedCount: number;
+  remainingExpiredCount: number;
+  remainingActiveCount: number;
+  cutoffAt: string;
+  schemaFingerprint: string;
+  reconciliationState: 'purged' | 'none_eligible';
+  collateral: ErrorLogRetentionCollateral;
+};
+
+export type RetentionArchivePhase =
+  | 'archived'
+  | 'already_archived'
+  | 'empty-noop'
+  | 'failed'
+  | 'mixed'
+  | 'indeterminate'
+  | 'not-ready';
+
+export async function runRetentionAfterArchivePhase<T>(
+  archivePhase: RetentionArchivePhase,
+  purge: () => Promise<T>
+): Promise<T | null> {
+  if (
+    archivePhase !== 'archived' &&
+    archivePhase !== 'already_archived' &&
+    archivePhase !== 'empty-noop'
+  ) {
+    return null;
+  }
+  return purge();
+}
+
+async function countMatchingErrorLogs(
+  client: PgClientLike,
+  tag: string,
+  sql: string,
+  values: unknown[] = []
+): Promise<number> {
+  const counted = await client.query<{ count: unknown }>(
+    `/* ${tag} */ ${sql}`,
+    values
+  );
+  const count = Number(counted.rows[0]?.count ?? Number.NaN);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('Retention count is invalid; purge rolled back');
+  }
+  return count;
+}
+
+async function inventoryRetentionCollateral(
+  client: PgClientLike,
+  targetIds: string[]
+): Promise<ErrorLogRetentionCollateral> {
+  if (targetIds.length === 0) {
+    return {
+      cascadedAlertCount: 0,
+      userUsageEventsNulled: 0,
+      serviceHealthEventsNulled: 0,
+      notes: [],
+    };
+  }
+  const relations = getRelations();
+  const alerts = await countMatchingErrorLogs(
+    client,
+    'fixerrors:retention-alert-collateral',
+    `SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogAlertsTable)} WHERE error_log_id = ANY($1::uuid[])`,
+    [targetIds]
+  );
+  const usage = await countMatchingErrorLogs(
+    client,
+    'fixerrors:retention-usage-collateral',
+    `SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.userUsageEventsTable)} WHERE error_log_id = ANY($1::uuid[])`,
+    [targetIds]
+  );
+  const service = await countMatchingErrorLogs(
+    client,
+    'fixerrors:retention-service-collateral',
+    `SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.serviceHealthEventsTable)} WHERE recovery_error_log_id = ANY($1::uuid[])`,
+    [targetIds]
+  );
+  const notes: string[] = [];
+  if (alerts > 0) notes.push(CASCADE_COLLATERAL_NOTE);
+  if (usage > 0 || service > 0) notes.push(SET_NULL_COLLATERAL_NOTE);
+  return {
+    cascadedAlertCount: alerts,
+    userUsageEventsNulled: usage,
+    serviceHealthEventsNulled: service,
+    notes,
+  };
+}
+
+export async function purgeExpiredArchivedErrorLogs(
+  client: PgClientLike,
+  expectedSchemaFingerprint: string
+): Promise<ErrorLogRetentionResult> {
+  if (!/^[a-f0-9]{64}$/u.test(expectedSchemaFingerprint)) {
+    throw new Error('Retention requires the archived snapshot schema fingerprint');
+  }
+  const relations = getRelations();
+  let commitAttempted = false;
+  await client.query(
+    '/* fixerrors:retention-begin */ BEGIN ISOLATION LEVEL SERIALIZABLE'
+  );
+  try {
+    await client.query(
+      "/* fixerrors:retention-timeouts */ SET LOCAL lock_timeout = '5s'; SET LOCAL statement_timeout = '30s'"
+    );
+    await client.query(`
+      /* fixerrors:retention-lock */
+      LOCK TABLE
+        ${qualifiedTable(relations.errorLogsTable)},
+        ${qualifiedTable(relations.errorLogAlertsTable)},
+        ${qualifiedTable(relations.serviceHealthEventsTable)},
+        ${qualifiedTable(relations.userUsageEventsTable)}
+      IN SHARE ROW EXCLUSIVE MODE
+    `);
+    const schemaFingerprint = assertSchemaCatalogContract(
+      await fetchSchemaCatalog(client)
+    );
+    if (schemaFingerprint !== expectedSchemaFingerprint) {
+      throw new Error('Snapshot schema fingerprint mismatch; retention blocked');
+    }
+
+    const cutoffResult = await client.query<{ cutoff: unknown }>(
+      `
+        /* fixerrors:retention-cutoff */
+        SELECT
+          to_char(
+            (transaction_timestamp() - ($1::int * INTERVAL '1 month')) AT TIME ZONE 'UTC',
+            '${SNAPSHOT_TIMESTAMPTZ_TEXT_FORMAT}'
+          ) AS cutoff
+      `,
+      [ERROR_LOG_RETENTION_MONTHS]
+    );
+    const cutoffAt = canonicalizeSnapshotTimestamp(
+      cutoffResult.rows[0]?.cutoff,
+      'retention cutoff'
+    );
+    const eligible = await client.query<{ id: unknown }>(
+      `
+        /* fixerrors:retention-eligible */
+        SELECT error_logs.id::text AS id
+        FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs
+        WHERE error_logs.status = 'archived'
+          AND error_logs.archived_at IS NOT NULL
+          AND error_logs.archived_at < $1::timestamptz
+        ORDER BY error_logs.archived_at ASC, error_logs.id ASC
+      `,
+      [cutoffAt]
+    );
+    const eligibleIds = eligible.rows.map((row) =>
+      requireSnapshotUuid(row.id, 'retention candidate ID')
+    );
+    if (new Set(eligibleIds).size !== eligibleIds.length) {
+      throw new Error('Retention candidate set contained duplicate IDs; purge rolled back');
+    }
+    const collateral = await inventoryRetentionCollateral(client, eligibleIds);
+    const activeBefore = await countMatchingErrorLogs(
+      client,
+      'fixerrors:retention-active-before',
+      `SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs WHERE ${ACTIVE_ERROR_LOG_PREDICATE}`
+    );
+
+    if (eligibleIds.length === 0) {
+      commitAttempted = true;
+      await client.query('/* fixerrors:retention-commit */ COMMIT');
+      return {
+        eligibleCount: 0,
+        purgedCount: 0,
+        remainingExpiredCount: 0,
+        remainingActiveCount: activeBefore,
+        cutoffAt,
+        schemaFingerprint,
+        reconciliationState: 'none_eligible',
+        collateral,
+      };
+    }
+
+    let purgedCount = 0;
+    for (
+      let index = 0;
+      index < eligibleIds.length;
+      index += ERROR_ARCHIVE_BATCH_SIZE
+    ) {
+      const batchIds = eligibleIds.slice(index, index + ERROR_ARCHIVE_BATCH_SIZE);
+      const deleted = await client.query<{ id: unknown }>(
+        `
+          /* fixerrors:retention-delete-batch */
+          DELETE FROM ${qualifiedTable(relations.errorLogsTable)}
+          WHERE id = ANY($1::uuid[])
+            AND status = 'archived'
+            AND archived_at IS NOT NULL
+            AND archived_at < $2::timestamptz
+          RETURNING id::text AS id
+        `,
+        [batchIds, cutoffAt]
+      );
+      const deletedIds = deleted.rows.map((row) =>
+        requireSnapshotUuid(row.id, 'retention deleted ID')
+      );
+      const deletedIdSet = new Set(deletedIds);
+      if (
+        deletedIds.length !== batchIds.length ||
+        deletedIdSet.size !== batchIds.length ||
+        batchIds.some((id) => !deletedIdSet.has(id))
+      ) {
+        throw new Error(
+          `Retention deleted ${deletedIds.length} of ${batchIds.length} eligible rows; purge rolled back`
+        );
+      }
+      purgedCount += deletedIds.length;
+    }
+
+    const remainingExpiredCount = await countMatchingErrorLogs(
+      client,
+      'fixerrors:retention-remaining-expired',
+      `
+        SELECT COUNT(*)::text AS count
+        FROM ${qualifiedTable(relations.errorLogsTable)}
+        WHERE status = 'archived'
+          AND archived_at IS NOT NULL
+          AND archived_at < $1::timestamptz
+      `,
+      [cutoffAt]
+    );
+    const remainingActiveCount = await countMatchingErrorLogs(
+      client,
+      'fixerrors:retention-active-after',
+      `SELECT COUNT(*)::text AS count FROM ${qualifiedTable(relations.errorLogsTable)} AS error_logs WHERE ${ACTIVE_ERROR_LOG_PREDICATE}`
+    );
+    const postDeleteCollateral = await inventoryRetentionCollateral(
+      client,
+      eligibleIds
+    );
+    if (
+      purgedCount !== eligibleIds.length ||
+      remainingExpiredCount !== 0 ||
+      remainingActiveCount !== activeBefore ||
+      postDeleteCollateral.cascadedAlertCount !== 0 ||
+      postDeleteCollateral.userUsageEventsNulled !== 0 ||
+      postDeleteCollateral.serviceHealthEventsNulled !== 0
+    ) {
+      throw new Error('Retention reconciliation mismatch; purge rolled back');
+    }
+
+    commitAttempted = true;
+    await client.query('/* fixerrors:retention-commit */ COMMIT');
+    return {
+      eligibleCount: eligibleIds.length,
+      purgedCount,
+      remainingExpiredCount,
+      remainingActiveCount,
+      cutoffAt,
+      schemaFingerprint,
+      reconciliationState: 'purged',
+      collateral,
+    };
+  } catch (error) {
+    if (!commitAttempted) {
+      try {
+        await client.query('/* fixerrors:retention-rollback */ ROLLBACK');
+      } catch {
+        throw new ErrorCleanupTransactionError(
+          `Retention outcome is indeterminate after rollback failure: ${safeErrorMessage(error)}`,
+          'indeterminate',
+          []
+        );
+      }
+      throw error instanceof ErrorCleanupTransactionError
+        ? error
+        : new ErrorCleanupTransactionError(
+            safeErrorMessage(error),
+            'failed',
+            []
+          );
+    }
+    throw new ErrorCleanupTransactionError(
+      `Retention commit outcome is indeterminate: ${safeErrorMessage(error)}`,
+      'indeterminate',
+      []
+    );
+  }
 }

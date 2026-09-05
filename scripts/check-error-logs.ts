@@ -44,6 +44,7 @@ async function checkErrorLogs() {
     const { data: errors, error } = await supabase
       .from('error_logs')
       .select('*')
+      .eq('status', 'active')
       .order('timestamp', { ascending: false })
       .limit(50);
 

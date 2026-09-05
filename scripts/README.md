@@ -10,7 +10,6 @@ npm run db:baseline
 npm run db:validate
 npm run setup:storage
 npm run fixerrors
-npm run fixerrors -- --no-clear
 npm run createinvoice -- --from YYYY-MM-DD --to YYYY-MM-DD
 npm run finalise
 ```
@@ -83,13 +82,13 @@ Canonical private artifact roots (ignored, repository-local):
 
 Native writers emit lane-based `plan-contract-marker:v2` and V4 completion markers. Readers remain compatible with V1-V3 evidence. Opaque workstream/checkpoint IDs are sanitized before filesystem use. External/sibling plan roots are rejected. The Cursor stop hook is fail-open with `loop_limit: 1`.
 
-Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`, `/finalise-full`, `/fap`, `/ffap`, `/createinvoice`, `/cleancodebase`, and `/fixerrors`. They are thin adapters to the global operator contract: `fap` = `finalise and push` = COMPLETE_AND_RELEASE(normal), and `ffap` = `finalise full and push` = COMPLETE_AND_RELEASE(full). `/finalise` and `/finalise-full` do not authorize a push. Short aliases `/fap` and `/ffap` are authorized push phrases. Ordinary `fap` runs `npm run finalise` then a normal fast-forward push; ordinary `ffap` runs `npm run finalise:full` then a normal fast-forward push. Protected CRITICAL / C9 releases still use `npm run finalise:push` / `npm run finalise:full:push`. The long phrases `finalise and push`, `finalise full and push`, `finalise:push`, and `push to GitHub` also authorize those complete-and-release paths. `/fixerrors` is a trusted operational command under safety contract `fixerrors-exact-snapshot-v1`: default `npm run fixerrors` exports a repeatable-read snapshot only; destructive cleanup requires the exact printed bound `--cleanup` command after confirmation.
+Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`, `/finalise-full`, `/fap`, `/ffap`, `/createinvoice`, `/cleancodebase`, and `/fixerrors`. They are thin adapters to the global operator contract: `fap` = `finalise and push` = COMPLETE_AND_RELEASE(normal), and `ffap` = `finalise full and push` = COMPLETE_AND_RELEASE(full). `/finalise` and `/finalise-full` do not authorize a push. Short aliases `/fap` and `/ffap` are authorized push phrases. Ordinary `fap` runs `npm run finalise` then a normal fast-forward push; ordinary `ffap` runs `npm run finalise:full` then a normal fast-forward push. Protected CRITICAL / C9 releases still use `npm run finalise:push` / `npm run finalise:full:push`. The long phrases `finalise and push`, `finalise full and push`, `finalise:push`, and `push to GitHub` also authorize those complete-and-release paths. `/fixerrors` is a trusted operational command under safety contract `fixerrors-exact-snapshot-v4`: `npm run fixerrors` exports a repeatable-read snapshot of active `error_logs`, archives those exact IDs in the same process, then purges archived rows older than 12 months. `--no-clear` is rejected. `--cleanup` is crash-recovery archive only and must use the exact sealed snapshot identity.
 
 Model registry version: `ffts-tee-model-registry-v1`.
 
 ## Automation Artifacts
 
-`fixerrors` creates `docs_private/` when needed and writes ignored analysis, fix-log, snapshot (`error-snapshot.json` / `error-snapshots/`), and structured automation-run files. Default export and `--no-clear` never mutate production. Cleanup deletes only exact verified snapshot `error_logs` IDs plus inventoried `error_log_alerts`, records SET NULL collateral, and refuses automatic retry after `indeterminate` / `committed_unverified` outcomes. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted.
+`fixerrors` creates `docs_private/` when needed and writes ignored analysis, decision, fix-log, snapshot (`error-snapshot.json` / `error-snapshots/`), and structured automation-run files. The default command archives exact verified active snapshot IDs, then deletes only expired archived rows bound to a captured candidate set. It refuses automatic retry after failed or indeterminate archive/retention outcomes. Leftover v1 snapshots are rejected before any database connection. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted unbounded archive-active surfaces.
 
 `finalise` preflights the three release artifacts before making a product commit:
 

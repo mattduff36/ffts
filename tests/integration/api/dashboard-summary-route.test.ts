@@ -546,6 +546,7 @@ describe('GET /api/dashboard/summary', () => {
     expect(response.status).toBe(200);
     expect(payload.metrics.badges.error_logs).toBe(7);
     expect(selectErrorLogs).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+    expect(errorLogsCountQuery.eq).toHaveBeenCalledWith('status', 'active');
     expect(errorLogsCountQuery.or).toHaveBeenCalledWith('page_url.is.null,page_url.not.ilike.%localhost%');
     expect(errorLogsCountQuery.or).toHaveBeenCalledWith(
       `user_email.is.null,user_email.neq.${DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL}`

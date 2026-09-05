@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       .from('error_logs')
       .select('*')
       .eq('id', error_log_id)
+      .eq('status', 'active')
       .single();
 
     if (errorLogError || !errorLog) {

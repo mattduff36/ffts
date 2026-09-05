@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     const { data: errors, error: queryError } = await supabase
       .from('error_logs')
       .select('*')
+      .eq('status', 'active')
       .gte('timestamp', yesterday.toISOString())
       .lte('timestamp', yesterdayEnd.toISOString())
       .order('timestamp', { ascending: false });

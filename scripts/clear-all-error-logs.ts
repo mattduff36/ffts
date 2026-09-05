@@ -1,7 +1,6 @@
 /**
- * Clear All Error Logs
- * 
- * Clears the entire error_logs table for a fresh start
+ * Untrusted debug helper: archive every active error_logs row.
+ * Not snapshot-bound. Not part of fixerrors-exact-snapshot-v4.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -22,38 +21,43 @@ const supabase = createClient(
 );
 
 async function clearAllErrorLogs() {
-  console.log('🧹 CLEARING ALL ERROR LOGS');
-  console.log('==========================\n');
+  console.log('UNTRUSTED ARCHIVE OF ACTIVE ERROR LOGS');
+  console.log('======================================\n');
 
   try {
-    // Count current errors
-    const { data: current } = await supabase
+    const { data: current, error: countError } = await supabase
       .from('error_logs')
-      .select('id');
+      .select('id')
+      .eq('status', 'active');
+
+    if (countError) {
+      console.error('Error counting active logs:', countError);
+      process.exit(1);
+    }
 
     const currentCount = current?.length || 0;
 
     if (currentCount === 0) {
-      console.log('✅ Error log is already empty!\n');
+      console.log('No active error logs to archive.\n');
       return;
     }
 
-    console.log(`Found ${currentCount} error log entries to clear\n`);
+    console.log(`Found ${currentCount} active error log entries\n`);
 
-    // Delete all
     const { error } = await supabase
       .from('error_logs')
-      .delete()
-      .gte('timestamp', '1970-01-01');
+      .update({
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+      })
+      .eq('status', 'active');
 
     if (error) {
-      console.error('❌ Error clearing logs:', error);
-      return;
+      console.error('Error archiving logs:', error);
+      process.exit(1);
     }
 
-    console.log(`✅ Cleared all ${currentCount} error log entries\n`);
-    console.log('Fresh start! 🎉\n');
-
+    console.log(`Archived ${currentCount} active error log entries\n`);
   } catch (error) {
     console.error('Fatal error:', error);
     process.exit(1);

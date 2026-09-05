@@ -1,15 +1,14 @@
 /**
  * Fix Errors - Automated Error Analysis & Report Generator
  *
- * Two-phase trusted operational flow:
- * 1. Default / `--no-clear`: non-destructive Postgres REPEATABLE READ snapshot export,
- *    analysis report, and historical fix-log update. Never mutates production.
- * 2. Exact printed `--cleanup` command: transactional delete of the verified snapshot IDs
- *    (+ inventoried error_log_alerts) under safety contract fixerrors-exact-snapshot-v1.
+ * Registered v4 flow:
+ * 1. Repeatable-read snapshot of active error_logs
+ * 2. Local analysis artifacts
+ * 3. Same-process archive of those exact IDs
+ * 4. 12-month retention of expired archived rows
  *
  * Usage:
  *   npm run fixerrors
- *   npm run fixerrors -- --no-clear
  *   npm run fixerrors -- --cleanup --snapshot-id=... --checksum=... --row-count=... --target=... --expires-at=... --safety-contract=... --manifest=...
  */
 
@@ -24,12 +23,16 @@ import {
   ERROR_ANALYSIS_PATH,
   ERROR_SNAPSHOT_PATH,
   acquireErrorSnapshotArtifactLock,
+  assertFixerrorsEntrypointPreconditions,
+  assertLocalV4SnapshotOrThrow,
   executeVerifiedSnapshotCleanup,
   fetchDatabaseTargetFingerprint,
   fetchProductionErrorSnapshot,
   getErrorSnapshotArtifactPath,
   markSnapshotAnalysisCompleted,
   markSnapshotCleanupNotRequired,
+  purgeExpiredArchivedErrorLogs,
+  runRetentionAfterArchivePhase,
   writeAndVerifyErrorSnapshot,
   writeAndVerifyTextArtifactAtomic,
   type CleanupConfirmation,
@@ -128,11 +131,23 @@ export type ErrorPattern = {
   lastSeen: string;
 };
 
+export type ErrorClusterLane = 'fast' | 'standard' | 'guarded' | 'critical' | 'report-only';
+
+export interface ErrorRootCauseCluster {
+  id: string;
+  rootCauseFamily: string;
+  lane: ErrorClusterLane;
+  action: 'fix' | 'investigate' | 'report-only' | 'critical-gates';
+  patterns: ErrorPattern[];
+  occurrences: number;
+}
+
 export function ensurePrivateDocsDirectory(root = process.cwd()): void {
   fs.mkdirSync(resolve(root, 'docs_private'), { recursive: true });
 }
 
 function getPatternReviewMetadata(patterns: ErrorPattern[]) {
+  const clusters = clusterErrorPatterns(patterns);
   return {
     topPatterns: patterns.slice(0, 10).map((pattern) => ({
       errorType: pattern.errorType,
@@ -143,6 +158,8 @@ function getPatternReviewMetadata(patterns: ErrorPattern[]) {
       sourceFiles: pattern.sourceFiles.slice(0, 10).map((sourceFile) => sourceFile.file),
     })),
     patternsWithoutSourceFiles: patterns.filter((pattern) => pattern.sourceFiles.length === 0).length,
+    clusterCount: clusters.length,
+    clusterLanes: summarizeClusterLanes(clusters),
   };
 }
 
@@ -523,6 +540,96 @@ export function groupIntoPatterns(errors: ErrorLogEntry[], repoRoot = process.cw
 
 // ─── Report Generation ───────────────────────────────────────────────
 
+function classifyRootCauseFamily(pattern: ErrorPattern): string {
+  const text = [
+    pattern.errorType,
+    pattern.component,
+    pattern.normalizedMessage,
+    ...pattern.affectedPages,
+  ]
+    .join(' ')
+    .toLowerCase();
+  if (/\b(rls|row level|auth|jwt|permission|forbidden|unauthori[sz]ed|access control)\b/u.test(text)) {
+    return 'auth-permissions-security';
+  }
+  if (/\b(postgres|database|sql|constraint|foreign key|supabase|schema|migration)\b/u.test(text)) {
+    return 'database-persistence';
+  }
+  if (/\b(payment|billing|invoice total|payroll|money|charge)\b/u.test(text)) {
+    return 'money-billing';
+  }
+  if (/\b(deadlock|race condition|concurren|transaction conflict)\b/u.test(text)) {
+    return 'concurrency-transaction';
+  }
+  if (/\b(network|failed to fetch|econn|enotfound|third[- ]party|gateway|offline)\b/u.test(text)) {
+    return 'external-network';
+  }
+  if (/\b(validation|invalid input|required field|user input)\b/u.test(text)) {
+    return 'user-input';
+  }
+  const primarySource = pattern.sourceFiles[0]?.file;
+  return primarySource
+    ? `source:${primarySource}`
+    : `component:${pattern.component.toLowerCase().replace(/[^a-z0-9]+/gu, '-')}`;
+}
+
+function classifyCluster(
+  rootCauseFamily: string,
+  patterns: ErrorPattern[]
+): Pick<ErrorRootCauseCluster, 'lane' | 'action'> {
+  if (
+    rootCauseFamily === 'auth-permissions-security' ||
+    rootCauseFamily === 'database-persistence' ||
+    rootCauseFamily === 'money-billing' ||
+    rootCauseFamily === 'concurrency-transaction'
+  ) {
+    return { lane: 'critical', action: 'critical-gates' };
+  }
+  if (rootCauseFamily === 'external-network' || rootCauseFamily === 'user-input') {
+    return { lane: 'report-only', action: 'report-only' };
+  }
+  const sourceFiles = new Set(patterns.flatMap((pattern) => pattern.sourceFiles.map((ref) => ref.file)));
+  if (patterns.length > 2 || sourceFiles.size > 2) {
+    return { lane: 'guarded', action: 'investigate' };
+  }
+  if (patterns.length > 1 || sourceFiles.size > 1) {
+    return { lane: 'standard', action: 'fix' };
+  }
+  return sourceFiles.size === 1
+    ? { lane: 'fast', action: 'fix' }
+    : { lane: 'report-only', action: 'report-only' };
+}
+
+export function clusterErrorPatterns(patterns: ErrorPattern[]): ErrorRootCauseCluster[] {
+  const grouped = new Map<string, ErrorPattern[]>();
+  for (const pattern of patterns) {
+    const family = classifyRootCauseFamily(pattern);
+    grouped.set(family, [...(grouped.get(family) ?? []), pattern]);
+  }
+  return [...grouped.entries()]
+    .map(([rootCauseFamily, familyPatterns], index) => {
+      const classification = classifyCluster(rootCauseFamily, familyPatterns);
+      return {
+        id: `cluster-${index + 1}`,
+        rootCauseFamily,
+        ...classification,
+        patterns: familyPatterns,
+        occurrences: familyPatterns.reduce(
+          (total, pattern) => total + pattern.occurrences.length,
+          0
+        ),
+      };
+    })
+    .sort((left, right) => right.occurrences - left.occurrences);
+}
+
+function summarizeClusterLanes(clusters: ErrorRootCauseCluster[]): Record<string, number> {
+  return clusters.reduce<Record<string, number>>((summary, cluster) => {
+    summary[cluster.lane] = (summary[cluster.lane] ?? 0) + 1;
+    return summary;
+  }, {});
+}
+
 function generateReport(patterns: ErrorPattern[], totalFetched: number, totalFiltered: number): string {
   const now = new Date().toISOString();
   const lines: string[] = [];
@@ -543,6 +650,25 @@ function generateReport(patterns: ErrorPattern[], totalFetched: number, totalFil
     lines.push('');
     return lines.join('\n');
   }
+
+  lines.push(
+    'Mechanical clusters and TEE lanes below are advisory input for the premium analysis step, which writes `docs_private/error-analysis-decision.md`.'
+  );
+  lines.push('');
+
+  const clusters = clusterErrorPatterns(patterns);
+  lines.push('## Root Cause Clusters and TEE Routing');
+  lines.push('');
+  lines.push('| Cluster | Root cause family | Lane | Action | Patterns | Occurrences |');
+  lines.push('|---|---|---|---|---:|---:|');
+  for (const cluster of clusters) {
+    lines.push(
+      `| ${cluster.id} | ${cluster.rootCauseFamily} | ${cluster.lane.toUpperCase()} | ${cluster.action} | ${cluster.patterns.length} | ${cluster.occurrences} |`
+    );
+  }
+  lines.push('');
+  lines.push('Clusters are routed independently; a CRITICAL cluster does not escalate unrelated clusters.');
+  lines.push('');
 
   // ── Section 1: Summary Table ──
   lines.push('## Summary');
@@ -1005,10 +1131,34 @@ export function parseCleanupConfirmation(args: string[]): CleanupConfirmation | 
 
 // ─── Main ────────────────────────────────────────────────────────────
 
+const ARCHIVE_MUTATION = TRUSTED_OPERATIONAL_ACTIONS.fixerrors.allowedMutations.find(
+  (mutation) => mutation.operation === 'update'
+);
+const RETENTION_MUTATION = TRUSTED_OPERATIONAL_ACTIONS.fixerrors.allowedMutations.find(
+  (mutation) => mutation.purpose === 'expired-archived-retention'
+);
+
+function retentionStepMetadata() {
+  if (!RETENTION_MUTATION) {
+    throw new Error('fixerrors retention mutation is not registered');
+  }
+  return {
+    operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+    operationalSafetyContract: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+    operationalExecutionCandidate: true,
+    confirmationBoundToSnapshot: false,
+    retentionBoundToCandidateSet: true,
+    requestedMutations: [RETENTION_MUTATION],
+  };
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  // `--no-clear` remains a non-destructive alias of the default export/analysis mode.
+  assertFixerrorsEntrypointPreconditions(args);
   const cleanupConfirmation = parseCleanupConfirmation(args);
+  const crashRecoverySnapshot = cleanupConfirmation
+    ? assertLocalV4SnapshotOrThrow(cleanupConfirmation)
+    : null;
   ensurePrivateDocsDirectory();
   const run = new AutomationRun({
     scriptName: 'fixerrors',
@@ -1035,10 +1185,10 @@ async function main() {
       await fetchDatabaseTargetFingerprint(databaseClient);
 
     if (cleanupConfirmation) {
-      console.log('Validating bound snapshot confirmation and cleanup scope...');
+      console.log('Validating bound snapshot confirmation and archive scope...');
       try {
         const clearResult = await run.step(
-          'Execute verified transactional snapshot cleanup',
+          'Execute verified transactional snapshot archive',
           () =>
             executeVerifiedSnapshotCleanup({
               client: databaseClient,
@@ -1051,6 +1201,7 @@ async function main() {
               TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
             operationalExecutionCandidate: true,
             confirmationBoundToSnapshot: true,
+            requestedMutations: ARCHIVE_MUTATION ? [ARCHIVE_MUTATION] : [],
           }
         );
         run.recordStep({
@@ -1068,15 +1219,50 @@ async function main() {
           },
         });
         console.log(
-          `  Cleared ${clearResult.clearedCount} exact exported error log entr${clearResult.clearedCount === 1 ? 'y' : 'ies'}`
+          `  Archived ${clearResult.clearedCount} exact exported error log entr${clearResult.clearedCount === 1 ? 'y' : 'ies'}`
+        );
+        console.log(`  Reconciliation: ${clearResult.reconciliationState}`);
+        console.log(`  Remaining active error logs: ${clearResult.remainingCount}`);
+        const retention = await run.step(
+          'Purge archived error logs older than 12 months',
+          async () => {
+            const purged = await runRetentionAfterArchivePhase(
+              clearResult.reconciliationState,
+              () =>
+                purgeExpiredArchivedErrorLogs(
+                  databaseClient,
+                  crashRecoverySnapshot!.schemaFingerprint
+                )
+            );
+            if (!purged) {
+              throw new Error('Retention skipped after a committed archive');
+            }
+            return purged;
+          },
+          retentionStepMetadata()
+        );
+        run.recordStep({
+          name: 'Record retention collateral',
+          status: 'passed',
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: 0,
+          metadata: {
+            eligibleCount: retention.eligibleCount,
+            purgedCount: retention.purgedCount,
+            remainingExpiredCount: retention.remainingExpiredCount,
+            remainingActiveCount: retention.remainingActiveCount,
+            cutoffAt: retention.cutoffAt,
+            reconciliationState: retention.reconciliationState,
+            collateral: retention.collateral,
+          },
+        });
+        console.log(
+          `  Retention purged: ${retention.purgedCount} (eligible ${retention.eligibleCount}, cutoff ${retention.cutoffAt})`
         );
         console.log(
-          `  Cleared ${clearResult.clearedAlertCount} dependent diagnostic alert entr${clearResult.clearedAlertCount === 1 ? 'y' : 'ies'}`
+          `  Retention collateral: alerts=${retention.collateral.cascadedAlertCount}, usage=${retention.collateral.userUsageEventsNulled}, service_health=${retention.collateral.serviceHealthEventsNulled}`
         );
-        console.log(
-          `  SET NULL collateral: usage=${clearResult.collateral.userUsageEventsNulled}, service_health=${clearResult.collateral.serviceHealthEventsNulled}`
-        );
-        console.log(`  Newer/unexported error logs remaining: ${clearResult.remainingCount}`);
         await run.finish('passed');
         return;
       } catch (error) {
@@ -1111,8 +1297,7 @@ async function main() {
         operationalTrustSuspended: false,
         operationalSafetyContract:
           TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
-        phase: 'non-destructive-export',
-        noClearAlias: args.includes('--no-clear'),
+        phase: 'analysis-export-archive',
       },
     });
 
@@ -1173,9 +1358,11 @@ async function main() {
       }
     );
     const patternReviewMetadata = getPatternReviewMetadata(patterns);
-    const clusterLanes: Record<string, number> =
-      patterns.length > 0 ? { standard: patterns.length } : {};
-    console.log(`  Found ${patterns.length} distinct pattern(s)`);
+    const clusters = clusterErrorPatterns(patterns);
+    const clusterLanes = summarizeClusterLanes(clusters);
+    console.log(
+      `  Found ${patterns.length} pattern(s) across ${clusters.length} independent cluster(s)`
+    );
 
     console.log('Generating and validating analysis report...');
     const report = generateReport(patterns, rawErrors.length, errors.length);
@@ -1239,17 +1426,57 @@ async function main() {
       }
     );
 
+    let archiveResult: {
+      clearedCount: number;
+      remainingCount: number;
+      reconciliationState: string;
+    } | null = null;
+    if (snapshot.rowCount > 0) {
+      archiveResult = await run.step(
+        'Archive verified snapshot rows',
+        () =>
+          executeVerifiedSnapshotCleanup({
+            client: databaseClient,
+            confirmation: {
+              snapshotId: snapshot.snapshotId,
+              checksum: snapshot.checksum,
+              rowCount: snapshot.rowCount,
+              databaseTargetFingerprint: snapshot.databaseTargetFingerprint,
+              expiresAt: snapshot.expiresAt,
+              safetyContract: snapshot.safetyContract,
+              manifestChecksum: snapshot.manifestChecksum,
+            },
+            databaseTargetFingerprint,
+            lockAlreadyHeld: true,
+          }),
+        {
+          operationalCommand: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.commandId,
+          operationalSafetyContract:
+            TRUSTED_OPERATIONAL_ACTIONS.fixerrors.safetyContract,
+          operationalExecutionCandidate: true,
+          confirmationBoundToSnapshot: true,
+          requestedMutations: ARCHIVE_MUTATION ? [ARCHIVE_MUTATION] : [],
+          snapshotId: snapshot.snapshotId,
+          rowCount: snapshot.rowCount,
+        }
+      );
+    }
+
     console.log('\n=============================================');
     console.log('EXPORT SUMMARY');
     console.log('=============================================');
     console.log(`  Snapshot rows:       ${snapshot.rowCount}`);
     console.log(`  After filtering:     ${errors.length}`);
     console.log(`  Patterns found:      ${patterns.length}`);
-    console.log(
-      snapshot.rowCount === 0
-        ? '  Production rows cleared: 0 (no cleanup required)'
-        : '  Production rows cleared: 0 (confirmation required)'
-    );
+    console.log(`  Root-cause clusters: ${clusters.length}`);
+    if (archiveResult) {
+      console.log(
+        `  Production rows archived: ${archiveResult.clearedCount} (${archiveResult.reconciliationState})`
+      );
+      console.log(`  Remaining active:    ${archiveResult.remainingCount}`);
+    } else {
+      console.log('  Production rows archived: 0 (no active rows)');
+    }
 
     if (patterns.length > 0) {
       console.log('\nTop patterns:');
@@ -1263,16 +1490,57 @@ async function main() {
       }
     }
 
-    if (snapshot.rowCount === 0) {
-      console.log('\nNo cleanup is required; production error_logs is empty.');
-    } else {
-      console.log('\nCleanup is ready but has not run.');
-      console.log(
-        'After confirming the displayed snapshot, run this exact bound command:'
+    try {
+      const retention = await run.step(
+        'Purge archived error logs older than 12 months',
+        async () => {
+          const purged = await runRetentionAfterArchivePhase(
+            snapshot.rowCount === 0
+              ? 'empty-noop'
+              : archiveResult?.reconciliationState === 'already_archived'
+                ? 'already_archived'
+                : 'archived',
+            () =>
+              purgeExpiredArchivedErrorLogs(
+                databaseClient,
+                snapshot.schemaFingerprint
+              )
+          );
+          if (!purged) {
+            throw new Error('Retention skipped after a successful archive phase');
+          }
+          return purged;
+        },
+        retentionStepMetadata()
       );
+      run.recordStep({
+        name: 'Record retention collateral',
+        status: 'passed',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 0,
+        metadata: {
+          eligibleCount: retention.eligibleCount,
+          purgedCount: retention.purgedCount,
+          remainingExpiredCount: retention.remainingExpiredCount,
+          remainingActiveCount: retention.remainingActiveCount,
+          cutoffAt: retention.cutoffAt,
+          reconciliationState: retention.reconciliationState,
+          collateral: retention.collateral,
+        },
+      });
       console.log(
-        `npm run fixerrors -- --cleanup --snapshot-id=${snapshot.snapshotId} --checksum=${snapshot.checksum} --row-count=${snapshot.rowCount} --target=${snapshot.databaseTargetFingerprint} --expires-at=${snapshot.expiresAt} --safety-contract=${snapshot.safetyContract} --manifest=${snapshot.manifestChecksum}`
+        `  Retention purged:     ${retention.purgedCount} (eligible ${retention.eligibleCount})`
       );
+      console.log(`  Retention cutoff:     ${retention.cutoffAt}`);
+      console.log(
+        `  Retention collateral: alerts=${retention.collateral.cascadedAlertCount}, usage=${retention.collateral.userUsageEventsNulled}, service_health=${retention.collateral.serviceHealthEventsNulled}`
+      );
+    } catch (error) {
+      console.log(
+        '  Retention purge failed; archived snapshot rows were left in place'
+      );
+      throw error;
     }
     console.log('=============================================\n');
     await run.finish('passed');

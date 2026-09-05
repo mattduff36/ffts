@@ -31,6 +31,7 @@ async function clearNetworkErrors() {
     const { data: errors, error: fetchError } = await supabase
       .from('error_logs')
       .select('*')
+      .eq('status', 'active')
       .ilike('error_message', '%Failed to fetch%')
       .ilike('error_message', '%/api/messages/notifications%')
       .order('created_at', { ascending: false });
@@ -50,19 +51,22 @@ async function clearNetworkErrors() {
     console.log(`   Last:  ${new Date(errors[0].created_at).toLocaleString()}`);
     console.log(`   User:  ${errors[0].user_email || 'Unknown'}\n`);
 
-    // Delete these errors
     const errorIds = errors.map(e => e.id);
-    const { error: deleteError } = await supabase
+    const { error: archiveError } = await supabase
       .from('error_logs')
-      .delete()
+      .update({
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+      })
+      .eq('status', 'active')
       .in('id', errorIds);
 
-    if (deleteError) {
-      console.error('❌ Error deleting error logs:', deleteError);
+    if (archiveError) {
+      console.error('❌ Error archiving error logs:', archiveError);
       process.exit(1);
     }
 
-    console.log(`✅ Successfully cleared ${errors.length} network error log(s)!`);
+    console.log(`✅ Successfully archived ${errors.length} network error log(s)!`);
     console.log('🎉 Error log is now clean!\n');
 
   } catch (err: unknown) {

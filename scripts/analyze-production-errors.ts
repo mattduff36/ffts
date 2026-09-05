@@ -29,6 +29,7 @@ async function analyzeProductionErrors() {
     const { data: errors } = await supabase
       .from('error_logs')
       .select('*')
+      .eq('status', 'active')
       .order('timestamp', { ascending: false })
       .limit(10);
 

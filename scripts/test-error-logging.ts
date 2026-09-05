@@ -25,7 +25,8 @@ async function testServerErrorLogging(): Promise<TestResult[]> {
   // Get error count before tests
   const { count: beforeCount } = await supabase
     .from('error_logs')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'active');
   
   console.log(`Current error logs count: ${beforeCount || 0}`);
   
@@ -61,7 +62,8 @@ async function testServerErrorLogging(): Promise<TestResult[]> {
   // Get error count after tests
   const { count: afterCount } = await supabase
     .from('error_logs')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'active');
   
   console.log(`Error logs count after test: ${afterCount || 0}`);
   
@@ -91,6 +93,7 @@ async function verifyErrorDetails(): Promise<TestResult[]> {
   const { data: recentErrors, error } = await supabase
     .from('error_logs')
     .select('*')
+    .eq('status', 'active')
     .order('timestamp', { ascending: false })
     .limit(5);
   

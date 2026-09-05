@@ -12,10 +12,11 @@ function trustedExecution(
 ): OperationalClassificationInput {
   return {
     commandId: 'fixerrors',
-    safetyContract: 'fixerrors-exact-snapshot-v1',
+    safetyContract: 'fixerrors-exact-snapshot-v4',
     intent: 'execute',
     explicitlyRequested: true,
     confirmationBoundToSnapshot: true,
+    retentionBoundToCandidateSet: true,
     runtimeSafetyChecksPassed: true,
     requestedMutations: TRUSTED_OPERATIONAL_ACTIONS.fixerrors.allowedMutations,
     ...overrides,
@@ -29,11 +30,11 @@ describe('TEE V2.2 trusted operational action policy', () => {
       lane: null,
       trusted: true,
       trustSuspended: false,
-      safetyContract: 'fixerrors-exact-snapshot-v1',
+      safetyContract: 'fixerrors-exact-snapshot-v4',
     });
   });
 
-  it('FXERR-TRUST-001 keeps modification of fixerrors destructive logic CRITICAL', () => {
+  it('keeps modification of fixerrors destructive logic CRITICAL', () => {
     expect(
       classifyOperationalAction(trustedExecution({ intent: 'modify' }))
     ).toMatchObject({
@@ -44,7 +45,7 @@ describe('TEE V2.2 trusted operational action policy', () => {
     });
   });
 
-  it('FXERR-TRUST-001 does not trust unregistered destructive commands or natural-language trust claims', () => {
+  it('does not trust unregistered destructive commands or natural-language trust claims', () => {
     expect(
       classifyOperationalAction(
         trustedExecution({ commandId: 'delete-all-error-logs' })
@@ -66,7 +67,19 @@ describe('TEE V2.2 trusted operational action policy', () => {
     });
   });
 
-  it('FXERR-TRUST-001 suspends trust when confirmation or a runtime safety invariant fails', () => {
+  it('suspends trust when retention is not bound to a candidate set', () => {
+    expect(
+      classifyOperationalAction(
+        trustedExecution({ retentionBoundToCandidateSet: false })
+      )
+    ).toMatchObject({
+      kind: 'engineering_task',
+      lane: 'critical',
+      trustSuspended: true,
+    });
+  });
+
+  it('suspends trust when confirmation or a runtime safety invariant fails', () => {
     expect(
       classifyOperationalAction(
         trustedExecution({ confirmationBoundToSnapshot: false })
@@ -87,7 +100,7 @@ describe('TEE V2.2 trusted operational action policy', () => {
     });
   });
 
-  it('FXERR-TRUST-001 suspends trust when the registered command safety-contract version differs', () => {
+  it('suspends trust when the registered command safety-contract version differs', () => {
     expect(
       classifyOperationalAction(
         trustedExecution({ safetyContract: 'fixerrors-exact-snapshot-v2' })
@@ -100,7 +113,7 @@ describe('TEE V2.2 trusted operational action policy', () => {
     });
   });
 
-  it('FXERR-TRUST-001 suspends trust when execution requests wider production mutation scope', () => {
+  it('suspends trust when execution requests wider production mutation scope', () => {
     expect(
       classifyOperationalAction(
         trustedExecution({
@@ -124,13 +137,17 @@ describe('TEE V2.2 trusted operational action policy', () => {
     });
   });
 
-  it('FXERR-TRUST-001 / FXERR-COMPAT-001 confirms broad-clear Supabase mutation path is absent', () => {
+  it('FXERR-COMPAT-001 confirms broad-clear Supabase mutation path is absent', () => {
     const fixerrorsSource = readFileSync(
       resolve(process.cwd(), 'scripts/fixerrors.ts'),
       'utf8'
     );
+    const safetySource = readFileSync(
+      resolve(process.cwd(), 'scripts/fixerrors-safety.ts'),
+      'utf8'
+    );
     expect(fixerrorsSource).not.toMatch(/\.gte\(\s*['"]timestamp['"]\s*,\s*['"]1970-01-01['"]\s*\)/);
-    expect(fixerrorsSource).toMatch(/--no-clear/);
+    expect(safetySource).toMatch(/assertNoClearRejected/);
     expect(fixerrorsSource).toMatch(/analysis-export/);
   });
 });

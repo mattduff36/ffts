@@ -14,7 +14,7 @@ It records the behavior observed in the temporary, read-only AVS Worklog referen
 - **Automation scope:** testsuite, `finalise`, `fixerrors`, private logs, release metadata, and Cursor workflow rules.
 - **Reference lifetime:** `D:\Websites\avsworklog` is temporary and will be removed from the workspace after implementation.
 
-Implemented outcomes include explicit production testsuite confirmation and preflight, deterministic mocked pagination coverage, strict fixture cleanup, `fixerrors --no-clear`, tracked release-log consistency checks, fail-closed finalise recovery, release-version stale-client detection, and self-contained Cursor rules.
+Implemented outcomes include explicit production testsuite confirmation and preflight, deterministic mocked pagination coverage, strict fixture cleanup, `fixerrors` v4 archive/retention, tracked release-log consistency checks, fail-closed finalise recovery, release-version stale-client detection, and self-contained Cursor rules.
 
 ## Source Boundary
 
@@ -265,7 +265,7 @@ FFTS ports Token-Efficient Engineering V2.2 as a repository-enforced workflow la
 - Protocol state, immutable events, evidence manifests, and follow-up plans stay under ignored `docs_private/automation/**`.
 - The Cursor stop hook fails open and never authorizes a push.
 - Release-metadata preflight, consistency, recovery, and no-push-after-failure behavior in `scripts/finalise-release.ts` remain fail-closed and unchanged by TEE core.
-- `fixerrors` export/analysis is non-destructive by default; trusted cleanup uses exact-snapshot contract `fixerrors-exact-snapshot-v1` only. Debug UI / `clear-all-error-logs` clears remain untrusted.
+- `fixerrors` uses exact-snapshot contract `fixerrors-exact-snapshot-v4`: active-row export, same-process archive, then 12-month archived retention. Debug UI / `clear-all-error-logs` remain untrusted archive-active surfaces.
 
 Verification ledger for the TEE port: `docs/guides/TEE_V2_2_VERIFICATION_LEDGER.md`.
 
@@ -282,28 +282,24 @@ In particular:
 
 ## `fixerrors` Contract
 
-`npm run fixerrors` (and `--no-clear`) is the non-destructive export/analysis phase and must:
+`npm run fixerrors` is the registered v4 path and must:
 
-1. load production configuration from `.env.local` (including `POSTGRES_URL_NON_POOLING`);
-2. verify required connection values without printing secrets;
-3. capture a complete repeatable-read snapshot of `public.error_logs` with target + schema fingerprints;
-4. write and read-verify `docs_private/error-snapshot.json` (and per-id snapshot under `docs_private/error-snapshots/`);
-5. filter/group for reporting only (filters must not shrink the cleanup ID set);
-6. write and read-verify `docs_private/error-analysis.md`;
-7. create or update `docs_private/error-fix-log.md` when applicable;
-8. write structured automation run logs and validate required artifacts during self-review;
-9. print the exact bound cleanup command when the snapshot is non-empty (do not mutate production in this phase);
-10. report local artifact paths and any monthly follow-up.
+1. reject `--no-clear` and leftover v1/v2/v3 snapshot artifacts locally, before opening a database connection;
+2. load production configuration from `.env.local` (including `POSTGRES_URL_NON_POOLING`);
+3. verify required connection values without printing secrets;
+4. capture a complete repeatable-read snapshot of **active** `public.error_logs` with target + schema fingerprints and canonical microsecond UTC timestamps;
+5. write and read-verify `docs_private/error-snapshot.json` (and per-id snapshot under `docs_private/error-snapshots/`);
+6. filter/group for reporting only (filters must not shrink the archive ID set);
+7. write and read-verify `docs_private/error-analysis.md`;
+8. create or update `docs_private/error-fix-log.md` when applicable;
+9. after the analysis artifact is sealed, archive exact snapshot IDs in the same process (`status`/`archived_at` only);
+10. after a successful archive or empty-snapshot no-op, purge archived rows older than 12 months in a separate candidate-bound transaction;
+11. write structured automation run logs and validate required artifacts during self-review;
+12. report local artifact paths and any monthly follow-up.
 
-Trusted cleanup (exact printed `--cleanup` args under `fixerrors-exact-snapshot-v1`) must:
+Crash-recovery `--cleanup` under `fixerrors-exact-snapshot-v4` may archive a sealed snapshot only when analysis completed and archive did not finish. It must never delete active or recently archived rows. Retention deletes only captured expired archived parents; `error_log_alerts` change only via verified CASCADE. SET NULL collateral on usage/health FKs must be recorded. Never auto-retry failed or indeterminate archive/retention states.
 
-1. re-verify snapshot checksum/manifest/expiry/target/schema/analysis artifacts;
-2. delete only exact snapshot `error_logs` IDs inside one transaction after `FOR UPDATE`, plus inventoried `error_log_alerts`;
-3. record SET NULL collateral on usage/health FKs (including possible `service_health_events.updated_at` trigger updates);
-4. preserve newer/unexported rows;
-5. record durable outcomes (`rejected` / `rolled_back` / `committed` / `committed_unverified` / `indeterminate`) and never auto-retry indeterminate/commit-ambiguous states.
-
-An empty snapshot is a successful export with no cleanup required. Missing `docs_private/` is not a valid failure mode. Broad predicate clears (for example `timestamp >= 1970-01-01`) are forbidden in the trusted path. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted.
+An empty snapshot is a successful export with no archive write required. Missing `docs_private/` is not a valid failure mode. Broad predicate deletes (for example `timestamp >= 1970-01-01`) are forbidden in the trusted path. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted unbounded archive-active surfaces.
 
 ## `finalise` Contract
 
@@ -352,14 +348,15 @@ The finalise rule must:
 
 The fixerrors rule must:
 
-- run `npm run fixerrors` for non-destructive export/analysis (`--no-clear` alias allowed);
-- use only the exact printed bound cleanup command for destructive clears under `fixerrors-exact-snapshot-v1`;
-- read the generated `docs_private/error-analysis.md` and snapshot artifacts;
+- run `npm run fixerrors` for the v4 active-snapshot / same-process archive / 12-month retention path;
+- reject `--no-clear`;
+- use `--cleanup` only as crash-recovery archive with the exact sealed snapshot identity under `fixerrors-exact-snapshot-v4`;
+- read the generated `docs_private/error-analysis.md`, `docs_private/error-analysis-decision.md` when present, and snapshot artifacts;
 - inspect `docs_private/error-fix-log.md` when present;
 - summarize actionable groups without exposing sensitive payloads;
 - use automation review/follow-up files when generated;
-- avoid claiming remote errors were cleared unless the run log confirms a trusted `committed` cleanup;
-- never auto-retry `indeterminate` / `committed_unverified` outcomes;
+- avoid claiming remote errors were archived unless the run log confirms a trusted archive step;
+- never auto-retry failed or indeterminate archive/retention outcomes;
 - never require a sibling workspace or terminal directory.
 
 ### Rule Portability

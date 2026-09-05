@@ -65,11 +65,11 @@ describe('TEE V2.2 FFTS project context', () => {
     expect(finaliseCommands).toMatch(/Do not invoke `finalise:push` \/ `finalise:full:push` for ordinary work/);
     expect(finaliseCommands).not.toMatch(/do \*\*not\*\* authorize a push/iu);
     expect(finaliseCommands).toContain('finalise and push');
-    expect(fixerrors).toContain('fixerrors-exact-snapshot-v1');
+    expect(fixerrors).toContain('fixerrors-exact-snapshot-v4');
     expect(fixerrors).toMatch(/Never push/iu);
   });
 
-  it('TEE-DOCS-001 / FXERR-DOCS-001 / FXERR-COMPAT-001: documents trusted fixerrors export and bound cleanup', () => {
+  it('TEE-DOCS-001 / FXERR-DOCS-001 documents trusted fixerrors export and bound cleanup', () => {
     const core = readFileSync(path.join(root, '.cursor', 'rules', 'ffts-core.mdc'), 'utf8');
     const fixerrorsRule = readFileSync(path.join(root, '.cursor', 'rules', 'fixerrors.mdc'), 'utf8');
     const scriptsReadme = readFileSync(path.join(root, 'scripts', 'README.md'), 'utf8');
@@ -79,13 +79,13 @@ describe('TEE V2.2 FFTS project context', () => {
     );
     expect(core).toContain('load `.cursor/rules/database-migrations.mdc`');
     expect(core).toContain('push to GitHub');
-    expect(core).toContain('fixerrors-exact-snapshot-v1');
-    expect(core).toMatch(/non-destructive export\/analysis/i);
-    expect(fixerrorsRule).toContain('fixerrors-exact-snapshot-v1');
+    expect(core).toContain('fixerrors-exact-snapshot-v4');
+    expect(core).toMatch(/same-process archive/i);
+    expect(fixerrorsRule).toContain('fixerrors-exact-snapshot-v4');
     expect(fixerrorsRule).toMatch(/--no-clear/);
     expect(fixerrorsRule).toMatch(/untrusted/i);
-    expect(scriptsReadme).toContain('fixerrors-exact-snapshot-v1');
-    expect(scriptsReadme).toMatch(/never mutate production/i);
+    expect(scriptsReadme).toContain('fixerrors-exact-snapshot-v4');
+    expect(scriptsReadme).toMatch(/archives exact verified active snapshot IDs/i);
     expect(database).toContain('alwaysApply: false');
     expect(database).toContain('npm run db:validate');
     expect(database).toContain('must not open an implicit database connection');

@@ -1808,6 +1808,8 @@ export type Database = {
           component_name: string | null
           additional_data: Json | null
           created_at: string
+          status: 'active' | 'archived'
+          archived_at: string | null
         }
         Insert: {
           id?: string
@@ -1822,6 +1824,8 @@ export type Database = {
           component_name?: string | null
           additional_data?: Json | null
           created_at?: string
+          status?: 'active' | 'archived'
+          archived_at?: string | null
         }
         Update: {
           id?: string
@@ -1836,6 +1840,8 @@ export type Database = {
           component_name?: string | null
           additional_data?: Json | null
           created_at?: string
+          status?: 'active' | 'archived'
+          archived_at?: string | null
         }
         Relationships: [
         ]

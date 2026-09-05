@@ -35,6 +35,8 @@ import type {
   WorkflowTranscriptStatus,
 } from './types';
 
+export const FIXERRORS_COMMAND_MANDATED_REVIEW_REASON = 'fixerrors-command-mandated';
+
 export interface WorkflowStopHookInput {
   conversation_id?: string;
   generation_id?: string;

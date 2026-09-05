@@ -18,6 +18,8 @@ export interface ErrorLogAccessResult {
 }
 
 const ERROR_LOG_FETCH_LIMIT_MAX = 500;
+const ERROR_LOG_LIST_COLUMNS =
+  'id, timestamp, error_message, error_stack, error_type, user_id, user_email, page_url, user_agent, component_name, additional_data, created_at, status, archived_at';
 
 function clampLimit(limit: number): number {
   return Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit) : 200, 1), ERROR_LOG_FETCH_LIMIT_MAX);
@@ -27,11 +29,16 @@ export async function requireErrorLogAdminAccess(): Promise<ErrorLogAccessResult
   return requireDebugConsoleAccess();
 }
 
-export async function listErrorLogs(limit = 200): Promise<ErrorLogListEntry[]> {
+export async function listErrorLogs(
+  limit = 200,
+  options: { includeArchived?: boolean } = {}
+): Promise<ErrorLogListEntry[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('error_logs')
-    .select('id, timestamp, error_message, error_stack, error_type, user_id, user_email, page_url, user_agent, component_name, additional_data, created_at')
+  const selected = admin.from('error_logs').select(ERROR_LOG_LIST_COLUMNS);
+  const filtered = options.includeArchived
+    ? selected
+    : selected.eq('status', 'active');
+  const { data, error } = await filtered
     .order('timestamp', { ascending: false })
     .limit(clampLimit(limit));
 
@@ -64,16 +71,23 @@ export async function listErrorLogs(limit = 200): Promise<ErrorLogListEntry[]> {
   }));
 }
 
-export async function clearAllErrorLogs(): Promise<void> {
+export async function archiveActiveErrorLogs(): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin
     .from('error_logs')
-    .delete()
-    .gte('timestamp', '1970-01-01');
+    .update({
+      status: 'archived',
+      archived_at: new Date().toISOString(),
+    })
+    .eq('status', 'active');
 
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function clearAllErrorLogs(): Promise<void> {
+  await archiveActiveErrorLogs();
 }
 
 export async function insertErrorLogs(logs: ErrorLogInsertRow[]): Promise<void> {

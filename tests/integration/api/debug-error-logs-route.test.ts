@@ -73,7 +73,8 @@ describe('debug error logs route', () => {
       error: null,
     });
     const order = vi.fn(() => ({ limit }));
-    const selectErrorLogs = vi.fn(() => ({ order }));
+    const eq = vi.fn(() => ({ order }));
+    const selectErrorLogs = vi.fn(() => ({ eq, order }));
     const inProfiles = vi.fn().mockResolvedValue({
       data: [{ id: 'user-1', full_name: 'Client User' }],
       error: null,
@@ -152,7 +153,8 @@ describe('debug error logs route', () => {
       error: null,
     });
     const order = vi.fn(() => ({ limit }));
-    const selectErrorLogs = vi.fn(() => ({ order }));
+    const eq = vi.fn(() => ({ order }));
+    const selectErrorLogs = vi.fn(() => ({ eq, order }));
     const inProfiles = vi.fn().mockResolvedValue({
       data: [{ id: 'user-2', full_name: 'Support User' }],
       error: null,
@@ -211,8 +213,8 @@ describe('debug error logs route', () => {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const { getEffectiveRole } = await import('@/lib/utils/view-as');
 
-    const gte = vi.fn().mockResolvedValue({ error: null });
-    const deleteLogs = vi.fn(() => ({ gte }));
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateLogs = vi.fn(() => ({ eq }));
 
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       profile: { id: 'admin-1' },
@@ -234,7 +236,7 @@ describe('debug error logs route', () => {
     vi.mocked(createAdminClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === 'error_logs') {
-          return { delete: deleteLogs };
+          return { update: updateLogs };
         }
         if (table === 'permission_modules') {
           return sensitiveAccessMocks.permissionModules;
@@ -252,6 +254,10 @@ describe('debug error logs route', () => {
 
     expect(response.status).toBe(200);
     expect(payload.success).toBe(true);
-    expect(gte).toHaveBeenCalledWith('timestamp', '1970-01-01');
+    expect(updateLogs).toHaveBeenCalledWith({
+      status: 'archived',
+      archived_at: expect.any(String),
+    });
+    expect(eq).toHaveBeenCalledWith('status', 'active');
   });
 });

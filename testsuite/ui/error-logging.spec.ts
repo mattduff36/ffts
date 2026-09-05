@@ -76,6 +76,7 @@ async function fetchRecentTargetErrorLogs(sinceIso: string): Promise<ErrorLogRow
   const { data, error } = await supabase
     .from('error_logs')
     .select('id, error_message, user_email, timestamp, page_url, component_name')
+    .eq('status', 'active')
     .gte('timestamp', sinceIso)
     .order('timestamp', { ascending: false })
     .limit(50);
@@ -96,9 +97,16 @@ async function cleanupRecentTargetErrorLogs(sinceIso: string): Promise<void> {
     return;
   }
 
-  const { error } = await supabase.from('error_logs').delete().in('id', ids);
+  const { error } = await supabase
+    .from('error_logs')
+    .update({
+      status: 'archived',
+      archived_at: new Date().toISOString(),
+    })
+    .eq('status', 'active')
+    .in('id', ids);
   if (error) {
-    throw new Error(`Failed to clean up test error logs: ${error.message}`);
+    throw new Error(`Failed to archive test error logs: ${error.message}`);
   }
 }
 

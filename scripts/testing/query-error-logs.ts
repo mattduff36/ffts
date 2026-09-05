@@ -54,6 +54,7 @@ async function queryErrorLogs() {
         component_name,
         additional_data
       FROM error_logs
+      WHERE status = 'active'
       ORDER BY timestamp DESC
       LIMIT 100
     `);

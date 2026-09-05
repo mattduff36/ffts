@@ -499,6 +499,7 @@ export async function GET() {
           supabase
             .from('error_logs')
             .select('id', { count: 'exact', head: true })
+            .eq('status', 'active')
             .or('page_url.is.null,page_url.not.ilike.%localhost%')
             .or(`user_email.is.null,user_email.neq.${DEBUG_ERROR_LOG_HIDDEN_ADMIN_EMAIL}`)
         )

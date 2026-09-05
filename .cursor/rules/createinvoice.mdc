@@ -33,5 +33,10 @@ npm run createinvoice -- --from "<YYYY-MM-DD>" --to "<YYYY-MM-DD>" --rate "<rate
    - never claim exact token usage.
 9. Show hours, line values, development/support subtotals, total, and coverage notes.
 10. Save the exact response as `docs_private/invoices/invoice-<from>-to-<to>-final.md`.
+11. Export the companion JSON for invoice-software import:
+
+```bash
+npm run createinvoice -- --export-final "docs_private/invoices/invoice-<from>-to-<to>-final.md"
+```
 
 Do not modify application code, commit, push, or run builds during invoice generation.

@@ -1,6 +1,7 @@
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'fs';
@@ -9,14 +10,20 @@ import path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildWorkClusters,
+  classifyFinalInvoiceLine,
   classifyWorkCluster,
   collectParentChats,
   collectReleases,
+  exportFinalInvoiceJsonFromMarkdownFile,
   isParentTranscriptPath,
   parseCreateInvoiceArgs,
+  parseEnglishInvoiceDay,
+  parseFinalInvoiceMarkdown,
   parseGitLogOutput,
   parseParentTranscript,
   parseReleaseLog,
+  renderFinalInvoiceJson,
+  resolveFinalInvoiceJsonPath,
   validateDateRange,
   type ChatEvidence,
   type CommitEvidence,
@@ -495,5 +502,174 @@ describe('FFTS cluster classification and conservative calibration', () => {
     expect(support?.isSupport).toBe(true);
     expect(support?.recommendedHours).toBe(6);
     expect(support?.suggestedHoursBand.maximum).toBe(6);
+  });
+});
+
+const SAMPLE_FFTS_FINAL_INVOICE = `# FFTS Invoice: 25 July–7 August 2026
+
+Development rate: £30/hour  
+Production-support rate: £30/hour
+
+## Development
+
+- Development Session: 6 August 2026 (improved quotes and scheduling) — 5 hours × £30 = £150
+
+Development subtotal: 5 hours — £150
+
+## BUG FIXES / Production Support
+
+- BUG FIXES / Production Support: 6–7 August 2026 (corrected the scheduling board) — 2 hours × £30 = £60
+
+Production-support subtotal: 2 hours — £60
+
+## Total
+
+7 hours — £210
+
+## Coverage notes
+
+- Reconciled 3 production releases.
+`;
+
+const SAMPLE_IMPORT_FORMAT_INVOICE = `# Invoice summary: 1–19 August 2026
+
+- Development Session: 5–6 August 2026 (Payroll — Added timesheet payroll rules) — 3h × £28 = £84
+- Maintenance and UI Improvements: 17 August 2026 (Help and FAQ catalogue refresh) — 2h × £28 = £56
+- BUG FIXES / Production Support: 5–19 August 2026 (Corrected post-release payroll issues) — 6h × £5 = £30
+
+## Totals
+
+- Development: 5 hours — £140
+- Production support: 6 hours — £30
+- Estimated total: 11 hours — £170
+
+## Coverage notes
+
+- Period: 1 August 2026 to 19 August 2026, development £28/hour, support £5/hour; completed unpushed work was requested and none remained.
+- Excluded planning-only chats.
+`;
+
+describe('createinvoice final JSON export', () => {
+  it('classifies line kinds and parses English invoice days', () => {
+    expect(classifyFinalInvoiceLine('Development Session')).toBe('development');
+    expect(classifyFinalInvoiceLine('BUG FIXES / Production Support')).toBe('support');
+    expect(classifyFinalInvoiceLine('Maintenance and UI Improvements')).toBe('maintenance');
+    expect(parseEnglishInvoiceDay('1 August 2026')).toBe('2026-08-01');
+    expect(parseEnglishInvoiceDay('19 August 2026')).toBe('2026-08-19');
+  });
+
+  it('parses established FFTS final invoice markdown into importable JSON', () => {
+    const invoice = parseFinalInvoiceMarkdown(SAMPLE_FFTS_FINAL_INVOICE, {
+      sourcePath: 'docs_private/invoices/invoice-2026-07-25-to-2026-08-07-final.md',
+    });
+
+    expect(invoice).toMatchObject({
+      schemaVersion: 1,
+      title: 'Invoice summary: 25 July–7 August 2026',
+      period: {
+        from: '2026-07-25',
+        to: '2026-08-07',
+        label: '25 July–7 August 2026',
+      },
+      pricing: {
+        developmentRate: 30,
+        supportRate: 30,
+        currency: 'GBP',
+      },
+      totals: {
+        developmentHours: 5,
+        developmentAmount: 150,
+        supportHours: 2,
+        supportAmount: 60,
+        totalHours: 7,
+        totalAmount: 210,
+      },
+    });
+    expect(invoice.lines).toEqual([
+      {
+        kind: 'development',
+        label: 'Development Session',
+        dateLabel: '6 August 2026',
+        heading: null,
+        description: 'improved quotes and scheduling',
+        hours: 5,
+        rate: 30,
+        amount: 150,
+        text: 'Development Session: 6 August 2026 (improved quotes and scheduling) — 5 hours × £30 = £150',
+      },
+      {
+        kind: 'support',
+        label: 'BUG FIXES / Production Support',
+        dateLabel: '6–7 August 2026',
+        heading: null,
+        description: 'corrected the scheduling board',
+        hours: 2,
+        rate: 30,
+        amount: 60,
+        text: 'BUG FIXES / Production Support: 6–7 August 2026 (corrected the scheduling board) — 2 hours × £30 = £60',
+      },
+    ]);
+    expect(invoice.coverageNotes[0]).toContain('Reconciled 3 production releases');
+    expect(renderFinalInvoiceJson(invoice)).toContain('"schemaVersion": 1');
+  });
+
+  it('also parses the invoice-software import markdown shape', () => {
+    const invoice = parseFinalInvoiceMarkdown(SAMPLE_IMPORT_FORMAT_INVOICE);
+
+    expect(invoice.schemaVersion).toBe(1);
+    expect(invoice.lines).toEqual([
+      {
+        kind: 'development',
+        label: 'Development Session',
+        dateLabel: '5–6 August 2026',
+        heading: 'Payroll',
+        description: 'Added timesheet payroll rules',
+        hours: 3,
+        rate: 28,
+        amount: 84,
+        text: 'Development Session: 5–6 August 2026 (Payroll — Added timesheet payroll rules) — 3h × £28 = £84',
+      },
+      {
+        kind: 'maintenance',
+        label: 'Maintenance and UI Improvements',
+        dateLabel: '17 August 2026',
+        heading: null,
+        description: 'Help and FAQ catalogue refresh',
+        hours: 2,
+        rate: 28,
+        amount: 56,
+        text: 'Maintenance and UI Improvements: 17 August 2026 (Help and FAQ catalogue refresh) — 2h × £28 = £56',
+      },
+      {
+        kind: 'support',
+        label: 'BUG FIXES / Production Support',
+        dateLabel: '5–19 August 2026',
+        heading: null,
+        description: 'Corrected post-release payroll issues',
+        hours: 6,
+        rate: 5,
+        amount: 30,
+        text: 'BUG FIXES / Production Support: 5–19 August 2026 (Corrected post-release payroll issues) — 6h × £5 = £30',
+      },
+    ]);
+    expect(invoice.totals.totalAmount).toBe(170);
+  });
+
+  it('writes a companion JSON file beside the final markdown', () => {
+    const directory = createTemporaryDirectory('create-invoice-export-');
+    const markdownPath = path.join(directory, 'invoice-2026-07-25-to-2026-08-07-final.md');
+    writeFileSync(markdownPath, SAMPLE_FFTS_FINAL_INVOICE, 'utf8');
+
+    const jsonPath = exportFinalInvoiceJsonFromMarkdownFile(markdownPath);
+    const exported = JSON.parse(readFileSync(jsonPath, 'utf8'));
+
+    expect(jsonPath).toBe(resolveFinalInvoiceJsonPath(markdownPath));
+    expect(exported.period).toEqual({
+      from: '2026-07-25',
+      to: '2026-08-07',
+      label: '25 July–7 August 2026',
+    });
+    expect(exported.lines).toHaveLength(2);
+    expect(exported.totals.totalAmount).toBe(210);
   });
 });

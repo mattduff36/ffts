@@ -10,3 +10,8 @@ npm run createinvoice -- --from "<YYYY-MM-DD>" --to "<YYYY-MM-DD>" --rate "<rate
 ```
 
 3. Read the generated evidence paths, reconcile releases/commits/chats, produce customer-facing lines, and save `docs_private/invoices/invoice-<from>-to-<to>-final.md`.
+4. Export the companion JSON with the same formatting:
+
+```bash
+npm run createinvoice -- --export-final "docs_private/invoices/invoice-<from>-to-<to>-final.md"
+```

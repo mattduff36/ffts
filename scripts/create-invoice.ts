@@ -121,6 +121,48 @@ export interface InvoiceEvidenceReport {
   };
 }
 
+export type FinalInvoiceLineKind = 'development' | 'support' | 'maintenance';
+
+export interface FinalInvoiceLine {
+  kind: FinalInvoiceLineKind;
+  label: string;
+  dateLabel: string;
+  heading: string | null;
+  description: string;
+  hours: number;
+  rate: number;
+  amount: number;
+  text: string;
+}
+
+export interface FinalInvoice {
+  schemaVersion: 1;
+  title: string;
+  period: InvoiceDateRange & {
+    label: string;
+  };
+  pricing: {
+    developmentRate: number;
+    supportRate: number;
+    currency: 'GBP';
+  };
+  lines: FinalInvoiceLine[];
+  totals: {
+    developmentHours: number;
+    developmentAmount: number;
+    supportHours: number;
+    supportAmount: number;
+    totalHours: number;
+    totalAmount: number;
+  };
+  coverageNotes: string[];
+}
+
+export interface ParseFinalInvoiceOptions {
+  sourcePath?: string;
+  period?: Partial<InvoiceDateRange>;
+}
+
 interface ReleaseHistoryEntry {
   version: string;
   title: string;
@@ -492,6 +534,279 @@ export function isDayInRange(day: string, range: InvoiceDateRange): boolean {
 
 export function calculateLineValue(hours: number, rate: number): number {
   return Math.round(hours * rate * 100) / 100;
+}
+
+const MONTH_INDEX: Record<string, string> = {
+  january: '01',
+  february: '02',
+  march: '03',
+  april: '04',
+  may: '05',
+  june: '06',
+  july: '07',
+  august: '08',
+  september: '09',
+  october: '10',
+  november: '11',
+  december: '12',
+};
+
+const FINAL_INVOICE_LINE_PATTERN =
+  /^- (.+?): (.+?) \((.*)\) — (\d+(?:\.\d+)?)(?:h| hours) × £(\d+(?:\.\d+)?) = £(\d+(?:\.\d+)?)\s*$/u;
+const FINAL_INVOICE_TITLE_PATTERN = /^#\s+(?:FFTS Invoice|Invoice summary):\s+(.+?)\s*$/mu;
+const FINAL_INVOICE_FILENAME_PATTERN =
+  /invoice-(\d{4}-\d{2}-\d{2})-to-(\d{4}-\d{2}-\d{2})-final\.md$/iu;
+const FINAL_INVOICE_PERIOD_NOTE_PATTERN =
+  /Period:\s+(\d{1,2} \w+ \d{4})\s+to\s+(\d{1,2} \w+ \d{4})/u;
+const FINAL_INVOICE_RATE_NOTE_PATTERN =
+  /development £(\d+(?:\.\d+)?)\/hour,\s*support £(\d+(?:\.\d+)?)\/hour/iu;
+const FINAL_INVOICE_FFTS_RATE_PATTERN =
+  /Development rate:\s*£(\d+(?:\.\d+)?)\/hour[\s\S]*?Production-support rate:\s*£(\d+(?:\.\d+)?)\/hour/iu;
+const FINAL_INVOICE_GRAND_TOTAL_PATTERN =
+  /^## Total\s+(\d+(?:\.\d+)?) hours — £(\d+(?:\.\d+)?)\s*$/mu;
+
+export function parseEnglishInvoiceDay(value: string): string {
+  const match = value.trim().match(/^(\d{1,2}) (\w+) (\d{4})$/u);
+  if (!match) {
+    throw new Error(`Unable to parse invoice day "${value}".`);
+  }
+
+  const month = MONTH_INDEX[match[2].toLowerCase()];
+  if (!month) {
+    throw new Error(`Unable to parse invoice month in "${value}".`);
+  }
+
+  return `${match[3]}-${month}-${match[1].padStart(2, '0')}`;
+}
+
+export function classifyFinalInvoiceLine(label: string): FinalInvoiceLineKind {
+  if (/production support|bug fixes/iu.test(label)) return 'support';
+  if (/development session/iu.test(label)) return 'development';
+  return 'maintenance';
+}
+
+function parseFinalInvoiceHeading(body: string): { heading: string | null; description: string } {
+  const separator = ' — ';
+  const index = body.indexOf(separator);
+  if (index <= 0) {
+    return { heading: null, description: body };
+  }
+
+  return {
+    heading: body.slice(0, index),
+    description: body.slice(index + separator.length),
+  };
+}
+
+function readMarkdownSectionBullets(markdown: string, heading: string): string[] {
+  const lines = markdown.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+  if (start === -1) return [];
+
+  const bullets: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('## ')) break;
+    if (trimmed.startsWith('- ')) bullets.push(trimmed.slice(2));
+  }
+  return bullets;
+}
+
+function readTotalValue(bullets: string[], label: string): { hours: number; amount: number } | null {
+  const match = bullets
+    .map((bullet) =>
+      bullet.match(new RegExp(`^${label}: (\\d+(?:\\.\\d+)?) hours — £(\\d+(?:\\.\\d+)?)$`, 'u')),
+    )
+    .find((candidate) => candidate !== null);
+  if (!match) return null;
+
+  return {
+    hours: Number(match[1]),
+    amount: Number(match[2]),
+  };
+}
+
+function readFftsSubtotal(
+  markdown: string,
+  label: 'Development' | 'Production-support',
+): { hours: number; amount: number } | null {
+  const match = markdown.match(
+    new RegExp(`^${label} subtotal:\\s+(\\d+(?:\\.\\d+)?) hours — £(\\d+(?:\\.\\d+)?)\\s*$`, 'mu'),
+  );
+  if (!match) return null;
+  return {
+    hours: Number(match[1]),
+    amount: Number(match[2]),
+  };
+}
+
+function readFftsGrandTotal(markdown: string): { hours: number; amount: number } | null {
+  const match = markdown.match(FINAL_INVOICE_GRAND_TOTAL_PATTERN);
+  if (!match) return null;
+  return {
+    hours: Number(match[1]),
+    amount: Number(match[2]),
+  };
+}
+
+function sumLineTotals(
+  lines: FinalInvoiceLine[],
+  kind: FinalInvoiceLineKind | 'non-support',
+): { hours: number; amount: number } {
+  const selected = lines.filter((line) =>
+    kind === 'non-support' ? line.kind !== 'support' : line.kind === kind,
+  );
+  return {
+    hours: selected.reduce((total, line) => total + line.hours, 0),
+    amount: selected.reduce((total, line) => total + line.amount, 0),
+  };
+}
+
+export function parseFinalInvoicePeriod(
+  markdown: string,
+  options: ParseFinalInvoiceOptions = {},
+): InvoiceDateRange & { label: string } {
+  const titleMatch = markdown.match(FINAL_INVOICE_TITLE_PATTERN);
+  const filenameMatch = options.sourcePath
+    ? path.basename(options.sourcePath).match(FINAL_INVOICE_FILENAME_PATTERN)
+    : null;
+  const periodNoteMatch = markdown.match(FINAL_INVOICE_PERIOD_NOTE_PATTERN);
+
+  const from =
+    options.period?.from ??
+    filenameMatch?.[1] ??
+    (periodNoteMatch ? parseEnglishInvoiceDay(periodNoteMatch[1]) : undefined);
+  const to =
+    options.period?.to ??
+    filenameMatch?.[2] ??
+    (periodNoteMatch ? parseEnglishInvoiceDay(periodNoteMatch[2]) : undefined);
+
+  if (!from || !to) {
+    throw new Error('Final invoice period could not be determined from the markdown or file name.');
+  }
+
+  return {
+    ...validateDateRange({ from, to }),
+    label: titleMatch?.[1] ?? `${from} to ${to}`,
+  };
+}
+
+export function parseFinalInvoiceMarkdown(
+  markdown: string,
+  options: ParseFinalInvoiceOptions = {},
+): FinalInvoice {
+  const titleMatch = markdown.match(FINAL_INVOICE_TITLE_PATTERN);
+  if (!titleMatch) {
+    throw new Error('Final invoice markdown must start with "# FFTS Invoice:" or "# Invoice summary:".');
+  }
+
+  const lines = markdown
+    .split(/\r?\n/u)
+    .map((line) => FINAL_INVOICE_LINE_PATTERN.exec(line.trim()))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => {
+      const [, label, dateLabel, body, hoursValue, rateValue, amountValue] = match;
+      const { heading, description } = parseFinalInvoiceHeading(body);
+      return {
+        kind: classifyFinalInvoiceLine(label),
+        label,
+        dateLabel,
+        heading,
+        description,
+        hours: Number(hoursValue),
+        rate: Number(rateValue),
+        amount: Number(amountValue),
+        text: match[0].replace(/^- /u, ''),
+      } satisfies FinalInvoiceLine;
+    });
+
+  if (lines.length === 0) {
+    throw new Error('Final invoice markdown does not contain any priced lines.');
+  }
+
+  const avsTotals = readMarkdownSectionBullets(markdown, 'Totals');
+  const developmentTotal =
+    readFftsSubtotal(markdown, 'Development') ??
+    readTotalValue(avsTotals, 'Development') ??
+    sumLineTotals(lines, 'non-support');
+  const supportTotal =
+    readFftsSubtotal(markdown, 'Production-support') ??
+    readTotalValue(avsTotals, 'Production support') ??
+    sumLineTotals(lines, 'support');
+  const estimatedTotal =
+    readFftsGrandTotal(markdown) ??
+    readTotalValue(avsTotals, 'Estimated total') ?? {
+      hours: developmentTotal.hours + supportTotal.hours,
+      amount: developmentTotal.amount + supportTotal.amount,
+    };
+  const fftsRateMatch = markdown.match(FINAL_INVOICE_FFTS_RATE_PATTERN);
+  const rateNoteMatch = markdown.match(FINAL_INVOICE_RATE_NOTE_PATTERN);
+  const developmentLine = lines.find((line) => line.kind !== 'support');
+  const supportLine = lines.find((line) => line.kind === 'support');
+
+  return {
+    schemaVersion: 1,
+    title: `Invoice summary: ${titleMatch[1]}`,
+    period: parseFinalInvoicePeriod(markdown, options),
+    pricing: {
+      developmentRate: fftsRateMatch
+        ? Number(fftsRateMatch[1])
+        : rateNoteMatch
+          ? Number(rateNoteMatch[1])
+          : (developmentLine?.rate ?? 28),
+      supportRate: fftsRateMatch
+        ? Number(fftsRateMatch[2])
+        : rateNoteMatch
+          ? Number(rateNoteMatch[2])
+          : (supportLine?.rate ?? 5),
+      currency: 'GBP',
+    },
+    lines,
+    totals: {
+      developmentHours: developmentTotal.hours,
+      developmentAmount: developmentTotal.amount,
+      supportHours: supportTotal.hours,
+      supportAmount: supportTotal.amount,
+      totalHours: estimatedTotal.hours,
+      totalAmount: estimatedTotal.amount,
+    },
+    coverageNotes: readMarkdownSectionBullets(markdown, 'Coverage notes'),
+  };
+}
+
+export function renderFinalInvoiceJson(invoice: FinalInvoice): string {
+  return `${JSON.stringify(invoice, null, 2)}\n`;
+}
+
+export function resolveFinalInvoiceJsonPath(markdownPath: string): string {
+  if (!markdownPath.toLowerCase().endsWith('.md')) {
+    throw new Error('Final invoice markdown path must end with .md');
+  }
+
+  return `${markdownPath.slice(0, -3)}.json`;
+}
+
+export function exportFinalInvoiceJsonFromMarkdownFile(markdownPath: string): string {
+  const resolvedMarkdownPath = path.resolve(markdownPath);
+  if (!existsSync(resolvedMarkdownPath)) {
+    throw new Error(`Final invoice markdown not found: ${resolvedMarkdownPath}`);
+  }
+
+  const invoice = parseFinalInvoiceMarkdown(readFileSync(resolvedMarkdownPath, 'utf8'), {
+    sourcePath: resolvedMarkdownPath,
+  });
+  const jsonPath = resolveFinalInvoiceJsonPath(resolvedMarkdownPath);
+  writeFileSync(jsonPath, renderFinalInvoiceJson(invoice), 'utf8');
+  return jsonPath;
+}
+
+function maybeExportExistingFinalInvoice(options: CreateInvoiceOptions): string | undefined {
+  const finalMarkdownPath = path.join(
+    options.outputDirectory,
+    `invoice-${options.from}-to-${options.to}-final.md`,
+  );
+  if (!existsSync(finalMarkdownPath)) return undefined;
+  return exportFinalInvoiceJsonFromMarkdownFile(finalMarkdownPath);
 }
 
 export function parseCreateInvoiceArgs(
@@ -1181,6 +1496,7 @@ export function renderEvidenceMarkdown(report: InvoiceEvidenceReport): string {
     '- Use customer-facing outcomes, not technical commit language.',
     '- Keep development and production-support pricing separate.',
     '- Save the final copy-ready Markdown beside this evidence report.',
+    '- Export the companion JSON with the same formatting via --export-final on that Markdown file.',
     '',
   );
   return lines.join('\n');
@@ -1203,6 +1519,7 @@ function printUsage(): void {
   console.log([
     'Usage:',
     '  npm run createinvoice -- --from YYYY-MM-DD --to YYYY-MM-DD [options]',
+    '  npm run createinvoice -- --export-final <final-markdown>',
     '',
     'Options:',
     '  --rate <number>                 Development hourly rate (default: 28)',
@@ -1210,6 +1527,7 @@ function printUsage(): void {
     '  --include-unpushed <true|false> Include completed local commits (default: true)',
     '  --transcripts-dir <path>        Override Cursor transcript directory',
     '  --output-dir <path>             Output directory (default: docs_private/invoices)',
+    '  --export-final <path>           Write companion JSON from a final invoice Markdown file',
   ].join('\n'));
 }
 
@@ -1219,12 +1537,23 @@ export function main(args = process.argv.slice(2)): void {
     return;
   }
 
+  const exportFinalPath = readFlagValue(args, '--export-final');
+  if (exportFinalPath) {
+    const jsonPath = exportFinalInvoiceJsonFromMarkdownFile(exportFinalPath);
+    console.log(`Final invoice JSON: ${jsonPath}`);
+    return;
+  }
+
   const options = parseCreateInvoiceArgs(args);
   const report = buildInvoiceEvidence(options);
   const output = writeInvoiceEvidence(report, options.outputDirectory);
+  const finalJsonPath = maybeExportExistingFinalInvoice(options);
   console.log(`Invoice evidence generated for ${options.from} to ${options.to}.`);
   console.log(`Evidence JSON: ${path.relative(options.repositoryRoot, output.jsonPath)}`);
   console.log(`Evidence Markdown: ${path.relative(options.repositoryRoot, output.markdownPath)}`);
+  if (finalJsonPath) {
+    console.log(`Final invoice JSON: ${path.relative(options.repositoryRoot, finalJsonPath)}`);
+  }
   console.log(
     `Found ${report.summary.releases} releases, ${report.summary.substantiveCommits} substantive commits, and ${report.summary.completedOrMixedChats} completed/mixed parent chats.`,
   );

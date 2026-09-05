@@ -123,8 +123,16 @@ Evidence is written to:
 - `docs_private/invoices/invoice-<from>-to-<to>-evidence.md`
 
 The agent saves the reconciled copy-ready result beside them as
-`docs_private/invoices/invoice-<from>-to-<to>-final.md`. These private artifacts remain ignored by
-Git. Use `--output-dir` only when a different local ignored destination is required.
+`docs_private/invoices/invoice-<from>-to-<to>-final.md`, then exports the importable companion JSON:
+
+```bash
+npm run createinvoice -- --export-final "docs_private/invoices/invoice-<from>-to-<to>-final.md"
+```
+
+That writes `docs_private/invoices/invoice-<from>-to-<to>-final.json` in the same schema used by
+invoice-software import. If a final Markdown file already exists for the requested dates, the
+evidence command refreshes that companion JSON automatically. These private artifacts remain ignored
+by Git. Use `--output-dir` only when a different local ignored destination is required.
 
 If transcript discovery fails, verify the FFTS Cursor project directory or rerun with
 `--transcripts-dir "<path>"`. Missing or incomplete release evidence should be corrected at its

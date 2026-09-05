@@ -945,43 +945,51 @@ describe('fixerrors v4 filesystem gates and artifacts', () => {
 
     const script = resolve(process.cwd(), 'scripts/fixerrors.ts');
     const tsxCli = resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs');
-    for (const args of [
+    const leftoverArtifacts = [
+      { version: 1, safetyContract: 'fixerrors-exact-snapshot-v1' },
+      { version: 2, safetyContract: 'fixerrors-exact-snapshot-v2' },
+      { version: 3, safetyContract: 'fixerrors-exact-snapshot-v3' },
+    ] as const;
+    const entrypointArgs = [
       [] as string[],
       ['--cleanup', '--snapshot-id=00000000-0000-4000-8000-000000000001'],
-    ]) {
-      const root = mkdtempSync(join(tmpdir(), 'fxerr-v1-'));
-      try {
-        mkdirSync(join(root, 'docs_private'), { recursive: true });
-        writeFileSync(
-          join(root, 'docs_private', 'error-snapshot.json'),
-          JSON.stringify({
-            version: 1,
-            safetyContract: 'fixerrors-exact-snapshot-v1',
-          })
-        );
-        const spawned = spawnSync(process.execPath, [tsxCli, script, ...args], {
-          cwd: root,
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            NODE_ENV: 'production',
-            POSTGRES_URL_NON_POOLING: 'postgresql://should-not-connect.invalid:5432/ffts',
-            POSTGRES_URL: '',
-          },
-          timeout: 30_000,
-          windowsHide: true,
-        });
-        const output = `${spawned.stdout ?? ''}\n${spawned.stderr ?? ''}\n${spawned.error?.message ?? ''}`;
-        expect(spawned.status, output).not.toBe(0);
-        expect(output).toMatch(/rejects leftover v1\/v2\/v3/u);
-        expect(output).not.toMatch(
-          /should-not-connect|ECONNREFUSED|getaddrinfo|FIXERRORS - Error Analysis/iu
-        );
-      } finally {
-        rmSync(root, { recursive: true, force: true });
+    ];
+    for (const leftover of leftoverArtifacts) {
+      for (const args of entrypointArgs) {
+        const root = mkdtempSync(join(tmpdir(), 'fxerr-v1-'));
+        try {
+          mkdirSync(join(root, 'docs_private'), { recursive: true });
+          writeFileSync(
+            join(root, 'docs_private', 'error-snapshot.json'),
+            JSON.stringify(leftover)
+          );
+          const spawned = spawnSync(process.execPath, [tsxCli, script, ...args], {
+            cwd: root,
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              NODE_ENV: 'production',
+              POSTGRES_URL_NON_POOLING: 'postgresql://should-not-connect.invalid:5432/ffts',
+              POSTGRES_URL: '',
+            },
+            timeout: 30_000,
+            windowsHide: true,
+          });
+          const output = `${spawned.stdout ?? ''}\n${spawned.stderr ?? ''}`;
+          expect(spawned.error, output).toBeUndefined();
+          expect(spawned.signal, output).toBeNull();
+          expect(spawned.status, output).toEqual(expect.any(Number));
+          expect(spawned.status, output).not.toBe(0);
+          expect(output).toMatch(/rejects leftover v1\/v2\/v3/u);
+          expect(output).not.toMatch(
+            /should-not-connect|ECONNREFUSED|getaddrinfo|FIXERRORS - Error Analysis/iu
+          );
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
       }
     }
-  });
+  }, 30_000);
 
   it('FXERR-NOCLEAR-024 rejects --no-clear before DB setup', () => {
     expect(() => assertNoClearRejected(['--no-clear'])).toThrow(

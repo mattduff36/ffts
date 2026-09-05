@@ -22,8 +22,10 @@ import {
   type SnapshotLock,
 } from '@/scripts/fixerrors-safety';
 import type { ErrorLogEntry } from '@/scripts/fixerrors';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { spawnSync } from 'child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join, resolve } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const SERVER_IDENTITY = {
@@ -940,6 +942,45 @@ describe('fixerrors v4 filesystem gates and artifacts', () => {
     expect(() =>
       assertFixerrorsEntrypointPreconditions([], new MemoryScanFs(new Map()))
     ).not.toThrow();
+
+    const script = resolve(process.cwd(), 'scripts/fixerrors.ts');
+    const tsxCli = resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs');
+    for (const args of [
+      [] as string[],
+      ['--cleanup', '--snapshot-id=00000000-0000-4000-8000-000000000001'],
+    ]) {
+      const root = mkdtempSync(join(tmpdir(), 'fxerr-v1-'));
+      try {
+        mkdirSync(join(root, 'docs_private'), { recursive: true });
+        writeFileSync(
+          join(root, 'docs_private', 'error-snapshot.json'),
+          JSON.stringify({
+            version: 1,
+            safetyContract: 'fixerrors-exact-snapshot-v1',
+          })
+        );
+        const spawned = spawnSync(process.execPath, [tsxCli, script, ...args], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+            POSTGRES_URL_NON_POOLING: 'postgresql://should-not-connect.invalid:5432/ffts',
+            POSTGRES_URL: '',
+          },
+          timeout: 30_000,
+          windowsHide: true,
+        });
+        const output = `${spawned.stdout ?? ''}\n${spawned.stderr ?? ''}\n${spawned.error?.message ?? ''}`;
+        expect(spawned.status, output).not.toBe(0);
+        expect(output).toMatch(/rejects leftover v1\/v2\/v3/u);
+        expect(output).not.toMatch(
+          /should-not-connect|ECONNREFUSED|getaddrinfo|FIXERRORS - Error Analysis/iu
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
   });
 
   it('FXERR-NOCLEAR-024 rejects --no-clear before DB setup', () => {

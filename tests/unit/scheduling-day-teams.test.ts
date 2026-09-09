@@ -4,6 +4,7 @@ import {
   emptyScheduleDayTeamSlots,
   extraSlotHasDailyMembers,
   profileIdsHiddenFromScheduleResources,
+  scheduleEmployeeInlineAssignment,
   removeScheduleDayTeamMember,
   SCHEDULE_DAY_TEAM_SLOT_CAPACITY,
   SCHEDULE_DAY_TEAM_SLOT_INDEXES,
@@ -32,6 +33,7 @@ const member = (profileId: string, slot: 1 | 2 | 3 | 4 | 5 | 6, isLeader = false
     employee_id: null,
     team_id: null,
     team_name: null,
+    kind: 'employee',
   },
   added_by: 'manager-1',
   created_at: '2026-09-01T08:00:00.000Z',
@@ -80,6 +82,7 @@ describe('schedule day team helpers', () => {
           employee_id: null,
           team_id: null,
           team_name: null,
+          kind: 'employee',
         },
       }],
     });
@@ -111,6 +114,7 @@ describe('schedule day team helpers', () => {
           employee_id: null,
           team_id: null,
           team_name: null,
+          kind: 'employee',
         },
       }],
     });
@@ -135,6 +139,7 @@ describe('schedule day team helpers', () => {
           employee_id: null,
           team_id: null,
           team_name: null,
+          kind: 'employee',
         },
       }],
     });
@@ -159,6 +164,7 @@ describe('schedule day team helpers', () => {
           employee_id: null,
           team_id: null,
           team_name: null,
+          kind: 'employee',
         },
       }],
     });
@@ -169,6 +175,72 @@ describe('schedule day team helpers', () => {
     );
     expect(slots[0].members.filter((item) => item.profile_id === 'leader-1')).toHaveLength(1);
     expect(slots[0].members[0].is_leader).toBe(true);
+  });
+
+  it('sched-resource-inline-assignment keeps a bucketed person visible with team and job tags', () => {
+    const teamSettings = settings({
+      leaders: [{
+        slot_index: 2,
+        profile_id: 'leader-2',
+        employee: {
+          id: 'leader-2',
+          full_name: 'Tom Newman-Bownes',
+          employee_id: null,
+          team_id: null,
+          team_name: null,
+          kind: 'employee',
+        },
+      }],
+    });
+    const board = {
+      ...boardWithTeams([member('e1', 2)], teamSettings),
+      jobs: [{
+        id: 'job-1',
+        job_reference: '1-JC',
+        title: 'Site works',
+        description: null,
+        site_address: null,
+        status: 'scheduled' as const,
+        source_type: 'manual' as const,
+        start_date: '2026-09-01',
+        end_date: '2026-09-01',
+        estimated_duration_minutes: 240,
+        required_staff_count: 3,
+        quote_id: null,
+        quote_project_number_id: null,
+        customer_id: null,
+        customer_site_id: null,
+        is_drop_on_ready: false,
+        tags: [],
+        created_by: null,
+        updated_by: null,
+        created_at: '2026-09-01T08:00:00.000Z',
+        updated_at: '2026-09-01T08:00:00.000Z',
+      }],
+      assignments: [{
+        id: 'a1',
+        job_id: 'job-1',
+        work_date: '2026-09-01',
+        visit_id: null,
+        notes: null,
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: null,
+        created_at: '2026-09-01T08:00:00.000Z',
+        updated_at: '2026-09-01T08:00:00.000Z',
+        resource_type: 'employee' as const,
+        profile_id: 'e1',
+        employee: member('e1', 2).employee,
+        conflicts: [],
+      }],
+    };
+    const hidden = profileIdsHiddenFromScheduleResources(board, '2026-09-01');
+    expect(hidden.has('e1')).toBe(true);
+    const status = scheduleEmployeeInlineAssignment(board, 'e1', '2026-09-01');
+    expect(status.teamLabel).toBe("Tom N's team");
+    expect(status.jobReferences).toEqual(['1-JC']);
   });
 
   it('sched-team-resource-once hides leaders and that day’s members', () => {
@@ -182,6 +254,7 @@ describe('schedule day team helpers', () => {
           employee_id: null,
           team_id: null,
           team_name: null,
+          kind: 'employee',
         },
       }],
     });

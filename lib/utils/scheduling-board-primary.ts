@@ -221,6 +221,7 @@ function buildResourceRows(
         employee_id: null,
         team_id: null,
         team_name: null,
+        kind: 'employee' as const,
       };
       rows.push({
         id: `employee:${resourceId}`,

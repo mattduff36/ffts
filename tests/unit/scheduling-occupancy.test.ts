@@ -22,6 +22,7 @@ const employee: ScheduleEmployeeResource = {
   employee_id: 'E001',
   team_id: 'team-1',
   team_name: 'Arborists',
+  kind: 'employee',
 };
 
 function visit(

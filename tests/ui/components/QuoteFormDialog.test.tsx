@@ -647,4 +647,50 @@ describe('QuoteFormDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Discard Changes' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('quote-attachment-xlsx-staged lists a spreadsheet immediately after select', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+
+    render(<QuoteFormDialog {...baseProps} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const spreadsheet = new File(['a,b'], 'quote.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    fireEvent.change(input, { target: { files: [spreadsheet] } });
+
+    expect(screen.getByText(/quote\.xlsx/)).toBeInTheDocument();
+    expect(screen.getByText(/KB/)).toBeInTheDocument();
+  });
+
+  it('quote-pricing-mode-switch does not throw when moving from attachments to line items', () => {
+    mockUseAuth.mockReturnValue({
+      profile: {
+        id: 'manager-1',
+        full_name: 'Manager Example',
+      },
+    });
+
+    render(<QuoteFormDialog {...baseProps} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['sheet'], 'pricing.xlsx', {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })],
+      },
+    });
+
+    fireEvent.click(screen.getAllByText('Itemised pricing')[0]);
+    fireEvent.click(screen.getByRole('option', { name: 'Refer to attachments' }));
+    fireEvent.click(screen.getAllByText('Refer to attachments')[0]);
+    fireEvent.click(screen.getByRole('option', { name: 'Itemised pricing' }));
+
+    expect(screen.getByText(/pricing\.xlsx/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument();
+  });
 });

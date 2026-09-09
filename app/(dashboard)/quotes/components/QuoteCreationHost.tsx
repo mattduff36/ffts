@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { toast } from 'sonner';
 import { QuoteFormDialog } from './QuoteFormDialog';
 import type { Quote, QuoteFormData, QuoteFormSubmitIntent } from '../types';
@@ -18,6 +18,7 @@ export function QuoteCreationHost({ open, onClose, onCreated }: QuoteCreationHos
   const [customers, setCustomers] = useState<QuoteFormProps['customers']>([]);
   const [managerOptions, setManagerOptions] = useState<QuoteFormProps['managerOptions']>([]);
   const [approvers, setApprovers] = useState<QuoteFormProps['approvers']>([]);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -33,19 +34,25 @@ export function QuoteCreationHost({ open, onClose, onCreated }: QuoteCreationHos
   }, [open]);
 
   async function handleSubmit(data: QuoteFormData, _isEdit: boolean, intent: QuoteFormSubmitIntent = 'save') {
-    const quote = await createQuoteWithAttachments(data);
-    if (intent === 'mark_as_sent') {
-      try {
-        const sentQuote = await markQuoteAsSent(quote.id);
-        await onCreated(sentQuote);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Quote saved, but it could not be marked as sent.');
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      const quote = await createQuoteWithAttachments(data);
+      if (intent === 'mark_as_sent') {
+        try {
+          const sentQuote = await markQuoteAsSent(quote.id);
+          await onCreated(sentQuote);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Quote saved, but it could not be marked as sent.');
+          await onCreated(quote);
+        }
+      } else {
         await onCreated(quote);
       }
-    } else {
-      await onCreated(quote);
+      onClose();
+    } finally {
+      submittingRef.current = false;
     }
-    onClose();
   }
 
   return open ? (

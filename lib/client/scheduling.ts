@@ -115,6 +115,7 @@ export interface CreateProjectScheduleJobInput {
   start_date: string;
   end_date: string;
   estimated_duration_minutes?: number | null;
+  required_staff_count?: number | null;
   is_drop_on_ready: boolean;
   tag_ids: string[];
   initial_visit?: {
@@ -152,6 +153,7 @@ export interface QuickAddScheduleProjectInput {
   start_date: string;
   end_date?: string;
   estimated_duration_minutes?: number | null;
+  required_staff_count?: number | null;
   is_drop_on_ready?: boolean;
   tag_ids?: string[];
   initial_visit: {

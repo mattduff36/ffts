@@ -20,6 +20,13 @@ import {
 } from '@/lib/server/quote-recipient-contacts';
 import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
+import {
+  claimQuoteCreate,
+  completeQuoteCreateRequest,
+  isQuoteCreateRequestReuseError,
+  quoteCreateInputHash,
+} from '@/lib/server/quote-create-idempotency';
+import { normalizeRequiredStaffCount } from '@/lib/utils/scheduling-staffing';
 
 type QuoteFieldErrors = Record<string, string>;
 type QuoteSageStatus = 'not_on_sage' | 'on_sage';
@@ -287,6 +294,7 @@ export async function POST(request: NextRequest) {
       approver_profile_id,
       line_items,
       secondary_contact_ids,
+      request_id: rawRequestId,
       ...quoteData
     } = body as {
       manager_profile_id?: string;
@@ -298,8 +306,10 @@ export async function POST(request: NextRequest) {
       signoff_title?: string;
       line_items?: Array<{ description?: string; quantity: number; unit?: string; unit_rate: number; sort_order?: number }>;
       secondary_contact_ids?: unknown;
+      request_id?: string;
       [key: string]: unknown;
     };
+    const requestId = typeof rawRequestId === 'string' && rawRequestId.trim() ? rawRequestId.trim() : '';
 
     const fieldErrors: QuoteFieldErrors = {};
     const customerId = typeof quoteData.customer_id === 'string' ? quoteData.customer_id.trim() : '';
@@ -309,6 +319,7 @@ export async function POST(request: NextRequest) {
       : null;
     const normalizedStartAlertDays = normalizeOptionalInteger(quoteData.start_alert_days);
     const normalizedEstimatedDurationDays = normalizeOptionalInteger(quoteData.estimated_duration_days);
+    const normalizedRequiredStaffCount = normalizeRequiredStaffCount(quoteData.required_staff_count);
     const normalizedValidityDays = Number(quoteData.validity_days);
     const pricingMode = quoteData.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
     const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
@@ -368,6 +379,14 @@ export async function POST(request: NextRequest) {
       fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
     }
 
+    if (Number.isNaN(normalizedRequiredStaffCount)) {
+      fieldErrors.required_staff_count = 'Required staff must be between 1 and 20.';
+    }
+
+    if (!requestId) {
+      fieldErrors.request_id = 'A request ID is required.';
+    }
+
     const normalizedItems = Array.isArray(line_items)
       ? line_items.map((item, index) => ({
         originalIndex: index,
@@ -401,6 +420,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const createHash = quoteCreateInputHash({
+      ...quoteData,
+      manager_profile_id: managerProfileId,
+      approver_profile_id: normalizedApproverProfileId,
+      line_items: normalizedItems,
+      secondary_contact_ids: normalizedSecondaryContactIds,
+      required_staff_count: normalizedRequiredStaffCount,
+      customer_site_id: resolvedSite.customerSiteId,
+      site_address: resolvedSite.siteAddress,
+    });
+    let reservedQuoteId: string;
+    try {
+      const claim = await claimQuoteCreate(admin, {
+        requestId,
+        inputHash: createHash,
+        actorUserId: user.id,
+      });
+      if (claim.kind === 'replay') {
+        const bundle = await fetchQuoteBundle(admin, claim.quoteId);
+        return NextResponse.json({
+          quote: {
+            ...bundle.quote,
+            line_items: bundle.lineItems,
+            invoice_summary: bundle.invoiceSummary,
+            timeline: bundle.timeline,
+          },
+          replayed: true,
+        }, { status: 200 });
+      }
+      reservedQuoteId = claim.quoteId;
+    } catch (error) {
+      if (isQuoteCreateRequestReuseError(error)) {
+        return NextResponse.json(
+          { error: 'This create request was already used with different details.' },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
+
     const managerOption = await getQuoteManagerOption(managerProfileId);
 
     const { data: managerProfile, error: managerProfileError } = await admin
@@ -429,7 +488,7 @@ export async function POST(request: NextRequest) {
       .filter(item => isMeaningfulLineItem(item))
       .map(({ originalIndex: _originalIndex, ...item }) => item);
     const totals = calculateQuoteTotals(items);
-    const quoteId = crypto.randomUUID();
+    const quoteId = reservedQuoteId;
 
     const insertPayload = {
       ...quoteData,
@@ -464,6 +523,7 @@ export async function POST(request: NextRequest) {
       start_date: normalizeOptionalString(quoteData.start_date),
       start_alert_days: startAlertDays,
       estimated_duration_days: estimatedDurationDays,
+      required_staff_count: normalizedRequiredStaffCount,
       pricing_mode: pricingMode,
       subtotal: totals.subtotal,
       total: totals.total,
@@ -476,7 +536,26 @@ export async function POST(request: NextRequest) {
     const { error: insertError } = await supabase
       .from('quotes')
       .insert(insertPayload as Database['public']['Tables']['quotes']['Insert']);
-    if (insertError) throw insertError;
+    if (insertError) {
+      if (insertError.code === '23505') {
+        await completeQuoteCreateRequest(admin, {
+          requestId,
+          quoteId,
+          actorUserId: user.id,
+        });
+        const bundle = await fetchQuoteBundle(admin, quoteId);
+        return NextResponse.json({
+          quote: {
+            ...bundle.quote,
+            line_items: bundle.lineItems,
+            invoice_summary: bundle.invoiceSummary,
+            timeline: bundle.timeline,
+          },
+          replayed: true,
+        }, { status: 200 });
+      }
+      throw insertError;
+    }
 
     if (items.length > 0) {
       const rows = items.map((item, index) => ({
@@ -523,6 +602,12 @@ export async function POST(request: NextRequest) {
       actorUserId: user.id,
     });
 
+    await completeQuoteCreateRequest(admin, {
+      requestId,
+      quoteId,
+      actorUserId: user.id,
+    });
+
     const bundle = await fetchQuoteBundle(admin, quoteId);
     return NextResponse.json({
       quote: {
@@ -534,6 +619,12 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
+    if (isQuoteCreateRequestReuseError(error)) {
+      return NextResponse.json(
+        { error: 'This create request was already used with different details.' },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : 'Unable to create this quote right now.';
     return NextResponse.json({ error: message }, { status: 500 });
   }

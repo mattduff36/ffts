@@ -31,6 +31,7 @@ import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-acce
 import { canManageQuoteSage } from '@/lib/server/quote-sage-access';
 import { syncQuoteSiteLocation } from '@/lib/server/inventory-site-location-sync';
 import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
+import { normalizeRequiredStaffCount } from '@/lib/utils/scheduling-staffing';
 
 type QuoteFieldErrors = Record<string, string>;
 
@@ -185,6 +186,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       start_date?: string | null;
       start_alert_days?: number | null;
       estimated_duration_days?: number | null;
+      required_staff_count?: number | null;
       pricing_mode?: 'itemized' | 'attachments_only';
       rams_comments?: string | null;
       on_sage?: boolean;
@@ -207,6 +209,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       : quoteUpdates.po_value ?? null;
     const normalizedStartAlertDays = normalizeOptionalInteger(quoteUpdates.start_alert_days);
     const normalizedEstimatedDurationDays = normalizeOptionalInteger(quoteUpdates.estimated_duration_days);
+    const normalizedRequiredStaffCount = normalizeRequiredStaffCount(quoteUpdates.required_staff_count);
     const pricingMode = quoteUpdates.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
     const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
 
@@ -885,6 +888,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
       }
 
+      if (Number.isNaN(normalizedRequiredStaffCount)) {
+        fieldErrors.required_staff_count = 'Required staff must be between 1 and 20.';
+      }
+
       if ('site_address' in quoteUpdates && !resolvedSite?.siteAddress) {
         fieldErrors.site_address = 'Enter the site address for this quote.';
       }
@@ -1012,6 +1019,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       if ('estimated_duration_days' in quoteUpdates) {
         updates.estimated_duration_days = normalizedEstimatedDurationDays;
+      }
+
+      if ('required_staff_count' in quoteUpdates) {
+        updates.required_staff_count = Number.isNaN(normalizedRequiredStaffCount)
+          ? undefined
+          : normalizedRequiredStaffCount;
       }
 
       if ('pricing_mode' in quoteUpdates) {

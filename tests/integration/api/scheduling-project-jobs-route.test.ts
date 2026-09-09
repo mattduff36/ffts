@@ -53,8 +53,9 @@ vi.mock('@/lib/server/inventory-site-location-sync', () => ({
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     rpc: (name: string, args: Record<string, unknown>) => {
-      if (name === 'create_project_schedule_job') return mockCreateRpc(args);
-      if (name === 'quick_add_schedule_project_v1') return mockQuickAddRpc(args);
+      if (name === 'create_project_schedule_job_with_staff_v1') return mockCreateRpc(args);
+      if (name === 'schedule_project_with_initial_visit_with_staff_v1') return mockCreateRpc(args);
+      if (name === 'quick_add_schedule_project_with_staff_v1') return mockQuickAddRpc(args);
       if (name === 'remove_schedule_job') return mockRemoveRpc(args);
       throw new Error(`Unexpected RPC ${name}`);
     },
@@ -220,6 +221,7 @@ describe('Project-backed scheduling job routes', () => {
       p_start_date: '2026-07-27',
       p_end_date: '2026-07-29',
       p_actor_user_id: 'manager-1',
+      p_required_staff_count: null,
     }));
     expect(mockSyncProjectLocation).toHaveBeenCalled();
     expect(payload.job.quote_project_number_id).toBe('project-1');
@@ -296,9 +298,38 @@ describe('Project-backed scheduling job routes', () => {
       p_request_id: '77777777-7777-4777-8777-777777777777',
       p_manager_profile_id: '22222222-2222-4222-8222-222222222222',
       p_visit_starts_at: '2026-07-27T08:00:00.000Z',
+      p_required_staff_count: null,
     }));
     expect(payload.visit.id).toBe('visit-1');
     expect(payload.project_reference).toBe('60001-MD');
+  });
+
+  it('rejects a reused quick-add request with a different payload', async () => {
+    mockQuickAddRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'REQUEST_ID_REUSED' },
+    });
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const response = await POST(postRequest({
+      mode: 'quick_add',
+      request_id: '77777777-7777-4777-8777-777777777777',
+      manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      project_title: 'Changed title',
+      customer_id: '33333333-3333-4333-8333-333333333333',
+      status: 'scheduled',
+      start_date: '2026-07-27',
+      end_date: '2026-07-27',
+      is_drop_on_ready: false,
+      tag_ids: [],
+      initial_visit: {
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+      },
+    }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'This create request was already used with different details.',
+    });
   });
 
   it('requires the Quotes sensitive-access boundary before quick add', async () => {

@@ -92,6 +92,7 @@ function job(id: string, overrides: Partial<ScheduleJob> = {}): ScheduleJob {
     start_date: '2026-09-01',
     end_date: '2026-09-07',
     estimated_duration_minutes: 120,
+    required_staff_count: null,
     quote_id: null,
     quote_project_number_id: null,
     customer_id: null,

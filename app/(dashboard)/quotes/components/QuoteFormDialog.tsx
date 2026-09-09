@@ -29,8 +29,11 @@ import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { cn } from '@/lib/utils/cn';
 import { getQuoteRichPasteText } from '@/lib/quotes/quote-rich-text';
 import { toast } from 'sonner';
+import { normalizeRequiredStaffCount } from '@/lib/utils/scheduling-staffing';
 import {
+  cloneSelectedQuoteFiles,
   deleteQuoteAttachment,
+  formatQuoteAttachmentSize,
   getQuoteAttachmentUrl,
   replaceQuoteAttachment,
 } from '../quote-attachment-client';
@@ -253,8 +256,10 @@ export function QuoteFormDialog({
     start_date: '',
     start_alert_days: '',
     estimated_duration_days: '',
+    required_staff_count: '',
     secondary_contact_ids: [],
     line_items: [{ ...EMPTY_LINE_ITEM }],
+    request_id: crypto.randomUUID(),
   });
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<QuoteAttachment[]>([]);
@@ -262,6 +267,7 @@ export function QuoteFormDialog({
   const [replacingAttachmentId, setReplacingAttachmentId] = useState<string | null>(null);
   const [attachmentActionError, setAttachmentActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const persistInFlightRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [quoteAssistOpen, setQuoteAssistOpen] = useState(false);
@@ -434,6 +440,12 @@ export function QuoteFormDialog({
       }
     }
 
+    if (Number.isNaN(normalizeRequiredStaffCount(
+      currentForm.required_staff_count === '' ? null : currentForm.required_staff_count
+    ))) {
+      nextErrors.required_staff_count = 'Required staff must be between 1 and 20.';
+    }
+
     return nextErrors;
   }
 
@@ -498,7 +510,9 @@ export function QuoteFormDialog({
         start_date: quote.start_date || '',
         start_alert_days: quote.start_alert_days || '',
         estimated_duration_days: quote.estimated_duration_days || '',
+        required_staff_count: quote.required_staff_count || '',
         secondary_contact_ids: quote.selected_secondary_contact_ids || [],
+        request_id: crypto.randomUUID(),
         line_items: quote.line_items && quote.line_items.length > 0
           ? quote.line_items.map((li, i) => ({ ...li, sort_order: i }))
           : [{ ...EMPTY_LINE_ITEM }],
@@ -531,8 +545,10 @@ export function QuoteFormDialog({
         start_date: '',
         start_alert_days: '',
         estimated_duration_days: '',
+        required_staff_count: '',
         secondary_contact_ids: [],
         line_items: [{ ...EMPTY_LINE_ITEM }],
+        request_id: crypto.randomUUID(),
       });
 
       if (initialCustomerId) {
@@ -782,7 +798,9 @@ export function QuoteFormDialog({
     if (!files?.length) return;
     setSubmitError(null);
     clearFieldError('attachment_files');
-    setAttachmentFiles(prev => [...prev, ...Array.from(files)]);
+    const cloned = cloneSelectedQuoteFiles(files);
+    setAttachmentFiles(prev => [...prev, ...cloned]);
+    setAttachmentActionError(null);
   }
 
   function removeAttachmentFile(index: number) {
@@ -871,6 +889,7 @@ export function QuoteFormDialog({
   const markAsSentRecipientEmail = (form.attention_email || selectedCustomer?.contact_email || '').trim();
 
   async function persistQuote(intent: QuoteFormSubmitIntent) {
+    if (persistInFlightRef.current) return;
     const validationErrors = validateForm(form);
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
@@ -879,6 +898,7 @@ export function QuoteFormDialog({
       return;
     }
 
+    persistInFlightRef.current = true;
     setSaving(true);
     setSubmitError(null);
     try {
@@ -898,6 +918,7 @@ export function QuoteFormDialog({
       setSubmitError(message);
       toast.error(message);
     } finally {
+      persistInFlightRef.current = false;
       setSaving(false);
     }
   }
@@ -1406,6 +1427,22 @@ export function QuoteFormDialog({
                   {renderFieldError('start_alert_days')}
                 </div>
                 <div className="space-y-2">
+                  <Label>Required staff</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={form.required_staff_count}
+                    onChange={e => updateField('required_staff_count', e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g. 3"
+                    className={getFieldClassName('required_staff_count')}
+                  />
+                  <p className="text-xs text-slate-400">
+                    Planned crew size shown on the scheduling board as assigned/required.
+                  </p>
+                  {renderFieldError('required_staff_count')}
+                </div>
+                <div className="space-y-2">
                   <Label>Estimated Duration (days)</Label>
                   <Input
                     type="number"
@@ -1551,6 +1588,7 @@ export function QuoteFormDialog({
                 <input
                   type="file"
                   multiple
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
                   className="hidden"
                   onChange={event => {
                     handleAttachmentFilesChange(event.target.files);
@@ -1623,7 +1661,10 @@ export function QuoteFormDialog({
                 <div className="space-y-2">
                   {attachmentFiles.map((file, index) => (
                     <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2 text-sm">
-                      <span className="truncate text-slate-200">{file.name}</span>
+                      <span className="truncate text-slate-200">
+                        {file.name}
+                        {formatQuoteAttachmentSize(file.size) ? ` · ${formatQuoteAttachmentSize(file.size)}` : ''}
+                      </span>
                       <Button type="button" variant="ghost" size="sm" onClick={() => removeAttachmentFile(index)} className="h-7 w-7 p-0 text-muted-foreground hover:text-red-300">
                         <X className="h-4 w-4" />
                       </Button>

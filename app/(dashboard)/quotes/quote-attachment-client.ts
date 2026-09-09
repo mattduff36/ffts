@@ -15,6 +15,27 @@ interface QuoteAttachmentResponse {
   attachment: QuoteAttachment;
 }
 
+export function buildQuoteAttachmentStoragePath(
+  quoteId: string,
+  fileName: string,
+  contentSha256: string
+): string {
+  const sanitizedFilename = fileName.replace(/[^a-z0-9_.-]/gi, '_');
+  return `${quoteId}/sha256_${contentSha256}_${sanitizedFilename}`;
+}
+
+export function cloneSelectedQuoteFiles(files: FileList | File[]): File[] {
+  return Array.from(files).map((file) => new File([file], file.name, {
+    type: file.type,
+    lastModified: file.lastModified,
+  }));
+}
+
+export function formatQuoteAttachmentSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 export function getQuoteAttachmentUrl(quoteId: string, attachmentId: string) {
   return `/api/quotes/${encodeURIComponent(quoteId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }

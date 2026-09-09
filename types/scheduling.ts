@@ -40,6 +40,7 @@ export interface ScheduleJob {
   start_date: string;
   end_date: string;
   estimated_duration_minutes: number | null;
+  required_staff_count: number | null;
   quote_id: string | null;
   quote_project_number_id: string | null;
   customer_id: string | null;
@@ -173,6 +174,7 @@ export interface ScheduleEmployeeResource {
   employee_id: string | null;
   team_id: string | null;
   team_name: string | null;
+  kind: 'employee' | 'subcontractor';
 }
 
 export interface SchedulePlantResource {

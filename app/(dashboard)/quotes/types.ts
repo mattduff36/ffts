@@ -280,6 +280,7 @@ export interface Quote {
   start_alert_days: number | null;
   start_alert_sent_at: string | null;
   estimated_duration_days: number | null;
+  required_staff_count?: number | null;
   invoice_number: string | null;
   invoice_notes: string | null;
   last_invoice_at: string | null;
@@ -478,7 +479,9 @@ export interface QuoteFormData {
   start_date: string;
   start_alert_days: number | '';
   estimated_duration_days: number | '';
+  required_staff_count: number | '';
   secondary_contact_ids: string[];
   line_items: QuoteLineItem[];
   attachment_files?: File[];
+  request_id?: string;
 }

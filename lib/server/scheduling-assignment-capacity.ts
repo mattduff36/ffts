@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildEmployeeCapacity } from '@/lib/server/scheduling-capacity';
 import { getScheduleLondonStartsAtRangeIso } from '@/lib/utils/scheduling';
+import { scheduleEmployeeKindFromRole } from '@/lib/utils/scheduling-staffing';
 import type {
   ScheduleDayCapacity,
   ScheduleEmployeeAssignment,
@@ -11,12 +12,15 @@ import type {
 function mapEmployee(row: Record<string, unknown>): ScheduleEmployeeResource {
   const team = row.team as { name?: string } | Array<{ name?: string }> | null;
   const teamName = Array.isArray(team) ? team[0]?.name : team?.name;
+  const role = row.role as { name?: string; display_name?: string } | Array<{ name?: string; display_name?: string }> | null;
+  const roleValue = Array.isArray(role) ? role[0] : role;
   return {
     id: String(row.id),
     full_name: String(row.full_name || 'Unknown'),
     employee_id: typeof row.employee_id === 'string' ? row.employee_id : null,
     team_id: typeof row.team_id === 'string' ? row.team_id : null,
     team_name: teamName || null,
+    kind: scheduleEmployeeKindFromRole(roleValue),
   };
 }
 
@@ -48,7 +52,7 @@ export async function loadEmployeeCapacityForDates(
         .lt('starts_at', visitRange.endExclusiveIso),
       admin
         .from('profiles')
-        .select('id, full_name, employee_id, team_id, is_placeholder, team:org_teams!profiles_team_id_fkey(name)')
+        .select('id, full_name, employee_id, team_id, is_placeholder, team:org_teams!profiles_team_id_fkey(name), role:roles(name, display_name)')
         .eq('is_placeholder', false)
         .order('full_name'),
       admin

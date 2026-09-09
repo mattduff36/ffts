@@ -20,6 +20,7 @@ const sharedJobFields = {
   customer_site_id: z.uuid().nullish(),
   status: z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']).default('draft'),
   estimated_duration_minutes: z.number().int().min(15).max(100800).nullish(),
+  required_staff_count: z.number().int().min(1).max(20).nullish(),
   is_drop_on_ready: z.boolean().default(false),
   tag_ids: z.array(z.uuid()).max(30).default([]),
 };
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
 
       const endDate = parsed.data.end_date || parsed.data.start_date;
       const { data: creationRows, error: creationError } = await admin.rpc(
-        'quick_add_schedule_project_v1',
+        'quick_add_schedule_project_with_staff_v1',
         {
           p_request_id: parsed.data.request_id,
           p_manager_profile_id: parsed.data.manager_profile_id,
@@ -182,12 +183,22 @@ export async function POST(request: NextRequest) {
           p_actor_user_id: access.userId,
           p_visit_starts_at: parsed.data.initial_visit.starts_at,
           p_visit_ends_at: parsed.data.initial_visit.ends_at,
+          p_required_staff_count: parsed.data.required_staff_count || null,
         }
       );
       if (creationError) {
         if (creationError.code === '23505') {
           return NextResponse.json(
             { error: 'That Project Number is already scheduled.' },
+            { status: 409 }
+          );
+        }
+        if (
+          creationError.message.includes('REQUEST_ID_REUSED')
+          || creationError.message.includes('REQUEST_ID_ACTOR_MISMATCH')
+        ) {
+          return NextResponse.json(
+            { error: 'This create request was already used with different details.' },
             { status: 409 }
           );
         }
@@ -226,10 +237,11 @@ export async function POST(request: NextRequest) {
       ]);
       if (jobResult.error) throw jobResult.error;
       if (visitResult.error) throw visitResult.error;
+      const job = jobResult.data as ScheduleJob;
       const tags = await loadTagsForScheduleJob(admin, creation.schedule_job_id);
       return NextResponse.json(
         {
-          job: { ...jobResult.data, tags } as ScheduleJob,
+          job: { ...job, tags } as ScheduleJob,
           visit: visitResult.data as ScheduleVisit,
           project_number_id: creation.project_number_id,
           project_reference: creation.project_reference,
@@ -240,8 +252,8 @@ export async function POST(request: NextRequest) {
     }
 
     const rpcName = parsed.data.initial_visit
-      ? 'schedule_project_with_initial_visit'
-      : 'create_project_schedule_job';
+      ? 'schedule_project_with_initial_visit_with_staff_v1'
+      : 'create_project_schedule_job_with_staff_v1';
     const rpcArguments = {
       p_project_number_id: parsed.data.project_number_id || null,
       p_manager_profile_id: parsed.data.manager_profile_id || null,
@@ -258,6 +270,7 @@ export async function POST(request: NextRequest) {
       p_is_drop_on_ready: parsed.data.is_drop_on_ready,
       p_tag_ids: parsed.data.tag_ids,
       p_actor_user_id: access.userId,
+      p_required_staff_count: parsed.data.required_staff_count || null,
       ...(parsed.data.initial_visit
         ? {
             p_visit_starts_at: parsed.data.initial_visit.starts_at,
@@ -328,10 +341,11 @@ export async function POST(request: NextRequest) {
     ]);
     if (jobResult.error) throw jobResult.error;
     if (visitResult.error) throw visitResult.error;
+    const createdJob = jobResult.data as ScheduleJob;
     const tags = await loadTagsForScheduleJob(admin, creation.schedule_job_id);
     return NextResponse.json(
       {
-        job: { ...jobResult.data, tags },
+        job: { ...createdJob, tags },
         ...(visitResult.data ? { visit: visitResult.data } : {}),
         project_reference: creation.project_reference,
       },

@@ -60,6 +60,7 @@ interface QuickAddForm {
   work_date: string;
   start_time: string;
   end_time: string;
+  required_staff_count: string;
 }
 
 const EMPTY_FORM: QuickAddForm = {
@@ -72,6 +73,7 @@ const EMPTY_FORM: QuickAddForm = {
   work_date: '',
   start_time: '08:00',
   end_time: '12:00',
+  required_staff_count: '',
 };
 
 export function ScheduleBoardQuickAddDialog({
@@ -103,6 +105,7 @@ export function ScheduleBoardQuickAddDialog({
     work_date: initialInput?.start_date || defaultDate,
     start_time: initialTime(initialInput?.initial_visit.starts_at, '08:00'),
     end_time: initialTime(initialInput?.initial_visit.ends_at, '12:00'),
+    required_staff_count: initialInput?.required_staff_count?.toString() || '',
   });
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [saving, setSaving] = useState(false);
@@ -178,6 +181,7 @@ export function ScheduleBoardQuickAddDialog({
       customer_site_id: form.site_id || null,
       start_date: form.work_date,
       end_date: form.work_date,
+      required_staff_count: form.required_staff_count ? Number(form.required_staff_count) : null,
       initial_visit: {
         starts_at: toScheduleLondonDateTimeIso(form.work_date, form.start_time),
         ends_at: toScheduleLondonDateTimeIso(form.work_date, form.end_time),
@@ -294,6 +298,21 @@ export function ScheduleBoardQuickAddDialog({
                   ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="quick-add-required-staff">Required staff</Label>
+            <Input
+              id="quick-add-required-staff"
+              type="number"
+              min="1"
+              max="20"
+              className="min-h-11"
+              value={form.required_staff_count}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, required_staff_count: event.target.value }))
+              }
+              placeholder="e.g. 3"
+            />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2 sm:col-span-1">

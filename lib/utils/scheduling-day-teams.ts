@@ -1,3 +1,4 @@
+import { formatScheduleTeamName } from '@/lib/utils/scheduling';
 import type {
   ScheduleDayTeamMember,
   ScheduleDayTeamSlot,
@@ -270,6 +271,36 @@ export function profileIdsHiddenFromScheduleResources(
     hidden.add(member.profile_id);
   }
   return hidden;
+}
+
+export function scheduleEmployeeInlineAssignment(
+  board:
+    | Pick<SchedulingBoardPayload, 'day_teams' | 'team_settings' | 'assignments' | 'jobs'>
+    | undefined,
+  profileId: string,
+  workDate: string
+): { teamLabel: string | null; jobReferences: string[] } {
+  const settings = teamSettingsFromBoard(board);
+  const slot = slotsForScheduleDate(board?.day_teams, workDate, settings)
+    .find((item) => item.members.some((member) => member.profile_id === profileId));
+  const leader = slot ? leaderBySlotIndex(settings, slot.slot_index) : undefined;
+  const jobsById = new Map((board?.jobs || []).map((job) => [job.id, job.job_reference]));
+  const jobReferences = [...new Set(
+    (board?.assignments || [])
+      .filter((assignment) =>
+        assignment.work_date === workDate
+        && assignment.resource_type === 'employee'
+        && assignment.profile_id === profileId
+      )
+      .map((assignment) => jobsById.get(assignment.job_id))
+      .filter((reference): reference is string => Boolean(reference))
+  )];
+  return {
+    teamLabel: slot
+      ? formatScheduleTeamName(leader?.employee?.full_name, slot.slot_index)
+      : null,
+    jobReferences,
+  };
 }
 
 export function extraSlotHasDailyMembers(

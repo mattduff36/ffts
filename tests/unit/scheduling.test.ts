@@ -35,6 +35,7 @@ function job(id: string, reference: string): ScheduleJob {
     start_date: '2026-07-13',
     end_date: '2026-07-19',
     estimated_duration_minutes: null,
+    required_staff_count: null,
     quote_id: null,
     quote_project_number_id: null,
     customer_id: null,

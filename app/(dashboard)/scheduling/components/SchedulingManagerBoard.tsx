@@ -182,11 +182,20 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
 import {
-  profileIdsHiddenFromScheduleResources,
+  scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
   slotsForScheduleDate,
   teamSettingsFromBoard,
 } from '@/lib/utils/scheduling-day-teams';
+import {
+  countAssignedStaffForJobDate,
+  formatStaffingBadge,
+} from '@/lib/utils/scheduling-staffing';
+import {
+  QUICK_ADD_TIMEOUT_MS,
+  shouldRollbackOptimisticQuickAdd,
+  withBoundedTimeout,
+} from '@/lib/utils/scheduling-timeout';
 import {
   buildEmployeeOccupancySegments,
   mergeTeamOccupancySegments,
@@ -1759,16 +1768,33 @@ function resourceFromPlant(plant: SchedulePlantResource): SelectedScheduleResour
 function BoardRowIdentity({
   row,
   primary,
+  staffingBadge,
 }: {
   row: ScheduleBoardRow;
   primary: SchedulingBoardPrimary;
+  staffingBadge?: { label: string; short: boolean } | null;
 }) {
   if (row.kind === 'job' && row.job) {
     return (
       <div className="min-w-0 overflow-hidden">
-        <span className="block truncate font-semibold text-foreground">
-          {row.job.job_reference}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="block min-w-0 truncate font-semibold text-foreground">
+            {row.job.job_reference}
+          </span>
+          {staffingBadge ? (
+            <span
+              data-testid={`schedule-job-staffing-${row.job.id}`}
+              className={cn(
+                'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                staffingBadge.short
+                  ? 'bg-amber-500/20 text-amber-200'
+                  : 'bg-slate-700 text-slate-200'
+              )}
+            >
+              {staffingBadge.label}
+            </span>
+          ) : null}
+        </div>
         <p
           className="mt-1 truncate text-sm text-muted-foreground"
           title={`${row.job.customer_name ? `${row.job.customer_name} · ` : ''}${row.job.title}`}
@@ -1891,6 +1917,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   );
   const jobSearch = jobFilters.q;
   const [teamFilter, setTeamFilter] = useState('all');
+  const [employeeKindFilter, setEmployeeKindFilter] =
+    useState<'all' | 'employee' | 'subcontractor'>('all');
   const [selectedResource, setSelectedResource] = useState<SelectedScheduleResource | null>(null);
   const [selectedQuote, setSelectedQuote] = useState<SchedulingQueueItem | null>(null);
   const [draggedResource, setDraggedResource] = useState<SelectedScheduleResource | null>(null);
@@ -2909,16 +2937,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   const matchingEmployees = useMemo(() => {
     const search = resourceSearch.trim().toLowerCase();
-    const hidden = profileIdsHiddenFromScheduleResources(board, selectedDate);
     return (board?.resources.employees || []).filter(
       (employee) =>
-        !hidden.has(employee.id) &&
+        (employeeKindFilter === 'all' || employee.kind === employeeKindFilter) &&
         (teamFilter === 'all' || employee.team_id === teamFilter) &&
         (!search ||
           employee.full_name.toLowerCase().includes(search) ||
           (employee.employee_id || '').toLowerCase().includes(search))
     );
-  }, [board, resourceSearch, selectedDate, teamFilter]);
+  }, [board, employeeKindFilter, resourceSearch, teamFilter]);
   const dayTeamOccupancyBySlot = useMemo(() => {
     const settings = teamSettingsFromBoard(board);
     const occupancy: Partial<Record<ScheduleDayTeamSlotIndex, ScheduleOccupancySegment[]>> = {};
@@ -3160,6 +3187,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         start_date: startDate,
         end_date: startDate,
         estimated_duration_minutes: quote.returned_visit.duration_minutes,
+        required_staff_count: quote.returned_visit.job?.required_staff_count || null,
         quote_id: null,
         quote_project_number_id: null,
         customer_id: null,
@@ -3327,6 +3355,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       start_date: startDate,
       end_date: endDate,
       estimated_duration_minutes: quote.estimated_duration_minutes || null,
+      required_staff_count: null,
       quote_id: quote.id,
       quote_project_number_id: null,
       customer_id: null,
@@ -3462,6 +3491,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       start_date: input.start_date,
       end_date: input.end_date,
       estimated_duration_minutes: input.estimated_duration_minutes || null,
+      required_staff_count: input.required_staff_count || null,
       quote_id: null,
       quote_project_number_id: project.id,
       customer_id: input.customer_id,
@@ -5270,6 +5300,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       start_date: input.start_date,
       end_date: input.end_date || input.start_date,
       estimated_duration_minutes: input.estimated_duration_minutes || null,
+      required_staff_count: input.required_staff_count || null,
       quote_id: null,
       quote_project_number_id: null,
       customer_id: input.customer_id,
@@ -5347,7 +5378,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
     setSelectedDate(visitDate);
     activateVisit(optimisticJob, optimisticVisit);
-    void quickAddScheduleProject(input)
+    void withBoundedTimeout(
+      quickAddScheduleProject(input),
+      QUICK_ADD_TIMEOUT_MS,
+      'Quick add timed out before the server confirmed the project.'
+    )
       .then((result) => {
         const scheduledVisit = adoptAuthoritativeVisit({
           optimisticVisitId: optimisticVisit.id,
@@ -5396,10 +5431,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         toast.success(`${result.project_reference} added to the schedule`);
       })
       .catch((error) => {
-        getMutationCoordinator().cancelWaiters(optimisticVisit.id);
-        getMutationCoordinator().cancelWaiters(optimisticJob.id);
+        const rollback = shouldRollbackOptimisticQuickAdd(error);
+        if (rollback) {
+          getMutationCoordinator().cancelWaiters(optimisticVisit.id);
+          getMutationCoordinator().cancelWaiters(optimisticJob.id);
+          setQuickAddOpen(true);
+        }
         settleOptimisticOperation(operation.id, 'failure', error);
-        setQuickAddOpen(true);
         toast.error(error instanceof Error ? error.message : 'Unable to quick add this job.');
       });
   }
@@ -6022,11 +6060,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   <p className={RESOURCE_GUIDANCE_CLASS}>
                     Drag a queued job onto a date. Drag a scheduled visit back anywhere into Resources to return it here.
                   </p>
-                  {quoteStage === SCHEDULE_QUOTE_STAGES.draft ? (
-                    <p className={RESOURCE_GUIDANCE_CLASS}>
-                      Draft quotes with a Start Date already appear on the calendar, not in this queue. Leave Start Date blank when creating a quote to keep it selectable here.
-                    </p>
-                  ) : null}
+                  <p className={RESOURCE_GUIDANCE_CLASS}>
+                    Quotes without a Start Date stay in this queue. In Progress quotes appear under Accepted. Once a Start Date is set, look at that week on the calendar — they leave this list.
+                  </p>
                   <Tabs
                     value={quoteStage}
                     onValueChange={(value) =>
@@ -6189,13 +6225,33 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     </TabsList>
                   </Tabs>
                   {sidebarTab === 'employee' ? (
-                    <Select value={teamFilter} onValueChange={setTeamFilter}>
-                      <SelectTrigger><SelectValue placeholder="All teams" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All teams</SelectItem>
-                        {teams.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <>
+                      <Tabs
+                        value={employeeKindFilter}
+                        onValueChange={(value) =>
+                          setEmployeeKindFilter(value as 'all' | 'employee' | 'subcontractor')
+                        }
+                      >
+                        <TabsList className="grid w-full grid-cols-3">
+                          <TabsTrigger value="all" aria-label="All people" className="px-1 text-[10px]">
+                            All
+                          </TabsTrigger>
+                          <TabsTrigger value="employee" aria-label="Employees only" className="px-1 text-[10px]">
+                            Employees
+                          </TabsTrigger>
+                          <TabsTrigger value="subcontractor" aria-label="Subcontractors" className="px-1 text-[10px]">
+                            Subcontractors
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                      <Select value={teamFilter} onValueChange={setTeamFilter}>
+                        <SelectTrigger><SelectValue placeholder="All teams" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All teams</SelectItem>
+                          {teams.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </>
                   ) : null}
                   <div className="relative">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -6243,17 +6299,31 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                 activeVisitTarget.visit
                               )
                             );
+                            const inline = scheduleEmployeeInlineAssignment(
+                              board,
+                              employee.id,
+                              selectedDate
+                            );
+                            const assigned = Boolean(inline.teamLabel || inline.jobReferences.length);
                             return (
                               <ResourceCard
                                 key={employee.id}
                                 resource={resource}
-                                subtitle={employee.team_name || 'No team assigned'}
+                                subtitle={
+                                  [
+                                    inline.teamLabel,
+                                    employee.kind === 'subcontractor' ? 'Subcontractor' : null,
+                                    !inline.teamLabel ? employee.team_name || 'No team assigned' : null,
+                                  ].filter(Boolean).join(' · ')
+                                }
                                 metadata={[
+                                  inline.jobReferences.join(', '),
                                   activeVisitTarget
                                     ? isUnavailable ? 'Unavailable' : 'Available'
-                                    : 'Employee',
+                                    : employee.kind === 'subcontractor' ? 'Subcontractor' : 'Employee',
                                   employee.employee_id,
                                 ].filter(Boolean).join(' · ')}
+                                muted={assigned}
                                 warning={isUnavailable ? 'Already assigned during this visit' : undefined}
                                 occupancySegments={
                                   view === SCHEDULING_BOARD_VIEWS.daily
@@ -6687,7 +6757,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             : undefined
                         }
                       >
-                        <BoardRowIdentity row={row} primary={primary} />
+                        <BoardRowIdentity
+                          row={row}
+                          primary={primary}
+                          staffingBadge={
+                            row.job
+                              ? formatStaffingBadge(
+                                  countAssignedStaffForJobDate({
+                                    jobId: row.job.id,
+                                    workDate: selectedDate,
+                                    assignments: board?.assignments || [],
+                                  }),
+                                  row.job.required_staff_count
+                                )
+                              : null
+                          }
+                        />
                         {job ? (
                         <div
                           className="mt-auto flex min-w-0 items-end justify-between gap-1 pt-2"
@@ -6862,7 +6947,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     data-testid={`${getScheduleBoardRowTestId(row)}-mobile`}
                   >
                     <div className="mb-3 min-w-0">
-                      <BoardRowIdentity row={row} primary={primary} />
+                      <BoardRowIdentity
+                        row={row}
+                        primary={primary}
+                        staffingBadge={
+                          row.job
+                            ? formatStaffingBadge(
+                                countAssignedStaffForJobDate({
+                                  jobId: row.job.id,
+                                  workDate: selectedDate,
+                                  assignments: board?.assignments || [],
+                                }),
+                                row.job.required_staff_count
+                              )
+                            : null
+                        }
+                      />
                       {job ? (
                       <div
                         className="mt-2 flex min-w-0 items-end justify-between gap-2"

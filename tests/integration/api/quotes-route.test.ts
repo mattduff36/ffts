@@ -15,6 +15,8 @@ const {
   mockGetInvoiceSummary,
   mockGetQuoteManagerOption,
   mockLoadQuoteModuleSettings,
+  mockClaimQuoteCreate,
+  mockCompleteQuoteCreateRequest,
 } = vi.hoisted(() => ({
   mockCreateClient: vi.fn(),
   mockCreateAdminClient: vi.fn(),
@@ -26,6 +28,8 @@ const {
   mockGetInvoiceSummary: vi.fn(),
   mockGetQuoteManagerOption: vi.fn(),
   mockLoadQuoteModuleSettings: vi.fn(),
+  mockClaimQuoteCreate: vi.fn(),
+  mockCompleteQuoteCreateRequest: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,6 +43,17 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/server/sensitive-module-access', () => ({
   requireSensitiveModuleAccess: vi.fn().mockResolvedValue(null),
 }));
+
+vi.mock('@/lib/server/quote-create-idempotency', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/server/quote-create-idempotency')>(
+    '@/lib/server/quote-create-idempotency'
+  );
+  return {
+    ...actual,
+    claimQuoteCreate: mockClaimQuoteCreate,
+    completeQuoteCreateRequest: mockCompleteQuoteCreateRequest,
+  };
+});
 
 vi.mock('@/lib/server/quote-workflow', () => ({
   calculateQuoteTotals: mockCalculateQuoteTotals,
@@ -226,6 +241,11 @@ describe('POST /api/quotes', () => {
       default_start_alert_days: null,
       default_estimated_duration_days: null,
     });
+    mockClaimQuoteCreate.mockResolvedValue({
+      kind: 'reserved',
+      quoteId: 'quote-1',
+    });
+    mockCompleteQuoteCreateRequest.mockResolvedValue(undefined);
     mockFetchQuoteBundle.mockResolvedValue({
       quote: { id: 'quote-1', quote_reference: '80000-MD' },
       lineItems: [],
@@ -283,6 +303,7 @@ describe('POST /api/quotes', () => {
       site_address: 'Enter the site address for this quote.',
       subject_line: 'Enter a quote title.',
       validity_days: 'Enter quote validity in days.',
+      request_id: 'A request ID is required.',
     });
     expect(mockGetQuoteManagerOption).not.toHaveBeenCalled();
   });
@@ -343,6 +364,8 @@ describe('POST /api/quotes', () => {
         subject_line: 'Fence works',
         project_description: 'Short summary',
         scope: 'Install fencing',
+        request_id: '11111111-1111-4111-8111-111111111111',
+        required_staff_count: 3,
         pricing_mode: 'attachments_only',
         start_date: '',
         start_alert_days: '',
@@ -364,6 +387,7 @@ describe('POST /api/quotes', () => {
 
     expect(response.status).toBe(201);
     expect(quoteInsert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'quote-1',
       customer_id: 'customer-1',
       quote_reference: '80000-MD',
       start_alert_days: null,
@@ -372,11 +396,17 @@ describe('POST /api/quotes', () => {
       subject_line: 'Fence works',
       project_description: 'Short summary',
       scope: 'Install fencing',
+      required_staff_count: 3,
       pricing_mode: 'attachments_only',
       subtotal: 0,
       total: 0,
     }));
     expect(lineItemInsert).not.toHaveBeenCalled();
+    expect(mockCompleteQuoteCreateRequest).toHaveBeenCalledWith(expect.anything(), {
+      requestId: '11111111-1111-4111-8111-111111111111',
+      quoteId: 'quote-1',
+      actorUserId: 'user-1',
+    });
   });
 
   it('persists selected secondary customer contact recipients', async () => {
@@ -467,6 +497,7 @@ describe('POST /api/quotes', () => {
         subject_line: 'Recipient quote',
         project_description: 'Recipient summary',
         scope: 'Recipient scope',
+        request_id: '11111111-1111-4111-8111-111111111112',
         pricing_mode: 'attachments_only',
         secondary_contact_ids: ['contact-1', 'contact-2', 'contact-1'],
         line_items: [],
@@ -552,6 +583,7 @@ describe('POST /api/quotes', () => {
         subject_line: 'Scheduled quote',
         project_description: 'Scheduled summary',
         scope: 'Scheduled scope',
+        request_id: '11111111-1111-4111-8111-111111111113',
         pricing_mode: 'attachments_only',
         start_alert_days: '',
         estimated_duration_days: '',
@@ -565,5 +597,69 @@ describe('POST /api/quotes', () => {
       start_alert_days: 7,
       estimated_duration_days: 3,
     }));
+  });
+
+  it('quote-create-idempotent replays the same request id and rejects a changed body', async () => {
+    mockClaimQuoteCreate.mockResolvedValueOnce({ kind: 'replay', quoteId: 'quote-1' });
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+    } as unknown as SupabaseClient);
+    mockCreateAdminClient.mockReturnValue({
+      from: vi.fn(),
+    });
+
+    const replayed = await POST(new NextRequest('http://localhost/api/quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_id: 'customer-1',
+        manager_profile_id: 'manager-1',
+        quote_date: '2026-03-24',
+        validity_days: 30,
+        attention_name: 'Jane Customer',
+        attention_email: 'jane@example.com',
+        site_address: '1 Test Street',
+        subject_line: 'Fence works',
+        project_description: 'Short summary',
+        scope: 'Install fencing',
+        request_id: '11111111-1111-4111-8111-111111111114',
+        pricing_mode: 'attachments_only',
+        line_items: [],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const replayedPayload = await replayed.json();
+    expect(replayed.status).toBe(200);
+    expect(replayedPayload.replayed).toBe(true);
+    expect(replayedPayload.quote.quote_reference).toBe('80000-MD');
+
+    mockClaimQuoteCreate.mockRejectedValueOnce(new Error('REQUEST_ID_REUSED'));
+    const changed = await POST(new NextRequest('http://localhost/api/quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_id: 'customer-1',
+        manager_profile_id: 'manager-1',
+        quote_date: '2026-03-24',
+        validity_days: 30,
+        attention_name: 'Jane Customer',
+        attention_email: 'jane@example.com',
+        site_address: '1 Test Street',
+        subject_line: 'Changed title',
+        project_description: 'Short summary',
+        scope: 'Install fencing',
+        request_id: '11111111-1111-4111-8111-111111111114',
+        pricing_mode: 'attachments_only',
+        line_items: [],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({
+      error: 'This create request was already used with different details.',
+    });
   });
 });

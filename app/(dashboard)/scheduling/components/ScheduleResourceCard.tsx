@@ -17,6 +17,7 @@ export interface ResourceCardProps {
   selected: boolean;
   dragEnabled: boolean;
   warning?: string;
+  muted?: boolean;
   occupancySegments?: ScheduleOccupancySegment[];
   onSelect: () => void;
 }
@@ -100,6 +101,7 @@ export function ResourceCard({
   selected,
   dragEnabled,
   warning,
+  muted,
   occupancySegments,
   onSelect,
 }: ResourceCardProps) {
@@ -111,6 +113,7 @@ export function ResourceCard({
         metadata={metadata}
         selected={selected}
         warning={warning}
+        muted={muted}
         occupancySegments={occupancySegments}
         onSelect={onSelect}
       />
@@ -133,7 +136,8 @@ export function ResourceCard({
         'relative flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left transition',
         selected
           ? schedulingControlStyles.primary
-          : resourceCardTint(resource.type)
+          : resourceCardTint(resource.type),
+        muted && !selected && 'opacity-70'
       )}
     >
       <ResourceDragCue testId="schedule-resource-drag-cue" />
@@ -162,6 +166,7 @@ export function DraggableResourceCard({
   metadata,
   selected,
   warning,
+  muted,
   occupancySegments,
   onSelect,
 }: Omit<ResourceCardProps, 'dragEnabled'>) {
@@ -199,6 +204,7 @@ export function DraggableResourceCard({
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type),
+        muted && !selected && 'opacity-70',
         isDragging && 'cursor-grabbing opacity-40'
       )}
       style={{ touchAction: 'none' }}

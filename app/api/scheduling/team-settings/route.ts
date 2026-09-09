@@ -64,6 +64,7 @@ export async function PUT(request: NextRequest) {
           employee_id: typeof row.employee_id === 'string' ? row.employee_id : null,
           team_id: typeof row.team_id === 'string' ? row.team_id : null,
           team_name: typeof teamName === 'string' ? teamName : null,
+          kind: 'employee',
         };
         return [employee.id, employee] as const;
       })

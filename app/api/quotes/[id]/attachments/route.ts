@@ -1,8 +1,17 @@
+import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { buildQuoteAttachmentStoragePath } from '@/app/(dashboard)/quotes/quote-attachment-client';
 import { appendQuoteTimelineEvent, fetchQuoteBundle } from '@/lib/server/quote-workflow';
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
+
+function isDuplicateStorageError(error: unknown): boolean {
+  const record = error && typeof error === 'object' ? error as { message?: unknown; statusCode?: unknown } : null;
+  const message = String(record?.message || '');
+  const statusCode = String(record?.statusCode || '');
+  return statusCode === '409' || /duplicate|already exists/i.test(message);
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -76,9 +85,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unsupported attachment purpose.' }, { status: 400 });
     }
 
-    const sanitizedFilename = file.name.replace(/[^a-z0-9_.-]/gi, '_');
-    const filePath = `${id}/${Date.now()}_${sanitizedFilename}`;
     const fileBuffer = await file.arrayBuffer();
+    const contentSha256 = createHash('sha256').update(Buffer.from(fileBuffer)).digest('hex');
+    const filePath = buildQuoteAttachmentStoragePath(id, file.name, contentSha256);
+
+    const existingResult = await supabase
+      .from('quote_attachments')
+      .select('*')
+      .eq('quote_id', id)
+      .eq('file_path', filePath)
+      .maybeSingle();
+    if (existingResult.error) throw existingResult.error;
+    if (existingResult.data) {
+      return NextResponse.json({ attachment: existingResult.data, replayed: true }, { status: 200 });
+    }
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('quote-attachments')
@@ -87,14 +107,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         upsert: false,
       });
 
-    if (uploadError) throw uploadError;
+    if (uploadError && !isDuplicateStorageError(uploadError)) {
+      throw uploadError;
+    }
 
+    const storedPath = uploadData?.path || filePath;
     const { data: attachment, error: insertError } = await supabase
       .from('quote_attachments')
       .insert({
         quote_id: id,
         file_name: file.name,
-        file_path: uploadData.path,
+        file_path: storedPath,
         content_type: file.type || null,
         file_size: file.size,
         uploaded_by: user.id,
@@ -105,7 +128,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (insertError) {
-      await supabase.storage.from('quote-attachments').remove([uploadData.path]);
+      if (insertError.code === '23505') {
+        const replayed = await supabase
+          .from('quote_attachments')
+          .select('*')
+          .eq('quote_id', id)
+          .eq('file_path', storedPath)
+          .maybeSingle();
+        if (replayed.error) throw replayed.error;
+        if (replayed.data) {
+          return NextResponse.json({ attachment: replayed.data, replayed: true }, { status: 200 });
+        }
+      }
+      if (uploadData?.path) {
+        await supabase.storage.from('quote-attachments').remove([uploadData.path]);
+      }
       throw insertError;
     }
 

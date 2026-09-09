@@ -40,6 +40,7 @@ describe('SchedulingEmployeeView', () => {
         start_date: '2026-07-15',
         end_date: '2026-07-15',
         estimated_duration_minutes: 240,
+        required_staff_count: null,
         quote_id: null,
         quote_project_number_id: null,
         customer_id: null,

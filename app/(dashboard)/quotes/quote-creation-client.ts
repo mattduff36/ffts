@@ -23,7 +23,10 @@ export async function markQuoteAsSent(quoteId: string): Promise<Quote> {
 
 export function buildQuoteCreatePayload(data: QuoteFormData) {
   const { attachment_files: _attachmentFiles, ...payload } = data;
-  return payload;
+  return {
+    ...payload,
+    request_id: data.request_id || crypto.randomUUID(),
+  };
 }
 
 export async function uploadClientQuoteAttachments(quoteId: string, files?: File[]) {

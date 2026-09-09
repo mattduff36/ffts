@@ -13,6 +13,7 @@ const employees: ScheduleEmployeeResource[] = [
     employee_id: 'E1',
     team_id: null,
     team_name: null,
+    kind: 'employee',
   },
 ];
 

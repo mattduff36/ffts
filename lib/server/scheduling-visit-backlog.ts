@@ -109,6 +109,10 @@ export async function loadScheduleVisitBacklog(
         typeof job.estimated_duration_minutes === 'number'
           ? job.estimated_duration_minutes
           : null,
+      required_staff_count:
+        typeof job.required_staff_count === 'number'
+          ? job.required_staff_count
+          : null,
       quote_id: typeof job.quote_id === 'string' ? job.quote_id : null,
       quote_project_number_id:
         typeof job.quote_project_number_id === 'string'

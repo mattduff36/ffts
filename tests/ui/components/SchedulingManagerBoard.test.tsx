@@ -294,6 +294,7 @@ const board: SchedulingBoardPayload = {
     start_date: '2026-07-13',
     end_date: '2026-07-15',
     estimated_duration_minutes: 240,
+    required_staff_count: 3,
     quote_id: null,
     quote_project_number_id: 'project-1',
     customer_id: null,
@@ -333,6 +334,7 @@ const board: SchedulingBoardPayload = {
       employee_id: 'E001',
       team_id: 'team-1',
       team_name: 'Arborists',
+      kind: 'employee',
     },
     notes: null,
     conflict_override: false,
@@ -365,12 +367,14 @@ const board: SchedulingBoardPayload = {
       employee_id: 'E001',
       team_id: 'team-1',
       team_name: 'Arborists',
+      kind: 'employee',
     }, {
       id: 'employee-2',
       full_name: 'Bob Jones',
       employee_id: 'E002',
       team_id: 'team-1',
       team_name: 'Arborists',
+      kind: 'employee',
     }],
     plant: [],
   },
@@ -1601,7 +1605,7 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getAllByText('Team 6').length).toBeGreaterThan(0);
   });
 
-  it('hides leaders and that day’s members from Employees', async () => {
+  it('sched-resource-inline-assignment keeps leaders and that day’s members in Employees', async () => {
     const today = prepareDailyBoard();
     mockFetchBoard.mockResolvedValue({
       ...board,
@@ -1627,6 +1631,7 @@ describe('SchedulingManagerBoard', () => {
             employee_id: 'E003',
             team_id: 'team-1',
             team_name: 'Arborists',
+            kind: 'employee' as const,
           },
         ],
       },
@@ -1663,8 +1668,9 @@ describe('SchedulingManagerBoard', () => {
       button: 0,
       ctrlKey: false,
     });
-    expect(screen.queryByTestId('schedule-resource-employee-employee-1')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('schedule-resource-employee-employee-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-employee-employee-1')).toHaveClass('opacity-70');
+    expect(screen.getByTestId('schedule-resource-employee-employee-2')).toHaveClass('opacity-70');
+    expect(within(screen.getByTestId('schedule-resource-employee-employee-1')).getByText("Alex S's team")).toBeInTheDocument();
     expect(screen.getByTestId('schedule-resource-employee-employee-3')).toBeInTheDocument();
   });
 
@@ -3241,6 +3247,7 @@ describe('SchedulingManagerBoard', () => {
       employee_id: 'E003',
       team_id: 'team-1',
       team_name: 'Arborists',
+      kind: 'employee' as const,
     };
     mockFetchBoard.mockResolvedValue({
       ...board,
@@ -3612,6 +3619,7 @@ describe('SchedulingManagerBoard', () => {
       employee_id: 'E003',
       team_id: 'team-1',
       team_name: 'Arborists',
+      kind: 'employee' as const,
     };
     mockFetchBoard.mockResolvedValue({
       ...board,

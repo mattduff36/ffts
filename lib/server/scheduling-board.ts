@@ -13,6 +13,7 @@ import {
   readBoardSequence,
   sortJobsByBoardSequence,
 } from '@/lib/utils/scheduling-board-order';
+import { scheduleEmployeeKindFromRole } from '@/lib/utils/scheduling-staffing';
 import type {
   ScheduleAssignment,
   ScheduleEmployeeAssignment,
@@ -33,12 +34,16 @@ function pickRelation<T>(value: T | T[] | null | undefined): T | null {
 
 function mapEmployee(row: Record<string, unknown>): ScheduleEmployeeResource {
   const team = pickRelation(row.team as { name?: string | null } | Array<{ name?: string | null }> | null);
+  const role = pickRelation(
+    row.role as { name?: string | null; display_name?: string | null } | Array<{ name?: string | null; display_name?: string | null }> | null
+  );
   return {
     id: String(row.id),
     full_name: String(row.full_name || 'Unknown employee'),
     employee_id: typeof row.employee_id === 'string' ? row.employee_id : null,
     team_id: typeof row.team_id === 'string' ? row.team_id : null,
     team_name: team?.name || null,
+    kind: scheduleEmployeeKindFromRole(role),
   };
 }
 
@@ -252,7 +257,7 @@ export async function loadSchedulingBoard(
         .lte('work_date', weekEnd),
       admin
         .from('profiles')
-        .select('id, full_name, employee_id, team_id, is_placeholder, team:org_teams!profiles_team_id_fkey(name)')
+        .select('id, full_name, employee_id, team_id, is_placeholder, team:org_teams!profiles_team_id_fkey(name), role:roles(name, display_name)')
         .eq('is_placeholder', false)
         .order('full_name'),
       admin

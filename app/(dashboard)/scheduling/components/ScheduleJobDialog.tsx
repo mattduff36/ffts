@@ -135,6 +135,11 @@ export function ScheduleJobDialog({
       || job?.estimated_duration_minutes?.toString()
       || ''
   );
+  const [requiredStaffCount, setRequiredStaffCount] = useState(
+    initialInput?.required_staff_count?.toString()
+      || job?.required_staff_count?.toString()
+      || ''
+  );
   const [saving, setSaving] = useState(false);
   const isQuoteJob = job?.source_type === 'quote';
   const isProjectJob = job?.source_type === 'manual' && Boolean(job.quote_project_number_id);
@@ -281,10 +286,12 @@ export function ScheduleJobDialog({
       toast.info('Wait for the new tag to finish saving.');
       return;
     }
+    const requiredStaff = requiredStaffCount ? Number(requiredStaffCount) : null;
     const input: ScheduleJobUpdateInput = isQuoteJob
         ? {
             is_drop_on_ready: isDropOnReady,
             tag_ids: selectedTagIds,
+            required_staff_count: requiredStaff,
           }
         : {
             ...(isSampleJob
@@ -301,6 +308,7 @@ export function ScheduleJobDialog({
             start_date: startDate,
             end_date: endDate,
             estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+            required_staff_count: requiredStaff,
             is_drop_on_ready: isDropOnReady,
             tag_ids: selectedTagIds,
           };
@@ -569,8 +577,20 @@ export function ScheduleJobDialog({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Operational classification</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tags and crew-offer availability can be updated here for both Project and Quote jobs.
+                Tags, required staff, and crew-offer availability can be updated here for both Project and Quote jobs.
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schedule-job-required-staff-ops">Required staff</Label>
+              <Input
+                id="schedule-job-required-staff-ops"
+                type="number"
+                min="1"
+                max="20"
+                value={requiredStaffCount}
+                onChange={(event) => setRequiredStaffCount(event.target.value)}
+                placeholder="e.g. 3"
+              />
             </div>
             <label
               htmlFor="schedule-job-drop-on-ready"

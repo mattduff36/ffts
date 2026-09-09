@@ -26,6 +26,7 @@ function job(id: string, overrides: Partial<ScheduleJob> = {}): ScheduleJob {
     start_date: '2026-07-13',
     end_date: '2026-07-15',
     estimated_duration_minutes: 120,
+    required_staff_count: null,
     quote_id: null,
     quote_project_number_id: null,
     customer_id: null,
@@ -72,6 +73,7 @@ function employee(
     employee_id: id,
     team_id: 'team-1',
     team_name: 'Arborists',
+    kind: 'employee',
   };
 }
 

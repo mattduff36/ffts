@@ -18,6 +18,7 @@ export interface SchedulingQuoteSource {
   start_date: string | null;
   estimated_duration_days: number | null;
   estimated_duration_minutes: number | null;
+  required_staff_count: number | null;
   created_by: string | null;
   updated_by: string | null;
 }
@@ -46,6 +47,7 @@ export function mapOpenQuoteToScheduleJob(
     start_date: quote.start_date,
     end_date: format(addDays(parseISO(quote.start_date), estimatedDays - 1), 'yyyy-MM-dd'),
     estimated_duration_minutes: quote.estimated_duration_minutes,
+    required_staff_count: quote.required_staff_count,
     quote_id: quote.id,
     customer_id: quote.customer_id,
     customer_site_id: quote.customer_site_id,

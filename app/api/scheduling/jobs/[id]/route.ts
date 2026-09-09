@@ -24,6 +24,7 @@ const updateSchema = z
     start_date: z.iso.date().optional(),
     end_date: z.iso.date().optional(),
     estimated_duration_minutes: z.number().int().min(15).max(100800).nullable().optional(),
+    required_staff_count: z.number().int().min(1).max(20).nullable().optional(),
     is_drop_on_ready: z.boolean().optional(),
     tag_ids: z.array(z.uuid()).max(30).optional(),
   })
@@ -84,12 +85,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const admin = createAdminClient();
     const existingResult = await admin
       .from('schedule_jobs')
-      .select('start_date, end_date, source_type, quote_project_number_id, customer_id, customer_site_id, site_address')
+      .select('start_date, end_date, source_type, quote_id, quote_project_number_id, customer_id, customer_site_id, site_address')
       .eq('id', id)
       .maybeSingle();
     if (existingResult.error) throw existingResult.error;
     if (!existingResult.data) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
-    const classificationFields = new Set(['is_drop_on_ready', 'tag_ids']);
+    const classificationFields = new Set(['is_drop_on_ready', 'tag_ids', 'required_staff_count']);
     const quoteOwnedFields = Object.keys(parsed.data).filter(
       (field) => !classificationFields.has(field)
     );
@@ -114,7 +115,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const { tag_ids: tagIds, ...jobUpdates } = parsed.data;
+    const { tag_ids: tagIds, required_staff_count: requiredStaffCount, ...jobUpdates } = parsed.data;
     const startDate = jobUpdates.start_date || existingResult.data.start_date;
     const endDate = jobUpdates.end_date || existingResult.data.end_date;
     if (endDate < startDate) {
@@ -170,28 +171,58 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const updates = {
-      ...jobUpdates,
-      ...(resolvedSite
-        ? {
-          customer_id: customerId,
-          customer_site_id: resolvedSite.customerSiteId,
-          site_address: resolvedSite.siteAddress,
+    const hasStaffUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'required_staff_count');
+    const hasJobColumnUpdates = Object.keys(jobUpdates).length > 0 || Boolean(resolvedSite);
+    let data: Record<string, unknown> | null = null;
+    if (hasJobColumnUpdates) {
+      const updates = {
+        ...jobUpdates,
+        ...(resolvedSite
+          ? {
+            customer_id: customerId,
+            customer_site_id: resolvedSite.customerSiteId,
+            site_address: resolvedSite.siteAddress,
+          }
+          : {}),
+        updated_by: access.userId,
+      };
+      const updateResult = await admin
+        .from('schedule_jobs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (updateResult.error) {
+        if (updateResult.error.code === '23505') {
+          return NextResponse.json({ error: 'That job reference already exists.' }, { status: 409 });
         }
-        : {}),
-      updated_by: access.userId,
-    };
-    const { data, error } = await admin
-      .from('schedule_jobs')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'That job reference already exists.' }, { status: 409 });
+        throw updateResult.error;
       }
-      throw error;
+      data = updateResult.data;
+    }
+    if (hasStaffUpdate) {
+      const staffUpdate = await admin.rpc('set_schedule_job_required_staff_v1', {
+        p_job_id: id,
+        p_required_staff_count: requiredStaffCount ?? null,
+        p_actor_user_id: access.userId,
+      });
+      if (staffUpdate.error) throw staffUpdate.error;
+      const refreshed = await admin
+        .from('schedule_jobs')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (refreshed.error) throw refreshed.error;
+      data = refreshed.data;
+    }
+    if (!data) {
+      const current = await admin
+        .from('schedule_jobs')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (current.error) throw current.error;
+      data = current.data;
     }
     if (tagIds) {
       await syncScheduleJobTags(admin, id, tagIds, access.userId);

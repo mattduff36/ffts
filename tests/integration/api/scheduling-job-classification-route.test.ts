@@ -9,12 +9,14 @@ const {
   mockLoadTags,
   mockSyncTags,
   mockUpdate,
+  mockStaffRpc,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
   mockExisting: vi.fn(),
   mockLoadTags: vi.fn(),
   mockSyncTags: vi.fn(),
   mockUpdate: vi.fn(),
+  mockStaffRpc: vi.fn(),
 }));
 
 vi.mock('@/lib/server/scheduling-auth', () => ({
@@ -33,6 +35,10 @@ vi.mock('@/lib/server/customer-sites', () => ({
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
+    rpc: (name: string, args: Record<string, unknown>) => {
+      if (name === 'set_schedule_job_required_staff_v1') return mockStaffRpc(args);
+      throw new Error(`Unexpected RPC ${name}`);
+    },
     from: (table: string) => {
       if (table !== 'schedule_jobs') throw new Error(`Unexpected table ${table}`);
       return {
@@ -40,6 +46,14 @@ vi.mock('@/lib/supabase/admin', () => ({
           eq: () => ({
             maybeSingle: async () => ({
               data: mockExisting(),
+              error: null,
+            }),
+            single: async () => ({
+              data: {
+                id: '11111111-1111-4111-8111-111111111111',
+                required_staff_count: 3,
+                ...mockExisting(),
+              },
               error: null,
             }),
           }),
@@ -93,6 +107,7 @@ describe('PATCH /api/scheduling/jobs/[id] classification', () => {
       },
     ]);
     mockSyncTags.mockResolvedValue(undefined);
+    mockStaffRpc.mockResolvedValue({ data: null, error: null });
     mockUpdate.mockImplementation((values) => ({
       eq: () => ({
         select: () => ({
@@ -153,5 +168,20 @@ describe('PATCH /api/scheduling/jobs/[id] classification', () => {
     expect(response.status).toBe(409);
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockSyncTags).not.toHaveBeenCalled();
+  });
+
+  it('updates required staff through the job-and-quote RPC', async () => {
+    const { PATCH } = await import('@/app/api/scheduling/jobs/[id]/route');
+    const response = await PATCH(request({ required_staff_count: 3 }), params);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockStaffRpc).toHaveBeenCalledWith({
+      p_job_id: '11111111-1111-4111-8111-111111111111',
+      p_required_staff_count: 3,
+      p_actor_user_id: 'manager-1',
+    });
+    expect(payload.job.required_staff_count).toBe(3);
   });
 });

@@ -16,6 +16,7 @@ const quoteJob: ScheduleJob = {
   start_date: '2026-08-01',
   end_date: '2026-08-05',
   estimated_duration_minutes: null,
+  required_staff_count: null,
   quote_id: 'quote-1',
   quote_project_number_id: null,
   customer_id: null,

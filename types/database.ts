@@ -5444,6 +5444,7 @@ export type Database = {
           scope: string | null
           estimated_duration_days: number | null
           estimated_duration_minutes: number | null
+          required_staff_count: number | null
           pricing_mode: 'itemized' | 'attachments_only'
           sage_posted_at: string | null
           sage_posted_by: string | null
@@ -5513,6 +5514,7 @@ export type Database = {
           scope?: string | null
           estimated_duration_days?: number | null
           estimated_duration_minutes?: number | null
+          required_staff_count?: number | null
           pricing_mode?: 'itemized' | 'attachments_only'
           sage_posted_at?: string | null
           sage_posted_by?: string | null
@@ -5582,6 +5584,7 @@ export type Database = {
           scope?: string | null
           estimated_duration_days?: number | null
           estimated_duration_minutes?: number | null
+          required_staff_count?: number | null
           pricing_mode?: 'itemized' | 'attachments_only'
           sage_posted_at?: string | null
           sage_posted_by?: string | null
@@ -6264,6 +6267,7 @@ export type Database = {
           schedule_visit_id: string
           project_reference: string
           was_project_created: boolean
+          input_hash: string | null
           created_at: string
         }
         Insert: {
@@ -6274,6 +6278,7 @@ export type Database = {
           schedule_visit_id: string
           project_reference: string
           was_project_created?: boolean
+          input_hash?: string | null
           created_at?: string
         }
         Update: {
@@ -6284,6 +6289,7 @@ export type Database = {
           schedule_visit_id?: string
           project_reference?: string
           was_project_created?: boolean
+          input_hash?: string | null
           created_at?: string
         }
         Relationships: []
@@ -6300,6 +6306,7 @@ export type Database = {
           start_date: string
           end_date: string
           estimated_duration_minutes: number | null
+          required_staff_count: number | null
           quote_id: string | null
           quote_project_number_id: string | null
           customer_id: string | null
@@ -6322,6 +6329,7 @@ export type Database = {
           start_date: string
           end_date: string
           estimated_duration_minutes?: number | null
+          required_staff_count?: number | null
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null
@@ -6343,6 +6351,7 @@ export type Database = {
           start_date?: string
           end_date?: string
           estimated_duration_minutes?: number | null
+          required_staff_count?: number | null
           quote_id?: string | null
           quote_project_number_id?: string | null
           customer_id?: string | null

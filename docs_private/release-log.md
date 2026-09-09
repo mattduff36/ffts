@@ -2,6 +2,29 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.7.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): add staffing badges, quote create replay, and board assignment status`
+
+**PUSHED AT**
+2026-09-09T23:53:31.491Z
+
+**WHAT CHANGED**
+Add staffing badges, quote create replay, and board assignment status.
+
+**VERSION HISTORY DETAILS**
+- Updated quotes, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.
+- Updated data storage, with changes to shared typing, automation scripts, automated tests, and data storage.
+- Updated projects, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(scheduling): add staffing badges, quote create replay, and board assignment status`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.6.0
 
 **GIT COMMIT MESSAGE**

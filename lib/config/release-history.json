@@ -1,5 +1,24 @@
 [
   {
+    "version": "0926.7.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Added staffing badges, quote create replay, and board assignment status.",
+    "summary": "Added staffing badges, quote create replay, and board assignment status.",
+    "details": [
+      "Updated quotes, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.",
+      "Updated data storage, with changes to shared typing, automation scripts, automated tests, and data storage.",
+      "Updated projects, with changes to automated tests."
+    ],
+    "areas": [
+      "Staffing badges",
+      "Quote create replay",
+      "Board assignment status"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-09T23:53:31.491Z"
+  },
+  {
     "version": "0926.6.0",
     "updateKind": "major",
     "title": "Invoices update",

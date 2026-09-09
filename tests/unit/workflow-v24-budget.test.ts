@@ -659,5 +659,62 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     expect(freshResult.ok).toBe(false);
     expect(freshResult.message).toMatch(/git-derived|no longer holds|not match/i);
   });
+
+  it('revalidates a rehomed isolate after the same checkout moves to a later isolated successor', () => {
+    const repoRoot = makeTempRoot('rehome-checkout-drift');
+    const baseline = initGitRepo(repoRoot);
+    const first = commitFile(repoRoot, 'one.ts', 'one');
+    const second = commitFile(repoRoot, 'two.ts', 'two');
+    initWorkstream(repoRoot, 'ws_rehome_drift', baseline);
+    failFirstThenClosure(repoRoot, 'ws_rehome_drift');
+    spawnSync('git', ['checkout', '-b', 'successor', baseline], { cwd: repoRoot, shell: false });
+
+    const routed = applyProtocolTransition({
+      repoRoot,
+      command: 'route',
+      workstreamId: 'ws_rehome_drift',
+      disposition: 'rehomed',
+      reason: 'isolate remaining work',
+      implementationCommits: [first, second],
+      predecessorHeadCommit: second,
+      successorRepo: repoRoot,
+      successorBranch: 'successor',
+      successorBaseline: baseline,
+    });
+    expect(routed.ok).toBe(true);
+    const original = readProtocolRecord(repoRoot, 'ws_rehome_drift')!;
+    expect(revalidateRouteDisposition({ repoRoot, record: original }).ok).toBe(true);
+
+    spawnSync('git', ['checkout', '-b', 'successor-2', baseline], { cwd: repoRoot, shell: false });
+    commitFile(repoRoot, 'later.ts', 'later-isolated-successor');
+    expect(revalidateRouteDisposition({ repoRoot, record: original }).ok).toBe(true);
+
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'merge', '--no-ff', '--no-edit', 'main'],
+      { cwd: repoRoot, shell: false }
+    );
+    const merged = revalidateRouteDisposition({ repoRoot, record: original });
+    expect(merged.ok).toBe(false);
+    expect(merged.ok === false && merged.message).toMatch(
+      /unreviewed implementation|still contains the failed implementation/i
+    );
+
+    spawnSync('git', ['reset', '--hard', 'HEAD~1'], { cwd: repoRoot, shell: false });
+    expect(revalidateRouteDisposition({ repoRoot, record: original }).ok).toBe(true);
+
+    spawnSync('git', ['branch', '-f', 'successor', 'main'], { cwd: repoRoot, shell: false });
+    const movedSuccessor = revalidateRouteDisposition({ repoRoot, record: original });
+    expect(movedSuccessor.ok).toBe(false);
+    expect(movedSuccessor.ok === false && movedSuccessor.message).toMatch(
+      /blocked predecessor HEAD|no longer holds/i
+    );
+
+    spawnSync('git', ['branch', '-f', 'successor', baseline], { cwd: repoRoot, shell: false });
+    spawnSync('git', ['branch', '-D', 'successor'], { cwd: repoRoot, shell: false });
+    const deleted = revalidateRouteDisposition({ repoRoot, record: original });
+    expect(deleted.ok).toBe(false);
+    expect(deleted.ok === false && deleted.message).toMatch(/successor branch does not exist/i);
+  });
 });
 

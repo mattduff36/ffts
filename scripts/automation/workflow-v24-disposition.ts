@@ -735,18 +735,19 @@ export function gitCommitExists(
 
 export function resolveBranchCommit(
   repoRoot: string,
-  branchName: string
+  branchName: string,
+  label = 'predecessor'
 ): { ok: true; sha: string } | { ok: false; message: string } {
   if (!BRANCH_RE.test(branchName)) {
-    return { ok: false, message: `predecessor branch name is invalid: ${branchName}` };
+    return { ok: false, message: `${label} branch name is invalid: ${branchName}` };
   }
   const result = runGit(repoRoot, ['rev-parse', '--verify', `refs/heads/${branchName}`]);
   if (result.status !== 0 || !FULL_COMMIT_SHA_RE.test(result.stdout)) {
-    return { ok: false, message: `predecessor branch does not exist: ${branchName}` };
+    return { ok: false, message: `${label} branch does not exist: ${branchName}` };
   }
   const sha = resolveCommitObject(repoRoot, result.stdout);
   if (!sha) {
-    return { ok: false, message: `predecessor branch ${branchName} does not resolve to a commit` };
+    return { ok: false, message: `${label} branch ${branchName} does not resolve to a commit` };
   }
   return { ok: true, sha };
 }
@@ -1594,6 +1595,7 @@ export function buildRouteDisposition(params: {
   predecessorHead?: string;
   nowIso: string;
   allowIsolationImport?: boolean;
+  requireSuccessorWorktreeCheckout?: boolean;
 }): { ok: true; disposition: WorkflowRouteDisposition } | { ok: false; message: string } {
   if (params.record.phase !== 'routing_required') {
     return { ok: false, message: `route requires routing_required (have ${params.record.phase})` };
@@ -1779,16 +1781,29 @@ export function buildRouteDisposition(params: {
     if (!BRANCH_RE.test(params.successorBranch)) {
       return { ok: false, message: 'successor branch name is invalid' };
     }
-    const successorHead = gitHeadCommit(successorRepo.canonical);
-    const successorBranch = gitBranchName(successorRepo.canonical);
-    if (!successorHead || !successorBranch) {
-      return { ok: false, message: 'unable to read successor HEAD/branch' };
-    }
-    if (successorBranch !== params.successorBranch) {
-      return {
-        ok: false,
-        message: `successor worktree is on ${successorBranch}, not ${params.successorBranch}`,
-      };
+    const requireSuccessorWorktreeCheckout = params.requireSuccessorWorktreeCheckout !== false;
+    let successorHead: string;
+    if (requireSuccessorWorktreeCheckout) {
+      const worktreeHead = gitHeadCommit(successorRepo.canonical);
+      const successorBranch = gitBranchName(successorRepo.canonical);
+      if (!worktreeHead || !successorBranch) {
+        return { ok: false, message: 'unable to read successor HEAD/branch' };
+      }
+      if (successorBranch !== params.successorBranch) {
+        return {
+          ok: false,
+          message: `successor worktree is on ${successorBranch}, not ${params.successorBranch}`,
+        };
+      }
+      successorHead = worktreeHead;
+    } else {
+      const successorBranchHead = resolveBranchCommit(
+        successorRepo.canonical,
+        params.successorBranch,
+        'successor'
+      );
+      if (!successorBranchHead.ok) return successorBranchHead;
+      successorHead = successorBranchHead.sha;
     }
     const successorOwned = requireCommitAncestor(
       successorRepo.canonical,
@@ -1904,6 +1919,7 @@ export function revalidateRouteDisposition(params: {
     predecessorHead: disposition.gitEvidence.predecessorHead,
     nowIso: disposition.recordedAt,
     allowIsolationImport: false,
+    requireSuccessorWorktreeCheckout: false,
   });
   if (!rebuilt.ok) {
     return { ok: false, message: `disposition no longer holds: ${rebuilt.message}` };

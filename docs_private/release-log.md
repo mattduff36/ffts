@@ -2,6 +2,42 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.6.0
+
+**GIT COMMIT MESSAGE**
+`feat(invoices): export companion JSON for invoice-software import`
+
+**PUSHED AT**
+2026-09-09T22:35:56.072Z
+
+**WHAT CHANGED**
+Revalidate rehomed isolates by successor branch ref. Export companion JSON for invoice-software import. Execute leftover rejection for all entrypoint combinations. Execute leftover rejection at the real entrypoint. Isolate leftover entrypoint close-out onto successor-2. Collect Vercel Speed Insights on production deployments. Restore live terminal verification dashboard. Align scheduling fixtures with current contracts. Route ordinary fap and ffap through local finalise then a normal push. Restates fap and ffap as global complete-and-release adapters.
+
+**VERSION HISTORY DETAILS**
+- Updated error reporting, with changes to background routes, shared logic, automation scripts, automated tests, and data storage.
+- Updated data storage, with changes to shared typing, automated tests, and data storage.
+- Updated actions, with changes to automation scripts and automated tests.
+- Updated help and FAQ, with changes to documentation.
+- Updated debug tools, with changes to automated tests.
+- Updated maintenance, with changes to automation scripts.
+- Updated navigation across 1 changed file.
+
+**COMMITS IN THIS RELEASE**
+- `fix(workflow): revalidate rehomed isolates by successor branch ref`
+- `feat(invoices): export companion JSON for invoice-software import`
+- `test(fixerrors): execute leftover rejection for all entrypoint combinations`
+- `test(fixerrors): execute leftover rejection at the real entrypoint`
+- `feat(fixerrors): isolate leftover entrypoint close-out onto successor-2`
+- `feat: collect Vercel Speed Insights on production deployments`
+- `fix(workflow): restore live terminal verification dashboard`
+- `test: align scheduling fixtures with current contracts`
+- `fix(workflow): route ordinary fap and ffap through local finalise then a normal push`
+- `docs(workflow): restates fap and ffap as global complete-and-release adapters`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 0926.5.1
 
 **GIT COMMIT MESSAGE**

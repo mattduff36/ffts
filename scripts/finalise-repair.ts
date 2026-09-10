@@ -103,9 +103,12 @@ function main(): void {
   if ((activeProtocol?.checkpointId ?? null) !== (artifact.checkpointId ?? null)) {
     fail('protocol checkpoint context changed; rerun the original finalise command');
   }
-  const attempted = incrementFinaliseRepairAttempt(REPO_ROOT);
+  const attempted = incrementFinaliseRepairAttempt(REPO_ROOT, artifact);
+  if (!attempted) {
+    fail('failure artifact changed before targeted repair could claim it');
+  }
   const recentAttemptCount = recordFinaliseRepairHistory(REPO_ROOT, artifact);
-  if ((attempted?.repairAttemptCount ?? 0) > 2 || recentAttemptCount > 2) {
+  if (attempted.repairAttemptCount > 2 || recentAttemptCount > 2) {
     appendWorkflowAnomalySignal({
       repoRoot: REPO_ROOT,
       eventId: `finalise-repair:${artifact.originalMode}:${artifact.failedStep}:${artifact.safetyFingerprint}`,
@@ -147,9 +150,8 @@ function main(): void {
     });
   }
 
-  const latest = readFinaliseFailureArtifact(REPO_ROOT) ?? artifact;
-  markFinaliseRepairComplete(REPO_ROOT, latest, {
-    checkpointId: activeProtocol?.checkpointId ?? latest.checkpointId ?? null,
+  markFinaliseRepairComplete(REPO_ROOT, attempted, {
+    checkpointId: activeProtocol?.checkpointId ?? attempted.checkpointId ?? null,
   });
   process.stdout.write(
     'Targeted finalise repair passed. Run the original finalise command once for closure.\n'

@@ -219,6 +219,8 @@ const ORDINARY_REUSE_FINGERPRINTED_ENV_KEYS = new Set([
   'SKIP_BUILD_CHECKS',
   'TZ',
   'UV_THREADPOOL_SIZE',
+  'VITEST_MAX_THREADS',
+  'VITEST_MIN_THREADS',
   'VERCEL',
   'VERCEL_ENV',
 ]);
@@ -325,10 +327,22 @@ function isKnownOrdinaryReuseEnvironmentKey(
   );
 }
 
+function isFingerprintedFinaliseEnvironmentKey(
+  key: string,
+  declaredKeys: Set<string>
+): boolean {
+  const normalized = key.toUpperCase();
+  return (
+    normalized.startsWith('NEXT_PUBLIC_') ||
+    ORDINARY_REUSE_FINGERPRINTED_ENV_KEYS.has(normalized) ||
+    declaredKeys.has(normalized)
+  );
+}
+
 function environmentFingerprint(repoRoot: string): string {
   const declaredKeys = declaredEnvironmentKeys(repoRoot);
   const fingerprintedEnvironment = Object.entries(process.env)
-    .filter(([key]) => isKnownOrdinaryReuseEnvironmentKey(key, declaredKeys))
+    .filter(([key]) => isFingerprintedFinaliseEnvironmentKey(key, declaredKeys))
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => [key, value ?? '']);
   return hashText([

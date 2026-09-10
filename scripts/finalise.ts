@@ -19,6 +19,7 @@ import {
   resolveActiveProtocolFinaliseContext,
 } from './automation/finalise-checkpoint';
 import {
+  archiveSupersededFinaliseFailureArtifact,
   assertRepairClosureClearanceAllowed,
   clearFinaliseRepairClosureArtifacts,
   writeFinaliseFailureArtifact,
@@ -1142,6 +1143,25 @@ async function main(): Promise<void> {
       await run.step('Inspect protocol finalise readiness', () => {
         console.log('\n==> Protocol readiness');
         console.log(formatFinaliseProtocolReadinessReport(resolvedProtocolReadiness));
+      });
+    }
+
+    if (!options.dryRun) {
+      await run.step('Archive superseded finalise failure gate', () => {
+        const result = archiveSupersededFinaliseFailureArtifact(REPO_ROOT);
+        if (result.archived) {
+          console.log(`Archived superseded finalise failure evidence: ${result.archivePath}`);
+        }
+        return result;
+      });
+      await run.step('Validate finalise failure gate before mutation', () => {
+        const gateContext = resolveActiveProtocolFinaliseContext(REPO_ROOT);
+        assertRepairClosureClearanceAllowed({
+          repoRoot: REPO_ROOT,
+          mode: finaliseMode,
+          workstreamId: gateContext?.workstreamId ?? null,
+          checkpointId: gateContext?.checkpointId ?? null,
+        });
       });
     }
 

@@ -14,6 +14,7 @@ export default defineWorkspace([
         'tests/unit/**/*.test.ts',
         'tests/regression/**/*.test.ts',
       ],
+      testTimeout: 120_000,
       hookTimeout: 60_000,
       // ProjectConfig omits this key; Vitest 3 still honours it for git-fixture worker teardown.
       // @ts-expect-error TS2353

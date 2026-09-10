@@ -2,11 +2,13 @@ import { existsSync, readFileSync, renameSync, rmSync } from 'fs';
 import path from 'path';
 import type { FinaliseTaskKey } from '../finalise-recent-tasks';
 import {
+  FINALISE_TASK_COMMANDS,
   type FinaliseModeKey,
   getFinaliseRepairSafetyFingerprint,
   getFinaliseTaskFingerprint,
 } from './finalise-checkpoint';
-import { writeJsonAtomic } from './workflow-events';
+import { assertSafeOpaqueId } from './workflow-plan-contract';
+import { withWorkflowLock, writeJsonAtomic } from './workflow-events';
 
 export interface FinaliseFailureArtifact {
   schemaVersion: '1';
@@ -59,6 +61,14 @@ export function getFinaliseRepairCompletePath(repoRoot: string): string {
   return path.join(repoRoot, 'docs_private', 'automation', 'finalise-repair-complete.json');
 }
 
+function getFinaliseGateMutationLockPath(repoRoot: string): string {
+  return path.join(repoRoot, 'docs_private', 'automation', 'finalise-gate-mutation.lock');
+}
+
+function withFinaliseGateMutationLock<T>(repoRoot: string, action: () => T): T {
+  return withWorkflowLock(getFinaliseGateMutationLockPath(repoRoot), action);
+}
+
 function getFinaliseRepairHistoryPath(repoRoot: string): string {
   return path.join(repoRoot, 'docs_private', 'automation', 'finalise-repair-history.json');
 }
@@ -75,72 +85,166 @@ export function writeFinaliseFailureArtifact(params: {
   workstreamId?: string | null;
   checkpointId?: string | null;
 }): FinaliseFailureArtifact {
-  const artifact: FinaliseFailureArtifact = {
+  return withFinaliseGateMutationLock(params.repoRoot, () => {
+    const artifact: FinaliseFailureArtifact = {
+      schemaVersion: '1',
+      originalMode: params.originalMode,
+      failedStep: params.failedStep,
+      command: params.command,
+      inputFingerprint: getFinaliseTaskFingerprint({
+        repoRoot: params.repoRoot,
+        task: params.failedStep,
+        mode: params.originalMode,
+        command: params.command,
+      }),
+      safetyFingerprint: getFinaliseRepairSafetyFingerprint({
+        repoRoot: params.repoRoot,
+        task: params.failedStep,
+        mode: params.originalMode,
+        command: params.command,
+      }),
+      workstreamId: params.workstreamId ?? null,
+      checkpointId: params.checkpointId ?? null,
+      createdAt: new Date().toISOString(),
+      repairAttemptCount: 0,
+    };
+    writeJsonAtomic(getFinaliseFailurePath(params.repoRoot), artifact);
+    return artifact;
+  });
+}
+
+function isValidNullableFinaliseId(value: unknown, fieldName: string): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === 'string' && assertSafeOpaqueId(value, fieldName).ok)
+  );
+}
+
+function parseFinaliseFailureArtifact(value: unknown): FinaliseFailureArtifact | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = value as Partial<FinaliseFailureArtifact>;
+  const knownStep =
+    parsed.failedStep === 'other' ||
+    (typeof parsed.failedStep === 'string' &&
+      Object.prototype.hasOwnProperty.call(FINALISE_TASK_COMMANDS, parsed.failedStep));
+  const canonicalCommand =
+    parsed.failedStep === 'other'
+      ? typeof parsed.command === 'string' && parsed.command.length > 0
+      : knownStep &&
+        parsed.command === FINALISE_TASK_COMMANDS[parsed.failedStep as FinaliseTaskKey];
+  const workstreamId = parsed.workstreamId ?? null;
+  const checkpointId = parsed.checkpointId ?? null;
+  if (
+    parsed.schemaVersion !== '1' ||
+    typeof parsed.originalMode !== 'string' ||
+    !['finalise', 'finalise-full', 'fap', 'ffap'].includes(parsed.originalMode) ||
+    !knownStep ||
+    !canonicalCommand ||
+    typeof parsed.inputFingerprint !== 'string' ||
+    !/^[a-f0-9]{32}$/u.test(parsed.inputFingerprint) ||
+    typeof parsed.safetyFingerprint !== 'string' ||
+    !/^[a-f0-9]{32}$/u.test(parsed.safetyFingerprint) ||
+    !isValidNullableFinaliseId(workstreamId, 'workstreamId') ||
+    !isValidNullableFinaliseId(checkpointId, 'checkpointId') ||
+    (workstreamId === null) !== (checkpointId === null) ||
+    typeof parsed.createdAt !== 'string' ||
+    !Number.isFinite(Date.parse(parsed.createdAt)) ||
+    (parsed.repairAttemptCount !== undefined &&
+      (!Number.isInteger(parsed.repairAttemptCount) || parsed.repairAttemptCount < 0))
+  ) {
+    return null;
+  }
+  return {
     schemaVersion: '1',
-    originalMode: params.originalMode,
-    failedStep: params.failedStep,
-    command: params.command,
-    inputFingerprint: getFinaliseTaskFingerprint({
-      repoRoot: params.repoRoot,
-      task: params.failedStep,
-      mode: params.originalMode,
-      command: params.command,
-    }),
-    safetyFingerprint: getFinaliseRepairSafetyFingerprint({
-      repoRoot: params.repoRoot,
-      task: params.failedStep,
-      mode: params.originalMode,
-      command: params.command,
-    }),
-    workstreamId: params.workstreamId ?? null,
-    checkpointId: params.checkpointId ?? null,
-    createdAt: new Date().toISOString(),
-    repairAttemptCount: 0,
+    originalMode: parsed.originalMode as FinaliseModeKey,
+    failedStep: parsed.failedStep as FinaliseTaskKey | 'other',
+    command: parsed.command as string,
+    inputFingerprint: parsed.inputFingerprint,
+    safetyFingerprint: parsed.safetyFingerprint,
+    workstreamId,
+    checkpointId,
+    createdAt: parsed.createdAt,
+    repairAttemptCount: parsed.repairAttemptCount ?? 0,
   };
-  writeJsonAtomic(getFinaliseFailurePath(params.repoRoot), artifact);
-  return artifact;
+}
+
+function sameFinaliseFailureIdentity(
+  left: FinaliseFailureArtifact,
+  right: FinaliseFailureArtifact
+): boolean {
+  return (
+    left.originalMode === right.originalMode &&
+    left.failedStep === right.failedStep &&
+    left.command === right.command &&
+    left.inputFingerprint === right.inputFingerprint &&
+    left.safetyFingerprint === right.safetyFingerprint &&
+    left.workstreamId === right.workstreamId &&
+    left.checkpointId === right.checkpointId &&
+    left.createdAt === right.createdAt
+  );
 }
 
 export function readFinaliseFailureArtifact(repoRoot: string): FinaliseFailureArtifact | null {
   const filePath = getFinaliseFailurePath(repoRoot);
   if (!existsSync(filePath)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as FinaliseFailureArtifact;
-    if (
-      parsed.schemaVersion !== '1' ||
-      !['finalise', 'finalise-full', 'fap', 'ffap'].includes(parsed.originalMode) ||
-      typeof parsed.failedStep !== 'string' ||
-      typeof parsed.command !== 'string' ||
-      typeof parsed.inputFingerprint !== 'string' ||
-      typeof parsed.safetyFingerprint !== 'string' ||
-      !Number.isFinite(Date.parse(parsed.createdAt)) ||
-      (parsed.repairAttemptCount !== undefined &&
-        (!Number.isInteger(parsed.repairAttemptCount) || parsed.repairAttemptCount < 0))
-    ) {
-      return null;
-    }
-    return {
-      ...parsed,
-      workstreamId: parsed.workstreamId ?? null,
-      checkpointId: parsed.checkpointId ?? null,
-      repairAttemptCount: parsed.repairAttemptCount ?? 0,
-    };
+    return parseFinaliseFailureArtifact(JSON.parse(readFileSync(filePath, 'utf8')));
   } catch {
     return null;
   }
 }
 
+export function archiveSupersededFinaliseFailureArtifact(repoRoot: string): {
+  archived: boolean;
+  archivePath?: string;
+  reason: string;
+} {
+  return withFinaliseGateMutationLock(repoRoot, () => {
+    const artifact = readFinaliseFailureArtifact(repoRoot);
+    if (!artifact) {
+      return { archived: false, reason: 'missing-or-malformed' };
+    }
+    if (!isRepairableFinaliseStep(artifact.failedStep)) {
+      return { archived: false, reason: 'non-repairable-step' };
+    }
+    const currentFingerprint = getFinaliseTaskFingerprint({
+      repoRoot,
+      task: artifact.failedStep,
+      mode: artifact.originalMode,
+      command: artifact.command,
+    });
+    if (currentFingerprint === artifact.inputFingerprint) {
+      return { archived: false, reason: 'same-candidate' };
+    }
+
+    const failurePath = getFinaliseFailurePath(repoRoot);
+    const archivePath = path.join(
+      path.dirname(failurePath),
+      `finalise-last-failure.superseded-${Date.now()}.json`
+    );
+    renameSync(failurePath, archivePath);
+    return { archived: true, archivePath, reason: 'candidate-changed' };
+  });
+}
+
 export function incrementFinaliseRepairAttempt(
-  repoRoot: string
+  repoRoot: string,
+  expectedArtifact?: FinaliseFailureArtifact
 ): FinaliseFailureArtifact | null {
-  const artifact = readFinaliseFailureArtifact(repoRoot);
-  if (!artifact) return null;
-  const next = {
-    ...artifact,
-    repairAttemptCount: artifact.repairAttemptCount + 1,
-  };
-  writeJsonAtomic(getFinaliseFailurePath(repoRoot), next);
-  return next;
+  return withFinaliseGateMutationLock(repoRoot, () => {
+    const artifact = readFinaliseFailureArtifact(repoRoot);
+    if (!artifact) return null;
+    if (expectedArtifact && !sameFinaliseFailureIdentity(artifact, expectedArtifact)) {
+      throw new Error('finalise failure artifact changed before targeted repair claim');
+    }
+    const next = {
+      ...artifact,
+      repairAttemptCount: artifact.repairAttemptCount + 1,
+    };
+    writeJsonAtomic(getFinaliseFailurePath(repoRoot), next);
+    return next;
+  });
 }
 
 export function recordFinaliseRepairHistory(
@@ -181,7 +285,9 @@ export function recordFinaliseRepairHistory(
 }
 
 export function clearFinaliseFailureArtifact(repoRoot: string): void {
-  rmSync(getFinaliseFailurePath(repoRoot), { force: true });
+  withFinaliseGateMutationLock(repoRoot, () => {
+    rmSync(getFinaliseFailurePath(repoRoot), { force: true });
+  });
 }
 
 export function readFinaliseRepairCompleteArtifact(
@@ -190,18 +296,40 @@ export function readFinaliseRepairCompleteArtifact(
   const filePath = getFinaliseRepairCompletePath(repoRoot);
   if (!existsSync(filePath)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as FinaliseRepairCompleteArtifact;
+    const value = JSON.parse(readFileSync(filePath, 'utf8')) as unknown;
+    if (!value || typeof value !== 'object') return null;
+    const parsed = value as Partial<FinaliseRepairCompleteArtifact>;
+    const originalFailure = parseFinaliseFailureArtifact(parsed.originalFailure);
+    const workstreamId = parsed.workstreamId ?? null;
+    const checkpointId = parsed.checkpointId ?? null;
     if (
       parsed.schemaVersion !== '1' ||
       parsed.status !== 'awaiting_finalise_closure' ||
       typeof parsed.repairedAt !== 'string' ||
       !Number.isFinite(Date.parse(parsed.repairedAt)) ||
-      typeof parsed.command !== 'string' ||
-      !parsed.originalFailure
+      !originalFailure ||
+      parsed.repairedStep !== originalFailure.failedStep ||
+      parsed.command !== originalFailure.command ||
+      parsed.originalMode !== originalFailure.originalMode ||
+      workstreamId !== originalFailure.workstreamId ||
+      checkpointId !== originalFailure.checkpointId ||
+      !isValidNullableFinaliseId(workstreamId, 'workstreamId') ||
+      !isValidNullableFinaliseId(checkpointId, 'checkpointId') ||
+      (workstreamId === null) !== (checkpointId === null)
     ) {
       return null;
     }
-    return parsed;
+    return {
+      schemaVersion: '1',
+      status: 'awaiting_finalise_closure',
+      repairedAt: parsed.repairedAt,
+      repairedStep: originalFailure.failedStep,
+      command: originalFailure.command,
+      originalMode: originalFailure.originalMode,
+      workstreamId,
+      checkpointId,
+      originalFailure,
+    };
   } catch {
     return null;
   }
@@ -216,35 +344,39 @@ export function markFinaliseRepairComplete(
   artifact: FinaliseFailureArtifact,
   options?: { checkpointId?: string | null }
 ): FinaliseRepairCompleteArtifact {
-  const complete: FinaliseRepairCompleteArtifact = {
-    schemaVersion: '1',
-    status: 'awaiting_finalise_closure',
-    repairedAt: new Date().toISOString(),
-    repairedStep: artifact.failedStep,
-    command: artifact.command,
-    originalMode: artifact.originalMode,
-    workstreamId: artifact.workstreamId,
-    checkpointId: options?.checkpointId ?? artifact.checkpointId ?? null,
-    originalFailure: artifact,
-  };
-  writeJsonAtomic(getFinaliseRepairCompletePath(repoRoot), complete);
-  const failurePath = getFinaliseFailurePath(repoRoot);
-  if (existsSync(failurePath)) {
-    const archivePath = path.join(
-      path.dirname(failurePath),
-      `finalise-last-failure.repaired-${Date.now()}.json`
-    );
-    try {
-      renameSync(failurePath, archivePath);
-    } catch {
-      rmSync(failurePath, { force: true });
+  return withFinaliseGateMutationLock(repoRoot, () => {
+    const current = readFinaliseFailureArtifact(repoRoot);
+    if (!current || !sameFinaliseFailureIdentity(current, artifact)) {
+      throw new Error('finalise failure artifact changed during targeted repair');
     }
-  }
-  return complete;
+    const complete: FinaliseRepairCompleteArtifact = {
+      schemaVersion: '1',
+      status: 'awaiting_finalise_closure',
+      repairedAt: new Date().toISOString(),
+      repairedStep: artifact.failedStep,
+      command: artifact.command,
+      originalMode: artifact.originalMode,
+      workstreamId: artifact.workstreamId,
+      checkpointId: options?.checkpointId ?? artifact.checkpointId ?? null,
+      originalFailure: artifact,
+    };
+    writeJsonAtomic(getFinaliseRepairCompletePath(repoRoot), complete);
+    const failurePath = getFinaliseFailurePath(repoRoot);
+    if (existsSync(failurePath)) {
+      const archivePath = path.join(
+        path.dirname(failurePath),
+        `finalise-last-failure.repaired-${Date.now()}.json`
+      );
+      renameSync(failurePath, archivePath);
+    }
+    return complete;
+  });
 }
 
 export function clearFinaliseRepairCompleteArtifact(repoRoot: string): void {
-  rmSync(getFinaliseRepairCompletePath(repoRoot), { force: true });
+  withFinaliseGateMutationLock(repoRoot, () => {
+    rmSync(getFinaliseRepairCompletePath(repoRoot), { force: true });
+  });
 }
 
 function assertIdentityMatchesStored(params: {
@@ -287,17 +419,40 @@ export function assertRepairClosureClearanceAllowed(params: {
   workstreamId: string | null;
   checkpointId?: string | null;
 }): void {
+  const repairCompletePath = getFinaliseRepairCompletePath(params.repoRoot);
   const complete = readFinaliseRepairCompleteArtifact(params.repoRoot);
-  if (!complete) return;
-  assertIdentityMatchesStored({
-    label: 'repair-complete',
-    storedMode: complete.originalMode,
-    storedWorkstreamId: complete.workstreamId ?? null,
-    storedCheckpointId: complete.checkpointId ?? null,
-    mode: params.mode,
-    workstreamId: params.workstreamId,
-    checkpointId: params.checkpointId,
-  });
+  if (existsSync(repairCompletePath) && !complete) {
+    throw new Error('repair-complete closure gate is malformed; refuse finalise');
+  }
+  if (complete) {
+    assertIdentityMatchesStored({
+      label: 'repair-complete',
+      storedMode: complete.originalMode,
+      storedWorkstreamId: complete.workstreamId ?? null,
+      storedCheckpointId: complete.checkpointId ?? null,
+      mode: params.mode,
+      workstreamId: params.workstreamId,
+      checkpointId: params.checkpointId,
+    });
+    return;
+  }
+
+  const failurePath = getFinaliseFailurePath(params.repoRoot);
+  const failure = readFinaliseFailureArtifact(params.repoRoot);
+  if (existsSync(failurePath) && !failure) {
+    throw new Error('finalise-failure closure gate is malformed; refuse finalise');
+  }
+  if (failure) {
+    assertIdentityMatchesStored({
+      label: 'finalise-failure',
+      storedMode: failure.originalMode,
+      storedWorkstreamId: failure.workstreamId ?? null,
+      storedCheckpointId: failure.checkpointId ?? null,
+      mode: params.mode,
+      workstreamId: params.workstreamId,
+      checkpointId: params.checkpointId,
+    });
+  }
 }
 
 /**
@@ -310,23 +465,33 @@ export function clearFinaliseRepairClosureArtifacts(params: {
   workstreamId: string | null;
   checkpointId?: string | null;
 }): void {
-  const complete = readFinaliseRepairCompleteArtifact(params.repoRoot);
-  if (complete) {
-    assertRepairClosureClearanceAllowed(params);
-  } else {
-    const failure = readFinaliseFailureArtifact(params.repoRoot);
-    if (failure) {
-      assertIdentityMatchesStored({
-        label: 'finalise-failure',
-        storedMode: failure.originalMode,
-        storedWorkstreamId: failure.workstreamId ?? null,
-        storedCheckpointId: failure.checkpointId ?? null,
-        mode: params.mode,
-        workstreamId: params.workstreamId,
-        checkpointId: params.checkpointId,
-      });
+  withFinaliseGateMutationLock(params.repoRoot, () => {
+    const repairCompletePath = getFinaliseRepairCompletePath(params.repoRoot);
+    const complete = readFinaliseRepairCompleteArtifact(params.repoRoot);
+    if (existsSync(repairCompletePath) && !complete) {
+      throw new Error('repair-complete closure gate is malformed; refuse clearing');
     }
-  }
-  clearFinaliseFailureArtifact(params.repoRoot);
-  clearFinaliseRepairCompleteArtifact(params.repoRoot);
+    if (complete) {
+      assertRepairClosureClearanceAllowed(params);
+    } else {
+      const failurePath = getFinaliseFailurePath(params.repoRoot);
+      const failure = readFinaliseFailureArtifact(params.repoRoot);
+      if (existsSync(failurePath) && !failure) {
+        throw new Error('finalise-failure closure gate is malformed; refuse clearing');
+      }
+      if (failure) {
+        assertIdentityMatchesStored({
+          label: 'finalise-failure',
+          storedMode: failure.originalMode,
+          storedWorkstreamId: failure.workstreamId ?? null,
+          storedCheckpointId: failure.checkpointId ?? null,
+          mode: params.mode,
+          workstreamId: params.workstreamId,
+          checkpointId: params.checkpointId,
+        });
+      }
+    }
+    rmSync(getFinaliseFailurePath(params.repoRoot), { force: true });
+    rmSync(getFinaliseRepairCompletePath(params.repoRoot), { force: true });
+  });
 }

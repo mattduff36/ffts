@@ -4,11 +4,14 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  archiveSupersededFinaliseFailureArtifact,
   assertRepairClosureClearanceAllowed,
   clearFinaliseRepairClosureArtifacts,
   getFinaliseFailurePath,
   getFinaliseRepairCompletePath,
+  incrementFinaliseRepairAttempt,
   markFinaliseRepairComplete,
+  readFinaliseFailureArtifact,
   readFinaliseRepairCompleteArtifact,
   writeFinaliseFailureArtifact,
 } from '@/scripts/automation/finalise-failure';
@@ -103,6 +106,169 @@ describe('targeted finalise repair', () => {
     });
     expect(existsSync(getFinaliseRepairCompletePath(repoRoot))).toBe(false);
   }, 15_000);
+
+  it('archives a repairable failure only after its exact candidate changes', () => {
+    const repoRoot = makeRepo();
+    spawnSync('git', ['init'], { cwd: repoRoot, encoding: 'utf8' });
+    spawnSync('git', ['add', '.'], { cwd: repoRoot, encoding: 'utf8' });
+    spawnSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'fixture'],
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
+    const failure = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise-full',
+      failedStep: 'test-run',
+      command: 'npm run test:run',
+    });
+
+    expect(archiveSupersededFinaliseFailureArtifact(repoRoot)).toEqual({
+      archived: false,
+      reason: 'same-candidate',
+    });
+
+    writeFileSync(path.join(repoRoot, 'app', 'page.tsx'), 'export default 2;', 'utf8');
+    const archived = archiveSupersededFinaliseFailureArtifact(repoRoot);
+    expect(archived.archived).toBe(true);
+    expect(archived.reason).toBe('candidate-changed');
+    expect(archived.archivePath && existsSync(archived.archivePath)).toBe(true);
+    expect(existsSync(getFinaliseFailurePath(repoRoot))).toBe(false);
+    expect(
+      JSON.parse(readFileSync(archived.archivePath!, 'utf8')) as {
+        inputFingerprint: string;
+      }
+    ).toMatchObject({ inputFingerprint: failure.inputFingerprint });
+  });
+
+  it('fails closed for malformed gates and artifact replacement during repair', () => {
+    const repoRoot = makeRepo();
+    const failurePath = getFinaliseFailurePath(repoRoot);
+    mkdirSync(path.dirname(failurePath), { recursive: true });
+    writeFileSync(
+      failurePath,
+      JSON.stringify({
+        schemaVersion: '1',
+        originalMode: 'finalise-full',
+        failedStep: 'test-run',
+        command: 'npm run arbitrary',
+        inputFingerprint: 'not-a-fingerprint',
+        safetyFingerprint: 'also-invalid',
+        workstreamId: null,
+        checkpointId: null,
+        createdAt: new Date().toISOString(),
+        repairAttemptCount: 0,
+      }),
+      'utf8'
+    );
+    expect(archiveSupersededFinaliseFailureArtifact(repoRoot)).toEqual({
+      archived: false,
+      reason: 'missing-or-malformed',
+    });
+    expect(existsSync(failurePath)).toBe(true);
+    expect(() =>
+      assertRepairClosureClearanceAllowed({
+        repoRoot,
+        mode: 'finalise-full',
+        workstreamId: null,
+      })
+    ).toThrow(/malformed/iu);
+
+    rmSync(failurePath, { force: true });
+    const first = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise-full',
+      failedStep: 'test-run',
+      command: 'npm run test:run',
+    });
+    writeFileSync(path.join(repoRoot, 'tsconfig.json'), '{"changed":true}', 'utf8');
+    const replacement = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise-full',
+      failedStep: 'test-run',
+      command: 'npm run test:run',
+    });
+    expect(() => incrementFinaliseRepairAttempt(repoRoot, first)).toThrow(
+      /changed before targeted repair claim/iu
+    );
+    expect(() => markFinaliseRepairComplete(repoRoot, first)).toThrow(
+      /changed during targeted repair/iu
+    );
+    expect(readFinaliseFailureArtifact(repoRoot)?.inputFingerprint).toBe(
+      replacement.inputFingerprint
+    );
+  });
+
+  it('rejects malformed repair-complete evidence and recovers a dead-owner lock', () => {
+    const repoRoot = makeRepo();
+    const failure = writeFinaliseFailureArtifact({
+      repoRoot,
+      originalMode: 'finalise',
+      failedStep: 'build',
+      command: 'npm run build',
+    });
+    markFinaliseRepairComplete(repoRoot, failure);
+    const completePath = getFinaliseRepairCompletePath(repoRoot);
+    const malformed = JSON.parse(readFileSync(completePath, 'utf8')) as {
+      command: string;
+    };
+    malformed.command = 'npm run arbitrary';
+    writeFileSync(completePath, JSON.stringify(malformed), 'utf8');
+    expect(readFinaliseRepairCompleteArtifact(repoRoot)).toBeNull();
+    expect(() =>
+      assertRepairClosureClearanceAllowed({
+        repoRoot,
+        mode: 'finalise',
+        workstreamId: null,
+      })
+    ).toThrow(/malformed/iu);
+
+    const deadLockRepo = makeRepo();
+    const lockPath = path.join(
+      deadLockRepo,
+      'docs_private',
+      'automation',
+      'finalise-gate-mutation.lock'
+    );
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(
+      lockPath,
+      JSON.stringify({
+        pid: 2_147_483_647,
+        token: 'dead-owner-token',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      }),
+      'utf8'
+    );
+    expect(() =>
+      writeFinaliseFailureArtifact({
+        repoRoot: deadLockRepo,
+        originalMode: 'finalise',
+        failedStep: 'build',
+        command: 'npm run build',
+      })
+    ).not.toThrow();
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('validates any remaining closure gate before release mutations', () => {
+    const finaliseSource = readFileSync(
+      path.join(process.cwd(), 'scripts', 'finalise.ts'),
+      'utf8'
+    );
+    const gateIndex = finaliseSource.indexOf(
+      "run.step('Validate finalise failure gate before mutation'"
+    );
+    expect(gateIndex).toBeGreaterThan(-1);
+    for (const laterOperation of [
+      "console.log(`\\n==> Run pending local migrations",
+      "console.log('\\n==> Commit workspace changes')",
+      "console.log('\\n==> Push authorised SHA to origin/main')",
+      "run.finish('passed')",
+    ]) {
+      expect(finaliseSource.indexOf(laterOperation)).toBeGreaterThan(gateIndex);
+    }
+  });
 
   it('refuses database and stale failure artifacts', () => {
     const repoRoot = makeRepo();

@@ -323,6 +323,41 @@ describe('finalise recent task detection', () => {
         requiredArtifactPaths: [buildArtifactPath],
       }).reusable
     ).toBe(true);
+
+    process.env.npm_lifecycle_event = 'finalise:repair';
+    process.env._ = 'different-process-launcher';
+    expect(
+      canReuseOrdinaryFinaliseStep({
+        repoRoot,
+        mode: 'finalise',
+        task: 'build',
+        command: 'npm run build',
+        requiredArtifactPaths: [buildArtifactPath],
+      }).reusable
+    ).toBe(true);
+
+    process.env.VITEST_MAX_THREADS = '2';
+    expect(
+      canReuseOrdinaryFinaliseStep({
+        repoRoot,
+        mode: 'finalise',
+        task: 'build',
+        command: 'npm run build',
+        requiredArtifactPaths: [buildArtifactPath],
+      }).reusable
+    ).toBe(false);
+    delete process.env.VITEST_MAX_THREADS;
+
+    process.env.VITEST_MIN_THREADS = '1';
+    expect(
+      canReuseOrdinaryFinaliseStep({
+        repoRoot,
+        mode: 'finalise',
+        task: 'build',
+        command: 'npm run build',
+        requiredArtifactPaths: [buildArtifactPath],
+      }).reusable
+    ).toBe(false);
   });
 
   it('TEE-NOLIVE-001: non-db checkpoint bind/mark does not open a database connection', () => {

@@ -1,5 +1,22 @@
 [
   {
+    "version": "0926.7.2",
+    "updateKind": "minor",
+    "title": "User Management improvements",
+    "description": "Stop logging expected duplicate-email create failures.",
+    "summary": "Stop logging expected duplicate-email create failures.",
+    "details": [
+      "Stop logging expected duplicate-email create failures, with changes to app screens, shared logic, and automated tests."
+    ],
+    "areas": [
+      "User Management"
+    ],
+    "areaKeys": [
+      "user-management"
+    ],
+    "pushedAt": "2026-09-12T02:03:06.472Z"
+  },
+  {
     "version": "0926.7.1",
     "updateKind": "minor",
     "title": "App reliability update",

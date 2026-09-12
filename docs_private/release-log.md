@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.7.2
+
+**GIT COMMIT MESSAGE**
+`fix(admin-users): stop logging expected duplicate-email create failures`
+
+**PUSHED AT**
+2026-09-12T02:03:06.472Z
+
+**WHAT CHANGED**
+Stop logging expected duplicate-email create failures.
+
+**VERSION HISTORY DETAILS**
+- Stop logging expected duplicate-email create failures, with changes to app screens, shared logic, and automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(admin-users): stop logging expected duplicate-email create failures`
+
 ## 0926.7.1
 
 **GIT COMMIT MESSAGE**

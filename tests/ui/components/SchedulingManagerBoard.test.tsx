@@ -8,6 +8,7 @@ import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom';
 import { SchedulingManagerBoard } from '@/app/(dashboard)/scheduling/components/SchedulingManagerBoard';
+import { CoalescedBackgroundReconciler } from '@/app/(dashboard)/scheduling/components/scheduling-board-reconciliation';
 import {
   getSchedulingViewStorageKey,
   SCHEDULING_BOARD_VIEWS,
@@ -410,6 +411,39 @@ function mockWideViewport(matches: boolean) {
       dispatchEvent: vi.fn(),
     })),
   });
+}
+
+function installReceiverSensitiveBrowserTimers() {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const receiverSensitiveSetTimeout = function (
+    this: unknown,
+    handler: TimerHandler,
+    timeout?: number,
+    ...args: unknown[]
+  ) {
+    if (this instanceof CoalescedBackgroundReconciler) {
+      throw new TypeError('Illegal invocation');
+    }
+    return Reflect.apply(originalSetTimeout, globalThis, [handler, timeout, ...args]);
+  } as typeof setTimeout;
+  const receiverSensitiveClearTimeout = function (
+    this: unknown,
+    timer?: ReturnType<typeof setTimeout>
+  ) {
+    if (this instanceof CoalescedBackgroundReconciler) {
+      throw new TypeError('Illegal invocation');
+    }
+    return Reflect.apply(originalClearTimeout, globalThis, [timer]);
+  } as typeof clearTimeout;
+
+  globalThis.setTimeout = receiverSensitiveSetTimeout;
+  globalThis.clearTimeout = receiverSensitiveClearTimeout;
+
+  return () => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  };
 }
 
 function renderBoard(searchParams = '') {
@@ -2980,6 +3014,45 @@ describe('SchedulingManagerBoard', () => {
     await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
     expect(await screen.findByText(/60010-MD · Visit/i)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Employees' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('FE-SCHEDULING-QUICK-ADD-REMOVE-NO-UNHANDLED-REJECTION keeps settled board mutations free of timer receiver errors', async () => {
+    const restoreTimers = installReceiverSensitiveBrowserTimers();
+    const unhandledReasons: unknown[] = [];
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      unhandledReasons.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    try {
+      renderBoard();
+      expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+      expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Title *'), {
+        target: { value: 'Emergency works' },
+      });
+      fireEvent.click(screen.getAllByRole('combobox')[0]);
+      fireEvent.click(await screen.findByRole('option', { name: 'Manager One' }));
+      fireEvent.click(screen.getAllByRole('combobox')[1]);
+      fireEvent.click(await screen.findByRole('option', { name: 'Example Customer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
+      await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+      const confirmation = await screen.findByRole('alertdialog', {
+        name: 'Remove Project job from the schedule?',
+      });
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
+      await waitFor(() => expect(mockDeleteJob).toHaveBeenCalledWith('job-1'));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(unhandledReasons).toEqual([]);
+    } finally {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      restoreTimers();
+    }
   });
 
   it('FOLLOWUP-COLD-005 exits loading on failure and retries the cold week', async () => {

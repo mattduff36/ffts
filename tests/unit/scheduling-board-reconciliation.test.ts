@@ -18,6 +18,7 @@ function emptyProjection(): SchedulingProjection {
 describe('scheduling board reconciliation', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('P2-001 does not require an immediate full-week refetch when success proofs pass', () => {
@@ -63,6 +64,38 @@ describe('scheduling board reconciliation', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(ran).toBe(1);
     reconciler.dispose();
+  });
+
+  it('FE-SCHEDULING-ILLEGAL-INVOCATION-REPRO keeps browser timer receivers valid', () => {
+    let scheduledCallback: (() => void) | undefined;
+    const timerId = 1 as unknown as ReturnType<typeof setTimeout>;
+    vi.stubGlobal('setTimeout', function (
+      this: unknown,
+      callback: () => void
+    ): ReturnType<typeof setTimeout> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError('Illegal invocation');
+      }
+      scheduledCallback = callback;
+      return timerId;
+    });
+    vi.stubGlobal('clearTimeout', function (
+      this: unknown,
+      _timer: ReturnType<typeof setTimeout>
+    ): void {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError('Illegal invocation');
+      }
+    });
+
+    const reconciler = new CoalescedBackgroundReconciler({
+      delayMs: 250,
+      run: async () => {},
+    });
+
+    expect(() => reconciler.schedule(['board:week'])).not.toThrow();
+    expect(scheduledCallback).toEqual(expect.any(Function));
+    expect(() => reconciler.dispose()).not.toThrow();
   });
 
   it('P2-004 failure and ambiguous outcomes still require authoritative reconciliation', () => {

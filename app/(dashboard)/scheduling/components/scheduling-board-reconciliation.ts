@@ -48,8 +48,8 @@ export class CoalescedBackgroundReconciler {
   }) {
     this.delayMs = options.delayMs;
     this.run = options.run;
-    this.scheduleTimer = options.setTimeoutFn || setTimeout;
-    this.clearTimer = options.clearTimeoutFn || clearTimeout;
+    this.scheduleTimer = options.setTimeoutFn || ((callback, delayMs) => setTimeout(callback, delayMs));
+    this.clearTimer = options.clearTimeoutFn || ((timer) => clearTimeout(timer));
   }
 
   schedule(keys: readonly string[]) {

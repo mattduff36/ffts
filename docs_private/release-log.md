@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.7.3
+
+**GIT COMMIT MESSAGE**
+`fix(scheduling): preserve browser timer invocation context`
+
+**PUSHED AT**
+2026-09-12T02:13:41.557Z
+
+**WHAT CHANGED**
+Preserve browser timer invocation context.
+
+**VERSION HISTORY DETAILS**
+- Updated app screens, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `fix(scheduling): preserve browser timer invocation context`
+
 ## 0926.7.2
 
 **GIT COMMIT MESSAGE**

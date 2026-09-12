@@ -1,5 +1,18 @@
 [
   {
+    "version": "0926.7.3",
+    "updateKind": "minor",
+    "title": "Scheduling improvements",
+    "description": "Preserve browser timer invocation context.",
+    "summary": "Preserve browser timer invocation context.",
+    "details": [
+      "Updated app screens, with changes to app screens."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-12T02:13:41.557Z"
+  },
+  {
     "version": "0926.7.2",
     "updateKind": "minor",
     "title": "User Management improvements",

@@ -69,6 +69,7 @@ import { calculateNewUserRemainingLeaveDefault, roundToNearestHalfDay } from '@/
 import { isClientSessionPausedError } from '@/lib/app-auth/session-error';
 import { formatDateTime } from '@/lib/utils/date';
 import { filterHiddenSystemTestAccounts } from '@/lib/utils/system-test-accounts';
+import { isExpectedUserAdminError, shouldLogCreateUserError } from '@/lib/utils/admin-users-error-handling';
 import {
   computeQuickEditFloatingPosition,
   type FloatingPositionResult,
@@ -271,11 +272,6 @@ function UserTableAvatar({ user }: { user: ProfileWithEmail }) {
       ) : null}
     </div>
   );
-}
-
-function isExpectedUserAdminError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.includes('Forbidden:');
 }
 
 function formatAdminActivityTimestamp(value?: string | null): string {
@@ -1107,7 +1103,9 @@ export default function UsersAdminPage() {
       setFormData(createInitialFormData());
       setAddDialogOpen(false);
     } catch (error) {
-      console.error('Error creating user:', error);
+      if (shouldLogCreateUserError(error)) {
+        console.error('Error creating user:', error);
+      }
       setFormError(error instanceof Error ? error.message : 'Failed to create user');
     } finally {
       setFormLoading(false);

@@ -10,6 +10,7 @@ import {
   detectPlantConflicts,
   isDateWithinRange,
 } from '@/lib/server/scheduling-conflicts';
+import { loadExactVisitAssignment } from '@/lib/server/scheduling-assignment-existing';
 import {
   assignmentCreateBulkInputHash,
   replayAssignmentMutationIfPresent,
@@ -123,6 +124,22 @@ export async function POST(request: NextRequest) {
           : { plant_id: created.plant_id }),
       }));
 
+    if (visit) {
+      const existing = await loadExactVisitAssignment(admin, {
+        jobId: input.job_id,
+        visitId: visit.id,
+        resourceType: input.resource_type,
+        resourceId: input.resource_id,
+      });
+      if (existing) {
+        const capacity = await loadEmployeeCapacityForDates(admin, input.work_dates);
+        return NextResponse.json(
+          { assignments: toCreatedAssignments([existing]), employee_capacity: capacity },
+          { status: 201 }
+        );
+      }
+    }
+
     if (input.request_id) {
       const replay = await replayAssignmentMutationIfPresent<CreatedAssignmentRow[] | CreatedAssignmentRow>(
         admin,
@@ -223,6 +240,21 @@ export async function POST(request: NextRequest) {
       : await admin.rpc('create_schedule_assignments_bulk_v1', bulkArgs);
     if (error) {
       if (error.code === '23505' || error.message?.includes('RESOURCE_OVERLAP')) {
+        if (visit) {
+          const existing = await loadExactVisitAssignment(admin, {
+            jobId: input.job_id,
+            visitId: visit.id,
+            resourceType: input.resource_type,
+            resourceId: input.resource_id,
+          });
+          if (existing) {
+            const capacity = await loadEmployeeCapacityForDates(admin, input.work_dates);
+            return NextResponse.json(
+              { assignments: toCreatedAssignments([existing]), employee_capacity: capacity },
+              { status: 201 }
+            );
+          }
+        }
         return NextResponse.json(
           {
             error: visit

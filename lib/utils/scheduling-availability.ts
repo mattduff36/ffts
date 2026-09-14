@@ -10,10 +10,23 @@ export interface ScheduleResourceIdentity {
   id: string;
 }
 
-function getAssignmentResourceId(assignment: ScheduleAssignment): string {
+export function getAssignmentResourceId(assignment: ScheduleAssignment): string {
   return assignment.resource_type === 'employee'
     ? assignment.profile_id
     : assignment.plant_id;
+}
+
+export function findAssignmentForResourceOnVisit(
+  resource: ScheduleResourceIdentity,
+  assignments: ScheduleAssignment[],
+  visitId: string
+): ScheduleAssignment | undefined {
+  return assignments.find(
+    (assignment) =>
+      assignment.resource_type === resource.type
+      && getAssignmentResourceId(assignment) === resource.id
+      && assignment.visit_id === visitId
+  );
 }
 
 export function doesAssignmentOverlapVisit(

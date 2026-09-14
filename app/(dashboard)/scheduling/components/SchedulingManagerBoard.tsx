@@ -180,7 +180,10 @@ import {
   writeSchedulingViewPreference,
 } from '@/lib/config/scheduling-view-preference';
 import { cn } from '@/lib/utils/cn';
-import { isResourceUnavailableForVisit } from '@/lib/utils/scheduling-availability';
+import {
+  findAssignmentForResourceOnVisit,
+  isResourceUnavailableForVisit,
+} from '@/lib/utils/scheduling-availability';
 import {
   scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
@@ -3554,7 +3557,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     });
     if (!operation) return;
     setSelectedQuote(null);
-    if (optimisticVisit) activateVisit(optimisticJob, optimisticVisit);
+    if (optimisticVisit) {
+      activateVisit(optimisticJob, optimisticVisit, { resourceTab: 'employee' });
+    }
     void createProjectScheduleJob(input)
       .then((result) => {
         const scheduledVisit = adoptAuthoritativeVisit({
@@ -4451,6 +4456,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this new visit to finish saving before assigning resources.');
       return;
     }
+    const existingAssignment = findAssignmentForResourceOnVisit(
+      { type: resource.type, id: resource.id },
+      board?.assignments || [],
+      target.visit.id
+    );
+    if (existingAssignment) {
+      setSelectedResource(null);
+      activateVisit(target.job, target.visit, { resourceTab: resource.type });
+      return;
+    }
     const input: CreateAssignmentInput = {
       job_id: target.job.id,
       visit_id: target.visit.id,
@@ -4539,7 +4554,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     });
     if (admitted.duplicate) return;
     setSelectedResource(null);
-    activateVisit(target.job, target.visit);
+    activateVisit(target.job, target.visit, { resourceTab: resource.type });
   }
 
   async function addEmployeeToDayTeam(
@@ -5377,7 +5392,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       return;
     }
     setSelectedDate(visitDate);
-    activateVisit(optimisticJob, optimisticVisit);
+    activateVisit(optimisticJob, optimisticVisit, { resourceTab: 'employee' });
     void withBoundedTimeout(
       quickAddScheduleProject(input),
       QUICK_ADD_TIMEOUT_MS,
@@ -5574,9 +5589,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
-  function activateVisit(job: ScheduleJob, visit: ScheduleVisit) {
+  function activateVisit(
+    job: ScheduleJob,
+    visit: ScheduleVisit,
+    options?: { resourceTab?: 'employee' | 'plant' }
+  ) {
     setActiveVisitTarget({ job, visit });
-    setSidebarTab('employee');
+    setSidebarTab((current) => {
+      if (options?.resourceTab) return options.resourceTab;
+      if (current === 'employee' || current === 'plant') return current;
+      return 'employee';
+    });
   }
 
   function handleResourceSelect(resource: SelectedScheduleResource) {

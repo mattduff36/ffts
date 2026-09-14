@@ -9,12 +9,17 @@ const {
   mockDetectPlantConflicts,
   mockRpc,
   mockLoadCapacity,
+  mockExistingAssignment,
 } = vi.hoisted(() => ({
   mockAccess: vi.fn(),
   mockDetectEmployeeConflicts: vi.fn(),
   mockDetectPlantConflicts: vi.fn(),
   mockRpc: vi.fn(),
   mockLoadCapacity: vi.fn(),
+  mockExistingAssignment: {
+    data: null as Record<string, unknown> | null,
+    resolve: null as (() => Record<string, unknown> | null) | null,
+  },
 }));
 
 vi.mock('@/lib/server/scheduling-auth', () => ({
@@ -37,6 +42,22 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     rpc: mockRpc,
     from: (table: string) => {
+      if (
+        table === 'schedule_employee_assignments'
+        || table === 'schedule_plant_assignments'
+      ) {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({
+            data: mockExistingAssignment.resolve
+              ? mockExistingAssignment.resolve()
+              : mockExistingAssignment.data,
+            error: null,
+          }),
+        };
+        return chain;
+      }
       if (table === 'schedule_jobs') {
         return {
           select: () => ({
@@ -96,6 +117,8 @@ describe('POST /api/scheduling/assignments', () => {
     vi.clearAllMocks();
     mockAccess.mockResolvedValue(managerAccess);
     mockDetectEmployeeConflicts.mockResolvedValue([]);
+    mockExistingAssignment.data = null;
+    mockExistingAssignment.resolve = null;
     mockDetectPlantConflicts.mockResolvedValue([]);
     mockLoadCapacity.mockResolvedValue([{
       date: '2026-07-14',
@@ -389,5 +412,260 @@ describe('POST /api/scheduling/assignments', () => {
     }));
     expect(response.status).toBe(201);
     expect(mockRpc).toHaveBeenCalled();
+  });
+
+  it('SCHED-ASSIGN-API-001 assigns two different plants on one visit and is idempotent for the same plant', async () => {
+    const plantA = '44444444-4444-4444-8444-444444444444';
+    const plantB = '45555555-4555-4555-8555-455555555555';
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+
+    const first = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    const second = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantB,
+    }));
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(
+      mockRpc.mock.calls.filter(([name]) =>
+        String(name).startsWith('create_schedule_assignments_bulk')
+      )
+    ).toHaveLength(2);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_schedule_assignments_bulk_v1',
+      expect.objectContaining({ p_resource_id: plantA })
+    );
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_schedule_assignments_bulk_v1',
+      expect.objectContaining({ p_resource_id: plantB })
+    );
+
+    mockExistingAssignment.data = {
+      id: '77777777-7777-4777-8777-777777777777',
+      job_id: '11111111-1111-4111-8111-111111111111',
+      work_date: '2026-07-14',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      plant_id: plantA,
+      notes: null,
+      conflict_override: false,
+      conflict_codes: [],
+      conflict_override_by: null,
+      conflict_override_at: null,
+      assigned_by: managerAccess.userId,
+      created_at: '2026-07-14T08:00:00.000Z',
+      updated_at: '2026-07-14T08:00:00.000Z',
+    };
+    mockDetectPlantConflicts.mockClear();
+    mockDetectPlantConflicts.mockResolvedValue([{
+      code: 'plant_inactive',
+      severity: 'warning',
+      message: 'Plant status is hired.',
+    }]);
+    const repeat = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    const repeatPayload = await repeat.json();
+    expect(repeat.status).toBe(201);
+    expect(repeatPayload.assignments[0].id).toBe('77777777-7777-4777-8777-777777777777');
+    expect(repeatPayload.assignments[0].plant_id).toBe(plantA);
+    expect(mockDetectPlantConflicts).not.toHaveBeenCalled();
+    expect(
+      mockRpc.mock.calls.filter(([name]) =>
+        String(name).startsWith('create_schedule_assignments_bulk')
+      )
+    ).toHaveLength(2);
+
+    mockExistingAssignment.data = null;
+    mockExistingAssignment.resolve = null;
+    mockDetectPlantConflicts.mockResolvedValue([]);
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+    });
+    const missedUnique = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(missedUnique.status).toBe(409);
+
+    let uniqueLookups = 0;
+    mockExistingAssignment.resolve = () => {
+      uniqueLookups += 1;
+      return uniqueLookups >= 2
+        ? {
+            id: '88888888-8888-4888-8888-888888888888',
+            job_id: '11111111-1111-4111-8111-111111111111',
+            work_date: '2026-07-14',
+            visit_id: '55555555-5555-4555-8555-555555555555',
+            plant_id: plantA,
+            notes: null,
+            conflict_override: false,
+            conflict_codes: [],
+            assigned_by: managerAccess.userId,
+            created_at: '2026-07-14T08:00:00.000Z',
+            updated_at: '2026-07-14T08:00:00.000Z',
+          }
+        : null;
+    };
+    const recoveredUnique = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(recoveredUnique.status).toBe(201);
+    expect(uniqueLookups).toBeGreaterThanOrEqual(2);
+
+    mockExistingAssignment.resolve = null;
+    mockExistingAssignment.data = null;
+    mockRpc.mockClear();
+    mockDetectPlantConflicts.mockResolvedValue([
+      {
+        code: 'plant_inactive',
+        severity: 'warning',
+        message: 'Plant status is hired.',
+      },
+      {
+        code: 'plant_unavailable',
+        severity: 'warning',
+        message: 'Plant is unavailable: service.',
+      },
+    ]);
+    const blocked = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: '46666666-4666-4666-8666-466666666666',
+    }));
+    expect(blocked.status).toBe(409);
+    expect(mockRpc.mock.calls.filter(([name]) =>
+      String(name).startsWith('create_schedule_assignments_bulk')
+    )).toHaveLength(0);
+  });
+
+  it('maps overlap to the existing row only for an exact visit match', async () => {
+    const plantA = '44444444-4444-4444-8444-444444444444';
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'RESOURCE_OVERLAP' },
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const missed = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(missed.status).toBe(409);
+
+    let lookups = 0;
+    const existingRow = {
+      id: '77777777-7777-4777-8777-777777777777',
+      job_id: '11111111-1111-4111-8111-111111111111',
+      work_date: '2026-07-14',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      plant_id: plantA,
+      notes: null,
+      conflict_override: false,
+      conflict_codes: [],
+      assigned_by: managerAccess.userId,
+      created_at: '2026-07-14T08:00:00.000Z',
+      updated_at: '2026-07-14T08:00:00.000Z',
+    };
+    mockExistingAssignment.resolve = () => {
+      lookups += 1;
+      return lookups >= 2 ? existingRow : null;
+    };
+    const recovered = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(recovered.status).toBe(201);
+    expect(lookups).toBeGreaterThanOrEqual(2);
+  });
+
+  it('maps unique 23505 to 201 only for an exact visit row', async () => {
+    const plantA = '44444444-4444-4444-8444-444444444444';
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const missed = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(missed.status).toBe(409);
+
+    let lookups = 0;
+    mockExistingAssignment.resolve = () => {
+      lookups += 1;
+      return lookups >= 2
+        ? {
+            id: '88888888-8888-4888-8888-888888888888',
+            job_id: '11111111-1111-4111-8111-111111111111',
+            work_date: '2026-07-14',
+            visit_id: '55555555-5555-4555-8555-555555555555',
+            plant_id: plantA,
+            notes: null,
+            conflict_override: false,
+            conflict_codes: [],
+            assigned_by: managerAccess.userId,
+            created_at: '2026-07-14T08:00:00.000Z',
+            updated_at: '2026-07-14T08:00:00.000Z',
+          }
+        : null;
+    };
+    const recovered = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+    }));
+    expect(recovered.status).toBe(201);
+    expect(lookups).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps 409 for a new inactive or unavailable plant', async () => {
+    mockDetectPlantConflicts.mockResolvedValue([
+      {
+        code: 'plant_inactive',
+        severity: 'warning',
+        message: 'Plant status is hired.',
+      },
+      {
+        code: 'plant_unavailable',
+        severity: 'warning',
+        message: 'Plant is unavailable: service.',
+      },
+    ]);
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const response = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: '46666666-4666-4666-8666-466666666666',
+    }));
+    expect(response.status).toBe(409);
+    expect(mockRpc.mock.calls.filter(([name]) =>
+      String(name).startsWith('create_schedule_assignments_bulk')
+    )).toHaveLength(0);
   });
 });

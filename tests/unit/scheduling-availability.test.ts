@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   doesAssignmentOverlapVisit,
+  findAssignmentForResourceOnVisit,
   isResourceUnavailableForVisit,
 } from '@/lib/utils/scheduling-availability';
 import type { ScheduleEmployeeAssignment, ScheduleVisit } from '@/types/scheduling';
@@ -88,5 +89,30 @@ describe('scheduling availability', () => {
 
   it('treats legacy day-level assignments as unavailable for the whole day', () => {
     expect(doesAssignmentOverlapVisit(assignment(null), afternoon)).toBe(true);
+  });
+
+  it('finds only the exact resource already on the same visit', () => {
+    const morningAssignment = assignment(morning);
+    expect(
+      findAssignmentForResourceOnVisit(
+        { type: 'employee', id: 'employee-1' },
+        [morningAssignment],
+        morning.id
+      )?.id
+    ).toBe('assignment-1');
+    expect(
+      findAssignmentForResourceOnVisit(
+        { type: 'employee', id: 'employee-2' },
+        [morningAssignment],
+        morning.id
+      )
+    ).toBeUndefined();
+    expect(
+      findAssignmentForResourceOnVisit(
+        { type: 'employee', id: 'employee-1' },
+        [morningAssignment],
+        afternoon.id
+      )
+    ).toBeUndefined();
   });
 });

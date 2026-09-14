@@ -2751,6 +2751,236 @@ describe('SchedulingManagerBoard', () => {
     );
   });
 
+  it('SCHED-PLANT-TAB-001 keeps the Plant tab selected after a plant drop', async () => {
+    mockWideViewport(true);
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      resources: {
+        ...board.resources,
+        plant: [{
+          id: 'plant-1',
+          plant_id: 'P001',
+          nickname: 'Loader',
+          make: 'JCB',
+          model: '403',
+          status: 'active',
+        }],
+      },
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.getByRole('tab', { name: 'Plant' })).toHaveAttribute('aria-selected', 'true');
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-1', label: 'P001 — Loader' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+    });
+
+    await waitFor(() => expect(mockCreateAssignment).toHaveBeenCalled());
+    expect(screen.getByRole('tab', { name: 'Plant' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Review scheduling conflict' })).not.toBeInTheDocument();
+  });
+
+  it('SCHED-PLANT-MULTI-001 assigns two distinct plants to the same visit', async () => {
+    mockWideViewport(true);
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      resources: {
+        ...board.resources,
+        plant: [{
+          id: 'plant-1',
+          plant_id: 'P001',
+          nickname: 'Loader',
+          make: 'JCB',
+          model: '403',
+          status: 'active',
+        }, {
+          id: 'plant-2',
+          plant_id: 'P002',
+          nickname: 'Chipper',
+          make: 'Jensen',
+          model: 'A530',
+          status: 'active',
+        }],
+      },
+    });
+    mockCreateAssignment
+      .mockResolvedValueOnce({
+        assignments: [{
+          id: 'assignment-plant-1',
+          job_id: 'job-1',
+          work_date: '2026-07-14',
+          visit_id: 'visit-1',
+          plant_id: 'plant-1',
+          resource_type: 'plant',
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'manager-1',
+          notes: null,
+          created_at: '2026-07-14T08:00:00.000Z',
+          updated_at: '2026-07-14T08:00:00.000Z',
+        }],
+        employee_capacity: [],
+      })
+      .mockResolvedValueOnce({
+        assignments: [{
+          id: 'assignment-plant-2',
+          job_id: 'job-1',
+          work_date: '2026-07-14',
+          visit_id: 'visit-1',
+          plant_id: 'plant-2',
+          resource_type: 'plant',
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'manager-1',
+          notes: null,
+          created_at: '2026-07-14T08:00:00.000Z',
+          updated_at: '2026-07-14T08:00:00.000Z',
+        }],
+        employee_capacity: [],
+      });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-1', label: 'P001 — Loader' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith(expect.objectContaining({
+        resource_type: 'plant',
+        resource_id: 'plant-1',
+      }))
+    );
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-2', label: 'P002 — Chipper' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(mockCreateAssignment).toHaveBeenCalledWith(expect.objectContaining({
+        resource_type: 'plant',
+        resource_id: 'plant-2',
+      }))
+    );
+
+    expect(mockCreateAssignment.mock.calls.map((call) => call[0].resource_id)).toEqual([
+      'plant-1',
+      'plant-2',
+    ]);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('schedule-assignment-chip-assignment-plant-1').length).toBeGreaterThan(0);
+      expect(screen.getAllByTestId('schedule-assignment-chip-assignment-plant-2').length).toBeGreaterThan(0);
+    });
+    expect(screen.getByRole('tab', { name: 'Plant' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Review scheduling conflict' })).not.toBeInTheDocument();
+  });
+
+  it('SCHED-PLANT-IDEM-001 does not re-post a plant already on the visit', async () => {
+    mockWideViewport(true);
+    const plant = {
+      id: 'plant-1',
+      plant_id: 'P001',
+      nickname: 'Loader',
+      make: 'JCB',
+      model: '403',
+      status: 'active' as const,
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      resources: {
+        ...board.resources,
+        plant: [plant],
+      },
+      assignments: [
+        ...board.assignments,
+        {
+          id: 'assignment-plant-1',
+          job_id: 'job-1',
+          work_date: '2026-07-14',
+          visit_id: 'visit-1',
+          resource_type: 'plant' as const,
+          plant_id: 'plant-1',
+          plant,
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'manager-1',
+          created_at: '2026-07-14T08:00:00.000Z',
+          updated_at: '2026-07-14T08:00:00.000Z',
+          conflicts: [],
+          visit: board.visits[0],
+        },
+      ],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    act(() => {
+      dndState.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: {
+            data: {
+              resource: { type: 'plant', id: 'plant-1', label: 'P001 — Loader' },
+            },
+          },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1', workDate: '2026-07-14' } },
+        },
+      });
+    });
+
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('schedule-assignment-chip-assignment-plant-1')).not.toHaveLength(0);
+    expect(screen.queryByRole('dialog', { name: 'Review scheduling conflict' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Plant' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('rolls back optimistic availability and opens override review on conflict', async () => {
     mockCreateAssignment.mockRejectedValueOnce(
       new SchedulingApiError(

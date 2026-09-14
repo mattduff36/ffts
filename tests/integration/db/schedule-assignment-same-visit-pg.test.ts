@@ -216,5 +216,12 @@ describe('schedule assignment same-visit PostgreSQL', () => {
     await expect(createAssignment('employee', employeeId, visitOverlap)).rejects.toThrow(
       /RESOURCE_OVERLAP/
     );
+    const dayEmployee = randomUUID();
+    await client.query(
+      `INSERT INTO ${SCHEMA}.schedule_employee_assignments (job_id, work_date, visit_id, profile_id, assigned_by)
+       VALUES ($1::uuid, '2099-01-02', NULL, $2::uuid, $3::uuid)`,
+      [jobId, dayEmployee, actorId]
+    );
+    await expect(createAssignment('employee', dayEmployee, visitA)).rejects.toThrow(/RESOURCE_OVERLAP/);
   });
 });

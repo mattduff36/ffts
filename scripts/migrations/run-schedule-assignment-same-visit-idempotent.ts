@@ -20,11 +20,7 @@ function describeTarget(urlString: string): { host: string; database: string; lo
   const url = new URL(urlString);
   const host = url.hostname;
   const database = decodeURIComponent(url.pathname.replace(/^\//, '')) || 'postgres';
-  const local =
-    host === 'localhost'
-    || host === '127.0.0.1'
-    || host === '::1'
-    || host.endsWith('.local');
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
   return { host, database, local };
 }
 

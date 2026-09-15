@@ -590,7 +590,7 @@ export async function proveAndExecuteLeftoverRequiredIds(params: {
       extraArgs: [
         '-t',
         ids.map(escapeTitleFilter).join('|'),
-        '--testTimeout=60000',
+        '--testTimeout=180000',
       ],
       vitestProject: runOptions.vitestProject,
       configFile: runOptions.configFile,

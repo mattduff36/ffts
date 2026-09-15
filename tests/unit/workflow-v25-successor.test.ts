@@ -17,7 +17,6 @@ import {
 import { getWorkflowPaths, loadWorkflowReviewStateStrict } from '@/scripts/automation/workflow-events';
 import {
   cleanupWorkflowV24Fixtures,
-  failFirstThenClosure,
   initGitRepo,
   initWorkstream,
   makeTempRoot,
@@ -56,15 +55,55 @@ function writeSuccessorPlan(
   return planPath;
 }
 
+function seedExhaustedParent(repoRoot: string, parentId: string): string {
+  const baseCommit = initGitRepo(repoRoot);
+  initWorkstream(repoRoot, parentId, baseCommit);
+  const current = readProtocolRecord(repoRoot, parentId)!;
+  const now = new Date().toISOString();
+  writeProtocolRecord(repoRoot, {
+    ...current,
+    phase: 'routing_required',
+    nextAction: 'route_or_isolate',
+    failedPremiumReviewCount: 2,
+    activeReviewToken: null,
+    activeReviewPass: null,
+    reviewAttempts: [
+      {
+        pass: 'first',
+        token: 'rev_first_seedparent001',
+        startedAt: now,
+        headCommit: current.headCommit,
+        treeFingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        result: 'failed',
+        blockerFamilies: ['verification'],
+        blockerIds: ['SCHED-ASSIGN-SQL-001'],
+        recordedAt: now,
+      },
+      {
+        pass: 'closure',
+        token: 'rev_closure_seedparent002',
+        startedAt: now,
+        headCommit: current.headCommit,
+        treeFingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        result: 'failed',
+        blockerFamilies: ['migration-runner'],
+        blockerIds: ['MIG-LOCAL-HOST-001'],
+        recordedAt: now,
+      },
+    ],
+    openBlockerIds: ['SCHED-ASSIGN-SQL-001', 'MIG-LOCAL-HOST-001'],
+    blockerFamilies: ['verification', 'migration-runner'],
+  });
+  return baseCommit;
+}
+
 function exhaustAndSucceedSuccessor(
   repoRoot: string,
   parentId: string,
   childId: string,
   requiredIds = ['TEE-PLAN-001']
 ) {
-  const baseCommit = initGitRepo(repoRoot);
-  initWorkstream(repoRoot, parentId, baseCommit);
-  failFirstThenClosure(repoRoot, parentId, { commitFixBeforeClosure: true });
+  seedExhaustedParent(repoRoot, parentId);
   const planPath = writeSuccessorPlan(repoRoot, childId, requiredIds, parentId);
   const result = applyProtocolTransition({
     repoRoot,
@@ -75,10 +114,10 @@ function exhaustAndSucceedSuccessor(
     ownerAuthorisedGeneration: true,
   });
   expect(result.ok).toBe(true);
-  return { baseCommit, planPath, result };
+  return { planPath, result };
 }
 
-describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
+describe('TEE V2.5 owner-authorised successor', () => {
   it('TEE-V25-SUCCESSOR-001 records one Generation 2 child against an exhausted parent', () => {
     const repoRoot = makeTempRoot('successor-legal');
     exhaustAndSucceedSuccessor(repoRoot, 'ws_ffts_pred', 'ws_ffts_gen2');
@@ -94,9 +133,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
 
   it('TEE-V25-SUCCESSOR-AUTH-001 refuses successor without owner authorisation', () => {
     const repoRoot = makeTempRoot('successor-auth');
-    const baseCommit = initGitRepo(repoRoot);
-    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
-    failFirstThenClosure(repoRoot, 'ws_ffts_pred');
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
     const planPath = writeSuccessorPlan(repoRoot, 'ws_ffts_gen2', ['TEE-PLAN-001'], 'ws_ffts_pred');
     const result = applyProtocolTransition({
       repoRoot,
@@ -176,9 +213,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
 
   it('TEE-V25-SUCCESSOR-PARK-003 parks the exhausted parent without rewriting its history', () => {
     const repoRoot = makeTempRoot('successor-park');
-    const baseCommit = initGitRepo(repoRoot);
-    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
-    failFirstThenClosure(repoRoot, 'ws_ffts_pred', { commitFixBeforeClosure: true });
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
     const before = readProtocolRecord(repoRoot, 'ws_ffts_pred')!;
     const planPath = writeSuccessorPlan(repoRoot, 'ws_ffts_gen2', ['TEE-PLAN-001'], 'ws_ffts_pred');
     expect(
@@ -201,9 +236,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
 
   it('TEE-V25-SUCCESSOR-HISTORY-004 keeps parent attempts and closed IDs immutable', () => {
     const repoRoot = makeTempRoot('successor-history');
-    const baseCommit = initGitRepo(repoRoot);
-    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
-    failFirstThenClosure(repoRoot, 'ws_ffts_pred', { commitFixBeforeClosure: true });
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
     const before = readProtocolRecord(repoRoot, 'ws_ffts_pred')!;
     const planPath = writeSuccessorPlan(repoRoot, 'ws_ffts_gen2', ['TEE-PLAN-001'], 'ws_ffts_pred');
     applyProtocolTransition({
@@ -224,9 +257,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
 
   it('TEE-V25-SUCCESSOR-ATOMIC-003 / TEE-V25-SUCCESSOR-ATOMIC-005 recovers a crashed successor persist', () => {
     const repoRoot = makeTempRoot('successor-atomic');
-    const baseCommit = initGitRepo(repoRoot);
-    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
-    failFirstThenClosure(repoRoot, 'ws_ffts_pred', { commitFixBeforeClosure: true });
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
     const previousParent = readProtocolRecord(repoRoot, 'ws_ffts_pred')!;
     const previousState = loadWorkflowReviewStateStrict(getWorkflowPaths(repoRoot).statePath);
     writeProtocolRecord(repoRoot, {
@@ -271,14 +302,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
 
   it('TEE-V25-SUCCESSOR-BLOCKERS-005 requires inherited blockers proven before first review', () => {
     const repoRoot = makeTempRoot('successor-blockers');
-    const baseCommit = initGitRepo(repoRoot);
-    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
-    failFirstThenClosure(repoRoot, 'ws_ffts_pred', { commitFixBeforeClosure: true });
-    const exhausted = readProtocolRecord(repoRoot, 'ws_ffts_pred')!;
-    writeProtocolRecord(repoRoot, {
-      ...exhausted,
-      openBlockerIds: ['SCHED-ASSIGN-SQL-001', 'MIG-LOCAL-HOST-001'],
-    });
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
     const closedPlan = writeSuccessorPlan(
       repoRoot,
       'ws_ffts_gen2',
@@ -314,13 +338,7 @@ describe('TEE V2.5 owner-authorised successor', { timeout: 60_000 }, () => {
     expect(blocked.message).toMatch(/inherited blockers/);
 
     const provenRoot = makeTempRoot('successor-blockers-close');
-    const provenBase = initGitRepo(provenRoot);
-    initWorkstream(provenRoot, 'ws_ffts_pred', provenBase);
-    failFirstThenClosure(provenRoot, 'ws_ffts_pred', { commitFixBeforeClosure: true });
-    writeProtocolRecord(provenRoot, {
-      ...readProtocolRecord(provenRoot, 'ws_ffts_pred')!,
-      openBlockerIds: ['SCHED-ASSIGN-SQL-001', 'MIG-LOCAL-HOST-001'],
-    });
+    seedExhaustedParent(provenRoot, 'ws_ffts_pred');
     const provenPlan = writeSuccessorPlan(
       provenRoot,
       'ws_ffts_gen2',

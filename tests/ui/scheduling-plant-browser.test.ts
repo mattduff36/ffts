@@ -21,7 +21,6 @@ describe('scheduling plant browser evidence', () => {
         timeout: 240_000,
         env: {
           ...process.env,
-          CI: process.env.CI ?? '1',
         },
       }
     );

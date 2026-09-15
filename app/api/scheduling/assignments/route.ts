@@ -13,8 +13,8 @@ import {
 import { loadExactVisitAssignment } from '@/lib/server/scheduling-assignment-existing';
 import {
   assignmentCreateBulkInputHash,
+  isMissingScheduleRpc,
   replayAssignmentMutationIfPresent,
-  rpcWithIdempotentFallback,
 } from '@/lib/server/scheduling-assignment-idempotency';
 import { getScheduleVisitDate } from '@/lib/utils/scheduling';
 import type { ScheduleVisit } from '@/types/scheduling';
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (visit) {
+    if (visit && !input.request_id) {
       const existing = await loadExactVisitAssignment(admin, {
         jobId: input.job_id,
         visitId: visit.id,
@@ -230,17 +230,29 @@ export async function POST(request: NextRequest) {
       p_actor_user_id: access.userId,
     };
     const { data: rows, error } = input.request_id
-      ? await rpcWithIdempotentFallback(
-          admin,
-          'create_schedule_assignments_bulk_v2',
-          { ...bulkArgs, p_request_id: input.request_id },
-          'create_schedule_assignments_bulk_v1',
-          bulkArgs
-        )
+      ? await admin.rpc('create_schedule_assignments_bulk_v2', {
+          ...bulkArgs,
+          p_request_id: input.request_id,
+        })
       : await admin.rpc('create_schedule_assignments_bulk_v1', bulkArgs);
     if (error) {
+      if (input.request_id && isMissingScheduleRpc(error)) {
+        return NextResponse.json(
+          { error: 'Assignment request binding is unavailable.', code: 'request_id_rpc_missing' },
+          { status: 503 }
+        );
+      }
+      if (error.message?.includes('REQUEST_ID_REUSED')) {
+        return NextResponse.json(
+          {
+            error: 'This scheduling request ID was already used for another change.',
+            code: 'request_id_reused',
+          },
+          { status: 409 }
+        );
+      }
       if (error.code === '23505' || error.message?.includes('RESOURCE_OVERLAP')) {
-        if (visit) {
+        if (visit && !input.request_id) {
           const existing = await loadExactVisitAssignment(admin, {
             jobId: input.job_id,
             visitId: visit.id,

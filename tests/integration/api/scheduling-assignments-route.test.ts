@@ -508,6 +508,55 @@ describe('POST /api/scheduling/assignments', () => {
       )
     ).toHaveLength(2);
 
+    mockDetectPlantConflicts.mockResolvedValue([]);
+    const freshRequestId = '88888888-8888-4888-8888-888888888881';
+    mockRpc.mockImplementation(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'schedule_assignment_request_replay_v2') {
+        return { data: null, error: null };
+      }
+      if (name === 'create_schedule_assignments_bulk_v2') {
+        return {
+          data: [{
+            assignment_id: '77777777-7777-4777-8777-777777777777',
+            resource_type: 'plant',
+            job_id: args.p_job_id,
+            visit_id: args.p_visit_id,
+            work_date: '2026-07-14',
+            profile_id: null,
+            plant_id: args.p_resource_id,
+            notes: null,
+            conflict_override: false,
+            conflict_codes: [],
+            conflict_override_by: null,
+            conflict_override_at: null,
+            assigned_by: managerAccess.userId,
+            created_at: '2026-07-14T08:00:00.000Z',
+            updated_at: '2026-07-14T08:00:00.000Z',
+          }],
+          error: null,
+        };
+      }
+      return { data: null, error: { message: 'v1 fallback is forbidden for request_id', code: 'XX000' } };
+    });
+    const fresh = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+      request_id: freshRequestId,
+    }));
+    expect(fresh.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_schedule_assignments_bulk_v2',
+      expect.objectContaining({
+        p_request_id: freshRequestId,
+        p_resource_id: plantA,
+      })
+    );
+    expect(
+      mockRpc.mock.calls.filter(([name]) => name === 'create_schedule_assignments_bulk_v1')
+    ).toHaveLength(2);
+
     mockExistingAssignment.data = null;
     mockExistingAssignment.resolve = null;
     mockDetectPlantConflicts.mockResolvedValue([]);
@@ -689,5 +738,45 @@ describe('POST /api/scheduling/assignments', () => {
     expect(mockRpc.mock.calls.filter(([name]) =>
       String(name).startsWith('create_schedule_assignments_bulk')
     )).toHaveLength(0);
+  });
+
+  it('SCHED-ASSIGN-RPC-MISSING-002 fails closed when request-bearing v2 is missing', async () => {
+    mockExistingAssignment.data = {
+      id: '77777777-7777-4777-8777-777777777777',
+      job_id: '11111111-1111-4111-8111-111111111111',
+      work_date: '2026-07-14',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      plant_id: '44444444-4444-4444-8444-444444444444',
+      notes: null,
+      conflict_override: false,
+      conflict_codes: [],
+      assigned_by: managerAccess.userId,
+      created_at: '2026-07-14T08:00:00.000Z',
+      updated_at: '2026-07-14T08:00:00.000Z',
+    };
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'schedule_assignment_request_replay_v2') {
+        return { data: null, error: null };
+      }
+      if (name === 'create_schedule_assignments_bulk_v2') {
+        return { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } };
+      }
+      return { data: [{ assignment_id: 'unbound' }], error: null };
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/route');
+    const response = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: '44444444-4444-4444-8444-444444444444',
+      request_id: '99999999-9999-4999-8999-999999999991',
+    }));
+    const payload = await response.json();
+    expect(response.status).toBe(503);
+    expect(payload.code).toBe('request_id_rpc_missing');
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignments_bulk_v1',
+      expect.anything()
+    );
   });
 });

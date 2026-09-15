@@ -34,6 +34,7 @@ import {
 } from './workflow-review-protocol';
 import {
   latestLegalFinalDiffAttempt,
+  outboundSuccessorProvenance,
   successorProvenanceEquals,
   validateCurrentV24ProtocolRecord,
 } from './workflow-v24-protocol-validator';
@@ -229,13 +230,16 @@ function immediateParentId(
   if (parent?.phase === 'split') return candidate;
   if (
     parent?.phase === 'successor_parked' &&
-    successorProvenanceEquals(parent.successorProvenance, record.successorProvenance)
+    successorProvenanceEquals(outboundSuccessorProvenance(parent), record.successorProvenance)
   ) {
     return candidate;
   }
   if (
     record.successorProvenance?.predecessorWorkstreamId === candidate &&
-    successorProvenanceEquals(parent?.successorProvenance, record.successorProvenance)
+    successorProvenanceEquals(
+      parent ? outboundSuccessorProvenance(parent) : null,
+      record.successorProvenance
+    )
   ) {
     return candidate;
   }
@@ -760,7 +764,10 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       const successorChild = byId.get(childWorkstreamIds[0] ?? '');
       if (
         !successorChild ||
-        !successorProvenanceEquals(protocol.successorProvenance, successorChild.successorProvenance)
+        !successorProvenanceEquals(
+          outboundSuccessorProvenance(protocol),
+          successorChild.successorProvenance
+        )
       ) {
         pushBlocker(
           makeBlocker({

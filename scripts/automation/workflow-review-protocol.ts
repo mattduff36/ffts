@@ -33,6 +33,7 @@ import {
 import { resolveCanonicalReviewRequiredIds } from './workflow-v24-required-id-set';
 import {
   latestLegalFinalDiffAttempt,
+  outboundSuccessorProvenance,
   validateCurrentV24ProtocolRecord,
   validateWorkflowProtocolRecordStructure,
 } from './workflow-v24-protocol-validator';
@@ -198,6 +199,7 @@ export function createEmptyProtocolRecord(params: {
     boundPlanCriticality: params.boundPlanCriticality ?? 'critical',
     rehomeProvenance: params.rehomeProvenance ?? null,
     successorProvenance: null,
+    successorChildProvenance: null,
     routeDisposition: null,
     updatedAt: nowIso(params.now),
   };
@@ -1190,7 +1192,7 @@ export function reduceReviewStart(params: {
       return fail('first review requires a recorded preflight manifest', current);
     }
     if (
-      current.successorProvenance?.generation === 2 &&
+      (current.successorProvenance?.generation ?? 0) >= 2 &&
       current.openBlockerIds.length > 0
     ) {
       return fail(
@@ -1562,7 +1564,9 @@ function listProtocolWorkstreamDirectoryIds(repoRoot: string): string[] {
 
 function existingSuccessorChildId(repoRoot: string, predecessorId: string): string | null {
   const predecessor = readProtocolRecord(repoRoot, predecessorId);
-  const declared = predecessor?.successorProvenance?.successorWorkstreamId;
+  const declared = predecessor
+    ? outboundSuccessorProvenance(predecessor)?.successorWorkstreamId
+    : null;
   if (declared && declared !== predecessorId) {
     return declared;
   }
@@ -1599,7 +1603,10 @@ export function reduceSuccessor(params: {
       current
     );
   }
-  if (current.successorProvenance || existingSuccessorChildId(params.repoRoot, current.workstreamId)) {
+  if (
+    outboundSuccessorProvenance(current) ||
+    existingSuccessorChildId(params.repoRoot, current.workstreamId)
+  ) {
     return fail('successor already exists for this exhausted generation; refuse replay', current);
   }
   if (listImmediateChildWorkstreamIds(params.repoRoot, current.workstreamId).length > 0) {
@@ -1619,7 +1626,7 @@ export function reduceSuccessor(params: {
     return fail('newWorkstreamId already exists', current);
   }
   if (!params.planPath) {
-    return fail('successor requires a Generation 2 plan contract', current);
+    return fail('successor requires a successor plan contract', current);
   }
   const resolved = resolvePlanPath({
     candidatePath: params.planPath,
@@ -1659,11 +1666,15 @@ export function reduceSuccessor(params: {
   }
 
   const createdAt = nowIso(params.now);
+  const inbound = current.successorProvenance;
+  const keepInbound =
+    inbound?.successorWorkstreamId === current.workstreamId ? inbound : null;
+  const generation = (keepInbound?.generation ?? inbound?.generation ?? 1) + 1;
   const provenance: WorkflowSuccessorProvenance = {
     schemaVersion: '1',
     predecessorWorkstreamId: current.workstreamId,
     successorWorkstreamId: childId,
-    generation: 2,
+    generation,
     ownerAuthorisedGeneration: true,
     authorisationMarker: 'owner-authorised-generation',
     branchName: git.binding.branchName,
@@ -1688,13 +1699,17 @@ export function reduceSuccessor(params: {
   child.reviewAttempts = [];
   child.blockerFamilies = [...current.blockerFamilies];
   child.openBlockerIds = [...current.openBlockerIds];
+  child.evidenceManifestPath = null;
+  child.fixDeltaManifestPath = null;
   child.successorProvenance = provenance;
+  child.successorChildProvenance = null;
 
   const parent: WorkflowProtocolRecord = {
     ...current,
     phase: 'successor_parked',
     nextAction: 'awaiting_successor_completion',
-    successorProvenance: provenance,
+    successorProvenance: keepInbound ?? provenance,
+    successorChildProvenance: keepInbound ? provenance : current.successorChildProvenance ?? null,
     updatedAt: createdAt,
   };
 
@@ -1702,7 +1717,7 @@ export function reduceSuccessor(params: {
     ok: true,
     exitCode: 0,
     record: parent,
-    message: 'owner-authorised Generation 2 successor recorded',
+    message: `owner-authorised Generation ${generation} successor recorded`,
     successorWorkstreamId: child.workstreamId,
     childRecord: child,
   };

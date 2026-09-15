@@ -163,6 +163,53 @@ function validateRehome(value: unknown): { ok: true } | { ok: false; message: st
   return { ok: true };
 }
 
+function parseSuccessorHop(
+  value: unknown,
+  label: 'successorProvenance' | 'successorChildProvenance'
+): { ok: true; hop: WorkflowSuccessorProvenance } | { ok: false; message: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ok: false, message: `${label} is malformed` };
+  }
+  const row = value as Partial<WorkflowSuccessorProvenance>;
+  if (row.schemaVersion !== '1') {
+    return { ok: false, message: `${label}.schemaVersion is unsupported` };
+  }
+  if (
+    typeof row.predecessorWorkstreamId !== 'string' ||
+    !assertSafeOpaqueId(row.predecessorWorkstreamId, 'predecessorWorkstreamId').ok
+  ) {
+    return { ok: false, message: `${label}.predecessorWorkstreamId is invalid` };
+  }
+  if (
+    typeof row.successorWorkstreamId !== 'string' ||
+    !assertSafeOpaqueId(row.successorWorkstreamId, 'successorWorkstreamId').ok
+  ) {
+    return { ok: false, message: `${label}.successorWorkstreamId is invalid` };
+  }
+  if (row.predecessorWorkstreamId === row.successorWorkstreamId) {
+    return { ok: false, message: `${label} cannot be cyclic` };
+  }
+  if (!Number.isSafeInteger(row.generation) || (row.generation ?? 0) < 2) {
+    return { ok: false, message: `${label}.generation is invalid` };
+  }
+  if (row.ownerAuthorisedGeneration !== true) {
+    return { ok: false, message: `${label}.ownerAuthorisedGeneration is required` };
+  }
+  if (row.authorisationMarker !== 'owner-authorised-generation') {
+    return { ok: false, message: `${label}.authorisationMarker is invalid` };
+  }
+  if (typeof row.branchName !== 'string' || !BRANCH_RE.test(row.branchName)) {
+    return { ok: false, message: `${label}.branchName is invalid` };
+  }
+  if (!isCommitToken(row.baseCommit) || !isCommitToken(row.createdAtHeadCommit)) {
+    return { ok: false, message: `${label} commit binding is invalid` };
+  }
+  if (!isIsoTimestamp(row.createdAt)) {
+    return { ok: false, message: `${label}.createdAt is invalid` };
+  }
+  return { ok: true, hop: row as WorkflowSuccessorProvenance };
+}
+
 function validateSuccessorProvenance(
   value: unknown,
   workstreamId: string,
@@ -174,57 +221,62 @@ function validateSuccessorProvenance(
     }
     return { ok: true };
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return { ok: false, message: 'successorProvenance is malformed' };
+  const parsed = parseSuccessorHop(value, 'successorProvenance');
+  if (!parsed.ok) return parsed;
+  const row = parsed.hop;
+  if (phase === 'successor_parked') {
+    const inbound = workstreamId === row.successorWorkstreamId;
+    const outbound = workstreamId === row.predecessorWorkstreamId;
+    if (!inbound && !outbound) {
+      return {
+        ok: false,
+        message:
+          'successor_parked successorProvenance must name this workstream as predecessor or successor',
+      };
+    }
+    return { ok: true };
   }
-  const row = value as Partial<WorkflowSuccessorProvenance>;
-  if (row.schemaVersion !== '1') {
-    return { ok: false, message: 'successorProvenance.schemaVersion is unsupported' };
-  }
-  if (
-    typeof row.predecessorWorkstreamId !== 'string' ||
-    !assertSafeOpaqueId(row.predecessorWorkstreamId, 'predecessorWorkstreamId').ok
-  ) {
-    return { ok: false, message: 'successorProvenance.predecessorWorkstreamId is invalid' };
-  }
-  if (
-    typeof row.successorWorkstreamId !== 'string' ||
-    !assertSafeOpaqueId(row.successorWorkstreamId, 'successorWorkstreamId').ok
-  ) {
-    return { ok: false, message: 'successorProvenance.successorWorkstreamId is invalid' };
-  }
-  if (row.predecessorWorkstreamId === row.successorWorkstreamId) {
-    return { ok: false, message: 'successorProvenance cannot be cyclic' };
-  }
-  if (!Number.isInteger(row.generation) || (row.generation ?? 0) < 2) {
-    return { ok: false, message: 'successorProvenance.generation is invalid' };
-  }
-  if (row.ownerAuthorisedGeneration !== true) {
-    return { ok: false, message: 'successorProvenance.ownerAuthorisedGeneration is required' };
-  }
-  if (row.authorisationMarker !== 'owner-authorised-generation') {
-    return { ok: false, message: 'successorProvenance.authorisationMarker is invalid' };
-  }
-  if (typeof row.branchName !== 'string' || !BRANCH_RE.test(row.branchName)) {
-    return { ok: false, message: 'successorProvenance.branchName is invalid' };
-  }
-  if (!isCommitToken(row.baseCommit) || !isCommitToken(row.createdAtHeadCommit)) {
-    return { ok: false, message: 'successorProvenance commit binding is invalid' };
-  }
-  if (!isIsoTimestamp(row.createdAt)) {
-    return { ok: false, message: 'successorProvenance.createdAt is invalid' };
-  }
-  if (phase === 'successor_parked' && workstreamId !== row.predecessorWorkstreamId) {
-    return { ok: false, message: 'successor_parked workstreamId must be the predecessor' };
-  }
-  if (
-    phase !== 'successor_parked' &&
-    row.generation === 2 &&
-    workstreamId !== row.successorWorkstreamId
-  ) {
-    return { ok: false, message: 'Generation 2 successorProvenance must belong to the successor' };
+  if (row.generation >= 2 && workstreamId !== row.successorWorkstreamId) {
+    return { ok: false, message: 'successorProvenance must belong to the successor' };
   }
   return { ok: true };
+}
+
+function validateSuccessorChildProvenance(
+  value: unknown,
+  workstreamId: string,
+  phase: WorkflowProtocolPhase | undefined,
+  inbound: WorkflowSuccessorProvenance | null | undefined
+): { ok: true } | { ok: false; message: string } {
+  if (value == null) return { ok: true };
+  if (phase !== 'successor_parked') {
+    return { ok: false, message: 'successorChildProvenance is only valid on successor_parked' };
+  }
+  const parsed = parseSuccessorHop(value, 'successorChildProvenance');
+  if (!parsed.ok) return parsed;
+  if (parsed.hop.predecessorWorkstreamId !== workstreamId) {
+    return { ok: false, message: 'successorChildProvenance predecessor must be this workstream' };
+  }
+  if (inbound && parsed.hop.generation !== inbound.generation + 1) {
+    return {
+      ok: false,
+      message: 'successorChildProvenance.generation must be inbound generation + 1',
+    };
+  }
+  return { ok: true };
+}
+
+export function outboundSuccessorProvenance(
+  record: Pick<
+    WorkflowProtocolRecord,
+    'workstreamId' | 'successorProvenance' | 'successorChildProvenance'
+  >
+): WorkflowSuccessorProvenance | null {
+  if (record.successorChildProvenance) return record.successorChildProvenance;
+  if (record.successorProvenance?.predecessorWorkstreamId === record.workstreamId) {
+    return record.successorProvenance;
+  }
+  return null;
 }
 
 export function successorProvenanceEquals(
@@ -362,6 +414,13 @@ export function validateWorkflowProtocolRecordStructure(
     candidate.phase as WorkflowProtocolPhase | undefined
   );
   if (!successor.ok) return fail(successor.message);
+  const childHop = validateSuccessorChildProvenance(
+    candidate.successorChildProvenance,
+    candidate.workstreamId,
+    candidate.phase as WorkflowProtocolPhase | undefined,
+    (candidate.successorProvenance ?? null) as WorkflowSuccessorProvenance | null
+  );
+  if (!childHop.ok) return fail(childHop.message);
   return { ok: true, record: candidate as WorkflowProtocolRecord };
 }
 

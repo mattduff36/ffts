@@ -700,6 +700,7 @@ export interface WorkflowProtocolRecord {
   boundPlanCriticality?: 'critical' | 'not_critical' | null;
   rehomeProvenance?: WorkflowRehomeProvenance | null;
   successorProvenance?: WorkflowSuccessorProvenance | null;
+  successorChildProvenance?: WorkflowSuccessorProvenance | null;
   routeDisposition?: WorkflowRouteDisposition | null;
   updatedAt: string;
 }

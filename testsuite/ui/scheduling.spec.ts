@@ -977,8 +977,9 @@ test.describe('@scheduling Scheduling', () => {
     expect(assignmentRequests[0]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab');
     expect(assignmentRequests[1]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac');
     expect(assignmentRequests[0]?.resource_id).not.toBe(assignmentRequests[1]?.resource_id);
-    await expect(target.getByText('Test Chipper')).toBeVisible();
-    await expect(target.getByText('Test Loader')).toBeVisible();
+    await expect(target.locator('[data-testid^="schedule-assignment-chip-"]')).toHaveCount(2);
+    await expect(target.getByText('Test Chipper')).toBeAttached();
+    await expect(target.getByText('Test Loader')).toBeAttached();
     await expect(boardResourceTab(page, 'Plant')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('dialog', { name: 'Review scheduling conflict' })).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);

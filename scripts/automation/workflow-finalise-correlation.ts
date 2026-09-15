@@ -174,6 +174,7 @@ export function isCriticalProtocolWorkstream(
 export type WorkflowProtocolLineageRole =
   | 'active_leaf'
   | 'parked_split_ancestor'
+  | 'parked_successor_ancestor'
   | 'parked_unstarted'
   | 'orphan_split'
   | 'finalised'

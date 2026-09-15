@@ -24,6 +24,7 @@ export type ScheduleAssignmentTargetDecision =
     };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const SUPABASE_POOLER_HOST = /^(?:[a-z0-9-]+\.)*pooler\.supabase\.com$/u;
 
 function sha256Fingerprint(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -76,7 +77,8 @@ export function classifyScheduleAssignmentTarget(connectionString: string): {
   }
 
   const sessionUser = /^postgres\.([a-z0-9]+)$/u.exec(user);
-  if (sessionUser && port === 5432) {
+  const recognizedPooler = SUPABASE_POOLER_HOST.test(host);
+  if (sessionUser && port === 5432 && recognizedPooler) {
     return {
       targetClass: 'supabase_session',
       projectRef: sessionUser[1] ?? null,
@@ -85,7 +87,7 @@ export function classifyScheduleAssignmentTarget(connectionString: string): {
     };
   }
 
-  if (port === 6543) {
+  if (port === 6543 && recognizedPooler) {
     return {
       targetClass: 'supabase_transaction',
       projectRef: sessionUser?.[1] ?? null,

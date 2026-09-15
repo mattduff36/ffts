@@ -227,6 +227,25 @@ function validateSuccessorProvenance(
   return { ok: true };
 }
 
+export function successorProvenanceEquals(
+  left: WorkflowSuccessorProvenance | null | undefined,
+  right: WorkflowSuccessorProvenance | null | undefined
+): boolean {
+  if (!left || !right) return false;
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.predecessorWorkstreamId === right.predecessorWorkstreamId &&
+    left.successorWorkstreamId === right.successorWorkstreamId &&
+    left.generation === right.generation &&
+    left.ownerAuthorisedGeneration === right.ownerAuthorisedGeneration &&
+    left.authorisationMarker === right.authorisationMarker &&
+    left.branchName === right.branchName &&
+    left.baseCommit === right.baseCommit &&
+    left.createdAtHeadCommit === right.createdAtHeadCommit &&
+    left.createdAt === right.createdAt
+  );
+}
+
 export function validateWorkflowProtocolRecordStructure(
   value: unknown
 ): ProtocolValidationResult {

@@ -64,6 +64,14 @@ describe('schedule assignment target gate', () => {
     expect(unknown.ok).toBe(false);
     if (!unknown.ok) expect(unknown.targetClass).toBe('unknown');
 
+    const spoofedSession = resolveScheduleAssignmentTarget({
+      connectionString: 'postgres://postgres.abc123xyz:pass@db.example.com:5432/postgres',
+      appSupabaseUrl: APP,
+      confirmToken: SCHED_ASSIGNMENT_CONFIRM_TOKEN,
+    });
+    expect(spoofedSession.ok).toBe(false);
+    if (!spoofedSession.ok) expect(spoofedSession.targetClass).toBe('unknown');
+
     const log = formatScheduleAssignmentTargetLog(local);
     expect(log).toMatch(/class=local/);
     expect(log).not.toMatch(/localhost|abc123xyz|postgres:\/\//);

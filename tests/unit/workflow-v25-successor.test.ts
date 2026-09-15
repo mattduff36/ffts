@@ -298,6 +298,38 @@ describe('TEE V2.5 owner-authorised successor', () => {
     );
     expect(child).toBeTruthy();
     expect(child?.message).not.toMatch(/exhausted its lineage premium review budget/);
+
+    const missingChildRoot = makeTempRoot('successor-finalise-missing');
+    exhaustAndSucceedSuccessor(missingChildRoot, 'ws_ffts_pred', 'ws_ffts_gen2');
+    const missingChild = readProtocolRecord(missingChildRoot, 'ws_ffts_gen2')!;
+    writeProtocolRecord(missingChildRoot, { ...missingChild, successorProvenance: null });
+    const missingReadiness = getFinaliseProtocolReadiness(missingChildRoot);
+    expect(
+      missingReadiness.blockingWorkstreams.some(
+        (row) =>
+          row.workstreamId === 'ws_ffts_pred' &&
+          /reciprocal successorProvenance|no valid child continuation/.test(row.message)
+      )
+    ).toBe(true);
+
+    const tamperedRoot = makeTempRoot('successor-finalise-tamper');
+    exhaustAndSucceedSuccessor(tamperedRoot, 'ws_ffts_pred', 'ws_ffts_gen2');
+    const tamperedChild = readProtocolRecord(tamperedRoot, 'ws_ffts_gen2')!;
+    writeProtocolRecord(tamperedRoot, {
+      ...tamperedChild,
+      successorProvenance: {
+        ...tamperedChild.successorProvenance!,
+        createdAtHeadCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+    const tamperedReadiness = getFinaliseProtocolReadiness(tamperedRoot);
+    expect(
+      tamperedReadiness.blockingWorkstreams.some(
+        (row) =>
+          row.workstreamId === 'ws_ffts_pred' &&
+          /reciprocal successorProvenance|no valid child continuation/.test(row.message)
+      )
+    ).toBe(true);
   });
 
   it('TEE-V25-SUCCESSOR-BLOCKERS-005 requires inherited blockers proven before first review', () => {

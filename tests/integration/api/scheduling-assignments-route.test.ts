@@ -486,6 +486,28 @@ describe('POST /api/scheduling/assignments', () => {
       )
     ).toHaveLength(2);
 
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'schedule_assignment_request_replay_v2') {
+        return { data: null, error: { message: 'REQUEST_ID_REUSED' } };
+      }
+      return { data: null, error: { message: 'unexpected create after reused request_id', code: 'XX000' } };
+    });
+    const reused = await POST(request({
+      job_id: '11111111-1111-4111-8111-111111111111',
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      resource_type: 'plant',
+      resource_id: plantA,
+      request_id: '99999999-9999-4999-8999-999999999999',
+    }));
+    const reusedPayload = await reused.json();
+    expect(reused.status).toBe(409);
+    expect(reusedPayload.code).toBe('request_id_reused');
+    expect(
+      mockRpc.mock.calls.filter(([name]) =>
+        String(name).startsWith('create_schedule_assignments_bulk')
+      )
+    ).toHaveLength(2);
+
     mockExistingAssignment.data = null;
     mockExistingAssignment.resolve = null;
     mockDetectPlantConflicts.mockResolvedValue([]);

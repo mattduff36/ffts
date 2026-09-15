@@ -35,8 +35,10 @@ function hasFlag(args: string[], name: string): boolean {
 function printUsage(): void {
   process.stdout.write(`Usage:
   npm run review:preflight -- --workstream <id> [--plan <path>] [--profile <name>] [--skip-checks]
+  npm run review:preflight -- --workstream <id> --kind fix-delta --closed-blocker-ids <csv> [--plan <path>]
 
-Creates a content-addressed preflight evidence manifest and records it on the protocol workstream.
+Creates a content-addressed preflight or fix-delta evidence manifest.
+Preflight records the manifest on the protocol workstream. Fix-delta only writes the manifest.
 Independent read-only checks may run concurrently (TEE_VERIFY_JOBS, default 3; 1 = serial).
 Progress is written to stderr and is not evidence. JSON on stdout remains the machine result.
 FFTS ships no live-product default inventory profile. Unknown profiles are rejected.
@@ -56,6 +58,19 @@ async function main(): Promise<void> {
   const profile = readFlag(args, '--profile');
   const skipChecks = hasFlag(args, '--skip-checks');
   const liveDb = hasFlag(args, '--live-db');
+  const kindRaw = readFlag(args, '--kind') ?? 'preflight';
+  const closedBlockerIds = (readFlag(args, '--closed-blocker-ids') ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (kindRaw !== 'preflight' && kindRaw !== 'fix-delta') {
+    throw new Error('review preflight --kind must be preflight or fix-delta');
+  }
+  const kind = kindRaw;
+  if (kind === 'fix-delta' && closedBlockerIds.length === 0) {
+    throw new Error('fix-delta requires --closed-blocker-ids');
+  }
 
   if (!workstreamIdRaw) {
     printUsage();
@@ -128,16 +143,26 @@ async function main(): Promise<void> {
   progress?.updateStage('protocol-validation', { status: 'running' });
   progress?.updateStage('protocol-validation', { status: 'pass' });
 
+  const blockerEvidence =
+    kind === 'fix-delta'
+      ? closedBlockerIds.map((blockerId) => ({
+          blockerId,
+          evidenceLabel: `${blockerId} family sweep`,
+          commandName: 'required-tests',
+        }))
+      : undefined;
   const built = skipChecks
     ? {
         ...buildEvidenceManifest({
           repoRoot,
           workstreamId,
-          kind: 'preflight',
+          kind,
           baseCommit: protocol.baseCommit,
           requiredTestIds,
           runChecks: false,
           runRequiredTests: false,
+          closedBlockerIds: kind === 'fix-delta' ? closedBlockerIds : undefined,
+          blockerEvidence,
           frozenCandidate: {
             headCommit: identity.headCommit,
             productTreeFingerprint: identity.productTreeFingerprint,
@@ -148,11 +173,13 @@ async function main(): Promise<void> {
     : await runAndBuildEvidenceManifest({
         repoRoot,
         workstreamId,
-        kind: 'preflight',
+        kind,
         baseCommit: protocol.baseCommit,
         requiredTestIds,
         runChecks,
         runRequiredTests,
+        closedBlockerIds: kind === 'fix-delta' ? closedBlockerIds : undefined,
+        blockerEvidence,
         progress,
       });
 
@@ -173,7 +200,7 @@ async function main(): Promise<void> {
       `${JSON.stringify(
         {
           ok: false,
-          message: 'preflight failed',
+          message: kind === 'fix-delta' ? 'fix-delta failed' : 'preflight failed',
           manifestPath: built.relativePath,
           manifest: {
             status: built.manifest.status,
@@ -187,6 +214,26 @@ async function main(): Promise<void> {
       )}\n`
     );
     process.exit(1);
+  }
+
+  if (kind === 'fix-delta') {
+    progress?.updateStage('preflight-record', { status: 'pass' });
+    progress?.complete('PASS', 'Fix-delta');
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          ok: true,
+          message: 'fix-delta manifest written',
+          manifestPath: built.relativePath,
+          protocolPhase: protocol.phase,
+          contentHash: built.manifest.contentHash,
+          exists: existsSync(built.absolutePath),
+        },
+        null,
+        2
+      )}\n`
+    );
+    process.exit(0);
   }
 
   progress?.updateStage('preflight-record', { status: 'running' });

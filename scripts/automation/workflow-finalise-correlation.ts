@@ -34,6 +34,7 @@ import {
 } from './workflow-review-protocol';
 import {
   latestLegalFinalDiffAttempt,
+  successorProvenanceEquals,
   validateCurrentV24ProtocolRecord,
 } from './workflow-v24-protocol-validator';
 import {
@@ -225,8 +226,19 @@ function immediateParentId(
   const candidate = record.sourceWorkstreamIds?.[0] ?? null;
   if (!candidate) return null;
   const parent = byId?.get(candidate);
-  if (parent?.phase === 'split' || parent?.phase === 'successor_parked') return candidate;
-  if (record.successorProvenance?.predecessorWorkstreamId === candidate) return candidate;
+  if (parent?.phase === 'split') return candidate;
+  if (
+    parent?.phase === 'successor_parked' &&
+    successorProvenanceEquals(parent.successorProvenance, record.successorProvenance)
+  ) {
+    return candidate;
+  }
+  if (
+    record.successorProvenance?.predecessorWorkstreamId === candidate &&
+    successorProvenanceEquals(parent?.successorProvenance, record.successorProvenance)
+  ) {
+    return candidate;
+  }
   if (record.inheritedFailedReviewCount > 0) return candidate;
   return null;
 }
@@ -738,6 +750,24 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
             role: 'orphan_split',
             phase: protocol.phase,
             message: `CRITICAL workstream ${protocol.workstreamId} is in phase successor_parked with ambiguous children ${childWorkstreamIds.join(', ')}; protocol integrity error`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      const successorChild = byId.get(childWorkstreamIds[0] ?? '');
+      if (
+        !successorChild ||
+        !successorProvenanceEquals(protocol.successorProvenance, successorChild.successorProvenance)
+      ) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'orphan_split',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} is in phase successor_parked without exact reciprocal successorProvenance; protocol integrity error`,
             protocol,
             byId,
             childWorkstreamIds,

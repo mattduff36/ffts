@@ -83,6 +83,7 @@ const FOREIGN_PROTOCOL_PHASES = new Set<WorkflowProtocolPhase>([
   'review_closed',
   'routing_required',
   'split',
+  'successor_parked',
   'finalise_ready',
   'finalised',
   'removed_from_release',

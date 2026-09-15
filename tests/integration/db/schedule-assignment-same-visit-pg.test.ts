@@ -30,17 +30,25 @@ function createClient() {
   });
 }
 
-function ephemeralMigrationSql(schema: string): string {
-  return readFileSync(
-    resolve(
-      process.cwd(),
-      'supabase/migrations/20260914233000_schedule_assignment_same_visit_idempotent.sql'
-    ),
-    'utf8'
-  )
+function ephemeralSql(relativePath: string, schema: string): string {
+  return readFileSync(resolve(process.cwd(), relativePath), 'utf8')
     .replace(/^\s*BEGIN;\s*/gmu, '')
     .replace(/^\s*COMMIT;\s*/gmu, '')
     .replace(/\bpublic\./gu, `${schema}.`);
+}
+
+function ephemeralMigrationSql(schema: string): string {
+  return ephemeralSql(
+    'supabase/migrations/20260914233000_schedule_assignment_same_visit_idempotent.sql',
+    schema
+  );
+}
+
+function ephemeralRollbackSql(schema: string): string {
+  return ephemeralSql(
+    'supabase/rollbacks/20260914233000_schedule_assignment_same_visit_idempotent.rollback.sql',
+    schema
+  );
 }
 
 async function installFixture(client: pg.Client, schema: string) {
@@ -223,5 +231,53 @@ describe('schedule assignment same-visit PostgreSQL', () => {
       [jobId, dayEmployee, actorId]
     );
     await expect(createAssignment('employee', dayEmployee, visitA)).rejects.toThrow(/RESOURCE_OVERLAP/);
+  });
+});
+
+describe('schedule assignment same-visit rollback', () => {
+  it('fails closed without POSTGRES_URL_NON_POOLING', () => {
+    expect(connectionString, 'ephemeral assignment SQL test requires POSTGRES_URL_NON_POOLING').toBeTruthy();
+  });
+
+  if (!connectionString) {
+    return;
+  }
+
+  it('MIG-SCHED-TXN-002 applies the function then restores the pinned rollback fingerprint', async () => {
+    const schema = `ffts_asgn_rb_${randomUUID().replace(/-/gu, '').slice(0, 12)}`;
+    const client = createClient();
+    await client.connect();
+    try {
+      await installFixture(client, schema);
+      await client.query(ephemeralRollbackSql(schema));
+      const functionReg = `${schema}.create_schedule_assignment_v1(uuid, uuid, text, uuid, date, text, boolean, text[], uuid)`;
+      const { rows: beforeRows } = await client.query<{ definition: string }>(
+        `SELECT pg_get_functiondef($1::regprocedure) AS definition`,
+        [functionReg]
+      );
+      const before = beforeRows[0]?.definition || '';
+      expect(before).toContain('RESOURCE_OVERLAP');
+      expect(before).not.toContain('assignment.visit_id IS DISTINCT FROM p_visit_id');
+
+      await client.query(ephemeralMigrationSql(schema));
+      const { rows: afterRows } = await client.query<{ definition: string }>(
+        `SELECT pg_get_functiondef($1::regprocedure) AS definition`,
+        [functionReg]
+      );
+      const after = afterRows[0]?.definition || '';
+      expect(after).toContain('assignment.visit_id IS DISTINCT FROM p_visit_id');
+      expect(after).toContain('AND assignment.visit_id = p_visit_id');
+      expect(after).toContain('RESOURCE_OVERLAP');
+
+      await client.query(ephemeralRollbackSql(schema));
+      const { rows: restoredRows } = await client.query<{ definition: string }>(
+        `SELECT pg_get_functiondef($1::regprocedure) AS definition`,
+        [functionReg]
+      );
+      expect(restoredRows[0]?.definition).toBe(before);
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => undefined);
+      await client.end();
+    }
   });
 });

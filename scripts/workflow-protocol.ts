@@ -25,6 +25,7 @@ Commands:
     [--blocker-families a,b] [--blocker-ids a,b] [--sibling-surfaces a,b]
   fix-record --workstream <id> --manifest <path> [--closed-blocker-ids a,b]
   split --workstream <id> --new-workstream <id> [--narrower-partition] [--has-fix-delta]
+  successor --workstream <exhausted-id> --new-workstream <id> --plan <path> --owner-authorised-generation
   route --workstream <id> --disposition removed_from_release|reverted|superseded|rehomed \\
     --reason <text> [--implementation-commits a,b] [--revert-commit <sha>] \\
     [--supersede-commit <sha>] [--successor-repo <path>] [--successor-branch <name>] \\
@@ -122,6 +123,7 @@ async function main(): Promise<void> {
     sourceHeadCommit: readFlag(args, '--source-head'),
     sourceBaselineCommit: readFlag(args, '--source-baseline'),
     sourceReviewWorkstreamId: readFlag(args, '--source-review-workstream'),
+    ownerAuthorisedGeneration: hasFlag(args, '--owner-authorised-generation'),
   });
 
   const payload = {
@@ -131,6 +133,7 @@ async function main(): Promise<void> {
     reviewToken: result.reviewToken,
     checkpointId: result.checkpointId,
     splitWorkstreamId: result.splitWorkstreamId,
+    successorWorkstreamId: result.successorWorkstreamId,
     record: result.record
       ? {
           workstreamId: result.record.workstreamId,

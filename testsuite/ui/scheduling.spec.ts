@@ -200,6 +200,13 @@ function schedulingFixture() {
         make: 'Bandit',
         model: '12XP',
         status: 'active',
+      }, {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
+        plant_id: 'P-TEST-2',
+        nickname: 'Test Loader',
+        make: 'JCB',
+        model: '403',
+        status: 'active',
       }],
     },
     employee_capacity: [{
@@ -485,7 +492,8 @@ async function mockManagerBoard(
         : {
             plant_id: String(body.resource_id),
             resource_type: 'plant',
-            plant: fixture.resources.plant[0],
+            plant: fixture.resources.plant.find((item) => item.id === body.resource_id)
+              || fixture.resources.plant[0],
           }),
       notes: null,
       conflict_override: false,
@@ -940,6 +948,45 @@ test.describe('@scheduling Scheduling', () => {
     });
     await expect(target.getByText('Test Chipper')).toBeVisible();
     await expect(page.getByText('Drop onto a timed visit.')).toHaveCount(0);
+  });
+
+  test('two distinct plant assets remain on one visit after drag', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { fixture, assignmentRequests } = await mockManagerBoard(page);
+    await page.goto('/scheduling');
+    await boardResourceTab(page, 'Plant').click();
+
+    const firstPlant = page.getByTestId(
+      'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab'
+    );
+    const secondPlant = page.getByTestId(
+      'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac'
+    );
+    const target = page
+      .locator(
+        `[data-testid="schedule-cell-11111111-1111-4111-8111-111111111111-${fixture.week.start}"]:visible`
+      )
+      .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
+
+    await dragWithMouse(page, firstPlant, target);
+    await expect.poll(() => assignmentRequests).toHaveLength(1);
+    await boardResourceTab(page, 'Plant').click();
+    await dragWithMouse(page, secondPlant, target);
+    await expect.poll(() => assignmentRequests).toHaveLength(2);
+
+    expect(assignmentRequests[0]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab');
+    expect(assignmentRequests[1]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac');
+    expect(assignmentRequests[0]?.resource_id).not.toBe(assignmentRequests[1]?.resource_id);
+    await expect(target.getByText('Test Chipper')).toBeVisible();
+    await expect(target.getByText('Test Loader')).toBeVisible();
+    await expect(boardResourceTab(page, 'Plant')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('dialog', { name: 'Review scheduling conflict' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Assign resource' })).toHaveCount(0);
+
+    const beforeRepeat = assignmentRequests.length;
+    await dragWithMouse(page, firstPlant, target);
+    await expect.poll(() => assignmentRequests.length).toBe(beforeRepeat);
+    await expect(target.locator('[data-testid^="schedule-assignment-chip-"]')).toHaveCount(2);
   });
 
   test('DND-MOVE-004 moves an assignment by dragging it to another visit', async ({ page }) => {

@@ -10,6 +10,7 @@ import type {
   WorkflowRehomeProvenance,
   WorkflowReviewState,
   WorkflowRouteDispositionTarget,
+  WorkflowSuccessorProvenance,
 } from './types';
 import {
   getWorkflowPaths,
@@ -89,6 +90,7 @@ export type WorkflowProtocolCommand =
   | 'review-record'
   | 'fix-record'
   | 'split'
+  | 'successor'
   | 'route'
   | 'rehome-bind'
   | 'finalise-start'
@@ -102,6 +104,7 @@ export interface WorkflowProtocolTransitionResult {
   reviewToken?: string;
   checkpointId?: string;
   splitWorkstreamId?: string;
+  successorWorkstreamId?: string;
   childRecord?: WorkflowProtocolRecord;
 }
 
@@ -194,6 +197,7 @@ export function createEmptyProtocolRecord(params: {
     planPath: params.planPath ?? null,
     boundPlanCriticality: params.boundPlanCriticality ?? 'critical',
     rehomeProvenance: params.rehomeProvenance ?? null,
+    successorProvenance: null,
     routeDisposition: null,
     updatedAt: nowIso(params.now),
   };
@@ -1058,11 +1062,19 @@ export function reducePreflightRecord(params: {
     return fail(validation.message, current);
   }
 
+  const provenInherited = current.openBlockerIds.filter((id) =>
+    expectedRequiredTestIds.includes(id)
+  );
+  const remainingOpenBlockerIds = current.openBlockerIds.filter(
+    (id) => !provenInherited.includes(id)
+  );
+
   const next: WorkflowProtocolRecord = {
     ...current,
     phase: 'preflight_ready',
     nextAction: 'review_start_first',
     evidenceManifestPath: path.relative(params.repoRoot, validation.absolutePath).replace(/\\/g, '/'),
+    openBlockerIds: remainingOpenBlockerIds,
     updatedAt: nowIso(params.now),
   };
   return succeed('preflight recorded', next);
@@ -1176,6 +1188,15 @@ export function reduceReviewStart(params: {
     }
     if (!current.evidenceManifestPath) {
       return fail('first review requires a recorded preflight manifest', current);
+    }
+    if (
+      current.successorProvenance?.generation === 2 &&
+      current.openBlockerIds.length > 0
+    ) {
+      return fail(
+        `successor first review-start requires inherited blockers to be proven and closed: ${current.openBlockerIds.join(', ')}`,
+        current
+      );
     }
     const bound = getBoundCriticalReviewContract(params.repoRoot, current);
     if (!bound.ok) return fail(bound.message, current);
@@ -1531,6 +1552,162 @@ export function reduceSplit(params: {
   };
 }
 
+function listProtocolWorkstreamDirectoryIds(repoRoot: string): string[] {
+  const root = path.join(repoRoot, 'docs_private', 'automation', 'workstreams');
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
+function existingSuccessorChildId(repoRoot: string, predecessorId: string): string | null {
+  const predecessor = readProtocolRecord(repoRoot, predecessorId);
+  const declared = predecessor?.successorProvenance?.successorWorkstreamId;
+  if (declared && declared !== predecessorId) {
+    return declared;
+  }
+  for (const id of listProtocolWorkstreamDirectoryIds(repoRoot)) {
+    const record = readProtocolRecord(repoRoot, id);
+    if (
+      record?.successorProvenance?.predecessorWorkstreamId === predecessorId &&
+      record.successorProvenance.successorWorkstreamId === record.workstreamId
+    ) {
+      return record.workstreamId;
+    }
+  }
+  return null;
+}
+
+export function reduceSuccessor(params: {
+  repoRoot: string;
+  workstreamId: string;
+  newWorkstreamId?: string;
+  planPath?: string;
+  ownerAuthorisedGeneration?: boolean;
+  now?: () => Date;
+}): WorkflowProtocolTransitionResult {
+  if (params.ownerAuthorisedGeneration !== true) {
+    return fail('successor requires --owner-authorised-generation');
+  }
+  const current = readProtocolRecord(params.repoRoot, params.workstreamId);
+  if (!current) return fail('protocol record missing; run init first');
+  const protocolCheck = validateCurrentV24ProtocolRecord(current);
+  if (!protocolCheck.ok) return fail(protocolCheck.message, current);
+  if (current.phase !== 'routing_required' || !lineageBudgetExhausted(current)) {
+    return fail(
+      'successor requires routing_required with an exhausted two-pass budget',
+      current
+    );
+  }
+  if (current.successorProvenance || existingSuccessorChildId(params.repoRoot, current.workstreamId)) {
+    return fail('successor already exists for this exhausted generation; refuse replay', current);
+  }
+  if (listImmediateChildWorkstreamIds(params.repoRoot, current.workstreamId).length > 0) {
+    return fail('exhausted generation already has a continuation child', current);
+  }
+  if (!params.newWorkstreamId?.trim()) {
+    return fail('newWorkstreamId required', current);
+  }
+  const childId = requireSafeOpaqueId(params.newWorkstreamId.trim(), 'newWorkstreamId');
+  if (childId === current.workstreamId) {
+    return fail('successor child cannot be the parent', current);
+  }
+  if ((current.sourceWorkstreamIds ?? []).includes(childId)) {
+    return fail('successor would create a lineage cycle', current);
+  }
+  if (readProtocolRecord(params.repoRoot, childId)) {
+    return fail('newWorkstreamId already exists', current);
+  }
+  if (!params.planPath) {
+    return fail('successor requires a Generation 2 plan contract', current);
+  }
+  const resolved = resolvePlanPath({
+    candidatePath: params.planPath,
+    repoRoot: params.repoRoot,
+  });
+  if (resolved.status !== 'ok' || !resolved.absolutePath) {
+    return fail(`invalid plan path: ${resolved.errors.join('; ') || 'unresolved'}`, current);
+  }
+  const planPath = toRepoRelativePosixPath(params.repoRoot, resolved.absolutePath);
+  if (!planPath || planPath.startsWith('..') || path.isAbsolute(planPath)) {
+    return fail('plan path must resolve to a repo-relative path', current);
+  }
+  const parsed = extractPlanContractMarker(readFileSync(resolved.absolutePath, 'utf8'));
+  if (parsed.status !== 'present' || !parsed.contract) {
+    return fail(`plan contract ${parsed.status}: ${parsed.errors.join('; ')}`, current);
+  }
+  if (parsed.contract.workstreamId !== childId) {
+    return fail(
+      `workstreamId mismatch: --new-workstream=${childId} plan=${parsed.contract.workstreamId}`,
+      current
+    );
+  }
+  if (
+    parsed.contract.reviewClosureProtocol &&
+    parsed.contract.reviewClosureProtocol !== 'two-pass-v1'
+  ) {
+    return fail('unsupported reviewClosureProtocol', current);
+  }
+
+  const git = assertProtocolGitBinding({
+    repoRoot: params.repoRoot,
+    protocol: current,
+  });
+  if (!git.ok) return fail(git.message, current);
+  if (!git.binding.headCommit || !git.binding.branchName) {
+    return fail('successor requires a named branch and current HEAD', current);
+  }
+
+  const createdAt = nowIso(params.now);
+  const provenance: WorkflowSuccessorProvenance = {
+    schemaVersion: '1',
+    predecessorWorkstreamId: current.workstreamId,
+    successorWorkstreamId: childId,
+    generation: 2,
+    ownerAuthorisedGeneration: true,
+    authorisationMarker: 'owner-authorised-generation',
+    branchName: git.binding.branchName,
+    baseCommit: current.baseCommit,
+    createdAtHeadCommit: git.binding.headCommit,
+    createdAt,
+  };
+
+  const child = createEmptyProtocolRecord({
+    workstreamId: childId,
+    baseCommit: current.baseCommit,
+    branchName: git.binding.branchName,
+    headCommit: git.binding.headCommit,
+    planPath,
+    boundPlanCriticality: isCriticalPlanContract(parsed.contract) ? 'critical' : 'not_critical',
+    sourceWorkstreamIds: [current.workstreamId],
+    inheritedFailedReviewCount: 0,
+    now: params.now,
+  });
+  child.failedPremiumReviewCount = 0;
+  child.inheritedFailedReviewCount = 0;
+  child.reviewAttempts = [];
+  child.blockerFamilies = [...current.blockerFamilies];
+  child.openBlockerIds = [...current.openBlockerIds];
+  child.successorProvenance = provenance;
+
+  const parent: WorkflowProtocolRecord = {
+    ...current,
+    phase: 'successor_parked',
+    nextAction: 'awaiting_successor_completion',
+    successorProvenance: provenance,
+    updatedAt: createdAt,
+  };
+
+  return {
+    ok: true,
+    exitCode: 0,
+    record: parent,
+    message: 'owner-authorised Generation 2 successor recorded',
+    successorWorkstreamId: child.workstreamId,
+    childRecord: child,
+  };
+}
+
 export function reduceRoute(params: {
   repoRoot: string;
   workstreamId: string;
@@ -1850,6 +2027,108 @@ function restoreFinalisePassedCommitSnapshot(params: {
  * Roll incomplete protected-passed commits back to the pre-commit snapshot.
  * Returns whether a pending marker existed. Malformed pending fails closed.
  */
+export const SUCCESSOR_COMMIT_PENDING_KIND = 'workflow-successor-commit-pending.v1' as const;
+
+interface SuccessorCommitPending {
+  schemaVersion: '1';
+  kind: typeof SUCCESSOR_COMMIT_PENDING_KIND;
+  createdAt: string;
+  parentId: string;
+  childId: string;
+  previousParent: WorkflowProtocolRecord | null;
+  previousChild: WorkflowProtocolRecord | null;
+  previousState: WorkflowReviewState;
+}
+
+export function getSuccessorCommitPendingPath(repoRoot: string): string {
+  return path.join(
+    getWorkflowPaths(repoRoot).knowledgeDirectory,
+    'successor-commit.pending.json'
+  );
+}
+
+function isSuccessorCommitPending(value: unknown): value is SuccessorCommitPending {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Partial<SuccessorCommitPending>;
+  return (
+    row.schemaVersion === '1' &&
+    row.kind === SUCCESSOR_COMMIT_PENDING_KIND &&
+    typeof row.createdAt === 'string' &&
+    typeof row.parentId === 'string' &&
+    typeof row.childId === 'string' &&
+    row.previousState != null &&
+    typeof row.previousState === 'object'
+  );
+}
+
+export function hasIncompleteSuccessorCommit(repoRoot: string): boolean {
+  return existsSync(getSuccessorCommitPendingPath(repoRoot));
+}
+
+export function recoverIncompleteSuccessorCommit(repoRoot: string): boolean {
+  const pendingPath = getSuccessorCommitPendingPath(repoRoot);
+  if (!existsSync(pendingPath)) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(pendingPath, 'utf8')) as unknown;
+  } catch {
+    throw new Error('incomplete successor commit is unreadable; refuse to proceed');
+  }
+  if (!isSuccessorCommitPending(parsed)) {
+    throw new Error('incomplete successor commit is malformed; refuse to proceed');
+  }
+  const paths = getWorkflowPaths(repoRoot);
+  if (parsed.previousParent && isWorkflowProtocolRecord(parsed.previousParent)) {
+    writeProtocolRecord(repoRoot, parsed.previousParent);
+  }
+  if (parsed.previousChild && isWorkflowProtocolRecord(parsed.previousChild)) {
+    writeProtocolRecord(repoRoot, parsed.previousChild);
+  } else if (parsed.childId) {
+    const childPath = getProtocolRecordPath(repoRoot, parsed.childId);
+    if (existsSync(childPath)) {
+      unlinkSync(childPath);
+    }
+  }
+  saveWorkflowReviewState(paths.statePath, parsed.previousState);
+  try {
+    unlinkSync(pendingPath);
+  } catch {
+    throw new Error('incomplete successor commit could not be cleared; refuse to proceed');
+  }
+  return true;
+}
+
+function persistSuccessorRelationUnlocked(params: {
+  repoRoot: string;
+  parent: WorkflowProtocolRecord;
+  child: WorkflowProtocolRecord;
+}): void {
+  const paths = getWorkflowPaths(params.repoRoot);
+  const pendingPath = getSuccessorCommitPendingPath(params.repoRoot);
+  const pending: SuccessorCommitPending = {
+    schemaVersion: '1',
+    kind: SUCCESSOR_COMMIT_PENDING_KIND,
+    createdAt: nowIso(),
+    parentId: params.parent.workstreamId,
+    childId: params.child.workstreamId,
+    previousParent: readProtocolRecord(params.repoRoot, params.parent.workstreamId),
+    previousChild: readProtocolRecord(params.repoRoot, params.child.workstreamId),
+    previousState: loadWorkflowReviewStateStrict(paths.statePath),
+  };
+  writeJsonAtomic(pendingPath, pending);
+  try {
+    persistParentAndOptionalChildUnlocked({
+      repoRoot: params.repoRoot,
+      parent: params.parent,
+      child: params.child,
+    });
+    unlinkSync(pendingPath);
+  } catch (error) {
+    recoverIncompleteSuccessorCommit(params.repoRoot);
+    throw error;
+  }
+}
+
 export function recoverIncompleteFinalisePassedCommit(repoRoot: string): boolean {
   const pendingPath = getFinalisePassedCommitPendingPath(repoRoot);
   if (!existsSync(pendingPath)) return false;
@@ -1976,17 +2255,20 @@ export function commitFinaliseCorrelationStateAndProtocols(params: {
 }
 
 function listImmediateChildWorkstreamIds(repoRoot: string, parentId: string): string[] {
-  const root = path.join(repoRoot, 'docs_private', 'automation', 'workstreams');
-  if (!existsSync(root)) return [];
   const ids: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const child = readProtocolRecord(repoRoot, entry.name);
+  for (const id of listProtocolWorkstreamDirectoryIds(repoRoot)) {
+    const child = readProtocolRecord(repoRoot, id);
     if (child?.sourceWorkstreamIds?.[0] === parentId) {
       ids.push(child.workstreamId);
     }
+    if (
+      child?.successorProvenance?.predecessorWorkstreamId === parentId &&
+      child.successorProvenance.successorWorkstreamId === child.workstreamId
+    ) {
+      ids.push(child.workstreamId);
+    }
   }
-  return ids;
+  return [...new Set(ids)];
 }
 
 function persistParentAndOptionalChildUnlocked(params: {
@@ -2120,8 +2402,12 @@ function applyProtocolTransitionUnlocked(params: {
   sourceHeadCommit?: string;
   sourceBaselineCommit?: string;
   sourceReviewWorkstreamId?: string;
+  ownerAuthorisedGeneration?: boolean;
   now?: () => Date;
 }): WorkflowProtocolTransitionResult {
+  if (params.command !== 'status') {
+    recoverIncompleteSuccessorCommit(params.repoRoot);
+  }
   if (params.command === 'status') {
     if (!params.workstreamId) return fail('workstreamId required for status');
     const record = readProtocolRecord(params.repoRoot, params.workstreamId);
@@ -2232,6 +2518,26 @@ function applyProtocolTransitionUnlocked(params: {
     });
     if (result.ok && result.record && result.childRecord) {
       persistParentAndOptionalChildUnlocked({
+        repoRoot: params.repoRoot,
+        parent: result.record,
+        child: result.childRecord,
+      });
+    }
+    return result;
+  }
+
+  if (params.command === 'successor') {
+    if (!params.newWorkstreamId) return fail('newWorkstreamId required');
+    const result = reduceSuccessor({
+      repoRoot: params.repoRoot,
+      workstreamId: params.workstreamId,
+      newWorkstreamId: params.newWorkstreamId,
+      planPath: params.planPath,
+      ownerAuthorisedGeneration: params.ownerAuthorisedGeneration,
+      now: params.now,
+    });
+    if (result.ok && result.record && result.childRecord) {
+      persistSuccessorRelationUnlocked({
         repoRoot: params.repoRoot,
         parent: result.record,
         child: result.childRecord,
@@ -2354,6 +2660,7 @@ export function applyProtocolTransition(params: {
   sourceHeadCommit?: string;
   sourceBaselineCommit?: string;
   sourceReviewWorkstreamId?: string;
+  ownerAuthorisedGeneration?: boolean;
   now?: () => Date;
 }): WorkflowProtocolTransitionResult {
   const runUnlocked = (): WorkflowProtocolTransitionResult => {

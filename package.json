@@ -34,6 +34,8 @@
     "scheduling:migrate:visits": "tsx scripts/migrations/run-quote-scheduling-visits-migration.ts",
     "scheduling:migrate:day-teams": "tsx scripts/migrations/run-schedule-day-teams-migration.ts",
     "scheduling:migrate:board-sequence": "tsx scripts/migrations/run-schedule-jobs-board-sequence-migration.ts",
+    "scheduling:migrate:same-visit-idempotent": "tsx scripts/migrations/run-schedule-assignment-same-visit-idempotent.ts",
+    "scheduling:rollback:same-visit-idempotent": "tsx scripts/migrations/rollback-schedule-assignment-same-visit-idempotent.ts",
     "scheduling:sample:plan": "tsx scripts/testing/scheduling-sample.ts --mode=plan",
     "scheduling:sample:apply": "tsx scripts/testing/scheduling-sample.ts --mode=apply",
     "scheduling:sample:queue:plan": "tsx scripts/testing/scheduling-sample.ts --mode=queue-plan",

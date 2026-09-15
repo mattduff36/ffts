@@ -26,6 +26,7 @@ import {
   getActiveFinaliseContext,
   getProtocolRecordPath,
   hasIncompleteFinalisePassedCommit,
+  hasIncompleteSuccessorCommit,
   isWorkflowProtocolRecord,
   readProtocolRecord,
   resolveProtocolPlanAbsolutePath,
@@ -223,7 +224,8 @@ function immediateParentId(
   const candidate = record.sourceWorkstreamIds?.[0] ?? null;
   if (!candidate) return null;
   const parent = byId?.get(candidate);
-  if (parent?.phase === 'split') return candidate;
+  if (parent?.phase === 'split' || parent?.phase === 'successor_parked') return candidate;
+  if (record.successorProvenance?.predecessorWorkstreamId === candidate) return candidate;
   if (record.inheritedFailedReviewCount > 0) return candidate;
   return null;
 }
@@ -498,6 +500,18 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
     );
   }
 
+  if (hasIncompleteSuccessorCommit(repoRoot)) {
+    pushBlocker(
+      makeBlocker({
+        workstreamId: 'successor-commit',
+        role: 'malformed',
+        phase: 'unknown',
+        message:
+          'incomplete successor commit; refuse finalise until the pending transaction is recovered',
+      })
+    );
+  }
+
   if (active) {
     const protocol = byId.get(active.workstreamId);
     if (
@@ -682,6 +696,67 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
       if (protocol.openBlockerIds.length > 0) {
         warnings.push(
           `parked split ancestor ${protocol.workstreamId} retains audit blockers ${protocol.openBlockerIds.join(', ')}; they do not independently block finalise`
+        );
+      }
+      continue;
+    }
+
+    if (protocol.phase === 'successor_parked') {
+      if (hasAncestorCycle(protocol, byId)) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'orphan_split',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} is in phase successor_parked with a lineage cycle; protocol integrity error`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      if (childWorkstreamIds.length === 0) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'orphan_split',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} is in phase successor_parked with no valid child continuation; protocol integrity error`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      if (childWorkstreamIds.length > 1) {
+        pushBlocker(
+          makeBlocker({
+            workstreamId: protocol.workstreamId,
+            role: 'orphan_split',
+            phase: protocol.phase,
+            message: `CRITICAL workstream ${protocol.workstreamId} is in phase successor_parked with ambiguous children ${childWorkstreamIds.join(', ')}; protocol integrity error`,
+            protocol,
+            byId,
+            childWorkstreamIds,
+          })
+        );
+        continue;
+      }
+      const parked = makeBlocker({
+        workstreamId: protocol.workstreamId,
+        role: 'parked_successor_ancestor',
+        phase: protocol.phase,
+        message: `successor ancestor ${protocol.workstreamId} is parked historical state; continuation ${childWorkstreamIds.join(', ')} owns completion`,
+        protocol,
+        byId,
+        childWorkstreamIds,
+      });
+      lineages.push(parked);
+      if (protocol.openBlockerIds.length > 0) {
+        warnings.push(
+          `parked successor ancestor ${protocol.workstreamId} retains audit blockers ${protocol.openBlockerIds.join(', ')}; they do not independently block finalise`
         );
       }
       continue;

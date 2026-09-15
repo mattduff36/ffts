@@ -4,6 +4,7 @@ import type {
   WorkflowProtocolReviewAttempt,
   WorkflowProtocolReviewPass,
   WorkflowRehomeProvenance,
+  WorkflowSuccessorProvenance,
 } from './types';
 import { assertSafeOpaqueId, parseOptionalRehomeProvenance } from './workflow-plan-contract';
 import {
@@ -45,6 +46,7 @@ const CURRENT_PHASES = new Set<WorkflowProtocolPhase>([
   'review_closed',
   'routing_required',
   'split',
+  'successor_parked',
   'finalise_ready',
   'finalised',
   'removed_from_release',
@@ -161,6 +163,70 @@ function validateRehome(value: unknown): { ok: true } | { ok: false; message: st
   return { ok: true };
 }
 
+function validateSuccessorProvenance(
+  value: unknown,
+  workstreamId: string,
+  phase: WorkflowProtocolPhase | undefined
+): { ok: true } | { ok: false; message: string } {
+  if (value == null) {
+    if (phase === 'successor_parked') {
+      return { ok: false, message: 'successor_parked requires successorProvenance' };
+    }
+    return { ok: true };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ok: false, message: 'successorProvenance is malformed' };
+  }
+  const row = value as Partial<WorkflowSuccessorProvenance>;
+  if (row.schemaVersion !== '1') {
+    return { ok: false, message: 'successorProvenance.schemaVersion is unsupported' };
+  }
+  if (
+    typeof row.predecessorWorkstreamId !== 'string' ||
+    !assertSafeOpaqueId(row.predecessorWorkstreamId, 'predecessorWorkstreamId').ok
+  ) {
+    return { ok: false, message: 'successorProvenance.predecessorWorkstreamId is invalid' };
+  }
+  if (
+    typeof row.successorWorkstreamId !== 'string' ||
+    !assertSafeOpaqueId(row.successorWorkstreamId, 'successorWorkstreamId').ok
+  ) {
+    return { ok: false, message: 'successorProvenance.successorWorkstreamId is invalid' };
+  }
+  if (row.predecessorWorkstreamId === row.successorWorkstreamId) {
+    return { ok: false, message: 'successorProvenance cannot be cyclic' };
+  }
+  if (!Number.isInteger(row.generation) || (row.generation ?? 0) < 2) {
+    return { ok: false, message: 'successorProvenance.generation is invalid' };
+  }
+  if (row.ownerAuthorisedGeneration !== true) {
+    return { ok: false, message: 'successorProvenance.ownerAuthorisedGeneration is required' };
+  }
+  if (row.authorisationMarker !== 'owner-authorised-generation') {
+    return { ok: false, message: 'successorProvenance.authorisationMarker is invalid' };
+  }
+  if (typeof row.branchName !== 'string' || !BRANCH_RE.test(row.branchName)) {
+    return { ok: false, message: 'successorProvenance.branchName is invalid' };
+  }
+  if (!isCommitToken(row.baseCommit) || !isCommitToken(row.createdAtHeadCommit)) {
+    return { ok: false, message: 'successorProvenance commit binding is invalid' };
+  }
+  if (!isIsoTimestamp(row.createdAt)) {
+    return { ok: false, message: 'successorProvenance.createdAt is invalid' };
+  }
+  if (phase === 'successor_parked' && workstreamId !== row.predecessorWorkstreamId) {
+    return { ok: false, message: 'successor_parked workstreamId must be the predecessor' };
+  }
+  if (
+    phase !== 'successor_parked' &&
+    row.generation === 2 &&
+    workstreamId !== row.successorWorkstreamId
+  ) {
+    return { ok: false, message: 'Generation 2 successorProvenance must belong to the successor' };
+  }
+  return { ok: true };
+}
+
 export function validateWorkflowProtocolRecordStructure(
   value: unknown
 ): ProtocolValidationResult {
@@ -271,6 +337,12 @@ export function validateWorkflowProtocolRecordStructure(
   ) {
     return fail('rehomeProvenance is malformed');
   }
+  const successor = validateSuccessorProvenance(
+    candidate.successorProvenance,
+    candidate.workstreamId,
+    candidate.phase as WorkflowProtocolPhase | undefined
+  );
+  if (!successor.ok) return fail(successor.message);
   return { ok: true, record: candidate as WorkflowProtocolRecord };
 }
 

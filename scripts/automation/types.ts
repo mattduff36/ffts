@@ -339,6 +339,7 @@ export type WorkflowProtocolPhase =
   | 'review_closed'
   | 'routing_required'
   | 'split'
+  | 'successor_parked'
   | 'finalise_ready'
   | 'finalised'
   | 'removed_from_release'
@@ -385,6 +386,19 @@ export interface WorkflowRouteDisposition {
 }
 
 export type WorkflowRehomeProvenanceStatus = 'declared' | 'bound';
+
+export interface WorkflowSuccessorProvenance {
+  schemaVersion: '1';
+  predecessorWorkstreamId: string;
+  successorWorkstreamId: string;
+  generation: number;
+  ownerAuthorisedGeneration: true;
+  authorisationMarker: 'owner-authorised-generation';
+  branchName: string;
+  baseCommit: string;
+  createdAtHeadCommit: string;
+  createdAt: string;
+}
 
 export interface WorkflowRehomeProvenance {
   schemaVersion: '1';
@@ -685,6 +699,7 @@ export interface WorkflowProtocolRecord {
   /** Immutable at init. Missing legacy records fail closed to CRITICAL. */
   boundPlanCriticality?: 'critical' | 'not_critical' | null;
   rehomeProvenance?: WorkflowRehomeProvenance | null;
+  successorProvenance?: WorkflowSuccessorProvenance | null;
   routeDisposition?: WorkflowRouteDisposition | null;
   updatedAt: string;
 }

@@ -12,7 +12,8 @@ const { Client } = pg;
 config({ path: resolve(process.cwd(), '.env.local') });
 
 const connectionString = process.env.POSTGRES_URL_NON_POOLING;
-const sqlFile = 'supabase/migrations/20260914233000_schedule_assignment_same_visit_idempotent.sql';
+const sqlFile =
+  'supabase/rollbacks/20260914233000_schedule_assignment_same_visit_idempotent.rollback.sql';
 
 function readConfirmToken(argv: string[]): string | null {
   const confirmIndex = argv.indexOf('--confirm');
@@ -26,11 +27,7 @@ function readConfirmToken(argv: string[]): string | null {
   return null;
 }
 
-function redactError(): string {
-  return 'Same-visit assignment migration failed.';
-}
-
-export async function applyScheduleAssignmentSameVisitMigration(params: {
+export async function rollbackScheduleAssignmentSameVisitMigration(params: {
   connectionString: string;
   appSupabaseUrl?: string;
   confirmToken?: string | null;
@@ -70,12 +67,11 @@ export async function applyScheduleAssignmentSameVisitMigration(params: {
       ) AS definition
     `);
     const definition = rows[0]?.definition || '';
-    if (
-      !definition.includes('assignment.visit_id IS DISTINCT FROM p_visit_id')
-      || !definition.includes('AND assignment.visit_id = p_visit_id')
-      || !definition.includes('RESOURCE_OVERLAP')
-    ) {
-      throw new Error('create_schedule_assignment_v1 same-visit predicate verification failed.');
+    if (definition.includes('assignment.visit_id IS DISTINCT FROM p_visit_id')) {
+      throw new Error('create_schedule_assignment_v1 rollback verification failed.');
+    }
+    if (!definition.includes('RESOURCE_OVERLAP')) {
+      throw new Error('create_schedule_assignment_v1 rollback verification failed.');
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -87,7 +83,7 @@ export async function applyScheduleAssignmentSameVisitMigration(params: {
     if (error instanceof Error && error.message.startsWith('create_schedule_assignment_v1')) {
       throw error;
     }
-    throw new Error(redactError());
+    throw new Error('Same-visit assignment rollback failed.');
   } finally {
     await client.end();
   }
@@ -99,18 +95,23 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   try {
-    await applyScheduleAssignmentSameVisitMigration({
+    await rollbackScheduleAssignmentSameVisitMigration({
       connectionString,
       appSupabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
       confirmToken: readConfirmToken(process.argv.slice(2)),
     });
-    process.stdout.write('Migration complete.\n');
+    process.stdout.write('Rollback complete.\n');
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : redactError()}\n`);
+    process.stderr.write(
+      `${error instanceof Error ? error.message : 'Same-visit assignment rollback failed.'}\n`
+    );
     process.exit(error instanceof Error && error.message.includes('Refusing') ? 2 : 1);
   }
 }
 
-if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('run-schedule-assignment-same-visit-idempotent.ts')) {
+if (
+  process.argv[1]
+  && process.argv[1].replace(/\\/g, '/').endsWith('rollback-schedule-assignment-same-visit-idempotent.ts')
+) {
   void main();
 }

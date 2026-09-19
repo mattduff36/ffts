@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.8.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): densify board cards and add plant occupancy bars`
+
+**PUSHED AT**
+2026-09-19T19:52:06.030Z
+
+**WHAT CHANGED**
+Densify board cards and add plant occupancy bars.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to automation scripts, automated tests, and data storage.
+- Updated navigation, with changes to shared logic and automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(scheduling): densify board cards and add plant occupancy bars`
+
 ## 0926.7.3
 
 **GIT COMMIT MESSAGE**

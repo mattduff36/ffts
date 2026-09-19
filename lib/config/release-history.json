@@ -1,5 +1,22 @@
 [
   {
+    "version": "0926.8.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Densify board cards and add plant occupancy bars.",
+    "summary": "Densify board cards and add plant occupancy bars.",
+    "details": [
+      "Updated data storage, with changes to automation scripts, automated tests, and data storage.",
+      "Updated navigation, with changes to shared logic and automated tests."
+    ],
+    "areas": [
+      "Densify board cards",
+      "Plant occupancy bars"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-19T19:52:06.030Z"
+  },
+  {
     "version": "0926.7.3",
     "updateKind": "minor",
     "title": "Scheduling improvements",

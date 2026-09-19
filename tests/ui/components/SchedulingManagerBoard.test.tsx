@@ -1417,13 +1417,13 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(employeeDragCue).toHaveAttribute('aria-hidden', 'true');
     expect(employeeDragCue).toHaveClass('pointer-events-none');
-    expect(employeeHandle).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
+    expect(employeeHandle).toHaveClass('min-h-8', 'min-w-8', 'touch-none');
     expect(within(employeeCard).getByText('Bob Jones')).toHaveClass(
-      'text-sm',
+      'text-xs',
       'font-semibold'
     );
     expect(within(employeeCard).getByText('Arborists')).toHaveClass(
-      'text-xs',
+      'text-[11px]',
       'text-slate-300'
     );
     expect(within(employeeCard).getByText('Employee · E002')).toHaveClass(
@@ -1448,7 +1448,7 @@ describe('SchedulingManagerBoard', () => {
     expect(within(plantHandle).getByTestId('schedule-resource-drag-cue'))
       .toHaveClass('pointer-events-none');
     expect(within(plantCard).getByText('JCB · 403')).toHaveClass(
-      'text-xs',
+      'text-[11px]',
       'text-slate-300'
     );
     expect(within(plantCard).getByText('Plant · active')).toHaveClass(
@@ -1709,7 +1709,45 @@ describe('SchedulingManagerBoard', () => {
   });
 
   it('occupancy-strip-daily-employees shows occupancy on Daily employee cards only', async () => {
-    prepareDailyBoard();
+    const today = prepareDailyBoard();
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: getSchedulingWeek(today),
+      jobs: [{
+        ...board.jobs[0],
+        start_date: getSchedulingWeek(today).start,
+        end_date: getSchedulingWeek(today).end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+      resources: {
+        ...board.resources,
+        plant: [{
+          id: 'plant-1',
+          plant_id: 'P001',
+          nickname: 'Loader',
+          make: 'JCB',
+          model: '403',
+          status: 'maintenance',
+        }],
+      },
+      plant_unavailability: [{
+        id: 'block-1',
+        plant_id: 'plant-1',
+        start_date: today,
+        end_date: today,
+        reason: 'Workshop service',
+        notes: null,
+        created_by: null,
+        updated_by: null,
+        created_at: `${today}T00:00:00.000Z`,
+        updated_at: `${today}T00:00:00.000Z`,
+      }],
+    });
     renderBoard();
     expect(await screen.findByText('Daily job board')).toBeInTheDocument();
 
@@ -1717,7 +1755,9 @@ describe('SchedulingManagerBoard', () => {
       button: 0,
       ctrlKey: false,
     });
-    expect(screen.getByTestId('schedule-resource-occupancy-legend')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-occupancy-legend')).toHaveTextContent(
+      'Absent / off-shift'
+    );
     expect(screen.getByTestId('schedule-resource-occupancy-employee-2')).toBeInTheDocument();
     expect(screen.getByRole('button', {
       name: /Bob Jones: select resource or drag to a timed visit\. Available 07:00–17:30/,
@@ -1727,7 +1767,13 @@ describe('SchedulingManagerBoard', () => {
       button: 0,
       ctrlKey: false,
     });
-    expect(screen.queryByTestId('schedule-resource-occupancy-legend')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-occupancy-legend')).toHaveTextContent(
+      'Unavailable / maintenance'
+    );
+    expect(screen.getByTestId('schedule-resource-occupancy-plant-1')).toBeInTheDocument();
+    expect(screen.getByRole('button', {
+      name: /P001 — Loader: select resource or drag to a timed visit\. Unavailable 07:00–17:30/,
+    })).toBeInTheDocument();
     expect(screen.queryByTestId('schedule-resource-occupancy-employee-2')).not.toBeInTheDocument();
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Weekly' }), {
@@ -2307,10 +2353,10 @@ describe('SchedulingManagerBoard', () => {
     expect(assignmentChip).not.toHaveTextContent('Alex Smith');
     expect(assignmentMoveButtons[0].querySelector('.lucide-grip-vertical')).not.toBeNull();
     expect(assignmentMoveButtons[0]).toHaveClass('cursor-grab');
-    expect(assignmentMoveButtons[0]).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
+    expect(assignmentMoveButtons[0]).toHaveClass('h-4', 'w-4', 'touch-none');
   });
 
-  it('caps compact visit assignments at two rows with an exact accessible overflow count', async () => {
+  it('shows every compact visit assignment and grows the daily lane', async () => {
     const today = formatScheduleDate(new Date());
     const currentWeek = getSchedulingWeek(today);
     const visit = {
@@ -2384,9 +2430,9 @@ describe('SchedulingManagerBoard', () => {
 
     const dailyTimeline = await screen.findByTestId('schedule-daily-timeline');
     const layout = within(dailyTimeline).getByTestId('schedule-assignment-layout-visit-1');
-    expect(layout).toHaveAttribute('data-assignment-row-count', '2');
-    expect(within(layout).getAllByTestId(/^schedule-assignment-row-/)).toHaveLength(2);
-    expect(within(layout).getAllByTestId(/^schedule-assignment-chip-/)).toHaveLength(3);
+    expect(layout).toHaveAttribute('data-assignment-row-count', '4');
+    expect(within(layout).getAllByTestId(/^schedule-assignment-row-/)).toHaveLength(4);
+    expect(within(layout).getAllByTestId(/^schedule-assignment-chip-/)).toHaveLength(8);
     for (const assignmentChip of within(layout).getAllByTestId(
       /^schedule-assignment-chip-/
     )) {
@@ -2394,18 +2440,14 @@ describe('SchedulingManagerBoard', () => {
     }
     expect(within(layout).getByText('Alice S')).toBeInTheDocument();
     expect(within(layout).getByText('Loader')).toBeInTheDocument();
-
-    const overflow = within(layout).getByTestId('schedule-assignment-overflow-visit-1');
-    expect(overflow).toHaveTextContent('+5');
-    expect(overflow).toHaveAttribute(
-      'aria-label',
-      '5 more assignments: Dana White, Evan Black, Fiona Green, George Brown, Helen Gray'
-    );
+    expect(within(layout).getByText('Helen G')).toBeInTheDocument();
+    expect(within(layout).queryByTestId('schedule-assignment-overflow-visit-1')).not.toBeInTheDocument();
     expect(within(dailyTimeline).getByTestId('schedule-timeline-visit-visit-1')).toHaveStyle({
       top: '8px',
-      height: '128px',
+      height: '152px',
     });
     expect(layout).toHaveClass('mt-auto', 'shrink-0');
+    expect(layout).not.toHaveClass('overflow-hidden');
     expect(within(layout).getByRole('button', {
       name: 'Move Alice Stone to another visit',
     })).toBeInTheDocument();
@@ -3198,7 +3240,7 @@ describe('SchedulingManagerBoard', () => {
     });
 
     const dragHandle = screen.getByTestId('schedule-resource-drag-handle-employee-employee-2');
-    expect(dragHandle).toHaveClass('min-h-11', 'min-w-11', 'touch-none');
+    expect(dragHandle).toHaveClass('min-h-8', 'min-w-8', 'touch-none');
     expect(dragHandle).toHaveStyle({ touchAction: 'none' });
     expect(PointerSensor.configure).toHaveBeenCalled();
     const configureCall = vi.mocked(PointerSensor.configure).mock.calls.at(-1)?.[0] as {

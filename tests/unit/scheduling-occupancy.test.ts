@@ -7,11 +7,15 @@ import {
   OCCUPANCY_STRIP_END_MINUTES,
   OCCUPANCY_STRIP_START_MINUTES,
   buildEmployeeOccupancySegments,
+  buildPlantOccupancySegments,
   mergeTeamOccupancySegments,
 } from '@/lib/utils/scheduling-occupancy';
 import type {
   ScheduleEmployeeAssignment,
   ScheduleEmployeeResource,
+  SchedulePlantAssignment,
+  SchedulePlantResource,
+  SchedulePlantUnavailability,
   ScheduleVisit,
 } from '@/types/scheduling';
 
@@ -263,6 +267,168 @@ describe('employee occupancy segments', () => {
       endMinutes: OCCUPANCY_STRIP_END_MINUTES,
       state: 'available',
     }]);
+  });
+});
+
+const plant: SchedulePlantResource = {
+  id: 'plant-1',
+  plant_id: 'P001',
+  nickname: 'Loader',
+  make: 'JCB',
+  model: '403',
+  status: 'active',
+};
+
+function plantAssignment(
+  id: string,
+  scheduledVisit: ScheduleVisit | null,
+  plantId = plant.id
+): SchedulePlantAssignment {
+  return {
+    id,
+    job_id: scheduledVisit?.job_id || `job-${id}`,
+    work_date: workDate,
+    visit_id: scheduledVisit?.id || null,
+    plant_id: plantId,
+    resource_type: 'plant',
+    plant,
+    visit: scheduledVisit,
+    notes: null,
+    conflict_override: false,
+    conflict_codes: [],
+    conflict_override_by: null,
+    conflict_override_at: null,
+    assigned_by: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    conflicts: [],
+  };
+}
+
+function plantBlock(
+  overrides: Partial<SchedulePlantUnavailability> = {}
+): SchedulePlantUnavailability {
+  return {
+    id: 'block-1',
+    plant_id: plant.id,
+    start_date: workDate,
+    end_date: workDate,
+    reason: 'Workshop service',
+    notes: null,
+    created_by: null,
+    updated_by: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function plantSegments(options: {
+  assignments?: SchedulePlantAssignment[];
+  unavailability?: SchedulePlantUnavailability[];
+  status?: SchedulePlantResource['status'];
+} = {}) {
+  return buildPlantOccupancySegments({
+    plantId: plant.id,
+    workDate,
+    assignments: options.assignments || [],
+    unavailability: options.unavailability,
+    status: options.status ?? 'active',
+  });
+}
+
+describe('plant occupancy segments', () => {
+  it('occupancy-plant-active keeps the whole strip available', () => {
+    expect(plantSegments()).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'available',
+    }]);
+  });
+
+  it('occupancy-plant-manual-block paints the whole strip unavailable', () => {
+    expect(plantSegments({ unavailability: [plantBlock()] })).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'unavailable',
+    }]);
+  });
+
+  it('occupancy-plant-date-filter ignores blocks outside the selected date', () => {
+    expect(plantSegments({
+      unavailability: [plantBlock({
+        start_date: '2026-01-10',
+        end_date: '2026-01-11',
+      })],
+    })).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'available',
+    }]);
+  });
+
+  it('occupancy-plant-inactive paints the whole strip unavailable', () => {
+    expect(plantSegments({ status: 'maintenance' })).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'unavailable',
+    }]);
+  });
+
+  it('occupancy-plant-booked-visit paints the timed window booked', () => {
+    expect(plantSegments({
+      assignments: [plantAssignment(
+        'p1',
+        visit('timed', '2026-01-12T07:30:00.000Z', '2026-01-12T10:30:00.000Z')
+      )],
+    })).toEqual([
+      { startMinutes: OCCUPANCY_STRIP_START_MINUTES, endMinutes: 7 * 60 + 30, state: 'available' },
+      { startMinutes: 7 * 60 + 30, endMinutes: 10 * 60 + 30, state: 'booked' },
+      { startMinutes: 10 * 60 + 30, endMinutes: OCCUPANCY_STRIP_END_MINUTES, state: 'available' },
+    ]);
+  });
+
+  it('occupancy-plant-untimed paints the whole visible range booked', () => {
+    expect(plantSegments({ assignments: [plantAssignment('untimed', null)] })).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'booked',
+    }]);
+  });
+
+  it('occupancy-plant-cancelled ignores cancelled visits', () => {
+    expect(plantSegments({
+      assignments: [plantAssignment(
+        'cancelled',
+        visit('cancelled', '2026-01-12T09:00:00.000Z', '2026-01-12T11:00:00.000Z', 'cancelled')
+      )],
+    })).toEqual([{
+      startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+      endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+      state: 'available',
+    }]);
+  });
+
+  it('occupancy-plant-booked-wins keeps a visit booked over an unavailability block', () => {
+    expect(plantSegments({
+      unavailability: [plantBlock()],
+      assignments: [plantAssignment(
+        'overlap',
+        visit('overlap', '2026-01-12T11:00:00.000Z', '2026-01-12T13:00:00.000Z')
+      )],
+    })).toEqual([
+      {
+        startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+        endMinutes: 11 * 60,
+        state: 'unavailable',
+      },
+      { startMinutes: 11 * 60, endMinutes: 13 * 60, state: 'booked' },
+      {
+        startMinutes: 13 * 60,
+        endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+        state: 'unavailable',
+      },
+    ]);
   });
 });
 

@@ -46,13 +46,16 @@ export function useDragSafeActivation(isDragging: boolean, onActivate: () => voi
   return { handleClick, resetDragState };
 }
 
+export const RESOURCE_CARD_HANDLE_CLASS =
+  'flex min-h-8 min-w-8 touch-none items-center justify-center self-stretch';
+
 export function ResourceDragCue({ testId }: { testId: string }) {
   return (
     <GripVertical
       aria-hidden="true"
       focusable="false"
       data-testid={testId}
-      className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground"
+      className="pointer-events-none h-3.5 w-3.5 shrink-0 text-muted-foreground"
     />
   );
 }
@@ -133,7 +136,7 @@ export function ResourceCard({
       title={occupancyLabel}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'relative flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left transition',
+        'relative flex w-full items-center gap-1.5 overflow-hidden rounded-lg px-1.5 py-1 text-left transition',
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type),
@@ -141,11 +144,11 @@ export function ResourceCard({
       )}
     >
       <ResourceDragCue testId="schedule-resource-drag-cue" />
-      <span className="min-w-0 flex-1 space-y-0.5">
-        <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+      <span className="min-w-0 flex-1 space-y-0">
+        <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
           {resource.label}
         </span>
-        <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+        <span className={cn('block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
           {subtitle}
         </span>
         <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
@@ -200,7 +203,7 @@ export function DraggableResourceCard({
       title={occupancyLabel || 'Tap to assign, or drag to a timed visit'}
       data-testid={`schedule-resource-${resource.type}-${resource.id}`}
       className={cn(
-        'relative flex min-h-11 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition',
+        'relative flex min-h-8 w-full touch-none cursor-grab items-stretch overflow-hidden rounded-lg text-left transition',
         selected
           ? schedulingControlStyles.primary
           : resourceCardTint(resource.type),
@@ -211,18 +214,18 @@ export function DraggableResourceCard({
     >
       <span
         data-testid={`schedule-resource-drag-handle-${resource.type}-${resource.id}`}
-        className="flex min-h-11 min-w-11 touch-none items-center justify-center self-stretch"
+        className={RESOURCE_CARD_HANDLE_CLASS}
         style={{ touchAction: 'none' }}
         aria-hidden="true"
       >
         <ResourceDragCue testId="schedule-resource-drag-cue" />
       </span>
-      <span className="flex min-w-0 flex-1 items-center gap-2 p-2 pl-0">
-        <span className="min-w-0 flex-1 space-y-0.5">
-          <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1.5 pl-0">
+        <span className="min-w-0 flex-1 space-y-0">
+          <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
             {resource.label}
           </span>
-          <span className={cn('block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+          <span className={cn('block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
             {subtitle}
           </span>
           <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-300')} title={metadata}>

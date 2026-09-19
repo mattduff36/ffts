@@ -4,6 +4,8 @@ import type {
   ScheduleEmployeeDaySession,
   ScheduleOccupancySegment,
   ScheduleOccupancyState,
+  SchedulePlantResource,
+  SchedulePlantUnavailability,
 } from '@/types/scheduling';
 
 export const OCCUPANCY_STRIP_START_MINUTES = 7 * 60;
@@ -201,6 +203,79 @@ export function buildEmployeeOccupancySegments(input: {
     (assignment) =>
       assignment.resource_type === 'employee'
       && assignment.profile_id === input.profileId
+      && assignment.work_date === input.workDate
+  );
+  if (matching.some((assignment) => !assignment.visit_id)) {
+    return overlayOccupancyState(
+      segments,
+      OCCUPANCY_STRIP_START_MINUTES,
+      OCCUPANCY_STRIP_END_MINUTES,
+      'booked'
+    );
+  }
+
+  for (const assignment of matching) {
+    const visit = assignment.visit;
+    if (
+      !visit
+      || visit.status === 'cancelled'
+      || getScheduleVisitDate(visit.starts_at) !== input.workDate
+    ) {
+      continue;
+    }
+    segments = overlayOccupancyState(
+      segments,
+      getOccupancyVisitMinutes(visit.starts_at),
+      getOccupancyVisitMinutes(visit.ends_at),
+      'booked'
+    );
+  }
+
+  return segments;
+}
+
+function plantIsUnavailableOnDate(
+  plantId: string,
+  workDate: string,
+  unavailability: SchedulePlantUnavailability[] | undefined
+): boolean {
+  return (unavailability || []).some(
+    (block) =>
+      block.plant_id === plantId
+      && block.start_date <= workDate
+      && block.end_date >= workDate
+  );
+}
+
+export function buildPlantOccupancySegments(input: {
+  plantId: string;
+  workDate: string;
+  assignments: ScheduleAssignment[];
+  unavailability?: SchedulePlantUnavailability[];
+  status?: SchedulePlantResource['status'];
+}): ScheduleOccupancySegment[] {
+  let segments: ScheduleOccupancySegment[] = [{
+    startMinutes: OCCUPANCY_STRIP_START_MINUTES,
+    endMinutes: OCCUPANCY_STRIP_END_MINUTES,
+    state: 'available',
+  }];
+
+  if (
+    (input.status && input.status !== 'active')
+    || plantIsUnavailableOnDate(input.plantId, input.workDate, input.unavailability)
+  ) {
+    segments = overlayOccupancyState(
+      segments,
+      OCCUPANCY_STRIP_START_MINUTES,
+      OCCUPANCY_STRIP_END_MINUTES,
+      'unavailable'
+    );
+  }
+
+  const matching = input.assignments.filter(
+    (assignment) =>
+      assignment.resource_type === 'plant'
+      && assignment.plant_id === input.plantId
       && assignment.work_date === input.workDate
   );
   if (matching.some((assignment) => !assignment.visit_id)) {

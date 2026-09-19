@@ -201,8 +201,14 @@ import {
 } from '@/lib/utils/scheduling-timeout';
 import {
   buildEmployeeOccupancySegments,
+  buildPlantOccupancySegments,
   mergeTeamOccupancySegments,
 } from '@/lib/utils/scheduling-occupancy';
+import {
+  getDailyVisitLaneHeight,
+  getDailyVisitPlacementWidth,
+  getVisitAssignmentColumns,
+} from '@/lib/utils/scheduling-visit-layout';
 import { ScheduleDayTeamBuckets, type ScheduleDayTeamDragData } from './ScheduleDayTeamBuckets';
 import { ScheduleTeamSettingsDialog } from './ScheduleTeamSettingsDialog';
 import {
@@ -279,7 +285,7 @@ import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/Pro
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
 
 const RESOURCE_GUIDANCE_CLASS =
-  'rounded-md border border-dashed border-slate-700 bg-slate-950/40 p-2 text-xs leading-relaxed text-slate-300';
+  'rounded-md border border-dashed border-slate-700 bg-slate-950/40 p-1.5 text-[11px] leading-snug text-slate-300';
 
 interface WeeklyDayHeaderProps {
   date: string;
@@ -487,7 +493,7 @@ function DraggableQuoteCard({
         title={`${quote.base_quote_reference} — ${quote.customer_name ? `${quote.customer_name} · ` : ''}${quote.title}`}
         data-testid={`schedule-quote-${quote.id}`}
         className={cn(
-          'flex min-h-11 w-full touch-none cursor-grab items-stretch rounded-lg p-1 text-left transition',
+          'flex min-h-8 w-full touch-none cursor-grab items-stretch rounded-lg p-0.5 text-left transition',
           selected
             ? schedulingControlStyles.primary
             : schedulingControlStyles.resourceJob,
@@ -496,20 +502,20 @@ function DraggableQuoteCard({
         style={{ touchAction: 'none' }}
       >
         <span
-          className="flex min-h-11 min-w-11 items-center justify-center self-stretch"
+          className="flex min-h-8 min-w-8 items-center justify-center self-stretch"
           data-testid={`schedule-quote-drag-handle-${quote.kind}-${quote.id}`}
           aria-hidden="true"
         >
           <ResourceDragCue testId="schedule-quote-drag-cue" />
         </span>
-        <span className="min-w-0 flex-1 py-1.5 pr-1.5">
-          <span className={cn('block truncate text-sm font-semibold', selected ? 'text-slate-950' : 'text-slate-100')}>
+        <span className="min-w-0 flex-1 py-1 pr-1.5">
+          <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')}>
             {quote.base_quote_reference}
           </span>
-          <span className={cn('mt-1 block truncate text-xs', selected ? 'text-slate-800' : 'text-slate-300')}>
+          <span className={cn('mt-0.5 block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')}>
             {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
           </span>
-          <span className={cn('mt-1.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
+          <span className={cn('mt-0.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
             <span>{durationDays} {durationDays === 1 ? 'day' : 'days'}</span>
             <span className={cn('truncate text-[9px]', selected ? 'text-slate-700' : 'text-slate-400')}>
               {'optimistic' in quote && quote.optimistic
@@ -709,7 +715,7 @@ function AssignmentChip({
       ref={ref}
       data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
-        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border pr-0.5 text-[11px]',
+        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 text-[11px] font-medium',
         assignment.resource_type === 'employee'
           ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
@@ -722,23 +728,23 @@ function AssignmentChip({
         ref={handleRef}
         type="button"
         className={cn(
-          'flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-l-full focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current',
+          'flex h-4 w-4 shrink-0 touch-none cursor-grab items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current',
           isDragging && 'cursor-grabbing'
         )}
         style={{ touchAction: 'none' }}
         aria-label={`Move ${fullLabel} to another visit`}
         data-testid={`schedule-assignment-drag-handle-${assignment.id}`}
       >
-        <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden="true" />
+        <GripVertical className="h-3 w-3 shrink-0 opacity-80" aria-hidden="true" />
       </button>
-      <span className="flex min-w-0 items-center gap-1 py-0.5 pr-1">
+      <span className="flex min-w-0 items-center gap-0.5 px-0.5">
         {assignment.resource_type === 'employee' ? (
-          <UserRound className="h-3.5 w-3.5 shrink-0" />
+          <UserRound className="h-3 w-3 shrink-0" />
         ) : (
-          <Tractor className="h-3.5 w-3.5 shrink-0" />
+          <Tractor className="h-3 w-3 shrink-0" />
         )}
         <span className="min-w-0 truncate">{label}</span>
-        {hasConflict ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" /> : null}
+        {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-amber-300" /> : null}
         {assignment.conflict_override ? (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" aria-label="Conflict overridden" />
         ) : null}
@@ -749,7 +755,7 @@ function AssignmentChip({
           event.stopPropagation();
           onDelete(assignment);
         }}
-        className="ml-0.5 shrink-0 rounded-full p-0.5 opacity-70 hover:bg-black/20 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current focus-visible:opacity-100"
+        className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full opacity-70 hover:bg-black/20 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current focus-visible:opacity-100"
         aria-label={`Remove ${fullLabel}`}
       >
         <X className="h-3 w-3" />
@@ -845,34 +851,11 @@ function VisitCard({
     isDragging,
     visit.status === 'cancelled' ? onEdit : onActivate
   );
-  const assignmentsPerRow =
-    cardWidth === undefined || cardWidth >= 260 ? 3 : cardWidth >= 140 ? 2 : 1;
-  const isCountOnly = cardWidth !== undefined && cardWidth < 140;
-  const maximumSlots = assignmentsPerRow * 2;
-  const hasOverflow = isCountOnly || cardAssignments.length > maximumSlots;
-  const visibleAssignmentCount = hasOverflow
-    ? Math.max(0, maximumSlots - 1)
-    : cardAssignments.length;
-  const visibleAssignments = cardAssignments.slice(0, visibleAssignmentCount);
-  const hiddenAssignments = cardAssignments.slice(visibleAssignmentCount);
-  const hiddenLabels = hiddenAssignments.map((assignment) =>
-    assignment.resource_type === 'employee'
-      ? assignment.employee?.full_name || 'Employee'
-      : assignment.plant?.nickname || assignment.plant?.plant_id || 'Plant'
-  );
-  const assignmentItems = [
-    ...visibleAssignments.map((assignment) => ({
-      assignment,
-      key: assignment.id,
-    })),
-    ...(hiddenAssignments.length > 0
-      ? [{ assignment: null, key: 'overflow' }]
-      : []),
-  ];
+  const assignmentsPerRow = getVisitAssignmentColumns(cardWidth);
   const assignmentRows = Array.from(
-    { length: Math.ceil(assignmentItems.length / assignmentsPerRow) },
+    { length: Math.ceil(cardAssignments.length / assignmentsPerRow) },
     (_, rowIndex) =>
-      assignmentItems.slice(
+      cardAssignments.slice(
         rowIndex * assignmentsPerRow,
         (rowIndex + 1) * assignmentsPerRow
       )
@@ -969,38 +952,25 @@ function VisitCard({
         </span>
       </div>
       <div
-        className="mt-auto max-h-12 shrink-0 space-y-1 overflow-hidden"
+        className="mt-auto shrink-0 space-y-1"
         data-testid={`schedule-assignment-layout-${visit.id}`}
         data-assignment-row-count={assignmentRows.length}
       >
         {assignmentRows.map((row, rowIndex) => (
           <div
             key={rowIndex}
-            className="flex min-w-0 items-center gap-1 overflow-hidden"
+            className="flex min-w-0 flex-wrap items-center gap-1"
             data-testid={`schedule-assignment-row-${visit.id}-${rowIndex + 1}`}
           >
-            {row.map((item) =>
-              item.assignment ? (
-                <AssignmentChip
-                  key={item.key}
-                  assignment={item.assignment}
-                  onDelete={onDeleteAssignment}
-                  dragScope={dndScope}
-                  dndInstanceId={dndInstanceId}
-                />
-              ) : (
-                <span
-                  key={item.key}
-                  tabIndex={0}
-                  className="inline-flex h-5 shrink-0 items-center rounded-full border border-border bg-muted px-1.5 text-[10px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-scheduling"
-                  aria-label={`${hiddenAssignments.length} more assignments: ${hiddenLabels.join(', ')}`}
-                  title={hiddenLabels.join(', ')}
-                  data-testid={`schedule-assignment-overflow-${visit.id}`}
-                >
-                  +{hiddenAssignments.length}
-                </span>
-              )
-            )}
+            {row.map((assignment) => (
+              <AssignmentChip
+                key={assignment.id}
+                assignment={assignment}
+                onDelete={onDeleteAssignment}
+                dragScope={dndScope}
+                dndInstanceId={dndInstanceId}
+              />
+            ))}
           </div>
         ))}
       </div>
@@ -1147,7 +1117,8 @@ interface DailyTimelineLayout {
 
 function getDailyTimelineLayout(
   dayPlacements: ScheduleBoardVisitPlacement[],
-  legacyAssignments: ScheduleAssignment[]
+  legacyAssignments: ScheduleAssignment[],
+  range: DailyTimelineRange
 ): DailyTimelineLayout {
   const sortedPlacements = [...dayPlacements].sort((first, second) =>
     first.visit.starts_at.localeCompare(second.visit.starts_at)
@@ -1157,7 +1128,15 @@ function getDailyTimelineLayout(
     + (legacyAssignments.length > 0 ? DAILY_TIMELINE_LEGACY_HEIGHT : 0);
   let nextTop = firstLaneTop;
   const placements = sortedPlacements.map((placement, index) => {
-    const height = placement.assignments.length > 2 ? 104 : 82;
+    const cardWidth = getDailyVisitPlacementWidth({
+      startsAt: placement.visit.starts_at,
+      endsAt: placement.visit.ends_at,
+      startHour: range.startHour,
+      endHour: range.endHour,
+      hourWidth: range.hourWidth,
+      rangeWidth: range.width,
+    });
+    const height = getDailyVisitLaneHeight(placement.assignments.length, cardWidth);
     const laidOut = { ...placement, top: nextTop, height };
     nextTop += height;
     if (index < sortedPlacements.length - 1) nextTop += DAILY_TIMELINE_LANE_GAP;
@@ -1486,22 +1465,16 @@ function ResizableDailyVisit({
     rangeStartMinutes,
     getScheduleTimeMinutes(displayedVisit.starts_at)
   );
-  const endsAt = Math.min(
-    range.endHour * 60,
-    getScheduleTimeMinutes(displayedVisit.ends_at)
-  );
   const left =
     ((startsAt - rangeStartMinutes) / 60) * range.hourWidth + 4;
-  const availableWidth = range.width - left - 4;
-  const width = Math.min(
-    availableWidth,
-    Math.max(
-      48,
-      ((Math.max(endsAt, startsAt + 30) - startsAt) / 60)
-        * range.hourWidth
-        - 8
-    )
-  );
+  const width = getDailyVisitPlacementWidth({
+    startsAt: displayedVisit.starts_at,
+    endsAt: displayedVisit.ends_at,
+    startHour: range.startHour,
+    endHour: range.endHour,
+    hourWidth: range.hourWidth,
+    rangeWidth: range.width,
+  });
 
   function handleResizePointerDown(
     event: PointerEvent<HTMLButtonElement>,
@@ -6055,10 +6028,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           data-testid="schedule-manager-layout"
         >
           <ResourcesReturnDropCard>
-            <CardHeader className="shrink-0 pb-3">
+            <CardHeader className="shrink-0 py-2">
               <CardTitle className="text-base">Resources</CardTitle>
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
               <Tabs
                 value={sidebarTab}
                 className="shrink-0"
@@ -6079,7 +6052,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               </Tabs>
               {sidebarTab === 'jobs' ? (
                 <>
-                  <div className="shrink-0 space-y-3">
+                  <div className="shrink-0 space-y-2">
                   <p className={RESOURCE_GUIDANCE_CLASS}>
                     Drag a queued job onto a date. Drag a scheduled visit back anywhere into Resources to return it here.
                   </p>
@@ -6165,7 +6138,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     data-mobile-scroll-lock="true"
                     data-testid="schedule-jobs-scroll-area"
                   >
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                         {quoteCandidatesQuery.isLoading
                           && projectCandidatesQuery.isLoading
                           && visitBacklogQuery.isLoading ? (
@@ -6195,7 +6168,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 </>
               ) : (
                 <>
-                  <div className="shrink-0 space-y-3">
+                  <div className="shrink-0 space-y-2">
                   {activeVisitTarget ? (
                     <div className="rounded-md border border-scheduling/40 bg-scheduling-soft p-3 text-xs">
                       <div className="flex items-start justify-between gap-2">
@@ -6285,8 +6258,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       className="pl-9"
                     />
                   </div>
-                  {view === SCHEDULING_BOARD_VIEWS.daily && sidebarTab === 'employee' ? (
-                    <ResourceOccupancyLegend />
+                  {view === SCHEDULING_BOARD_VIEWS.daily
+                    && (sidebarTab === 'employee' || sidebarTab === 'plant') ? (
+                    <ResourceOccupancyLegend
+                      variant={sidebarTab === 'plant' ? 'plant' : 'employee'}
+                    />
                   ) : null}
                   {selectedResource ? (
                     <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
@@ -6310,7 +6286,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     data-mobile-scroll-lock="true"
                     data-testid="schedule-resource-scroll-area"
                   >
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {sidebarTab === 'employee'
                         ? filteredEmployees.map((employee) => {
                             const resource = resourceFromEmployee(employee);
@@ -6391,6 +6367,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     : plant.status !== 'active'
                                       ? `Status: ${plant.status}`
                                       : undefined
+                                }
+                                occupancySegments={
+                                  view === SCHEDULING_BOARD_VIEWS.daily
+                                    ? buildPlantOccupancySegments({
+                                        plantId: plant.id,
+                                        workDate: selectedDate,
+                                        assignments: board.assignments,
+                                        unavailability: board.plant_unavailability,
+                                        status: plant.status,
+                                      })
+                                    : undefined
                                 }
                                 selected={selectedResource?.type === 'plant' && selectedResource.id === plant.id}
                                 dragEnabled
@@ -6739,7 +6726,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   {boardRows.map((row) => {
                     const dailyLayout = getDailyTimelineLayout(
                       row.visitsByDate[selectedDate] || [],
-                      row.legacyAssignmentsByDate[selectedDate] || []
+                      row.legacyAssignmentsByDate[selectedDate] || [],
+                      dailyTimelineRange
                     );
                     const job = row.job;
 

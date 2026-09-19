@@ -47,7 +47,11 @@ export function ResourceOccupancyStrip({
   );
 }
 
-export function ResourceOccupancyLegend() {
+export function ResourceOccupancyLegend({
+  variant = 'employee',
+}: {
+  variant?: 'employee' | 'plant';
+}) {
   return (
     <div
       data-testid="schedule-resource-occupancy-legend"
@@ -63,7 +67,7 @@ export function ResourceOccupancyLegend() {
       </span>
       <span className="flex items-center gap-1">
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
-        Absent / off-shift
+        {variant === 'plant' ? 'Unavailable / maintenance' : 'Absent / off-shift'}
       </span>
     </div>
   );

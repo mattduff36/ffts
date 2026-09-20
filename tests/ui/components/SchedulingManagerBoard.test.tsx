@@ -17,6 +17,7 @@ import {
   getSchedulingPrimaryStorageKey,
   SCHEDULING_BOARD_PRIMARIES,
 } from '@/lib/config/scheduling-primary-preference';
+import { parseISO, subDays } from 'date-fns';
 import { SchedulingApiError } from '@/lib/client/scheduling';
 import {
   formatScheduleDate,
@@ -123,6 +124,7 @@ const {
   mockSaveVisit,
   mockToastInfo,
   mockAddDayTeamMember,
+  mockCopyDayTeams,
   mockRemoveDayTeamMember,
   mockAssignDayTeam,
   mockSaveTeamSettings,
@@ -163,6 +165,7 @@ const {
   mockSaveVisit: vi.fn(),
   mockToastInfo: vi.fn(),
   mockAddDayTeamMember: vi.fn(),
+  mockCopyDayTeams: vi.fn(),
   mockRemoveDayTeamMember: vi.fn(),
   mockAssignDayTeam: vi.fn(),
   mockSaveTeamSettings: vi.fn(),
@@ -276,6 +279,7 @@ vi.mock('@/lib/client/scheduling', async () => {
     saveQuoteSchedule: mockSaveQuoteSchedule,
     saveScheduleVisit: mockSaveVisit,
     addScheduleDayTeamMember: mockAddDayTeamMember,
+    copyScheduleDayTeams: mockCopyDayTeams,
     removeScheduleDayTeamMember: mockRemoveDayTeamMember,
     assignScheduleDayTeam: mockAssignDayTeam,
     saveScheduleTeamSettings: mockSaveTeamSettings,
@@ -601,6 +605,11 @@ describe('SchedulingManagerBoard', () => {
         added_by: 'manager-1',
         created_at: '2026-07-14T08:00:00.000Z',
       },
+    });
+    mockCopyDayTeams.mockResolvedValue({
+      members: [],
+      copied: 0,
+      skipped: 0,
     });
     mockRemoveDayTeamMember.mockResolvedValue({ success: true });
     mockAssignDayTeam.mockResolvedValue({
@@ -1603,6 +1612,34 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-day-team-slot-desktop-5')).toBeInTheDocument();
     expect(screen.queryByTestId('schedule-day-team-slot-desktop-6')).not.toBeInTheDocument();
     expect(screen.getByTestId('schedule-settings-button')).toBeInTheDocument();
+  });
+
+  it('places Copy teams on the daily instruction row and copies from the previous date', async () => {
+    const today = prepareDailyBoard();
+    const yesterday = formatScheduleDate(subDays(parseISO(today), 1));
+    mockCopyDayTeams.mockResolvedValue({
+      members: [{
+        work_date: today,
+        slot_index: 2,
+        profile_id: 'employee-2',
+        added_by: 'manager-1',
+        created_at: `${today}T08:00:00.000Z`,
+      }],
+      copied: 1,
+      skipped: 0,
+    });
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    const instructionRow = screen.getByTestId('schedule-daily-instruction-row');
+    expect(within(instructionRow).getByTestId('schedule-copy-day-teams-button')).toBeInTheDocument();
+    expect(within(instructionRow).getByLabelText('Daily timeline display mode')).toBeInTheDocument();
+    fireEvent.click(within(instructionRow).getByTestId('schedule-copy-day-teams-button'));
+    fireEvent.click(screen.getByTestId('schedule-copy-day-teams-confirm'));
+    await waitFor(() => expect(mockCopyDayTeams).toHaveBeenCalledWith({
+      from_date: yesterday,
+      to_date: today,
+    }));
+    expect(await screen.findByTestId('schedule-day-team-member-desktop-employee-2')).toBeInTheDocument();
   });
 
   it('opens Settings and persists an extra unnamed team', async () => {

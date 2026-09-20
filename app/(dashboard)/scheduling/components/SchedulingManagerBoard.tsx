@@ -81,6 +81,7 @@ import {
 import {
   addScheduleDayTeamMember,
   assignScheduleDayTeam,
+  copyScheduleDayTeams,
   createProjectScheduleJob,
   createScheduleAssignment,
   deletePlantUnavailability,
@@ -187,6 +188,7 @@ import {
   isResourceUnavailableForVisit,
 } from '@/lib/utils/scheduling-availability';
 import {
+  isScheduleDayTeamSlotIndex,
   scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
   slotsForScheduleDate,
@@ -211,6 +213,7 @@ import {
   getDailyVisitPlacementWidth,
   getVisitAssignmentColumns,
 } from '@/lib/utils/scheduling-visit-layout';
+import { ScheduleCopyDayTeamsControl } from './ScheduleCopyDayTeamsControl';
 import { ScheduleDayTeamBuckets, type ScheduleDayTeamDragData } from './ScheduleDayTeamBuckets';
 import { ScheduleTeamSettingsDialog } from './ScheduleTeamSettingsDialog';
 import {
@@ -1976,6 +1979,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [unavailabilityOpen, setUnavailabilityOpen] = useState(false);
   const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
   const [teamSettingsSaving, setTeamSettingsSaving] = useState(false);
+  const [copyingDayTeams, setCopyingDayTeams] = useState(false);
   const [plantBlockDraft, setPlantBlockDraft] =
     useState<SavePlantUnavailabilityInput | null>(null);
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<ScheduleAssignment | null>(null);
@@ -4690,6 +4694,123 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
+  async function copyDayTeamsFromDate(fromDate: string) {
+    if (!board) return;
+    const toDate = selectedDate;
+    if (fromDate === toDate) {
+      toast.info('Choose a different date to copy from.');
+      return;
+    }
+    const settings = teamSettingsFromBoard(board);
+    const sourceMembers = slotsForScheduleDate(board.day_teams, fromDate, settings)
+      .flatMap((slot) => slot.members)
+      .filter((member) => member.is_leader !== true)
+      .map((member) => ({
+        ...member,
+        work_date: toDate,
+        is_leader: false,
+      }));
+    const mutationKey = `day-team:${toDate}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const operation = sourceMembers.length > 0
+      ? registerOptimisticOperation({
+          kind: 'day-team-add',
+          lockKeys: [
+            `day-team:${toDate}`,
+            ...sourceMembers.map((member) => `day-team-profile:${toDate}:${member.profile_id}`),
+          ],
+          queryKeys: [`board:${weekStart}`],
+          proofs: {
+            [`board:${weekStart}`]: (state) =>
+              sourceMembers.every((member) =>
+                state.board?.day_teams.some((entry) =>
+                  entry.date === toDate
+                  && entry.slots.some((slot) =>
+                    slot.members.some((item) => item.profile_id === member.profile_id)
+                  )
+                ) === true
+              ),
+          },
+          apply: (state) => ({
+            ...state,
+            board: sourceMembers.reduce(
+              (nextBoard, member) => (
+                nextBoard ? patchBoardWithDayTeamMember(nextBoard, member) : nextBoard
+              ),
+              state.board
+            ),
+          }),
+        })
+      : null;
+    if (sourceMembers.length > 0 && !operation) {
+      endMutation(mutationKey);
+      return;
+    }
+    setCopyingDayTeams(true);
+    try {
+      const result = await copyScheduleDayTeams({
+        from_date: fromDate,
+        to_date: toDate,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      const employeesById = new Map(
+        (board.resources.employees || []).map((employee) => [employee.id, employee])
+      );
+      const copiedMembers = result.members.flatMap((row) => {
+        if (!isScheduleDayTeamSlotIndex(row.slot_index)) return [];
+        return [{
+          work_date: row.work_date,
+          slot_index: row.slot_index,
+          profile_id: row.profile_id,
+          employee: employeesById.get(row.profile_id) || null,
+          added_by: row.added_by,
+          created_at: row.created_at,
+          is_leader: false,
+        }];
+      });
+      if (operation) {
+        settleOptimisticOperation(operation.id, 'success', undefined, {
+          apply: (state) => ({
+            ...state,
+            board: copiedMembers.reduce(
+              (nextBoard, member) => (
+                nextBoard ? patchBoardWithDayTeamMember(nextBoard, member) : nextBoard
+              ),
+              state.board
+            ),
+          }),
+        });
+      } else {
+        setBoardBaseData((current) =>
+          copiedMembers.reduce(
+            (nextBoard, member) => patchBoardWithDayTeamMember(nextBoard, member),
+            current
+          )
+        );
+      }
+      if (result.copied === 0 && result.skipped === 0) {
+        toast.info('No team members to copy from that date.');
+        return;
+      }
+      if (result.copied > 0) {
+        toast.success(
+          result.skipped > 0
+            ? `Copied ${result.copied} team member${result.copied === 1 ? '' : 's'}; skipped ${result.skipped}.`
+            : `Copied ${result.copied} team member${result.copied === 1 ? '' : 's'}.`
+        );
+        return;
+      }
+      toast.info('Those team members could not be copied onto this day.');
+    } catch (error) {
+      if (operation) settleOptimisticOperation(operation.id, 'failure', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to copy these teams');
+    } finally {
+      setCopyingDayTeams(false);
+      endMutation(mutationKey);
+    }
+  }
+
   async function handleTeamSettingsSave(input: {
     visible_slot_count: number;
     leaders: Array<{ slot_index: number; profile_id: string | null }>;
@@ -6464,9 +6585,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               ) : null}
               {view === SCHEDULING_BOARD_VIEWS.daily ? (
                 <div
-                  className="flex min-h-7 items-center justify-end gap-3"
+                  className="flex min-h-7 flex-nowrap items-center justify-between gap-3"
                   data-testid="schedule-daily-instruction-row"
                 >
+                  <ScheduleCopyDayTeamsControl
+                    selectedDate={selectedDate}
+                    copying={copyingDayTeams}
+                    onCopy={copyDayTeamsFromDate}
+                  />
                   <TooltipProvider delayDuration={200}>
                     <div
                       className="hidden shrink-0 items-center gap-1 md:flex"

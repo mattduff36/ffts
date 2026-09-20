@@ -14,6 +14,7 @@ import {
   isVisibleScheduleDayTeamSlotIndex,
   leaderBySlotIndex,
   mapDayTeamMemberRow,
+  standingLeaderProfileIds,
 } from '@/lib/utils/scheduling-day-teams';
 import { enumerateScheduleDates, getScheduleVisitDate } from '@/lib/utils/scheduling';
 import type {
@@ -353,6 +354,88 @@ export async function assignDayTeamToVisit(
     already_assigned_count: alreadyAssignedCount,
     employee_capacity: capacity,
   };
+}
+
+export interface CopiedDayTeamMemberRow {
+  work_date: string;
+  slot_index: ScheduleDayTeamSlotIndex;
+  profile_id: string;
+  added_by: string | null;
+  created_at: string;
+}
+
+export async function copyScheduleDayTeamMembers(
+  admin: SupabaseClient,
+  input: {
+    fromDate: string;
+    toDate: string;
+    actorUserId: string;
+  }
+): Promise<
+  | { status: 400; error: string }
+  | { members: CopiedDayTeamMemberRow[]; copied: number; skipped: number }
+> {
+  if (input.fromDate === input.toDate) {
+    return { status: 400, error: 'Choose a different date to copy from.' };
+  }
+
+  const settings = await loadScheduleTeamSettings(admin, new Map());
+  const leaderIds = standingLeaderProfileIds(settings);
+  const sourceResult = await admin
+    .from('schedule_day_team_members')
+    .select('work_date, slot_index, profile_id, added_by, created_at')
+    .eq('work_date', input.fromDate)
+    .order('slot_index')
+    .order('created_at');
+  if (sourceResult.error) {
+    if (isMissingDayTeamsRelation(sourceResult.error)) {
+      return { members: [], copied: 0, skipped: 0 };
+    }
+    throw sourceResult.error;
+  }
+
+  const sourceMembers = ((sourceResult.data || []) as Array<Record<string, unknown>>)
+    .map((row) => ({
+      slot_index: Number(row.slot_index),
+      profile_id: String(row.profile_id || ''),
+    }))
+    .filter((row): row is { slot_index: ScheduleDayTeamSlotIndex; profile_id: string } =>
+      Boolean(row.profile_id)
+      && !leaderIds.has(row.profile_id)
+      && isVisibleScheduleDayTeamSlotIndex(row.slot_index, settings.visible_slot_count)
+    );
+
+  const members: CopiedDayTeamMemberRow[] = [];
+  let skipped = 0;
+  for (const source of sourceMembers) {
+    const { data, error } = await admin.rpc('add_schedule_day_team_member_v1', {
+      p_work_date: input.toDate,
+      p_slot_index: source.slot_index,
+      p_profile_id: source.profile_id,
+      p_actor_user_id: input.actorUserId,
+    });
+    if (error) {
+      const mapped = mapDayTeamRpcError(error);
+      if (mapped && mapped.status !== 500) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+    if (!row) continue;
+    const slotIndex = Number(row.slot_index);
+    if (!isScheduleDayTeamSlotIndex(slotIndex)) continue;
+    members.push({
+      work_date: String(row.work_date || input.toDate).slice(0, 10),
+      slot_index: slotIndex,
+      profile_id: String(row.profile_id || source.profile_id),
+      added_by: typeof row.added_by === 'string' ? row.added_by : input.actorUserId,
+      created_at: String(row.created_at || new Date().toISOString()),
+    });
+  }
+
+  return { members, copied: members.length, skipped };
 }
 
 export { isScheduleDayTeamSlotIndex };

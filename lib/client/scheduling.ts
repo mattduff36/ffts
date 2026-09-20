@@ -398,6 +398,29 @@ export async function createScheduleAssignment(
   );
 }
 
+export async function copyScheduleDayTeams(input: {
+  from_date: string;
+  to_date: string;
+}): Promise<{
+  members: Array<{
+    work_date: string;
+    slot_index: number;
+    profile_id: string;
+    added_by: string | null;
+    created_at: string;
+  }>;
+  copied: number;
+  skipped: number;
+}> {
+  return readResponse(
+    await fetch('/api/scheduling/day-teams/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
 export async function addScheduleDayTeamMember(input: {
   work_date: string;
   slot_index: number;

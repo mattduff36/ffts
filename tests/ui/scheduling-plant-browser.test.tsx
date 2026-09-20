@@ -49,18 +49,16 @@ function spawnOutput(result: SpawnSyncReturns<string>): string {
 
 describe('scheduling plant browser evidence', () => {
   it('SCHED-PLANT-BROWSER-001 drags two distinct plants onto one visit', () => {
-    if (!existsSync(ADMIN_STORAGE_STATE)) {
-      const setup = spawnPlaywright([
-        '--config=testsuite/config/playwright.config.ts',
-        'testsuite/ui/auth.setup.ts',
-        '-g',
-        'authenticate as admin',
-        '--project=setup',
-        '--workers=1',
-      ]);
-      expect(setup.status, spawnOutput(setup)).toBe(0);
-      expect(existsSync(ADMIN_STORAGE_STATE), spawnOutput(setup)).toBe(true);
-    }
+    const setup = spawnPlaywright([
+      '--config=testsuite/config/playwright.config.ts',
+      'testsuite/ui/auth.setup.ts',
+      '-g',
+      'authenticate as admin',
+      '--project=setup',
+      '--workers=1',
+    ]);
+    expect(setup.status, spawnOutput(setup)).toBe(0);
+    expect(existsSync(ADMIN_STORAGE_STATE), spawnOutput(setup)).toBe(true);
 
     const result = spawnPlaywright([
       '--config=testsuite/config/playwright.config.ts',

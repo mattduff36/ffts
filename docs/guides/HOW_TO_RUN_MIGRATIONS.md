@@ -67,3 +67,5 @@ PostgreSQL trigger functions store column names as plain text. When you rename a
 
 Never apply migrations or baseline SQL against Forest production without a schema inventory, an explicit deployment plan, and approval for any destructive data change.
 
+The connected database currently contains only SAMPLE DATA. Do not classify migration or persistence work as CRITICAL until all SAMPLE data has been removed and real customer data is in use. See [SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
+

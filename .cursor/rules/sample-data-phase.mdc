@@ -1,0 +1,15 @@
+---
+description: While FFTS holds only SAMPLE DATA, do not use the CRITICAL TEE lane. Resume CRITICAL after sample data is removed and real customer data is live.
+alwaysApply: true
+---
+
+# Sample-data phase (CRITICAL deferred)
+
+All application database records are currently **SAMPLE DATA**. The app is not truly live with real customer data.
+
+- When planning or implementing new work, **do not use the CRITICAL lane**.
+- Classify FAST, STANDARD, or GUARDED from coordination and uncertainty only. Persistence, schema, migration, and database work are not CRITICAL while this phase holds.
+- Keep ordinary migration safety: approved `pg` pattern, no secret exposure, `db:validate` after rename/drop, explicit authorization before destructive schema or data changes.
+- Generic TEE still lists persistence and production-data risk as CRITICAL categories. This project overrides that until go-live.
+
+**Trigger to resume CRITICAL:** all SAMPLE data has been removed and real customer data is in use. Then use CRITICAL where necessary (persistence, auth/security/permissions/RLS, money, concurrency, irreversible operations, production-data risk, or an explicit independent-review request).

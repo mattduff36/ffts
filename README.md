@@ -21,9 +21,11 @@ npm install
 npm run dev
 ```
 
-The application is production-only. Demo reset, sample-data, questionnaire, and generic template setup flows are intentionally not included.
+The application is the production Forest Farm product. Built-in demo-reset, questionnaire, and generic template setup flows are intentionally not included. The connected database currently contains **only SAMPLE DATA**; see [docs/guides/SAMPLE_DATA_PHASE.md](docs/guides/SAMPLE_DATA_PHASE.md).
 
 ## Database
+
+The database is not yet live customer data. All current records are sample or fixture data. While that remains true, do not plan work in the CRITICAL TEE lane. Resume CRITICAL where necessary only after all SAMPLE data has been removed.
 
 Before applying any migration, read [docs/guides/HOW_TO_RUN_MIGRATIONS.md](docs/guides/HOW_TO_RUN_MIGRATIONS.md).
 

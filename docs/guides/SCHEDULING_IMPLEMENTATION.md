@@ -6,9 +6,13 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 
 - Scheduling is visit-based. Employees and plant remain available for other non-overlapping visits on the same day.
 - Managers can create quoted work from the board, reserve Project Numbers, place open Projects onto the calendar, and use **Quick add** for emergency jobs.
-- Quick add creates a formal Project Number, schedule job, and timed visit in one step for an existing customer/site. No quote or RAMS document upload is required.
+- Quick add creates a formal Project Number, schedule job, and timed visit in one step for an existing customer/site. No quote or RAMS document upload is required. Failed creates must not leave a visible card after refresh; the Project Number allocation is validated against the manager's five-digit series before insert.
+- Project and job numbers are five-digit owner ranges with two-letter initials: Joe `1xxxx-JC`, Matt `8xxxx-MD`, sample data `9xxxx-SD`. Series below 10000 are rejected.
+- Compact header actions reveal their labels after a short hover/focus dwell and keep those labels primed for a few seconds so the next click is not icon-only.
 - Resource cards expose a dedicated drag handle for touch-first drag-and-drop. Selecting a visit and tapping a resource remains supported.
 - Daily team buckets (default five, up to ten via Settings) let managers assemble an organisation-shared crew of up to six employees, including a standing team leader, for the selected date, then drag the whole bucket onto a timed visit. Leaders persist in settings and are implicit members every day. Employees appear in Resources or a bucket, never both. Conflicted people are skipped and reported; the bucket stays filled. This is independent of org team filters.
+- When a bucket has no standing team leader, the first added member becomes the display name with an `(auto)` suffix, for example `Paul B's team (auto)`.
+- Daily view: **Copy teams** sits on the left of the instruction row; calendar display-mode controls stay on the right of the same row. Copy adds another date's crews onto the selected day without changing standing leaders in Settings.
 - Board mutations update the local cache immediately and reconcile with the server in the background.
 
 ## Optimistic mutation contract
@@ -47,9 +51,12 @@ These ideas are intentionally deferred and must not be treated as current scope:
 ## Related files
 
 - Board UI: `app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx`
+- Compact header controls: `app/(dashboard)/scheduling/components/ScheduleCompactControls.tsx`
+- Copy teams: `app/(dashboard)/scheduling/components/ScheduleCopyDayTeamsControl.tsx`
 - Quick add dialog: `app/(dashboard)/scheduling/components/ScheduleBoardQuickAddDialog.tsx`
 - Cache helpers: `app/(dashboard)/scheduling/components/scheduling-board-cache.ts`
-- Persistence: `supabase/migrations/20260810214500_schedule_board_quick_add_v1.sql`, `supabase/migrations/20260901170000_schedule_day_teams.sql`, `supabase/migrations/20260901210000_schedule_assignment_mutation_requests.sql`
+- Persistence: `supabase/migrations/20260810214500_schedule_board_quick_add_v1.sql`, `supabase/migrations/20260901170000_schedule_day_teams.sql`, `supabase/migrations/20260901210000_schedule_assignment_mutation_requests.sql`, `supabase/migrations/20260920133000_quote_project_reference_owner_ranges.sql`
 - Mutation coordinator: `app/(dashboard)/scheduling/components/scheduling-mutation-coordinator.ts`, `app/(dashboard)/scheduling/components/scheduling-mutation-claims.ts`
 - Day teams UI: `app/(dashboard)/scheduling/components/ScheduleDayTeamBuckets.tsx`
+- Day-team names: `lib/utils/scheduling-day-teams.ts`
 - Sample data: `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`

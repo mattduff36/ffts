@@ -4,6 +4,8 @@
 
 This project uses **direct PostgreSQL connections** to run database migrations programmatically using the `pg` library. This eliminates the need for manual SQL execution in the Supabase Dashboard.
 
+The connected database currently holds only SAMPLE DATA. Do not classify migration work as CRITICAL until all SAMPLE data has been removed and real customer data is in use. See [SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
+
 ---
 
 ## 📋 Prerequisites

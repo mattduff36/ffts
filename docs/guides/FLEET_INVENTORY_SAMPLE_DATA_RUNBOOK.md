@@ -4,6 +4,10 @@ This runbook authorizes one guarded production fixture for demonstrating tree-su
 and Inventory workflows. It creates only fictional records marked by
 `fleet-inventory-sample-v1` and deterministic `ZZ99-` identifiers.
 
+The connected Forest Farm database currently contains only SAMPLE DATA overall. Do not use the
+CRITICAL TEE lane until all SAMPLE data is removed and real customer data is live. See
+[SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
+
 The fixture contains:
 
 - 10 active heavy Fleet Plant assets;

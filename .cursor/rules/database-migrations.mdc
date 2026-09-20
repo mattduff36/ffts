@@ -1,5 +1,5 @@
 ---
-description: Required CRITICAL procedure for any database, persistence, schema, SQL, RLS, migration, backfill, or production-data task. Request this rule before acting even when no migration file is open.
+description: Required procedure for any database, persistence, schema, SQL, RLS, migration, backfill, or data task. Request this rule before acting even when no migration file is open. CRITICAL gates apply only after real customer data is live.
 globs: "{scripts/**/*migration*.ts,scripts/migrations/**,supabase/**/*.sql,**/*schema*.sql}"
 alwaysApply: false
 ---
@@ -10,7 +10,8 @@ alwaysApply: false
 - Use the approved `pg` pattern only: parse `POSTGRES_URL_NON_POOLING`, create `pg.Client`, configure SSL, and execute SQL. Do not substitute Supabase client RPC.
 - Assume `.env.local` contains required variables, but never print or expose them.
 - Generate and run approved migrations yourself unless blocked by missing variables or permissions.
-- Never change production data/schema without explicit authorization and the full CRITICAL TEE gates.
+- Never change production schema or data without explicit authorization.
+- While the database contains only SAMPLE DATA, do not classify this work as CRITICAL. Resume full CRITICAL TEE gates only after sample data is removed and real customer data is in use. See `.cursor/rules/sample-data-phase.mdc`.
 - Run `npm run db:validate` immediately after any migration that renames or drops a column or table.
 - Do not route database/migration failures through generic finalise repair.
 - Planning, hooks, builds, tests, and non-database workflow checkpoints must not open an implicit database connection.

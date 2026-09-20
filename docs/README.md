@@ -8,9 +8,11 @@ This directory contains the public developer, feature, setup, and verification d
 - [`../README-SETUP-FFTS.md`](../README-SETUP-FFTS.md) — complete Forest Farm setup and handover instructions.
 - [`../FOREST_FARM_PRODUCTION_SETUP.md`](../FOREST_FARM_PRODUCTION_SETUP.md) — production bootstrap checklist.
 - [`DEVELOPMENT_STANDARDS_AND_TEMPLATES.md`](DEVELOPMENT_STANDARDS_AND_TEMPLATES.md) — implementation standards and code patterns.
+- [`guides/SAMPLE_DATA_PHASE.md`](guides/SAMPLE_DATA_PHASE.md) — current database is SAMPLE DATA only; do not use the CRITICAL lane until real customer data is live.
 
 ## Database and Operations
 
+- [`guides/SAMPLE_DATA_PHASE.md`](guides/SAMPLE_DATA_PHASE.md)
 - [`guides/HOW_TO_RUN_MIGRATIONS.md`](guides/HOW_TO_RUN_MIGRATIONS.md)
 - [`guides/MIGRATIONS_GUIDE.md`](guides/MIGRATIONS_GUIDE.md)
 - [`guides/AUDIT_LOGGING.md`](guides/AUDIT_LOGGING.md)

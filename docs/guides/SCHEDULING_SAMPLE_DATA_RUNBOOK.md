@@ -4,6 +4,12 @@ This runbook authorizes one narrow exception to the repository's no-production-d
 fixture creates only fictional Customers, operational Quotes, synchronized scheduling jobs, and
 unassigned timed visits. Every owned row is marked `scheduling-sample-v1`.
 
+The connected Forest Farm database currently contains only SAMPLE DATA overall, not just this
+fixture. Do not use the CRITICAL TEE lane until all SAMPLE data is removed and real customer data
+is live. See [SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
+
+Sample Quote and job numbers use the five-digit `9xxxx-SD` owner range.
+
 ## Preconditions
 
 1. Confirm `.env.local` points to the intended production Supabase project.
@@ -38,8 +44,8 @@ npm run scheduling:sample:apply -- --confirm-production=FFTS_SCHEDULING_SAMPLE
 ```
 
 The fixture creates a banned placeholder auth identity, five fictional Customers, 22 latest open
-Quotes, their synchronized jobs, and unassigned visits. It verifies each job number matches its
-Quote base reference.
+Quotes in `90000-SD`…`90021-SD`, their synchronized jobs, and unassigned visits. It verifies each
+job number matches its Quote base reference.
 
 ## Queue extension
 
@@ -51,8 +57,8 @@ npm run scheduling:sample:queue:plan
 ```
 
 The extension requires the base fixture identity, Customers, Quote/job set, and inactive series to
-remain intact, while allowing extra visits created during testing. It refuses any `99022-SD` to
-`99033-SD` reference collision. It plans 12 additional Quotes under the existing
+remain intact, while allowing extra visits created during testing. It refuses any `90022-SD` to
+`90033-SD` reference collision. It plans 12 additional Quotes under the existing
 `scheduling-sample-v1` owner: nine unscheduled Quotes split equally across the Draft, Pending, and
 Accepted scheduling groups, plus three dated Quotes with unassigned visits.
 
@@ -70,14 +76,14 @@ The normal ownership-checked cleanup command removes the base fixture and this e
 
 When the base SAMPLE fixture already exists and you need denser board coverage for the
 **current and next week**, use the play pack. It reuses `SAMPLE Scheduling Manager` and the five
-fictional Customers, and creates reserved `99100-SD`…`99113-SD` Quotes/jobs/visits only (no
+fictional Customers, and creates reserved `90100-SD`…`90113-SD` Quotes/jobs/visits only (no
 assignments).
 
 ```bash
 npm run scheduling:sample:play:plan
 ```
 
-Before applying, report the project reference, existing SAMPLE identity, `99100-SD` range, date
+Before applying, report the project reference, existing SAMPLE identity, `90100-SD` range, date
 window, Quote/job/visit counts, and the shared cleanup command. Apply only after explicit approval:
 
 ```bash

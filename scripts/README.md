@@ -32,6 +32,7 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 4. Run `npm run db:validate` after schema changes.
 5. Do not add demo seeds, customer exports, employee records, fleet records, or one-off client repair scripts.
 6. Test helpers must use deterministic fictional fixtures and must not alter production data unless a runbook explicitly authorizes it.
+7. The connected database currently holds only SAMPLE DATA. Do not classify script or migration work as CRITICAL until all SAMPLE data is removed and real customer data is live. See `docs/guides/SAMPLE_DATA_PHASE.md`.
 
 ### Scheduling sample-data exception
 
@@ -40,7 +41,7 @@ fictional `example.test` data marked `scheduling-sample-v1`, requires the config
 reference, validates the timed scheduling schema, creates no resource assignments, and has a matching
 ownership-checked cleanup command. Its guarded queue extension reuses that same owner and cleanup path,
 adds unscheduled Quote workflow coverage only when the base fixture is still in its expected state,
-and supports a denser current/next-week client-demo play pack (`99100-SD` range) on top of that owner.
+and supports a denser current/next-week client-demo play pack (`90100-SD` range) on top of that owner.
 
 Follow `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`. Never run the apply or destructive cleanup
 commands without the exact confirmation token and an operator review of the generated manifest.

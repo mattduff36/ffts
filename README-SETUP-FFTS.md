@@ -93,7 +93,7 @@ This script:
 - Creates or updates only `admin@mpdee.co.uk` as Matt Duffill SuperAdmin.
 - Runs `npm run db:validate` again.
 
-It intentionally does not create Forest Farm staff accounts, demo personas, sample data, or demo passwords.
+It intentionally does not create Forest Farm staff accounts, demo personas, sample data, or demo passwords. Sample fixtures, when needed, are applied later through the guarded runbooks in `docs/guides/`. The connected Forest Farm database currently holds only SAMPLE DATA; do not use the CRITICAL TEE lane until that sample data is removed and real customer data is live. See [docs/guides/SAMPLE_DATA_PHASE.md](docs/guides/SAMPLE_DATA_PHASE.md).
 
 After successful bootstrap:
 

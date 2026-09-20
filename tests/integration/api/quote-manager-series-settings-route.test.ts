@@ -84,7 +84,12 @@ describe('/api/quotes/settings/manager-series', () => {
         },
       },
       from: vi.fn((table: string) => {
-        if (table === 'quote_manager_series') return { upsert };
+        if (table === 'quote_manager_series') {
+          return {
+            upsert,
+            select: vi.fn().mockResolvedValue({ data: [], error: null }),
+          };
+        }
         if (table === 'quotes') return { update: quoteUpdate };
         if (table === 'profiles') {
           return {
@@ -104,8 +109,8 @@ describe('/api/quotes/settings/manager-series', () => {
       {
         profile_id: 'manager-1',
         initials: 'MO',
-        next_number: 12,
-        number_start: 1,
+        next_number: 20012,
+        number_start: 20000,
         signoff_name: 'Manager One',
         signoff_title: 'Contracts Manager',
         manager_email: 'manager@example.com',
@@ -119,8 +124,8 @@ describe('/api/quotes/settings/manager-series', () => {
       body: JSON.stringify({
         profile_id: 'manager-1',
         initials: 'mo',
-        next_number: 12,
-        number_start: 1,
+        next_number: 20012,
+        number_start: 20000,
         signoff_name: 'Manager One',
         signoff_title: 'Contracts Manager',
         manager_email: 'manager@example.com',
@@ -135,9 +140,110 @@ describe('/api/quotes/settings/manager-series', () => {
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
       profile_id: 'manager-1',
       initials: 'MO',
-      next_number: 12,
+      next_number: 20012,
       manager_email: 'manager-login@example.com',
     }), { onConflict: 'profile_id' });
     expect(payload.manager_options).toHaveLength(1);
+  });
+
+  it('rejects short initials and numbers below the five-digit owner ranges', async () => {
+    const { POST } = await import('@/app/api/quotes/settings/manager-series/route');
+    mockCreateAdminClient.mockReturnValue({
+      auth: {
+        admin: {
+          getUserById: vi.fn(),
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quote_manager_series') {
+          return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const response = await POST(new NextRequest('http://localhost/api/quotes/settings/manager-series', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile_id: 'manager-1',
+        initials: 'J',
+        next_number: 27,
+        number_start: 1,
+        is_active: true,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.field_errors).toMatchObject({
+      initials: expect.stringMatching(/two letters/i),
+      number_start: expect.stringMatching(/10000/),
+      next_number: expect.stringMatching(/10000/),
+    });
+  });
+
+  it('rejects overflow numbers and overlapping 10000-blocks', async () => {
+    const { POST } = await import('@/app/api/quotes/settings/manager-series/route');
+    mockCreateAdminClient.mockReturnValue({
+      auth: {
+        admin: {
+          getUserById: vi.fn(),
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quote_manager_series') {
+          return {
+            select: vi.fn().mockResolvedValue({
+              data: [{
+                profile_id: 'joe-1',
+                initials: 'JC',
+                number_start: 10000,
+                next_number: 10027,
+              }],
+              error: null,
+            }),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const overflow = await POST(new NextRequest('http://localhost/api/quotes/settings/manager-series', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile_id: 'manager-1',
+        initials: 'MD',
+        next_number: 100000,
+        number_start: 100000,
+        is_active: true,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    expect(overflow.status).toBe(400);
+    expect(await overflow.json()).toMatchObject({
+      field_errors: {
+        number_start: expect.stringMatching(/99999/),
+        next_number: expect.stringMatching(/99999/),
+      },
+    });
+
+    const overlap = await POST(new NextRequest('http://localhost/api/quotes/settings/manager-series', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile_id: 'manager-1',
+        initials: 'MD',
+        next_number: 10001,
+        number_start: 10000,
+        is_active: true,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    expect(overlap.status).toBe(400);
+    expect(await overlap.json()).toMatchObject({
+      field_errors: {
+        number_start: expect.stringMatching(/already used by JC/),
+      },
+    });
   });
 });

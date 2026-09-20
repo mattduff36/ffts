@@ -170,9 +170,21 @@ function getInitialsFromLabel(label: string) {
   return label
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 3)
+    .slice(0, 2)
     .map(part => part[0]?.toUpperCase() || '')
-    .join('');
+    .join('')
+    .padEnd(2, 'X');
+}
+
+function nextUnusedSeriesStart(rows: Array<{ number_start: number }>) {
+  const usedBlocks = new Set(rows.map((row) => Math.floor(Number(row.number_start || 0) / 10000)));
+  usedBlocks.add(1);
+  usedBlocks.add(8);
+  usedBlocks.add(9);
+  for (const block of [2, 3, 4, 5, 6, 7]) {
+    if (!usedBlocks.has(block)) return block * 10000;
+  }
+  return 20000;
 }
 
 function formatUserMetaValue(value: string | null | undefined) {
@@ -410,11 +422,12 @@ export function QuoteSettingsTab({
     const user = availableManagerUsers.find(item => item.id === newManagerProfileId);
     if (!user) return;
     const name = user.full_name || 'New Manager';
+    const seriesStart = nextUnusedSeriesStart(managerRows);
     const row = {
       profile_id: user.id,
       initials: getInitialsFromLabel(name),
-      next_number: 1,
-      number_start: 1,
+      next_number: seriesStart,
+      number_start: seriesStart,
       signoff_name: name,
       signoff_title: '',
       manager_email: '',
@@ -648,6 +661,8 @@ export function QuoteSettingsTab({
           </CardTitle>
           <CardDescription>
             Configure quote numbering, approvers, and sign-off defaults for each quote manager.
+            Use a unique 10000-block per manager so numbers do not overlap, for example
+            10000–19999, 20000–29999, or 80000–89999.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -696,13 +711,29 @@ export function QuoteSettingsTab({
 
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                     <Field label="Initials">
-                      <Input value={row.initials} onChange={event => updateManagerRow(row.profile_id, { initials: event.target.value.toUpperCase() })} />
+                      <Input
+                        maxLength={2}
+                        value={row.initials}
+                        onChange={event => updateManagerRow(row.profile_id, { initials: event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2) })}
+                      />
                     </Field>
                     <Field label="Number start">
-                      <Input type="number" value={row.number_start} onChange={event => updateManagerRow(row.profile_id, { number_start: Number(event.target.value) })} />
+                      <Input
+                        type="number"
+                        min={10000}
+                        max={99999}
+                        value={row.number_start}
+                        onChange={event => updateManagerRow(row.profile_id, { number_start: Number(event.target.value) })}
+                      />
                     </Field>
                     <Field label="Next number">
-                      <Input type="number" value={row.next_number} onChange={event => updateManagerRow(row.profile_id, { next_number: Number(event.target.value) })} />
+                      <Input
+                        type="number"
+                        min={10000}
+                        max={99999}
+                        value={row.next_number}
+                        onChange={event => updateManagerRow(row.profile_id, { next_number: Number(event.target.value) })}
+                      />
                     </Field>
                     <Field label="Manager email (from user account)">
                       <Input value={row.manager_email || ''} readOnly className="bg-slate-900/60 text-muted-foreground" />

@@ -25,6 +25,7 @@ import {
   getInvoiceSummary,
   type InvoiceSummary,
 } from '@/lib/utils/quote-workflow';
+import { formatQuoteProjectReference } from '@/lib/utils/timesheet-job-codes';
 
 const { Client } = pg;
 const QUOTE_NOTIFICATION_MODULE_KEY: NotificationModuleKey = 'quotes';
@@ -286,7 +287,7 @@ export async function generateQuoteReferenceForManager(params: {
     .single();
 
   if (error || !config) {
-    const fallbackInitials = (params.fallbackInitials || 'XX').toUpperCase().slice(0, 10);
+    const fallbackInitials = normalizeManagerInitials(params.fallbackInitials);
     const legacyReference = await generateLegacyQuoteReference(fallbackInitials);
     return { quoteReference: legacyReference, initials: fallbackInitials };
   }
@@ -313,16 +314,21 @@ export async function generateQuoteReferenceForManager(params: {
     }
 
     return {
-      quoteReference: `${issued}-${config.initials}`,
-      initials: config.initials,
+      quoteReference: formatQuoteProjectReference(issued, config.initials),
+      initials: normalizeManagerInitials(config.initials),
     };
   } finally {
     await client.end();
   }
 }
 
+function normalizeManagerInitials(value?: string | null): string {
+  const letters = (value || 'XX').toUpperCase().replace(/[^A-Z]/g, '');
+  return (letters.slice(0, 2) || 'XX').padEnd(2, 'X');
+}
+
 async function generateLegacyQuoteReference(initials: string): Promise<string> {
-  const key = initials.toUpperCase().slice(0, 10);
+  const key = normalizeManagerInitials(initials);
   const client = createPgClient();
   await client.connect();
 
@@ -331,7 +337,7 @@ async function generateLegacyQuoteReference(initials: string): Promise<string> {
       `
       WITH upsert AS (
         INSERT INTO quote_sequences (requester_initials, next_number)
-        VALUES ($1, 6001)
+        VALUES ($1, 20001)
         ON CONFLICT (requester_initials)
         DO UPDATE
         SET
@@ -341,7 +347,7 @@ async function generateLegacyQuoteReference(initials: string): Promise<string> {
       )
       SELECT
         CASE
-          WHEN next_number = 6001 THEN 6000
+          WHEN next_number = 20001 THEN 20000
           ELSE next_number - 1
         END AS issued_number
       FROM upsert
@@ -354,7 +360,7 @@ async function generateLegacyQuoteReference(initials: string): Promise<string> {
       throw new Error('Failed to allocate quote sequence number');
     }
 
-    return `${issued}-${key}`;
+    return formatQuoteProjectReference(issued, key);
   } finally {
     await client.end();
   }

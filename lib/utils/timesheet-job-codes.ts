@@ -13,6 +13,33 @@ export const JOB_NUMBER_REGEX = /^\d{4,5}-[A-Z]{2}$/;
 export const QUOTE_JOB_NUMBER_REGEX = /^\d{5}-[A-Z]{2}$/;
 export const JOB_NUMBER_MAX_LENGTH = 32;
 export const STANDARD_JOB_NUMBER_MAX_LENGTH = 8;
+export const QUOTE_PROJECT_NUMBER_MIN = 10000;
+export const QUOTE_PROJECT_NUMBER_MAX = 99999;
+export const MANAGER_INITIALS_REGEX = /^[A-Z]{2}$/;
+
+export function formatQuoteProjectReference(
+  issuedNumber: number,
+  initials: string
+): string {
+  const normalizedInitials = initials.trim().toUpperCase();
+  if (
+    !Number.isInteger(issuedNumber)
+    || issuedNumber < QUOTE_PROJECT_NUMBER_MIN
+    || issuedNumber > QUOTE_PROJECT_NUMBER_MAX
+  ) {
+    throw new Error(
+      `Issued number must be between ${QUOTE_PROJECT_NUMBER_MIN} and ${QUOTE_PROJECT_NUMBER_MAX}.`
+    );
+  }
+  if (!MANAGER_INITIALS_REGEX.test(normalizedInitials)) {
+    throw new Error('Initials must be exactly two letters.');
+  }
+  return `${issuedNumber}-${normalizedInitials}`;
+}
+
+export function quoteProjectNumberBlock(value: number): number {
+  return Math.floor(value / 10000);
+}
 
 function compactJobCode(value: string): string {
   return value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();

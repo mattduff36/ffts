@@ -332,6 +332,37 @@ describe('Project-backed scheduling job routes', () => {
     });
   });
 
+  it('returns a definite client error when the project reference check fails', async () => {
+    mockQuickAddRpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: '23514',
+        message: 'new row for relation "quote_project_numbers" violates check constraint "quote_project_numbers_reference_check"',
+      },
+    });
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const response = await POST(postRequest({
+      mode: 'quick_add',
+      request_id: '77777777-7777-4777-8777-777777777777',
+      manager_profile_id: '22222222-2222-4222-8222-222222222222',
+      project_title: 'Emergency works',
+      customer_id: '33333333-3333-4333-8333-333333333333',
+      status: 'scheduled',
+      start_date: '2026-07-27',
+      end_date: '2026-07-27',
+      is_drop_on_ready: false,
+      tag_ids: [],
+      initial_visit: {
+        starts_at: '2026-07-27T08:00:00.000Z',
+        ends_at: '2026-07-27T12:00:00.000Z',
+      },
+    }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'This manager series is not configured for five-digit project numbers. Update the quote number range and try again.',
+    });
+  });
+
   it('requires the Quotes sensitive-access boundary before quick add', async () => {
     mockSensitiveAccess.mockResolvedValue(
       NextResponse.json({ error: 'Sensitive access PIN required.' }, { status: 428 })

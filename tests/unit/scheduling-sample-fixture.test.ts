@@ -20,6 +20,8 @@ describe('scheduling SAMPLE fixture', () => {
     expect(fixture.customers).toHaveLength(5);
     expect(fixture.quotes).toHaveLength(22);
     expect(fixture.quotes.every((quote) => quote.reference.endsWith('-SD'))).toBe(true);
+    expect(fixture.quotes.every((quote) => quote.reference.startsWith('90'))).toBe(true);
+    expect(fixture.quotes.some((quote) => quote.reference.startsWith('99'))).toBe(false);
     expect(fixture.quotes.every((quote) => ['po_received', 'in_progress'].includes(quote.status))).toBe(true);
     expect(fixture.quotes.flatMap((quote) => quote.visits)).toHaveLength(36);
     expect(fixture.quotes.some((quote) => quote.visits.length === 5)).toBe(true);
@@ -37,8 +39,8 @@ describe('scheduling SAMPLE fixture', () => {
     });
     expect(manifest.series).toEqual({
       initials: 'SD',
-      number_start: 99000,
-      next_number: 99022,
+      number_start: 90000,
+      next_number: 90022,
     });
   });
 
@@ -51,7 +53,7 @@ describe('scheduling SAMPLE fixture', () => {
     expect(fixture.quotes.filter((quote) => quote.startDate)).toHaveLength(3);
     expect(fixture.quotes.flatMap((quote) => quote.visits)).toHaveLength(3);
     expect(fixture.quotes.map((quote) => quote.reference)).toEqual(
-      Array.from({ length: 12 }, (_, index) => `${99022 + index}-SD`)
+      Array.from({ length: 12 }, (_, index) => `${90022 + index}-SD`)
     );
   });
 
@@ -71,8 +73,8 @@ describe('scheduling SAMPLE fixture', () => {
     });
     expect(manifest.series).toEqual({
       initials: 'SD',
-      number_start: 99022,
-      next_number: 99034,
+      number_start: 90022,
+      next_number: 90034,
     });
   });
 
@@ -81,7 +83,7 @@ describe('scheduling SAMPLE fixture', () => {
     expect(fixture.windowStart).toBe('2026-08-10');
     expect(fixture.windowEnd).toBe('2026-08-23');
     expect(fixture.quotes).toHaveLength(14);
-    expect(fixture.quotes.every((quote) => quote.reference.startsWith('991'))).toBe(true);
+    expect(fixture.quotes.every((quote) => quote.reference.startsWith('901'))).toBe(true);
     expect(fixture.quotes.flatMap((quote) => quote.visits).length).toBeGreaterThan(14);
     expect(fixture.quotes.some((quote) => quote.visits.length === 3)).toBe(true);
   });
@@ -97,8 +99,8 @@ describe('scheduling SAMPLE fixture', () => {
     });
     expect(manifest.series).toEqual({
       initials: 'SD',
-      number_start: 99100,
-      next_number: 99114,
+      number_start: 90100,
+      next_number: 90114,
     });
   });
 });

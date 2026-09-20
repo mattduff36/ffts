@@ -3505,6 +3505,34 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByText('No jobs scheduled for this week')).toBeInTheDocument();
   });
 
+  it('rolls back the Creating project card after a definite quick-add configuration error', async () => {
+    mockQuickAdd.mockImplementation(async () => {
+      expect(screen.getByText('Creating project…')).toBeInTheDocument();
+      throw new SchedulingApiError(
+        'This manager series is not configured for five-digit project numbers. Update the quote number range and try again.',
+        400,
+        { error: 'This manager series is not configured for five-digit project numbers. Update the quote number range and try again.' }
+      );
+    });
+
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-quick-add-button'));
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title *'), {
+      target: { value: 'Emergency works' },
+    });
+    fireEvent.click(screen.getAllByRole('combobox')[0]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Manager One' }));
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(await screen.findByRole('option', { name: 'Example Customer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
+
+    await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
+    expect(await screen.findByRole('dialog', { name: 'Quick add job' })).toBeInTheDocument();
+    expect(screen.queryByText('Creating project…')).not.toBeInTheDocument();
+  });
+
   it('keeps an employee available for a non-overlapping same-day visit', async () => {
     const afternoonVisit = {
       ...board.visits[0],

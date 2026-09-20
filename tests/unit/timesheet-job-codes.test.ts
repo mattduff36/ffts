@@ -3,6 +3,7 @@ import {
   areCataloguedJobNumbers,
   collectUniqueJobNumbers,
   formatEntryJobNumbers,
+  formatQuoteProjectReference,
   getEntryJobNumbers,
   hasDuplicateJobNumbers,
   isValidJobNumber,
@@ -92,5 +93,18 @@ describe('timesheet job code helpers', () => {
   it('formats multiple job codes for display and detects duplicates', () => {
     expect(formatEntryJobNumbers({ job_numbers: ['1234-AB', '5678-CD'] })).toBe('1234-AB, 5678-CD');
     expect(hasDuplicateJobNumbers(['1234-AB', '1234ab'])).toBe(true);
+  });
+
+  it('formats owner-range quote and project references', () => {
+    expect(formatQuoteProjectReference(10027, 'jc')).toBe('10027-JC');
+    expect(formatQuoteProjectReference(80001, 'MD')).toBe('80001-MD');
+    expect(formatQuoteProjectReference(90011, 'sd')).toBe('90011-SD');
+    expect(formatQuoteProjectReference(10000, 'AA')).toBe('10000-AA');
+    expect(formatQuoteProjectReference(99999, 'ZZ')).toBe('99999-ZZ');
+    expect(() => formatQuoteProjectReference(27, 'JC')).toThrow(/10000 and 99999/);
+    expect(() => formatQuoteProjectReference(9999, 'JC')).toThrow(/10000 and 99999/);
+    expect(() => formatQuoteProjectReference(100000, 'JC')).toThrow(/10000 and 99999/);
+    expect(() => formatQuoteProjectReference(10001, 'J')).toThrow(/two letters/);
+    expect(() => formatQuoteProjectReference(10001, 'JCX')).toThrow(/two letters/);
   });
 });

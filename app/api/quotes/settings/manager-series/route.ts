@@ -8,6 +8,12 @@ import {
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
 import { filterHiddenSystemTestAccountProfiles } from '@/lib/server/system-test-accounts';
 import { isEffectiveRoleAdminOrSuper } from '@/lib/utils/rbac';
+import {
+  MANAGER_INITIALS_REGEX,
+  QUOTE_PROJECT_NUMBER_MAX,
+  QUOTE_PROJECT_NUMBER_MIN,
+  quoteProjectNumberBlock,
+} from '@/lib/utils/timesheet-job-codes';
 
 async function requireQuoteSettingsContext() {
   const supabase = await createClient();
@@ -150,14 +156,50 @@ async function validateManagerPayload(admin: ReturnType<typeof createAdminClient
   const fieldErrors: Record<string, string> = {};
   if (!payload.profile_id) fieldErrors.profile_id = 'Select a quote user.';
   if (!payload.initials) fieldErrors.initials = 'Enter quote initials.';
-  if (payload.initials.length > 10) fieldErrors.initials = 'Initials must be 10 characters or fewer.';
-  if (Number.isNaN(payload.number_start) || payload.number_start < 0) fieldErrors.number_start = 'Enter a valid starting number.';
-  if (Number.isNaN(payload.next_number) || payload.next_number < 0) fieldErrors.next_number = 'Enter a valid next number.';
+  else if (!MANAGER_INITIALS_REGEX.test(payload.initials)) {
+    fieldErrors.initials = 'Initials must be exactly two letters.';
+  }
+  if (
+    Number.isNaN(payload.number_start)
+    || payload.number_start < QUOTE_PROJECT_NUMBER_MIN
+    || payload.number_start > QUOTE_PROJECT_NUMBER_MAX
+  ) {
+    fieldErrors.number_start = `Enter a starting number between ${QUOTE_PROJECT_NUMBER_MIN} and ${QUOTE_PROJECT_NUMBER_MAX}.`;
+  }
+  if (
+    Number.isNaN(payload.next_number)
+    || payload.next_number < QUOTE_PROJECT_NUMBER_MIN
+    || payload.next_number > QUOTE_PROJECT_NUMBER_MAX
+  ) {
+    fieldErrors.next_number = `Enter a next number between ${QUOTE_PROJECT_NUMBER_MIN} and ${QUOTE_PROJECT_NUMBER_MAX}.`;
+  }
+  if (
+    !fieldErrors.number_start
+    && !fieldErrors.next_number
+    && payload.next_number < payload.number_start
+  ) {
+    fieldErrors.next_number = 'Next number must be on or after the starting number.';
+  }
 
   const quoteUsers = await listQuoteUserNotificationRecipientOptions(admin);
   const quoteUserIds = new Set(quoteUsers.map(user => user.id));
   if (payload.profile_id && !quoteUserIds.has(payload.profile_id)) {
     fieldErrors.profile_id = 'Manager must be a user with Quotes access.';
+  }
+
+  if (!fieldErrors.number_start && !fieldErrors.next_number) {
+    const { data: existingSeries, error } = await admin
+      .from('quote_manager_series')
+      .select('profile_id, initials, number_start, next_number');
+    if (error) throw error;
+    const requestedBlock = quoteProjectNumberBlock(payload.number_start);
+    const overlapping = (existingSeries || []).find((row) =>
+      row.profile_id !== payload.profile_id
+      && quoteProjectNumberBlock(Number(row.number_start)) === requestedBlock
+    );
+    if (overlapping) {
+      fieldErrors.number_start = `That ${requestedBlock}xxxx range is already used by ${overlapping.initials}. Choose a different 10000-block.`;
+    }
   }
 
   return fieldErrors;

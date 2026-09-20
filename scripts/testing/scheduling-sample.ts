@@ -15,11 +15,11 @@ const FIXTURE_KEY = 'scheduling-sample-v1';
 const CONFIRMATION = '--confirm-production=FFTS_SCHEDULING_SAMPLE';
 const SAMPLE_EMAIL = 'scheduling-sample-v1@example.test';
 const SAMPLE_INITIALS = 'SD';
-const SAMPLE_NUMBER_START = 99000;
+const SAMPLE_NUMBER_START = 90000;
 const QUOTE_COUNT = 22;
 const QUEUE_SAMPLE_NUMBER_START = SAMPLE_NUMBER_START + QUOTE_COUNT;
 const QUEUE_QUOTE_COUNT = 12;
-const PLAY_SAMPLE_NUMBER_START = 99100;
+const PLAY_SAMPLE_NUMBER_START = 90100;
 const PLAY_QUOTE_COUNT = 14;
 
 type Mode = 'plan' | 'apply' | 'cleanup' | 'queue-plan' | 'queue-apply' | 'play-plan' | 'play-apply';
@@ -408,7 +408,7 @@ export function createQueueManifest(projectRef: string): QueueSampleManifest {
 
 /**
  * Client-demo play pack: denser timed visits across this week and next.
- * Reuses the existing SAMPLE owner/customers; reserved references 99100-SD+.
+ * Reuses the existing SAMPLE owner/customers; reserved references 90100-SD+.
  */
 export function buildPlayFixtureDefinitions(today = new Date()): {
   windowStart: string;

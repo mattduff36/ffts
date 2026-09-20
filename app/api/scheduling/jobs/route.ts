@@ -80,6 +80,21 @@ const quickAddJobSchema = z.object({
 
 type QuoteProjectNumberRow = Database['public']['Tables']['quote_project_numbers']['Row'];
 
+function isProjectReferenceConfigError(error: { code?: string; message?: string }) {
+  return error.code === '23514'
+    && typeof error.message === 'string'
+    && error.message.includes('quote_project_numbers_reference_check');
+}
+
+function projectReferenceConfigResponse() {
+  return NextResponse.json(
+    {
+      error: 'This manager series is not configured for five-digit project numbers. Update the quote number range and try again.',
+    },
+    { status: 400 }
+  );
+}
+
 export async function GET() {
   try {
     const access = await requireSchedulingManagerAccess();
@@ -202,6 +217,9 @@ export async function POST(request: NextRequest) {
             { status: 409 }
           );
         }
+        if (isProjectReferenceConfigError(creationError)) {
+          return projectReferenceConfigResponse();
+        }
         if (creationError.code === 'P0001') {
           return NextResponse.json({ error: creationError.message }, { status: 400 });
         }
@@ -296,6 +314,9 @@ export async function POST(request: NextRequest) {
         || creationError.message.includes('already scheduled')
       ) {
         return NextResponse.json({ error: creationError.message }, { status: 409 });
+      }
+      if (isProjectReferenceConfigError(creationError)) {
+        return projectReferenceConfigResponse();
       }
       if (creationError.code === 'P0001') {
         return NextResponse.json({ error: creationError.message }, { status: 400 });

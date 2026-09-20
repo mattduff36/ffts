@@ -14,7 +14,7 @@ export const SCHEDULING_TOOLING_VERSION = 'debug-scheduling-v1';
 
 const SAMPLE_EMAIL = 'scheduling-sample-v1@example.test';
 const SAMPLE_INITIALS = 'SD';
-const BASE_START = 99000;
+const BASE_START = 90000;
 const BASE_COUNT = 22;
 const QUEUE_START = BASE_START + BASE_COUNT;
 const QUEUE_COUNT = 12;

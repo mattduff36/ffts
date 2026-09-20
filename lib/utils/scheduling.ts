@@ -52,11 +52,12 @@ export function formatScheduleEmployeeCompactName(fullName: string): string {
 
 export function formatScheduleTeamName(
   leaderFullName: string | null | undefined,
-  slotIndex: number
+  slotIndex: number,
+  options?: { auto?: boolean }
 ): string {
   const compact = leaderFullName ? formatScheduleEmployeeCompactName(leaderFullName) : '';
   if (!compact || compact === 'Employee') return `Team ${slotIndex}`;
-  return `${compact}'s team`;
+  return options?.auto ? `${compact}'s team (auto)` : `${compact}'s team`;
 }
 
 export function formatScheduleDate(date: Date): string {

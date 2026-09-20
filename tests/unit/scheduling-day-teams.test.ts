@@ -8,6 +8,7 @@ import {
   removeScheduleDayTeamMember,
   SCHEDULE_DAY_TEAM_SLOT_CAPACITY,
   SCHEDULE_DAY_TEAM_SLOT_INDEXES,
+  resolveScheduleDayTeamName,
   slotsForScheduleDate,
   upsertScheduleDayTeamMember,
   visibleScheduleDayTeamSlotIndexes,
@@ -274,6 +275,56 @@ describe('schedule day team helpers', () => {
   it('sched-team-name formats a compact possessive team title', () => {
     expect(formatScheduleTeamName('Tom Reed', 1)).toBe("Tom R's team");
     expect(formatScheduleTeamName(null, 6)).toBe('Team 6');
+    expect(formatScheduleTeamName('Paul Bennett', 1, { auto: true })).toBe("Paul B's team (auto)");
+  });
+
+  it('names a leaderless bucket after the first added member', () => {
+    const first = {
+      ...member('e1', 1),
+      employee: {
+        id: 'e1',
+        full_name: 'Paul Bennett',
+        employee_id: null,
+        team_id: null,
+        team_name: null,
+        kind: 'employee' as const,
+      },
+      created_at: '2026-09-01T08:00:00.000Z',
+    };
+    const later = {
+      ...member('e2', 1),
+      employee: {
+        id: 'e2',
+        full_name: 'Sam Cole',
+        employee_id: null,
+        team_id: null,
+        team_name: null,
+        kind: 'employee' as const,
+      },
+      created_at: '2026-09-01T09:00:00.000Z',
+    };
+    expect(resolveScheduleDayTeamName({
+      slot_index: 1,
+      members: [later, first],
+    })).toBe("Paul B's team (auto)");
+    expect(resolveScheduleDayTeamName({
+      slot_index: 1,
+      members: [first],
+    }, settings({
+      leaders: [{
+        slot_index: 1,
+        profile_id: 'leader-1',
+        employee: {
+          id: 'leader-1',
+          full_name: 'Tom Reed',
+          employee_id: null,
+          team_id: null,
+          team_name: null,
+          kind: 'employee',
+        },
+      }],
+    }))).toBe("Tom R's team");
+    expect(resolveScheduleDayTeamName({ slot_index: 3, members: [] })).toBe('Team 3');
   });
 
   it('moves an employee between slots instead of duplicating them', () => {

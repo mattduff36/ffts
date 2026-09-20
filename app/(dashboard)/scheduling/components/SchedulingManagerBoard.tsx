@@ -189,6 +189,7 @@ import {
 } from '@/lib/utils/scheduling-availability';
 import {
   isScheduleDayTeamSlotIndex,
+  resolveScheduleDayTeamName,
   scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
   slotsForScheduleDate,
@@ -243,7 +244,6 @@ import {
 import {
   enumerateScheduleDates,
   formatScheduleEmployeeCompactName,
-  formatScheduleTeamName,
   formatScheduleDate,
   formatScheduleVisitTime,
   getScheduleQuoteEndDate,
@@ -7297,11 +7297,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           </div>
         ) : draggedDayTeam ? (
           <div className="rounded-lg border border-scheduling bg-popover px-3 py-2 text-sm font-semibold text-foreground shadow-2xl">
-            {formatScheduleTeamName(
-              teamSettingsFromBoard(board).leaders.find(
-                (leader) => leader.slot_index === draggedDayTeam.slotIndex
-              )?.employee?.full_name,
-              draggedDayTeam.slotIndex
+            {resolveScheduleDayTeamName(
+              slotsForScheduleDate(
+                board.day_teams,
+                draggedDayTeam.workDate,
+                teamSettingsFromBoard(board)
+              ).find((slot) => slot.slot_index === draggedDayTeam.slotIndex)
+                || { slot_index: draggedDayTeam.slotIndex, members: [] },
+              teamSettingsFromBoard(board)
             )}
           </div>
         ) : draggedResource ? (

@@ -14,8 +14,9 @@ import {
   SCHEDULE_DAY_TEAM_SLOT_CAPACITY,
   buildScheduleDayTeams,
   defaultScheduleTeamSettings,
+  resolveScheduleDayTeamName,
 } from '@/lib/utils/scheduling-day-teams';
-import { formatScheduleEmployeeCompactName, formatScheduleTeamName } from '@/lib/utils/scheduling';
+import { formatScheduleEmployeeCompactName } from '@/lib/utils/scheduling';
 import type { ScheduleOccupancySegment } from '@/types/scheduling';
 import type { ScheduleDayTeamSlot, ScheduleDayTeamSlotIndex, ScheduleTeamSettings } from '@/types/scheduling';
 import { ResourceDragCue, ScheduleResourceCardShell } from './ScheduleResourceCard';
@@ -196,20 +197,17 @@ export function ScheduleDayTeamBuckets({
         data-testid={`schedule-day-team-buckets-${dndScope}`}
         aria-label="Day team buckets"
       >
-        {resolvedSlots.map((slot) => {
-          const leader = settings.leaders.find((item) => item.slot_index === slot.slot_index);
-          return (
-            <DayTeamSlotCard
-              key={slot.slot_index}
-              slot={slot}
-              workDate={workDate}
-              dndScope={dndScope}
-              teamName={formatScheduleTeamName(leader?.employee?.full_name, slot.slot_index)}
-              occupancySegments={occupancyBySlot?.[slot.slot_index]}
-              onRemoveMember={onRemoveMember}
-            />
-          );
-        })}
+        {resolvedSlots.map((slot) => (
+          <DayTeamSlotCard
+            key={slot.slot_index}
+            slot={slot}
+            workDate={workDate}
+            dndScope={dndScope}
+            teamName={resolveScheduleDayTeamName(slot, settings)}
+            occupancySegments={occupancyBySlot?.[slot.slot_index]}
+            onRemoveMember={onRemoveMember}
+          />
+        ))}
       </div>
     </TooltipProvider>
   );

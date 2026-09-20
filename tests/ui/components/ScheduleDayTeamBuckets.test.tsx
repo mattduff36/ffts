@@ -111,4 +111,47 @@ describe('ScheduleDayTeamBuckets', () => {
       Array.isArray(options.accept) && options.accept.includes('schedule-resource')
     ))).toBe(true);
   });
+
+  it('names a leaderless bucket after the first added member', () => {
+    render(
+      <ScheduleDayTeamBuckets
+        workDate="2026-09-01"
+        slots={[
+          {
+            work_date: '2026-09-01',
+            slot_index: 1,
+            members: [{
+              work_date: '2026-09-01',
+              slot_index: 1,
+              profile_id: 'employee-paul',
+              employee: {
+                id: 'employee-paul',
+                full_name: 'Paul Bennett',
+                employee_id: 'E010',
+                team_id: null,
+                team_name: null,
+              },
+              added_by: 'manager-1',
+              created_at: '2026-09-01T08:00:00.000Z',
+            }],
+          },
+          { work_date: '2026-09-01', slot_index: 2, members: [] },
+          { work_date: '2026-09-01', slot_index: 3, members: [] },
+          { work_date: '2026-09-01', slot_index: 4, members: [] },
+          { work_date: '2026-09-01', slot_index: 5, members: [] },
+        ]}
+        teamSettings={{
+          visible_slot_count: 5,
+          leaders: [],
+          updated_by: null,
+          updated_at: null,
+        }}
+        dndScope="desktop"
+        onRemoveMember={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Paul B's team (auto)")).toBeInTheDocument();
+    expect(screen.getByText('Team 2')).toBeInTheDocument();
+  });
 });

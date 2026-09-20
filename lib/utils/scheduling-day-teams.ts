@@ -155,6 +155,27 @@ function storedMembersForScheduleDate(
     .map((member) => ({ ...member, work_date: workDate, is_leader: false }));
 }
 
+export function resolveScheduleDayTeamName(
+  slot: Pick<ScheduleDayTeamSlot, 'slot_index' | 'members'> | undefined,
+  settings: ScheduleTeamSettings = defaultScheduleTeamSettings()
+): string {
+  const slotIndex = slot?.slot_index || 1;
+  const leader = slot ? leaderBySlotIndex(settings, slot.slot_index) : undefined;
+  if (leader) {
+    return formatScheduleTeamName(leader.employee?.full_name, slotIndex);
+  }
+  const firstAdded = [...(slot?.members || [])]
+    .filter((member) => member.is_leader !== true)
+    .sort((left, right) => {
+      const byCreated = left.created_at.localeCompare(right.created_at);
+      return byCreated !== 0 ? byCreated : left.profile_id.localeCompare(right.profile_id);
+    })[0];
+  if (firstAdded?.employee?.full_name) {
+    return formatScheduleTeamName(firstAdded.employee.full_name, slotIndex, { auto: true });
+  }
+  return formatScheduleTeamName(null, slotIndex);
+}
+
 export function slotsForScheduleDate(
   dayTeams: ScheduleDayTeams[] | undefined,
   workDate: string,
@@ -283,7 +304,6 @@ export function scheduleEmployeeInlineAssignment(
   const settings = teamSettingsFromBoard(board);
   const slot = slotsForScheduleDate(board?.day_teams, workDate, settings)
     .find((item) => item.members.some((member) => member.profile_id === profileId));
-  const leader = slot ? leaderBySlotIndex(settings, slot.slot_index) : undefined;
   const jobsById = new Map((board?.jobs || []).map((job) => [job.id, job.job_reference]));
   const jobReferences = [...new Set(
     (board?.assignments || [])
@@ -296,9 +316,7 @@ export function scheduleEmployeeInlineAssignment(
       .filter((reference): reference is string => Boolean(reference))
   )];
   return {
-    teamLabel: slot
-      ? formatScheduleTeamName(leader?.employee?.full_name, slot.slot_index)
-      : null,
+    teamLabel: slot ? resolveScheduleDayTeamName(slot, settings) : null,
     jobReferences,
   };
 }

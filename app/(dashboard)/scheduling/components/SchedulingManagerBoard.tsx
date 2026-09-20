@@ -285,6 +285,7 @@ import { ScheduleVisitDialog } from './ScheduleVisitDialog';
 import { ScheduleProjectPlacementDialog } from './ScheduleProjectPlacementDialog';
 import {
   ScheduleExpandingAction,
+  ScheduleExpandingActionGroup,
   ScheduleHelpCopy,
   ScheduleHelpHint,
   SCHEDULE_BOARD_HELP,
@@ -6091,7 +6092,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             descriptionClassName="truncate"
             actionsClassName="w-auto shrink-0 flex-nowrap"
             actions={(
-              <>
+              <ScheduleExpandingActionGroup>
                 <ScheduleExpandingAction
                   icon={CalendarOff}
                   label="Plant availability"
@@ -6141,7 +6142,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   onClick={() => setTeamSettingsOpen(true)}
                   data-testid="schedule-settings-button"
                 />
-              </>
+              </ScheduleExpandingActionGroup>
             )}
           />
         </div>

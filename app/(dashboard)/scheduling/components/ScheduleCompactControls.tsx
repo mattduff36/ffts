@@ -1,10 +1,13 @@
 'use client';
 
 import {
+  createContext,
   useEffect,
+  useContext,
   useRef,
   useState,
   type ComponentType,
+  type HTMLAttributes,
   type ReactNode,
 } from 'react';
 import { CircleHelp } from 'lucide-react';
@@ -138,12 +141,108 @@ type ScheduleExpandingActionProps = Omit<ButtonProps, 'children'> & {
   label: string;
 };
 
+const ACTION_LABEL_REVEAL_DELAY_MS = 1800;
+const ACTION_LABEL_RESET_DELAY_MS = 3000;
+const ScheduleExpandingActionGroupContext = createContext<boolean | null>(null);
+
+export function ScheduleExpandingActionGroup({
+  className,
+  onPointerEnter,
+  onPointerLeave,
+  onFocusCapture,
+  onBlurCapture,
+  children,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  const [labelsPrimed, setLabelsPrimed] = useState(false);
+  const revealTimerRef = useRef<number | null>(null);
+  const resetTimerRef = useRef<number | null>(null);
+  const pointerInsideRef = useRef(false);
+
+  function cancelRevealTimer() {
+    if (revealTimerRef.current != null) {
+      window.clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  }
+
+  function cancelResetTimer() {
+    if (resetTimerRef.current != null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+  }
+
+  function beginInteraction() {
+    cancelResetTimer();
+    if (labelsPrimed || revealTimerRef.current != null) return;
+    revealTimerRef.current = window.setTimeout(() => {
+      revealTimerRef.current = null;
+      setLabelsPrimed(true);
+    }, ACTION_LABEL_REVEAL_DELAY_MS);
+  }
+
+  function endInteraction() {
+    cancelRevealTimer();
+    if (!labelsPrimed) return;
+    cancelResetTimer();
+    resetTimerRef.current = window.setTimeout(() => {
+      resetTimerRef.current = null;
+      setLabelsPrimed(false);
+    }, ACTION_LABEL_RESET_DELAY_MS);
+  }
+
+  useEffect(() => () => {
+    cancelRevealTimer();
+    cancelResetTimer();
+  }, []);
+
+  return (
+    <ScheduleExpandingActionGroupContext.Provider value={labelsPrimed}>
+      <div
+        {...props}
+        className={cn('flex items-center gap-2', className)}
+        onPointerEnter={(event) => {
+          pointerInsideRef.current = true;
+          beginInteraction();
+          onPointerEnter?.(event);
+        }}
+        onPointerLeave={(event) => {
+          pointerInsideRef.current = false;
+          if (!event.currentTarget.contains(document.activeElement)) {
+            endInteraction();
+          }
+          onPointerLeave?.(event);
+        }}
+        onFocusCapture={(event) => {
+          beginInteraction();
+          onFocusCapture?.(event);
+        }}
+        onBlurCapture={(event) => {
+          const nextTarget = event.relatedTarget as Node | null;
+          if (!pointerInsideRef.current && !event.currentTarget.contains(nextTarget)) {
+            endInteraction();
+          }
+          onBlurCapture?.(event);
+        }}
+      >
+        {children}
+      </div>
+    </ScheduleExpandingActionGroupContext.Provider>
+  );
+}
+
 export function ScheduleExpandingAction({
   icon: Icon,
   label,
   className,
   ...props
 }: ScheduleExpandingActionProps) {
+  const labelsPrimed = useContext(ScheduleExpandingActionGroupContext);
+  const revealDelayClass = labelsPrimed === true
+    ? 'group-hover/action:delay-0 group-focus-visible/action:delay-0'
+    : 'group-hover/action:delay-[1800ms] group-focus-visible/action:delay-[1800ms]';
+
   return (
     <Button
       type="button"
@@ -160,8 +259,9 @@ export function ScheduleExpandingAction({
         className={cn(
           'max-w-0 overflow-hidden whitespace-nowrap opacity-0',
           'motion-safe:transition-all motion-safe:duration-[225ms] motion-safe:ease-out motion-reduce:transition-none',
-          'group-hover/action:ml-2 group-hover/action:max-w-[14rem] group-hover/action:opacity-100 group-hover/action:delay-[1800ms]',
-          'group-focus-visible/action:ml-2 group-focus-visible/action:max-w-[14rem] group-focus-visible/action:opacity-100 group-focus-visible/action:delay-[1800ms]'
+          'group-hover/action:ml-2 group-hover/action:max-w-[14rem] group-hover/action:opacity-100',
+          'group-focus-visible/action:ml-2 group-focus-visible/action:max-w-[14rem] group-focus-visible/action:opacity-100',
+          revealDelayClass
         )}
       >
         {label}

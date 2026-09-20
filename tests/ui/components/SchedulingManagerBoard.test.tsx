@@ -1334,8 +1334,6 @@ describe('SchedulingManagerBoard', () => {
     });
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-    const jobsGuidance = screen.getByText(/Drag a queued job onto a date/);
-    expect(jobsGuidance).toBeInTheDocument();
     expect(screen.getByTestId('schedule-manager-board-root')).toHaveClass('h-full', 'flex-1');
     expect(screen.getByTestId('schedule-manager-board-root').className).toContain(
       '[&>:first-child]:flex-1'
@@ -1400,8 +1398,6 @@ describe('SchedulingManagerBoard', () => {
       'aria-selected',
       'true'
     );
-    expect(screen.getByText(/Select a visit to show resources/).className)
-      .toBe(jobsGuidance.className);
 
     expect(dndState.sensors).toHaveLength(2);
     const employeeCard = screen.getByTestId('schedule-resource-employee-employee-2');
@@ -1966,9 +1962,52 @@ describe('SchedulingManagerBoard', () => {
       'aria-selected',
       'true'
     );
-    expect(screen.getByText(/Drag a queued job onto a date/)).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resources-help')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Schedule Quote' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Schedule a Quote' })).not.toBeInTheDocument();
+  });
+
+  it('moves persistent scheduling guidance into title help and pins board controls', async () => {
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+
+    expect(screen.queryByText(/Drag a queued job onto a date/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Select a visit to show resources/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Drag from the grip handle/)).not.toBeInTheDocument();
+
+    const titleControls = screen.getByTestId('schedule-board-title-controls');
+    expect(titleControls).toHaveClass('ml-auto', 'shrink-0');
+    expect(titleControls).toContainElement(screen.getByTestId('schedule-primary-tabs'));
+    expect(titleControls).toContainElement(screen.getByPlaceholderText('Search jobs'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resources help' }));
+    expect(await screen.findByText(/Drag a queued job onto a date/)).toBeInTheDocument();
+    expect(screen.getByText(/Quotes without a Start Date stay in this queue/)).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Employees' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.getByText(/Select a visit to show resources/)).toBeInTheDocument();
+    expect(screen.getByText(/Tap a resource or drag its card/)).toBeInTheDocument();
+    expect(screen.queryByText(/Drag a queued job onto a date/)).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(screen.getByText(/Select a visit to show resources available for its exact time/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Board help' }));
+    expect(await screen.findByText(
+      'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.'
+    )).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'Plant availability' })).toHaveClass('w-9');
+    expect(screen.getByRole('button', { name: 'New Quote' })).toHaveClass('w-9');
+    expect(screen.getByRole('button', { name: 'New Project Number' })).toHaveClass('w-9');
+    expect(screen.getByTestId('schedule-quick-add-button')).toHaveClass('w-9');
+    expect(screen.getByTestId('schedule-settings-button')).toHaveClass('w-9');
   });
 
   it('reschedules an existing Quote job from the board', async () => {
@@ -2071,9 +2110,13 @@ describe('SchedulingManagerBoard', () => {
       'Daily schedule timeline'
     );
     const instructionRow = screen.getByTestId('schedule-daily-instruction-row');
-    expect(instructionRow).toHaveTextContent(
+    expect(instructionRow).not.toHaveTextContent(
       'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.'
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Board help' }));
+    expect(await screen.findByText(
+      'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.'
+    )).toBeInTheDocument();
     const modeControls = within(instructionRow).getByRole('group', {
       name: 'Daily timeline display mode',
     });

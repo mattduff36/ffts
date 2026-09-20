@@ -36,7 +36,9 @@ import {
   Check,
   Clock3,
   ExternalLink,
+  FilePlus,
   GripVertical,
+  Hash,
   ListRestart,
   Minimize2,
   MoveHorizontal,
@@ -278,14 +280,19 @@ import {
 import { ScheduleQuoteDialog } from './ScheduleQuoteDialog';
 import { ScheduleVisitDialog } from './ScheduleVisitDialog';
 import { ScheduleProjectPlacementDialog } from './ScheduleProjectPlacementDialog';
+import {
+  ScheduleExpandingAction,
+  ScheduleHelpCopy,
+  ScheduleHelpHint,
+  SCHEDULE_BOARD_HELP,
+  SCHEDULE_RESOURCES_ASSIGNMENT_HELP,
+  SCHEDULE_RESOURCES_JOBS_HELP,
+} from './ScheduleCompactControls';
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 import { schedulingControlStyles } from './scheduling-control-styles';
 import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
 import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
-
-const RESOURCE_GUIDANCE_CLASS =
-  'rounded-md border border-dashed border-slate-700 bg-slate-950/40 p-1.5 text-[11px] leading-snug text-slate-300';
 
 interface WeeklyDayHeaderProps {
   date: string;
@@ -5964,38 +5971,41 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             actionsClassName="w-auto shrink-0 flex-nowrap"
             actions={(
               <>
-                <Button
+                <ScheduleExpandingAction
+                  icon={CalendarOff}
+                  label="Plant availability"
+                  iconMotion="tilt"
                   className={schedulingControlStyles.outline}
                   variant="outline"
                   onClick={() => {
                     setPlantBlockDraft(null);
                     setUnavailabilityOpen(true);
                   }}
-                >
-                  <CalendarOff className="mr-2 h-4 w-4" />
-                  Plant availability
-                </Button>
-                <Button
+                />
+                <ScheduleExpandingAction
+                  icon={FilePlus}
+                  label="New Quote"
+                  iconMotion="lift"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   disabled={!canCreateQuotes || !canViewCustomers}
                   title={!canCreateQuotes || !canViewCustomers ? 'Quotes and Customers access required' : 'New Quote'}
                   onClick={() => requestCreation('quote')}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Quote
-                </Button>
-                <Button
+                />
+                <ScheduleExpandingAction
+                  icon={Hash}
+                  label="New Project Number"
+                  iconMotion="pulse"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   disabled={!canCreateQuotes}
                   title={!canCreateQuotes ? 'Quotes access required' : 'New Project Number'}
                   onClick={() => requestCreation('project')}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Project Number
-                </Button>
-                <Button
+                />
+                <ScheduleExpandingAction
+                  icon={CalendarPlus}
+                  label="Quick add"
+                  iconMotion="pop"
                   className={schedulingControlStyles.primary}
                   disabled={!canCreateQuotes || !canViewCustomers}
                   title={
@@ -6005,19 +6015,16 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   }
                   onClick={() => requestCreation('quick_add')}
                   data-testid="schedule-quick-add-button"
-                >
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  Quick add
-                </Button>
-                <Button
+                />
+                <ScheduleExpandingAction
+                  icon={Settings}
+                  label="Settings"
+                  iconMotion="spin"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   onClick={() => setTeamSettingsOpen(true)}
                   data-testid="schedule-settings-button"
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Button>
+                />
               </>
             )}
           />
@@ -6029,7 +6036,21 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         >
           <ResourcesReturnDropCard>
             <CardHeader className="shrink-0 py-2">
-              <CardTitle className="text-base">Resources</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-base">Resources</CardTitle>
+                <ScheduleHelpHint
+                  label="Resources help"
+                  testId="schedule-resources-help"
+                >
+                  <ScheduleHelpCopy
+                    paragraphs={
+                      sidebarTab === 'jobs'
+                        ? SCHEDULE_RESOURCES_JOBS_HELP
+                        : SCHEDULE_RESOURCES_ASSIGNMENT_HELP
+                    }
+                  />
+                </ScheduleHelpHint>
+              </div>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
               <Tabs
@@ -6053,12 +6074,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               {sidebarTab === 'jobs' ? (
                 <>
                   <div className="shrink-0 space-y-2">
-                  <p className={RESOURCE_GUIDANCE_CLASS}>
-                    Drag a queued job onto a date. Drag a scheduled visit back anywhere into Resources to return it here.
-                  </p>
-                  <p className={RESOURCE_GUIDANCE_CLASS}>
-                    Quotes without a Start Date stay in this queue. In Progress quotes appear under Accepted. Once a Start Date is set, look at that week on the calendar — they leave this list.
-                  </p>
                   <Tabs
                     value={quoteStage}
                     onValueChange={(value) =>
@@ -6193,15 +6208,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                      <p className="mt-2 text-muted-foreground">
-                        Tap a resource or drag its card onto this or another visit.
-                      </p>
                     </div>
-                  ) : (
-                    <p className={RESOURCE_GUIDANCE_CLASS}>
-                      Select a visit to show resources available for its exact time.
-                    </p>
-                  )}
+                  ) : null}
                   <Tabs
                     value={resourceAvailabilityView}
                     onValueChange={(value) =>
@@ -6406,28 +6414,41 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 className="flex flex-nowrap items-center gap-3"
                 data-testid="schedule-board-title-row"
               >
-                <CardTitle className="shrink-0 whitespace-nowrap">
-                  {getScheduleBoardTitle(
-                    view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily' : 'Weekly',
-                    primary
-                  )}
-                </CardTitle>
-                <SchedulingDateRangeControls
-                  selectedDate={selectedDate}
-                  view={view}
-                  onDateChange={setSelectedDate}
-                  onViewChange={handleViewChange}
-                  primary={primary}
-                  onPrimaryChange={handlePrimaryChange}
-                />
-                <div className="relative ml-auto w-36 max-w-72 shrink-0">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={jobSearch}
-                    onChange={(event) => void setJobFilters({ q: event.target.value })}
-                    placeholder="Search jobs"
-                    className="pl-9"
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <CardTitle className="shrink-0 whitespace-nowrap">
+                    {getScheduleBoardTitle(
+                      view === SCHEDULING_BOARD_VIEWS.daily ? 'Daily' : 'Weekly',
+                      primary
+                    )}
+                  </CardTitle>
+                  <ScheduleHelpHint
+                    label="Board help"
+                    testId="schedule-board-help"
+                  >
+                    <p>{SCHEDULE_BOARD_HELP}</p>
+                  </ScheduleHelpHint>
+                </div>
+                <div
+                  className="ml-auto flex shrink-0 flex-nowrap items-center gap-2"
+                  data-testid="schedule-board-title-controls"
+                >
+                  <SchedulingDateRangeControls
+                    selectedDate={selectedDate}
+                    view={view}
+                    onDateChange={setSelectedDate}
+                    onViewChange={handleViewChange}
+                    primary={primary}
+                    onPrimaryChange={handlePrimaryChange}
                   />
+                  <div className="relative w-36 max-w-72 shrink-0">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={jobSearch}
+                      onChange={(event) => void setJobFilters({ q: event.target.value })}
+                      placeholder="Search jobs"
+                      className="pl-9"
+                    />
+                  </div>
                 </div>
               </div>
               {view === SCHEDULING_BOARD_VIEWS.daily ? (
@@ -6446,23 +6467,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   />
                 </div>
               ) : null}
-              <div
-                className="flex min-h-7 items-center justify-between gap-3"
-                data-testid={
-                  view === SCHEDULING_BOARD_VIEWS.daily
-                    ? 'schedule-daily-instruction-row'
-                    : undefined
-                }
-              >
-                <div>
-                  <p className="text-sm text-muted-foreground xl:hidden">
-                    Drag from the grip handle onto a visit, or select a visit and tap a resource.
-                  </p>
-                  <p className="hidden text-sm text-muted-foreground xl:block">
-                    Drag from the grip handle onto a timed visit, or select the visit and tap a resource.
-                  </p>
-                </div>
-                {view === SCHEDULING_BOARD_VIEWS.daily ? (
+              {view === SCHEDULING_BOARD_VIEWS.daily ? (
+                <div
+                  className="flex min-h-7 items-center justify-end gap-3"
+                  data-testid="schedule-daily-instruction-row"
+                >
                   <TooltipProvider delayDuration={200}>
                     <div
                       className="hidden shrink-0 items-center gap-1 md:flex"
@@ -6518,8 +6527,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       </Tooltip>
                     </div>
                   </TooltipProvider>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2" aria-label="Job classification filters">
                 <Button
                   type="button"

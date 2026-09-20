@@ -2040,11 +2040,11 @@ describe('SchedulingManagerBoard', () => {
       'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.'
     )).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: 'Plant availability' })).toHaveClass('w-9');
-    expect(screen.getByRole('button', { name: 'New Quote' })).toHaveClass('w-9');
-    expect(screen.getByRole('button', { name: 'New Project Number' })).toHaveClass('w-9');
-    expect(screen.getByTestId('schedule-quick-add-button')).toHaveClass('w-9');
-    expect(screen.getByTestId('schedule-settings-button')).toHaveClass('w-9');
+    expect(screen.getByRole('button', { name: 'Plant availability' })).toHaveClass('min-w-9');
+    expect(screen.getByRole('button', { name: 'New Quote' })).toHaveClass('min-w-9');
+    expect(screen.getByRole('button', { name: 'New Project Number' })).toHaveClass('min-w-9');
+    expect(screen.getByTestId('schedule-quick-add-button')).toHaveClass('min-w-9');
+    expect(screen.getByTestId('schedule-settings-button')).toHaveClass('min-w-9');
   });
 
   it('reschedules an existing Quote job from the board', async () => {

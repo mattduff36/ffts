@@ -150,18 +150,19 @@ export function ScheduleExpandingAction({
       {...props}
       aria-label={props['aria-label'] ?? label}
       className={cn(
-        'group/action h-9 w-9 max-w-9 shrink-0 gap-0 overflow-hidden px-0',
-        'motion-safe:transition-[max-width,width,padding,gap] motion-safe:duration-200 motion-safe:ease-out',
-        'motion-reduce:transition-none',
-        'hover:w-auto hover:max-w-[16rem] hover:gap-2 hover:px-3',
-        'focus-visible:w-auto focus-visible:max-w-[16rem] focus-visible:gap-2 focus-visible:px-3',
+        'group/action h-9 min-w-9 shrink-0 gap-0 overflow-hidden px-2.5',
         className
       )}
     >
       <Icon className="h-4 w-4 shrink-0" />
       <span
         aria-hidden
-        className="max-w-0 overflow-hidden opacity-0 whitespace-nowrap motion-safe:transition-all motion-safe:duration-200 group-hover/action:max-w-[14rem] group-hover/action:opacity-100 group-focus-visible/action:max-w-[14rem] group-focus-visible/action:opacity-100"
+        className={cn(
+          'max-w-0 overflow-hidden whitespace-nowrap opacity-0',
+          'motion-safe:transition-all motion-safe:duration-[225ms] motion-safe:ease-out motion-reduce:transition-none',
+          'group-hover/action:ml-2 group-hover/action:max-w-[14rem] group-hover/action:opacity-100 group-hover/action:delay-[1800ms]',
+          'group-focus-visible/action:ml-2 group-focus-visible/action:max-w-[14rem] group-focus-visible/action:opacity-100 group-focus-visible/action:delay-[1800ms]'
+        )}
       >
         {label}
       </span>

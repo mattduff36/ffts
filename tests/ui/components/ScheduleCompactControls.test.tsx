@@ -38,7 +38,7 @@ describe('ScheduleCompactControls', () => {
     expect(screen.getByText('Help body')).toBeInTheDocument();
   });
 
-  it('keeps expanding actions icon-only until hover or focus', () => {
+  it('uses the compact navbar expansion pattern with a delayed label reveal', () => {
     render(
       <ScheduleExpandingAction
         icon={Settings}
@@ -48,7 +48,15 @@ describe('ScheduleCompactControls', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Settings' });
-    expect(button).toHaveClass('w-9', 'hover:w-auto', 'focus-visible:w-auto');
+    const label = button.querySelector('span');
+    expect(button).toHaveClass('min-w-9', 'gap-0', 'overflow-hidden');
+    expect(button).not.toHaveClass('hover:w-auto', 'focus-visible:w-auto');
+    expect(label).toHaveClass(
+      'max-w-0',
+      'group-hover/action:max-w-[14rem]',
+      'group-hover/action:delay-[1800ms]',
+      'group-focus-visible/action:delay-[1800ms]'
+    );
     expect(button.querySelector('svg')?.className).not.toMatch(/rotate|scale|translate/);
   });
 });

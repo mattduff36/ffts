@@ -2,6 +2,30 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.9.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): auto-name leaderless day-team buckets`
+
+**PUSHED AT**
+2026-09-20T13:05:01.988Z
+
+**WHAT CHANGED**
+Auto-name leaderless day-team buckets. Copy day-team buckets from a previous date. Use owner-range five-digit project references. Drop header action icon motion. Compact manager board help and header actions.
+
+**VERSION HISTORY DETAILS**
+- Updated quotes, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.
+- Updated projects, with changes to automation scripts, automated tests, and data storage.
+- Updated data storage, with changes to automation scripts, automated tests, and data storage.
+- Updated timesheets, with changes to shared logic and automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `feat(scheduling): auto-name leaderless day-team buckets`
+- `feat(scheduling): copy day-team buckets from a previous date`
+- `fix(scheduling): use owner-range five-digit project references`
+- `fix(scheduling): drop header action icon motion`
+- `feat(scheduling): compact manager board help and header actions`
+
 ## 0926.8.0
 
 **GIT COMMIT MESSAGE**

@@ -1,5 +1,23 @@
 [
   {
+    "version": "0926.9.0",
+    "updateKind": "major",
+    "title": "Scheduling update",
+    "description": "Auto-name leaderless day-team buckets. Copy day-team buckets from a previous date. Use owner-range five-digit project references. Drop header action icon motion. Compact manager board help and header actions.",
+    "summary": "Auto-name leaderless day-team buckets. Copy day-team buckets from a previous date. Use owner-range five-digit project references. Drop header action icon motion. Compact manager board help and header actions.",
+    "details": [
+      "Updated quotes, with changes to background routes, app screens, shared logic, automation scripts, automated tests, and data storage.",
+      "Updated projects, with changes to automation scripts, automated tests, and data storage.",
+      "Updated data storage, with changes to automation scripts, automated tests, and data storage.",
+      "Updated timesheets, with changes to shared logic and automated tests."
+    ],
+    "areas": [
+      "Header actions"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-09-20T13:05:01.988Z"
+  },
+  {
     "version": "0926.8.0",
     "updateKind": "major",
     "title": "Scheduling update",

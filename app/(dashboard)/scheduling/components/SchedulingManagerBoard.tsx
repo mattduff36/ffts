@@ -5974,7 +5974,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <ScheduleExpandingAction
                   icon={CalendarOff}
                   label="Plant availability"
-                  iconMotion="tilt"
                   className={schedulingControlStyles.outline}
                   variant="outline"
                   onClick={() => {
@@ -5985,7 +5984,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <ScheduleExpandingAction
                   icon={FilePlus}
                   label="New Quote"
-                  iconMotion="lift"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   disabled={!canCreateQuotes || !canViewCustomers}
@@ -5995,7 +5993,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <ScheduleExpandingAction
                   icon={Hash}
                   label="New Project Number"
-                  iconMotion="pulse"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   disabled={!canCreateQuotes}
@@ -6005,7 +6002,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <ScheduleExpandingAction
                   icon={CalendarPlus}
                   label="Quick add"
-                  iconMotion="pop"
                   className={schedulingControlStyles.primary}
                   disabled={!canCreateQuotes || !canViewCustomers}
                   title={
@@ -6019,7 +6015,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <ScheduleExpandingAction
                   icon={Settings}
                   label="Settings"
-                  iconMotion="spin"
                   variant="outline"
                   className={schedulingControlStyles.outline}
                   onClick={() => setTeamSettingsOpen(true)}

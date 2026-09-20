@@ -26,21 +26,6 @@ export const SCHEDULE_RESOURCES_ASSIGNMENT_HELP = [
 export const SCHEDULE_BOARD_HELP =
   'Drag from the grip handle onto a timed visit, or select the visit and tap a resource.';
 
-export type ScheduleExpandingActionMotion =
-  | 'tilt'
-  | 'lift'
-  | 'pulse'
-  | 'pop'
-  | 'spin';
-
-const MOTION_CLASS: Record<ScheduleExpandingActionMotion, string> = {
-  tilt: 'motion-safe:group-hover/action:rotate-12 motion-safe:group-focus-visible/action:rotate-12',
-  lift: 'motion-safe:group-hover/action:-translate-y-0.5 motion-safe:group-focus-visible/action:-translate-y-0.5',
-  pulse: 'motion-safe:group-hover/action:scale-110 motion-safe:group-focus-visible/action:scale-110',
-  pop: 'motion-safe:group-hover/action:scale-110 motion-safe:group-hover/action:rotate-6 motion-safe:group-focus-visible/action:scale-110 motion-safe:group-focus-visible/action:rotate-6',
-  spin: 'motion-safe:group-hover/action:rotate-90 motion-safe:group-focus-visible/action:rotate-90',
-};
-
 interface ScheduleHelpHintProps {
   label: string;
   testId?: string;
@@ -151,13 +136,11 @@ export function ScheduleHelpHint({ label, testId, children }: ScheduleHelpHintPr
 type ScheduleExpandingActionProps = Omit<ButtonProps, 'children'> & {
   icon: ComponentType<{ className?: string }>;
   label: string;
-  iconMotion?: ScheduleExpandingActionMotion;
 };
 
 export function ScheduleExpandingAction({
   icon: Icon,
   label,
-  iconMotion = 'lift',
   className,
   ...props
 }: ScheduleExpandingActionProps) {
@@ -175,13 +158,7 @@ export function ScheduleExpandingAction({
         className
       )}
     >
-      <Icon
-        className={cn(
-          'h-4 w-4 shrink-0 motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out',
-          'motion-reduce:transition-none motion-reduce:transform-none',
-          MOTION_CLASS[iconMotion]
-        )}
-      />
+      <Icon className="h-4 w-4 shrink-0" />
       <span
         aria-hidden
         className="max-w-0 overflow-hidden opacity-0 whitespace-nowrap motion-safe:transition-all motion-safe:duration-200 group-hover/action:max-w-[14rem] group-hover/action:opacity-100 group-focus-visible/action:max-w-[14rem] group-focus-visible/action:opacity-100"

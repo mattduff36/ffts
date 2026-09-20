@@ -43,15 +43,12 @@ describe('ScheduleCompactControls', () => {
       <ScheduleExpandingAction
         icon={Settings}
         label="Settings"
-        iconMotion="spin"
         data-testid="expanding-settings"
       />
     );
 
     const button = screen.getByRole('button', { name: 'Settings' });
     expect(button).toHaveClass('w-9', 'hover:w-auto', 'focus-visible:w-auto');
-    expect(button.querySelector('svg')).toHaveClass(
-      'motion-safe:group-hover/action:rotate-90'
-    );
+    expect(button.querySelector('svg')?.className).not.toMatch(/rotate|scale|translate/);
   });
 });

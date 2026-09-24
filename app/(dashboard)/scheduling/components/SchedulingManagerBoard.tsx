@@ -5837,6 +5837,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     <div
       className="flex h-full min-h-0 flex-1 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col"
       data-testid="schedule-manager-board-root"
+      data-dnd-session-epoch={dndSessionEpoch}
     >
       <DragDropProvider
       key={dndSessionEpoch}
@@ -5970,7 +5971,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         setDraggedQuote(null);
         setDraggedVisit(null);
         setDraggedDayTeam(null);
-        endBoardPointerBusy('drag-end');        if (event.canceled) return;
+        // Start every subsequent drag with a fresh sensor session. Without this reset,
+        // a rapid second drag can retain the previous resource as its active source.
+        setDndSessionEpoch((epoch) => epoch + 1);
+        endBoardPointerBusy('drag-end');
+        if (event.canceled) return;
         if (sourceVisit && sourceVisitJob) {
           if (!targetData?.returnToResources) {
             toast.info('Drop this visit anywhere in Resources to return it to Jobs.');

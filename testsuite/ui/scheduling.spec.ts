@@ -90,13 +90,21 @@ async function readControlContrast(locator: Locator) {
   });
 }
 
-async function dragWithMouse(page: Page, source: Locator, target: Locator) {
+async function dragWithMouse(
+  page: Page,
+  source: Locator,
+  target: Locator,
+  expectedPickedUp?: string
+) {
   await expect(source).toBeVisible();
   await expect(target).toBeVisible();
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  expect(sourceBox).not.toBeNull();
-  expect(targetBox).not.toBeNull();
+  let sourceBox = await source.boundingBox();
+  let targetBox = await target.boundingBox();
+  await expect.poll(async () => {
+    sourceBox = await source.boundingBox();
+    targetBox = await target.boundingBox();
+    return Boolean(sourceBox && targetBox);
+  }).toBe(true);
 
   await page.mouse.move(
     sourceBox!.x + sourceBox!.width / 2,
@@ -108,11 +116,15 @@ async function dragWithMouse(page: Page, source: Locator, target: Locator) {
     sourceBox!.y + sourceBox!.height / 2,
     { steps: 4 }
   );
+  await expect(page.getByRole('status')).toContainText(
+    expectedPickedUp ? `Picked up ${expectedPickedUp}.` : 'Picked up'
+  );
   await page.mouse.move(
     targetBox!.x + targetBox!.width / 2,
     targetBox!.y + targetBox!.height / 2,
     { steps: 25 }
   );
+  await expect(page.getByRole('status')).not.toContainText('Picked up');
   await page.mouse.up();
 }
 
@@ -955,6 +967,8 @@ test.describe('@scheduling Scheduling', () => {
     const { fixture, assignmentRequests } = await mockManagerBoard(page);
     await page.goto('/scheduling');
     await boardResourceTab(page, 'Plant').click();
+    const boardRoot = page.getByTestId('schedule-manager-board-root');
+    const initialDndSessionEpoch = await boardRoot.getAttribute('data-dnd-session-epoch');
 
     const firstPlant = page.getByTestId(
       'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab'
@@ -968,11 +982,38 @@ test.describe('@scheduling Scheduling', () => {
       )
       .getByTestId('schedule-visit-44444444-4444-4444-8444-444444444444');
 
-    await dragWithMouse(page, firstPlant, target);
+    await dragWithMouse(page, firstPlant, target, 'P-TEST — Test Chipper');
     await expect.poll(() => assignmentRequests).toHaveLength(1);
-    await boardResourceTab(page, 'Plant').click();
-    await dragWithMouse(page, secondPlant, target);
+    await expect(boardRoot).not.toHaveAttribute(
+      'data-dnd-session-epoch',
+      initialDndSessionEpoch || '0'
+    );
+    const firstDndSessionEpoch = await boardRoot.getAttribute('data-dnd-session-epoch');
+    await expect(target.getByText('Test Chipper')).toBeVisible();
+    await expect(boardResourceTab(page, 'Plant')).toHaveAttribute('aria-selected', 'true');
+    await expect(secondPlant).toBeVisible();
+    await expect.poll(async () => {
+      const secondPlantBox = await secondPlant.boundingBox();
+      if (!secondPlantBox) return null;
+      return page.evaluate(({ x, y }) => {
+        const element = document.elementFromPoint(x, y);
+        return element?.closest<HTMLElement>('[data-testid]')?.dataset.testid;
+      }, {
+        x: secondPlantBox.x + secondPlantBox.width / 2,
+        y: secondPlantBox.y + secondPlantBox.height / 2,
+      });
+    }).toBe(
+      'schedule-resource-drag-handle-plant-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac'
+    );
+    await dragWithMouse(page, secondPlant, target, 'P-TEST-2 — Test Loader');
+    await expect(page.getByRole('status')).toContainText(
+      'P-TEST-2 — Test Loader was dropped on a visit.'
+    );
     await expect.poll(() => assignmentRequests).toHaveLength(2);
+    await expect(boardRoot).not.toHaveAttribute(
+      'data-dnd-session-epoch',
+      firstDndSessionEpoch || '1'
+    );
 
     expect(assignmentRequests[0]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab');
     expect(assignmentRequests[1]?.resource_id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac');

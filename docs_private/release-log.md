@@ -2,6 +2,30 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 0926.9.1
+
+**GIT COMMIT MESSAGE**
+`docs(invoice): report generated import paths`
+
+**PUSHED AT**
+2026-09-24T12:22:37.803Z
+
+**WHAT CHANGED**
+Align browser checks with fitted board. Serialize canonical vitest suite. Isolate browser evidence from vitest workers. Stabilise repeated plant drags. Report generated import paths.
+
+**VERSION HISTORY DETAILS**
+- Updated help and FAQ, with changes to data storage and documentation.
+- Updated data storage, with changes to data storage and documentation.
+- Updated inventory, with changes to documentation.
+- Updated fleet, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `test(scheduling): align browser checks with fitted board`
+- `test: serialize canonical vitest suite`
+- `test: isolate browser evidence from vitest workers`
+- `fix(scheduling): stabilise repeated plant drags`
+- `docs(invoice): report generated import paths`
+
 ## 0926.9.0
 
 **GIT COMMIT MESSAGE**

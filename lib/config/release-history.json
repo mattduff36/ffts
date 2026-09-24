@@ -1,5 +1,21 @@
 [
   {
+    "version": "0926.9.1",
+    "updateKind": "minor",
+    "title": "Invoice guidance update",
+    "description": "Align browser checks with fitted board. Serialize canonical vitest suite. Isolate browser evidence from vitest workers. Stabilise repeated plant drags. Report generated import paths.",
+    "summary": "Align browser checks with fitted board. Serialize canonical vitest suite. Isolate browser evidence from vitest workers. Stabilise repeated plant drags. Report generated import paths.",
+    "details": [
+      "Updated help and FAQ, with changes to data storage and documentation.",
+      "Updated data storage, with changes to data storage and documentation.",
+      "Updated inventory, with changes to documentation.",
+      "Updated fleet, with changes to documentation."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-09-24T12:22:37.803Z"
+  },
+  {
     "version": "0926.9.0",
     "updateKind": "major",
     "title": "Scheduling update",

@@ -15,3 +15,5 @@ npm run createinvoice -- --from "<YYYY-MM-DD>" --to "<YYYY-MM-DD>" --rate "<rate
 ```bash
 npm run createinvoice -- --export-final "docs_private/invoices/invoice-<from>-to-<to>-final.md"
 ```
+
+5. In the final summary, always show the customer-facing Markdown path and explicitly identify `docs_private/invoices/invoice-<from>-to-<to>-final.json` as the accounts-software import file.

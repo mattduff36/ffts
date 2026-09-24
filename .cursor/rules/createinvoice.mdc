@@ -39,4 +39,8 @@ npm run createinvoice -- --from "<YYYY-MM-DD>" --to "<YYYY-MM-DD>" --rate "<rate
 npm run createinvoice -- --export-final "docs_private/invoices/invoice-<from>-to-<to>-final.md"
 ```
 
+12. In the final summary, always show both generated paths:
+   - customer-facing Markdown: `docs_private/invoices/invoice-<from>-to-<to>-final.md`;
+   - accounts-software import JSON: `docs_private/invoices/invoice-<from>-to-<to>-final.json`.
+
 Do not modify application code, commit, push, or run builds during invoice generation.

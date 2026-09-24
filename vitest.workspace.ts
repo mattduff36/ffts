@@ -9,6 +9,9 @@ export default defineWorkspace([
     test: {
       name: 'integration',
       environment: 'node',
+      sequence: {
+        groupOrder: 0,
+      },
       include: [
         'tests/integration/**/*.test.ts',
         'tests/unit/**/*.test.ts',
@@ -27,12 +30,16 @@ export default defineWorkspace([
     test: {
       name: 'ui',
       environment: 'happy-dom',
+      sequence: {
+        groupOrder: 0,
+      },
       environmentOptions: {
         happyDOM: {
           url: process.env.TESTSUITE_BASE_URL || 'http://127.0.0.1:4000',
         },
       },
       include: ['tests/ui/**/*.test.tsx'],
+      exclude: ['tests/ui/scheduling-plant-browser.test.tsx'],
       globals: true,
       setupFiles: ['./tests/ui/setup.ts'],
     },
@@ -40,6 +47,20 @@ export default defineWorkspace([
       alias: {
         '@': path.resolve(__dirname, './'),
       },
+    },
+  },
+  // Resource-heavy browser evidence runs after the ordinary projects so its
+  // nested Playwright workers cannot starve Vitest's worker heartbeat.
+  {
+    extends: './vitest.config.ts',
+    test: {
+      name: 'browser-evidence',
+      environment: 'node',
+      sequence: {
+        groupOrder: 1,
+      },
+      include: ['tests/ui/scheduling-plant-browser.test.tsx'],
+      testTimeout: 240_000,
     },
   },
 ]);

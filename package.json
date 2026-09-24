@@ -58,7 +58,7 @@
     "test:contrast": "playwright test contrast.spec.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run",
+    "test:run": "vitest run --testTimeout=120000 --maxWorkers=1 --no-file-parallelism --pool=threads --poolOptions.threads.singleThread=true",
     "test:coverage": "vitest run --coverage",
     "setup:storage": "tsx scripts/maintenance/setup-storage.ts",
     "setup:test-users": "tsx scripts/setup-test-users.ts",

@@ -844,11 +844,12 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
           workstreamId: protocol.workstreamId,
           role: 'active_leaf',
           phase: protocol.phase,
-          message: `CRITICAL workstream ${protocol.workstreamId} has exhausted its lineage premium review budget (phase ${protocol.phase}); route, isolate, or prove removal from release`,
+          message: `CRITICAL workstream ${protocol.workstreamId} has exhausted this generation's premium review budget (phase ${protocol.phase}); request an owner-authorised same-checkout successor, use a valid disposition, or continue substantive owner-directed DIRECT/TEE-LIGHT work while preserving failed history; release still requires the supported successor/disposition gate`,
           protocol,
           byId,
           childWorkstreamIds,
           suggestedCommands: [
+            protocolCommand(protocol.workstreamId, 'successor', ' --new-workstream <id> --plan <path> --owner-authorised-generation'),
             protocolCommand(protocol.workstreamId, 'route', ' --disposition <target> --reason <text>'),
           ],
         })

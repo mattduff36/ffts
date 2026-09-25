@@ -17,6 +17,7 @@ import {
 import { getWorkflowPaths, loadWorkflowReviewStateStrict } from '@/scripts/automation/workflow-events';
 import {
   cleanupWorkflowV24Fixtures,
+  failFirstThenClosure,
   initGitRepo,
   initWorkstream,
   makeTempRoot,
@@ -118,6 +119,20 @@ function exhaustAndSucceedSuccessor(
 }
 
 describe('TEE V2.5 owner-authorised successor', () => {
+  it('reports the same-checkout successor as an exhausted finalise option', () => {
+    const repoRoot = makeTempRoot('successor-readiness-guidance');
+    const baseCommit = initGitRepo(repoRoot);
+    initWorkstream(repoRoot, 'ws_ffts_pred', baseCommit);
+    failFirstThenClosure(repoRoot, 'ws_ffts_pred');
+    const readiness = getFinaliseProtocolReadiness(repoRoot);
+    const blocker = readiness.blockingWorkstreams.find((row) => row.workstreamId === 'ws_ffts_pred');
+    expect(readiness.allowed).toBe(false);
+    expect(blocker?.message).toMatch(/owner-authorised same-checkout successor/);
+    expect(blocker?.suggestedCommands).toEqual(expect.arrayContaining([
+      expect.stringContaining('successor --workstream ws_ffts_pred'),
+    ]));
+  });
+
   it('TEE-V25-SUCCESSOR-001 records one Generation 2 child against an exhausted parent', () => {
     const repoRoot = makeTempRoot('successor-legal');
     exhaustAndSucceedSuccessor(repoRoot, 'ws_ffts_pred', 'ws_ffts_gen2');
@@ -129,6 +144,20 @@ describe('TEE V2.5 owner-authorised successor', () => {
     expect(child?.inheritedFailedReviewCount).toBe(0);
     expect(child?.successorProvenance?.generation).toBe(2);
     expect(parent?.successorProvenance?.successorWorkstreamId).toBe('ws_ffts_gen2');
+  });
+
+  it('explains the owner-authorised successor after review exhaustion', () => {
+    const repoRoot = makeTempRoot('successor-diagnostic');
+    seedExhaustedParent(repoRoot, 'ws_ffts_pred');
+    const result = applyProtocolTransition({
+      repoRoot,
+      command: 'review-start',
+      workstreamId: 'ws_ffts_pred',
+      pass: 'first',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/owner-authorised successor/);
+    expect(readProtocolRecord(repoRoot, 'ws_ffts_pred')?.phase).toBe('routing_required');
   });
 
   it('TEE-V25-SUCCESSOR-AUTH-001 refuses successor without owner authorisation', () => {

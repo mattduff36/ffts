@@ -99,7 +99,7 @@ export function buildWorkflowFindings(params: {
         'action',
         'failed',
         'Premium review budget exhausted',
-        'Second failed premium review exhausts the lineage-scoped budget. Route, isolate, remove, revert, or evidence-backed supersede. Routing or split does not reset this budget. Do not launch a third premium review for the same CRITICAL continuation.',
+        "Second failed premium review exhausts this generation's budget. A new first/closure budget requires an explicitly owner-authorised successor generation, which may remain in this checkout and branch. A valid disposition or owner-directed DIRECT/TEE-LIGHT continuation may resolve substantive blockers without claiming the failed review passed. Routing or split does not reset this budget; do not launch a third review in this generation.",
         [
           `protocolPhase:${protocolPhase ?? 'unknown'}`,
           `failedPremiumReviewCount:${failedPremiumReviewCount ?? 'unknown'}`,

@@ -1,3 +1,5 @@
+// Runtime compatibility registry for stored telemetry/plan schemas. Global TEE model-policy.json
+// owns current autonomy policy; unknown identities remain managed. Do not infer autonomy from tier.
 import type {
   WorkflowLane,
   WorkflowParentTier,
@@ -58,7 +60,7 @@ export const WORKFLOW_MODEL_REGISTRY: WorkflowModelRole[] = [
     role: 'economical-default',
     tier: 'economical',
     family: 'cursor-grok',
-    displayName: 'Cursor Grok 4.5',
+    displayName: 'Managed implementation worker',
     modelIds: ['cursor-grok-4.5-high-fast', 'composer-2.5-fast'],
     defaultModelId: 'cursor-grok-4.5-high-fast',
   },
@@ -66,7 +68,7 @@ export const WORKFLOW_MODEL_REGISTRY: WorkflowModelRole[] = [
     role: 'premium-architecture-gate',
     tier: 'premium',
     family: 'gpt-sol',
-    displayName: 'GPT-5.6 Sol (high reasoning)',
+    displayName: 'Independent reviewer',
     modelIds: ['gpt-5.6-sol-high', 'gpt-5.4-medium'],
     defaultModelId: 'gpt-5.6-sol-high',
   },
@@ -74,7 +76,7 @@ export const WORKFLOW_MODEL_REGISTRY: WorkflowModelRole[] = [
     role: 'premium-final-review',
     tier: 'premium',
     family: 'gpt-sol',
-    displayName: 'GPT-5.6 Sol (high reasoning)',
+    displayName: 'Independent reviewer',
     modelIds: ['gpt-5.6-sol-high', 'gpt-5.4-medium'],
     defaultModelId: 'gpt-5.6-sol-high',
   },
@@ -82,7 +84,7 @@ export const WORKFLOW_MODEL_REGISTRY: WorkflowModelRole[] = [
     role: 'premium-fix-routing',
     tier: 'premium',
     family: 'gpt-sol',
-    displayName: 'GPT-5.6 Sol (high)',
+    displayName: 'Review routing engineer',
     modelIds: ['gpt-5.6-sol-high'],
     defaultModelId: 'gpt-5.6-sol-high',
   },
@@ -90,7 +92,7 @@ export const WORKFLOW_MODEL_REGISTRY: WorkflowModelRole[] = [
     role: 'premium-planning',
     tier: 'premium',
     family: 'gpt-sol',
-    displayName: 'GPT-5.6 Sol',
+    displayName: 'Planning engineer',
     modelIds: [
       'gpt-5.6-sol-high',
       'gpt-5.4-medium',

@@ -684,8 +684,10 @@ export async function processWorkflowStopEvent(
       ? [
           'Premium review budget exhausted for this workstream (two failed rounds).',
           'Do not launch another final-diff-reviewer.',
-          'Run one premium-fix-routing pass or split the workstream via:',
-          `npx tsx scripts/workflow-protocol.ts split --workstream ${event.workstreamId ?? '<id>'} --new-workstream <new-id> --narrower-partition`,
+          'This generation cannot take a third premium review. Preserve the failed record and address its open blockers.',
+          'With explicit owner authorization, create a same-checkout successor generation via:',
+          `npx tsx scripts/workflow-protocol.ts successor --workstream ${event.workstreamId ?? '<id>'} --new-workstream <new-id> --plan <path> --owner-authorised-generation`,
+          'A valid disposition or owner-directed DIRECT/TEE-LIGHT continuation may instead resolve the substantive findings without claiming this review passed.',
         ].join('\n')
       : undefined;
 

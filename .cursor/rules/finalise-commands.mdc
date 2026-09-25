@@ -1,30 +1,13 @@
 ---
 description: Run FFTS finalise commands safely and report their automation artifacts
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Finalise Commands
 
-- Map `finalise` to `npm run finalise`.
-- Map `finalise full` to `npm run finalise:full`.
-- Map `finalise and push` and `fap` / `/fap` to COMPLETE_AND_RELEASE(normal): ordinary work runs `npm run finalise`, then a normal fetch/ancestry check and fast-forward push. Protected CRITICAL / C9 work uses `npm run finalise:push`.
-- Map `finalise full and push` and `ffap` / `/ffap` to COMPLETE_AND_RELEASE(full): ordinary work runs `npm run finalise:full`, then a normal fetch/ancestry check and fast-forward push. Protected CRITICAL / C9 work uses `npm run finalise:full:push`.
-- Use those authorized push phrases (`finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, `finalise:push`, or `push to GitHub` as applicable) only when the user wrote them as the current action. They implement the global COMPLETE_AND_RELEASE contract and must not be redefined as local-only. Do not invoke `finalise:push` / `finalise:full:push` for ordinary work; those scripts keep refusing ordinary `--push` before mutation.
-- Before any push, report the branch, commits, and changed files that will be pushed.
-- Check for an existing finalise process before starting another.
-- Never push after a failed build, test, cleanup, commit, or release-metadata step.
-- Treat a failed finalise as a diagnostic run, not the start of a full-suite retry loop:
-  1. Read the complete failure summary and collect every reported failure.
-  2. Repair all known related failures in one consolidated sweep.
-  3. Re-run only the failed test files, test names, projects, or failed build/check until they pass reliably.
-  4. Freeze the candidate, then run the original `finalise` or `finalise:full` command once as the closure gate.
-- If that closure run reveals new failures, return to targeted diagnosis and verification. Do not immediately launch another full finalise.
-- Use `finalise:repair` only when its selected step is itself the narrowest meaningful failed check. Do not use it when it would rerun a broad suite that can be targeted directly.
-- A broad rerun before targeted stability is allowed only when the failure cannot be isolated or is demonstrably order-/suite-dependent; record that reason first.
-- Never rerun an unchanged full suite after failure, and never run full finalise after fixing only one failure while other reported failures remain unresolved.
-- Read the generated `docs_private/automation/runs/finalise/*.md` summary and report its local path.
-- Treat a post-product-commit release failure as fail-closed: preserve local work, do not push, and follow the printed recovery command.
-- Local commit is not release-ready, and release-ready is not a push.
-- Run `npm run workflow-protocol -- status --blocking` before mutating finalise. Valid split ancestors are parked history. The active descendant owns remaining work. After two failed premium rounds, remaining work is routing, isolation, or proven removal from release — not another normal final-diff pass. Do not hand-edit protocol JSON.
-- Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget.
-- Once unresolved CRITICAL implementation is committed to the current release branch, do not start unrelated implementation on that branch. Finish CRITICAL first or use a separate explicitly-authorised branch/worktree.
+- `finalise` / `finalise full` run local `npm run finalise` / `npm run finalise:full`; neither authorises a push. Check for an active finalise or review process first.
+- Explicit current-action `finalise and push` or `fap` / `/fap` means COMPLETE_AND_RELEASE(normal); `finalise full and push` or `ffap` / `/ffap` means COMPLETE_AND_RELEASE(full). Quoted, historical, negated, and file-mentioned aliases are not authorization. Before a push, report the branch, commits, and changed files.
+- Ordinary complete-and-release runs local finalise, then fetches and confirms ancestry for a normal fast-forward push. Protected CRITICAL / C9 work uses `npm run finalise:push` or `npm run finalise:full:push`. The protected scripts refuse ordinary `--push`; never force push or push after a failed check, cleanup, commit, or release-metadata step.
+- Before mutating finalise, run `npm run workflow-protocol -- status --blocking`. A valid split or successor ancestor is parked history; the active leaf owns completion. Within one TEE-FULL generation, two failed premium rounds exhaust its first/closure budget. Preserve `routing_required` history and blockers. Legal next steps include an explicitly owner-authorised same-checkout successor generation, a valid disposition, or owner-directed DIRECT/TEE-LIGHT work that truthfully carries unresolved findings. DIRECT/LIGHT does not bypass the FFTS mechanical release gate: use the implemented owner-authorised successor path for release; if a requested continuation is unsupported, report that limit rather than invent a bypass. Do not mint a new review pass via split, route, metadata edits, or a new ID; do not hand-edit protocol JSON.
+- A failed finalise is diagnostic. Read all failures, repair related causes together, run the narrowest targeted checks until stable, then run the original finalise once for closure. Use `finalise:repair` only when its selected allowlisted step is itself the narrowest meaningful check. Do not use it for migrations, database validation, commit, push, or unknown failures. Never run an unchanged full suite after failure.
+- Read the generated `docs_private/automation/runs/finalise/*.md` summary and report its path. A post-product-commit release failure remains fail-closed: preserve local work, do not push, and use the printed recovery command. Local commit is not release-ready, and release-ready is not a push.

@@ -690,6 +690,20 @@ describe('workflow-findings', () => {
     parseErrors: [],
   });
 
+  it('explains the bounded owner-authorised successor after review exhaustion', () => {
+    const findings = buildWorkflowFindings({
+      marker: null,
+      markerStatus: 'missing',
+      transcriptSignals: null,
+      protocolPhase: 'routing_required',
+      failedPremiumReviewCount: 2,
+    });
+    const exhausted = findings.find((row) => row.id === 'review-loop-unbounded');
+    expect(exhausted?.status).toBe('failed');
+    expect(exhausted?.detail).toMatch(/owner-authorised successor generation/);
+    expect(exhausted?.detail).toMatch(/do not launch a third review in this generation/i);
+  });
+
   it('flags missing gates, unresolved tests, truncation, and incomplete handoff', () => {
     const findings = buildWorkflowFindings({
       marker: marker({
@@ -1765,7 +1779,7 @@ describe('workflow-review cadence', () => {
         shell: false,
       }
     );
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr || result.stdout || String(result.error ?? 'resolver exited without diagnostic')).toBe(0);
     expect(existsSync(pending.pendingPath!)).toBe(false);
     expect(existsSync(`${pending.pendingPath!}.resolved`)).toBe(true);
     expect(loadWorkflowReviewState(paths.statePath).pendingFollowUpPath).toBeNull();

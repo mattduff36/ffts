@@ -1235,7 +1235,7 @@ export function createDefaultPlanContract(params: {
             'Writers emit native V2.2 lane data and V4 completion markers; readers remain compatible with V1-V3 evidence.',
             'Missing, stale, malformed, or incomplete evidence is unknown, never passed.',
             'Do not launch a third premium review for the same CRITICAL continuation. Routing or split does not reset this budget.',
-            'The active descendant owns remaining work. After two failed premium rounds, remaining work is routing, isolation, or proven removal from release — not another normal final-diff pass. A split child inherits the lineage-scoped budget and must not re-enter initialized / preflight to mint a new first review.',
+            'The active descendant owns remaining work. After two failed premium rounds, this generation is exhausted. An explicit owner-authorised same-checkout successor may continue with inherited blockers and preserved failed evidence; isolation is optional. A split child inherits the lineage-scoped budget and must not re-enter initialized / preflight to mint a new first review.',
           ],
           boundaries: [
             'Do not modify product UI, domain behavior, application schema, RLS, or production records in TEE core.',

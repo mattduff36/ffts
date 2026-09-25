@@ -1171,7 +1171,7 @@ export function reduceReviewStart(params: {
 
   if (current.phase === 'routing_required' || lineageBudgetExhausted(current)) {
     return fail(
-      'routing_required: lineage premium review budget exhausted; route, isolate, remove, revert, or evidence-backed supersede. review-start rejected',
+      'routing_required: this generation has exhausted its premium review budget; request an owner-authorised successor for a new first/closure budget, or use a valid disposition. review-start rejected',
       current,
       WORKFLOW_ROUTING_REQUIRED_EXIT_CODE
     );

@@ -9,15 +9,14 @@ alwaysApply: true
 - Commit completed coding tasks locally unless the task is planning/review-only or the user says not to commit.
 - Never push unless the user writes the exact phrase `push to GitHub`, or explicitly requests a push as part of finalisation such as `finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, or `finalise:push`. These aliases implement the global COMPLETE_AND_RELEASE contract. State the branch and summary before pushing.
 - Never destructively change production data without explicit permission.
-- Current data phase: every application database record is SAMPLE DATA. Do not use the CRITICAL lane when planning or implementing new work. Classify FAST, STANDARD, or GUARDED from coordination and uncertainty only. See `.cursor/rules/sample-data-phase.mdc`.
-- Resume CRITICAL only after the app is truly live with real customer data. The trigger is that all SAMPLE data has been removed. Then use CRITICAL where necessary: database, schema, persistence, migration, auth, permissions/RLS, security, money, concurrency, irreversible operations, and production-data risk.
+- Follow `.cursor/rules/sample-data-phase.mdc`: while all records are SAMPLE DATA, use FAST, STANDARD, or GUARDED; resume CRITICAL after sample data is removed and real customer data is live.
 - For database/persistence intent, load `.cursor/rules/database-migrations.mdc` and the migration guide before acting.
 - Use the existing TypeScript, Node.js, Next.js App Router, React, and Tailwind patterns already established in this repository.
 - Keep functions typed and focused; update targeted tests when behavior changes.
 - Do not expose environment values or secrets.
 - Keep all workflows self-contained in FFTS. Do not add runtime, test, script, rule, or configuration dependencies on sibling repositories.
-- Do not create sibling FFTS worktrees or recovery/release folders by default. Prefer this checkout, normal branches, and in-place fixes. A separate worktree is allowed only when the user explicitly asks or it is genuinely impossible to proceed safely here; explain why first, keep it temporary, and remove it before completion.
+- Do not create sibling FFTS worktrees or recovery/release folders by default. Prefer this checkout, normal branches, and in-place fixes. If safe work genuinely needs a separate worktree, explain the engineering reason and obtain explicit owner authorization before creating it. A review failure alone is not that reason; agree its lifecycle with the owner.
 - `npm run fixerrors` is the registered v4 path: active-row snapshot, local analysis artifacts, same-process archive, then 12-month archived retention. Trusted mutation uses only `fixerrors-exact-snapshot-v4`. `--no-clear` is rejected. Debug UI / `clear-all-error-logs` remain untrusted archive-active surfaces.
 - Run application builds only when the user authorizes a test build. Project-specific rules override generic TEE when stricter.
 - Local commit is not release-ready, and release-ready is not a push. Do not hand-edit workflow protocol JSON.
-- Once unresolved CRITICAL implementation is committed to the current release branch, do not start unrelated implementation on that branch. Finish CRITICAL first or use a separate explicitly-authorised branch/worktree.
+- Keep unresolved CRITICAL release blockers visible. Do not release past them; see `.cursor/rules/finalise-commands.mdc` for finalise routing.

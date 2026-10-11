@@ -21,9 +21,11 @@ import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from '@dnd-
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addMinutes, format, parseISO } from 'date-fns';
 import {
+  createParser,
   parseAsArrayOf,
   parseAsBoolean,
   parseAsString,
+  useQueryState,
   useQueryStates,
 } from 'nuqs';
 import Link from 'next/link';
@@ -246,6 +248,7 @@ import {
   formatScheduleEmployeeCompactName,
   formatScheduleDate,
   formatScheduleVisitTime,
+  isScheduleDate,
   getScheduleQuoteEndDate,
   getDailyInitialVisitWindow,
   mapDailyScheduleClientXToMinutes,
@@ -1869,6 +1872,15 @@ interface DailyTimelinePanOperation {
   hasDragged: boolean;
 }
 
+const parseAsScheduleDate = createParser({
+  parse(value: string) {
+    return isScheduleDate(value) ? value : null;
+  },
+  serialize(value: string) {
+    return value;
+  },
+});
+
 function flattenConflictMessages(payload: Record<string, unknown>): SchedulingConflict[] {
   const byDate = payload.conflicts_by_date;
   if (!byDate || typeof byDate !== 'object') return [];
@@ -1885,7 +1897,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const dailyTimelineViewportRef = useRef<HTMLDivElement>(null);
   const dailyTimelinePanOperation = useRef<DailyTimelinePanOperation | null>(null);
   const latestPointerClientX = useRef<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => formatScheduleDate(new Date()));
+  const scheduleDateParser = useMemo(
+    () => parseAsScheduleDate.withDefault(formatScheduleDate(new Date())).withOptions({ history: 'replace' }),
+    []
+  );
+  const [selectedDate, setSelectedDate] = useQueryState('date', scheduleDateParser);
   const [view, setView] = useState<SchedulingBoardView>(() =>
     readSchedulingViewPreference(userId)
   );

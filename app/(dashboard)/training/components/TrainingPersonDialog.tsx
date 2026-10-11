@@ -26,12 +26,26 @@ import {
   type TrainingPersonFormData,
 } from '@/types/training';
 
+interface TrainingLinkedProfile {
+  id: string;
+  full_name: string | null;
+  employee_id: string | null;
+}
+
+interface TrainingProfileOption {
+  id: string;
+  full_name: string;
+  employee_id: string | null;
+}
+
 interface TrainingPersonDialogProps {
   open: boolean;
-  person?: TrainingPerson | null;
+  person?: (TrainingPerson & { profile?: TrainingLinkedProfile | null }) | null;
   onClose: () => void;
   onSubmit: (data: TrainingPersonFormData) => Promise<void>;
 }
+
+const UNLINKED_PROFILE_VALUE = '__none__';
 
 const EMPTY_FORM: TrainingPersonFormData = {
   employee_name_raw: '',
@@ -42,9 +56,17 @@ const EMPTY_FORM: TrainingPersonFormData = {
   source_sheets: '',
 };
 
+function employeeOptionLabel(option: Pick<TrainingProfileOption, 'full_name' | 'employee_id'>): string {
+  const name = option.full_name.trim() || 'Employee';
+  return option.employee_id ? `${name} (${option.employee_id})` : name;
+}
+
 export function TrainingPersonDialog({ open, person, onClose, onSubmit }: TrainingPersonDialogProps) {
   const [form, setForm] = useState<TrainingPersonFormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [profileOptions, setProfileOptions] = useState<TrainingProfileOption[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (person) {
@@ -62,9 +84,53 @@ export function TrainingPersonDialog({ open, person, onClose, onSubmit }: Traini
     setForm(EMPTY_FORM);
   }, [person, open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const controller = new AbortController();
+    let active = true;
+    setProfilesLoading(true);
+    setProfilesError(null);
+
+    fetch('/api/training/profile-options', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as { error?: string; profiles?: TrainingProfileOption[] };
+        if (!response.ok) {
+          throw new Error(payload.error || 'Failed to load employees');
+        }
+        return Array.isArray(payload.profiles) ? payload.profiles : [];
+      })
+      .then((profiles) => {
+        if (!active) return;
+        setProfileOptions(profiles);
+      })
+      .catch((error: unknown) => {
+        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return;
+        setProfileOptions([]);
+        setProfilesError(error instanceof Error ? error.message : 'Failed to load employees');
+      })
+      .finally(() => {
+        if (active) setProfilesLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [open]);
+
   function updateField<K extends keyof TrainingPersonFormData>(key: K, value: TrainingPersonFormData[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
+
+  const selectedOption = profileOptions.find((option) => option.id === form.profile_id);
+  const currentProfileUnavailable = Boolean(form.profile_id) && !selectedOption;
+  const currentProfileLabel = person?.profile?.full_name
+    ? employeeOptionLabel({
+        full_name: person.profile.full_name,
+        employee_id: person.profile.employee_id,
+      })
+    : 'Linked employee';
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -101,14 +167,28 @@ export function TrainingPersonDialog({ open, person, onClose, onSubmit }: Traini
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="training-profile-id">Profile ID</Label>
-                <Input
-                  id="training-profile-id"
-                  value={form.profile_id}
-                  onChange={(event) => updateField('profile_id', event.target.value)}
-                  placeholder="Optional profiles.id"
-                  className="bg-slate-800 border-slate-600"
-                />
+                <Label htmlFor="training-profile-id">Employee</Label>
+                <Select
+                  value={form.profile_id || UNLINKED_PROFILE_VALUE}
+                  onValueChange={(value) => updateField('profile_id', value === UNLINKED_PROFILE_VALUE ? '' : value)}
+                  disabled={profilesLoading}
+                >
+                  <SelectTrigger id="training-profile-id" className="bg-slate-800 border-slate-600">
+                    <SelectValue placeholder={profilesLoading ? 'Loading employees...' : 'No linked employee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNLINKED_PROFILE_VALUE}>No linked employee</SelectItem>
+                    {currentProfileUnavailable ? (
+                      <SelectItem value={form.profile_id}>{currentProfileLabel} (unavailable)</SelectItem>
+                    ) : null}
+                    {profileOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>{employeeOptionLabel(option)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {profilesError ? (
+                  <p className="text-sm text-red-300" role="alert">{profilesError}</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Match Status</Label>

@@ -455,7 +455,7 @@ function renderBoard(searchParams = '') {
     defaultOptions: { queries: { retry: false } },
   });
   const renderTree = () => (
-    <NuqsTestingAdapter searchParams={searchParams}>
+    <NuqsTestingAdapter searchParams={searchParams} hasMemory>
       <QueryClientProvider client={queryClient}>
         <SchedulingManagerBoard userId="manager-1" />
       </QueryClientProvider>
@@ -646,6 +646,16 @@ describe('SchedulingManagerBoard', () => {
         }),
       };
     }));
+  });
+
+  it('loads the week specified by a valid URL date', async () => {
+    renderBoard('?date=2026-07-14');
+    await waitFor(() => expect(mockFetchBoard).toHaveBeenCalledWith('2026-07-13'));
+  });
+
+  it('falls back to the current week for an impossible URL date', async () => {
+    renderBoard('?date=2026-02-30');
+    await waitFor(() => expect(mockFetchBoard).toHaveBeenCalledWith(getSchedulingWeek(formatScheduleDate(new Date())).start));
   });
 
   it('uses the weekly board when no saved preference exists', async () => {

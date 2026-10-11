@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { findEligibleTrainingProfile } from '@/lib/server/training-profile-options';
 import { requireTrainingAdminAccess } from '@/lib/server/training-auth';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { isUuid } from '@/lib/utils/uuid';
 import { isTrainingProfileMatchStatus, type TrainingProfileMatchStatus } from '@/types/training';
 
 interface RouteParams {
@@ -46,6 +48,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const body = (await request.json()) as TrainingPersonUpdateBody;
     const update: Record<string, unknown> = {};
+    const admin = createAdminClient();
 
     if (body.employee_name_raw !== undefined) {
       const name = cleanString(body.employee_name_raw);
@@ -54,7 +57,34 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
       update.employee_name_raw = name;
     }
-    if (body.profile_id !== undefined) update.profile_id = cleanString(body.profile_id);
+    if (body.profile_id !== undefined) {
+      if (body.profile_id !== null && typeof body.profile_id !== 'string') {
+        return NextResponse.json({ error: 'Profile link must be a valid employee' }, { status: 400 });
+      }
+      const nextProfileId = cleanString(body.profile_id);
+      if (nextProfileId && !isUuid(nextProfileId)) {
+        return NextResponse.json({ error: 'Profile link must be a valid employee' }, { status: 400 });
+      }
+
+      const existing = await admin
+        .from('training_people')
+        .select('profile_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+      if (!existing.data) {
+        return NextResponse.json({ error: 'Training person not found' }, { status: 404 });
+      }
+
+      if (nextProfileId && nextProfileId !== existing.data.profile_id) {
+        const eligible = await findEligibleTrainingProfile(admin, nextProfileId);
+        if (!eligible) {
+          return NextResponse.json({ error: 'Selected employee is not available to link' }, { status: 400 });
+        }
+      }
+
+      update.profile_id = nextProfileId;
+    }
     if (body.profile_match_status !== undefined) {
       if (!isTrainingProfileMatchStatus(body.profile_match_status)) {
         return NextResponse.json({ error: 'Invalid profile match status' }, { status: 400 });
@@ -65,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.date_of_births !== undefined) update.date_of_births = cleanStringArray(body.date_of_births);
     if (body.source_sheets !== undefined) update.source_sheets = cleanStringArray(body.source_sheets);
 
-    const { data, error } = await createAdminClient()
+    const { data, error } = await admin
       .from('training_people')
       .update(update)
       .eq('id', id)

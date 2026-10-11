@@ -928,8 +928,21 @@ function ReportsContent() {
 
         <TabsContent value="settings" className="mt-0">
           <Card className="border-border">
-            <CardContent className="py-10">
-              <p className="text-sm text-muted-foreground">No settings for this module yet.</p>
+            <CardHeader>
+              <CardTitle>Report access</CardTitle>
+              <CardDescription>Access and date choices.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Your administrator controls who can view reports. Use Overview to choose dates before
+                downloading a report.
+              </p>
+              <p>
+                Date filters on Overview apply only to the report you download in this visit. They default to
+                last week and are not saved. Absence Allowance Snapshot uses the start date only; the other
+                downloads use the selected start and end dates.
+              </p>
+              <p>There are no additional report settings.</p>
             </CardContent>
           </Card>
         </TabsContent>

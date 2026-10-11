@@ -145,13 +145,13 @@ export function ResourceCard({
     >
       <ResourceDragCue testId="schedule-resource-drag-cue" />
       <span className="min-w-0 flex-1 space-y-0">
-        <span className={cn('block truncate font-semibold', schedulingControlStyles.readableLabel, selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+        <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
           {resource.label}
         </span>
-        <span className={cn('block truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+        <span className={cn('block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
           {subtitle}
         </span>
-        <span className={cn('block truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
+        <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-400')} title={metadata}>
           {metadata}
         </span>
       </span>
@@ -222,13 +222,13 @@ export function DraggableResourceCard({
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1.5 pl-0">
         <span className="min-w-0 flex-1 space-y-0">
-          <span className={cn('block truncate font-semibold', schedulingControlStyles.readableLabel, selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
+          <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')} title={resource.label}>
             {resource.label}
           </span>
-          <span className={cn('block truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
+          <span className={cn('block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')} title={subtitle}>
             {subtitle}
           </span>
-          <span className={cn('block truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-700' : 'text-slate-300')} title={metadata}>
+          <span className={cn('block truncate text-[10px]', selected ? 'text-slate-700' : 'text-slate-300')} title={metadata}>
             {metadata}
           </span>
         </span>

@@ -1,6 +1,4 @@
 export const schedulingControlStyles = {
-  readableLabel: 'text-[14px] md:text-[14px]',
-  readableMeta: 'text-[12px] md:text-[12px]',
   primary:
     'border border-[#34d399] bg-[#34d399] text-[#020617] shadow-sm hover:border-[#6ee7b7] hover:bg-[#6ee7b7] hover:text-[#020617] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617] disabled:border-[#64748b] disabled:bg-[#334155] disabled:text-[#cbd5e1] disabled:opacity-100',
   outline:

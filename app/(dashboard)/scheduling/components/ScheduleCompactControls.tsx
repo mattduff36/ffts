@@ -139,7 +139,6 @@ export function ScheduleHelpHint({ label, testId, children }: ScheduleHelpHintPr
 type ScheduleExpandingActionProps = Omit<ButtonProps, 'children'> & {
   icon: ComponentType<{ className?: string }>;
   label: string;
-  labels?: 'hover' | 'visible';
 };
 
 const ACTION_LABEL_REVEAL_DELAY_MS = 1800;
@@ -236,7 +235,6 @@ export function ScheduleExpandingActionGroup({
 export function ScheduleExpandingAction({
   icon: Icon,
   label,
-  labels = 'hover',
   className,
   ...props
 }: ScheduleExpandingActionProps) {
@@ -244,22 +242,6 @@ export function ScheduleExpandingAction({
   const revealDelayClass = labelsPrimed === true
     ? 'group-hover/action:delay-0 group-focus-visible/action:delay-0'
     : 'group-hover/action:delay-[1800ms] group-focus-visible/action:delay-[1800ms]';
-
-  if (labels === 'visible') {
-    return (
-      <Button
-        type="button"
-        {...props}
-        aria-label={props['aria-label'] ?? label}
-        className={cn('h-9 min-w-9 shrink gap-2 px-2.5', className)}
-      >
-        <Icon className="h-4 w-4 shrink-0" aria-hidden />
-        <span className={cn('whitespace-nowrap font-medium', schedulingControlStyles.readableLabel)}>
-          {label}
-        </span>
-      </Button>
-    );
-  }
 
   return (
     <Button

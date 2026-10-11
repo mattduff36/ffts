@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.0.0
+
+**GIT COMMIT MESSAGE**
+`chore(workflow): simplify context routing and preserve release safeguards`
+
+**PUSHED AT**
+2026-10-11T20:18:18.768Z
+
+**WHAT CHANGED**
+Simplify context routing and preserve release safeguards. Require targeted repair before finalise retry.
+
+**VERSION HISTORY DETAILS**
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `chore(workflow): simplify context routing and preserve release safeguards`
+- `workflow: require targeted repair before finalise retry`
+
 ## 0926.9.1
 
 **GIT COMMIT MESSAGE**

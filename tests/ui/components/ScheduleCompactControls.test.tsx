@@ -61,6 +61,24 @@ describe('ScheduleCompactControls', () => {
     expect(button.querySelector('svg')?.className).not.toMatch(/rotate|scale|translate/);
   });
 
+  it('shows header labels without a hover width change when labels are visible', () => {
+    render(
+      <ScheduleExpandingAction
+        icon={Settings}
+        label="Settings"
+        labels="visible"
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Settings' });
+    const label = button.querySelector('span');
+    expect(button).toHaveTextContent('Settings');
+    expect(button).toHaveClass('min-w-9', 'gap-2');
+    expect(button).not.toHaveClass('overflow-hidden', 'gap-0');
+    expect(label).toHaveClass('text-[14px]', 'whitespace-nowrap');
+    expect(label).not.toHaveClass('max-w-0', 'opacity-0');
+  });
+
   it('keeps labels primed while moving between actions and resets after inactivity', () => {
     vi.useFakeTimers();
     try {

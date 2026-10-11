@@ -1020,7 +1020,7 @@ describe('SchedulingManagerBoard', () => {
       });
     });
     expect(within(draftCard).getByText('Changes Requested')).toHaveClass(
-      'text-[9px]',
+      'text-[12px]',
       'text-slate-400'
     );
     expect(within(draftCard).getByText('2 days').parentElement).toHaveClass(
@@ -1424,15 +1424,15 @@ describe('SchedulingManagerBoard', () => {
     expect(employeeDragCue).toHaveClass('pointer-events-none');
     expect(employeeHandle).toHaveClass('min-h-8', 'min-w-8', 'touch-none');
     expect(within(employeeCard).getByText('Bob Jones')).toHaveClass(
-      'text-xs',
+      'text-[14px]',
       'font-semibold'
     );
     expect(within(employeeCard).getByText('Arborists')).toHaveClass(
-      'text-[11px]',
+      'text-[12px]',
       'text-slate-300'
     );
     expect(within(employeeCard).getByText('Employee · E002')).toHaveClass(
-      'text-[10px]',
+      'text-[12px]',
       'text-slate-300'
     );
     fireEvent.click(employeeCard);
@@ -1453,11 +1453,11 @@ describe('SchedulingManagerBoard', () => {
     expect(within(plantHandle).getByTestId('schedule-resource-drag-cue'))
       .toHaveClass('pointer-events-none');
     expect(within(plantCard).getByText('JCB · 403')).toHaveClass(
-      'text-[11px]',
+      'text-[12px]',
       'text-slate-300'
     );
     expect(within(plantCard).getByText('Plant · active')).toHaveClass(
-      'text-[10px]',
+      'text-[12px]',
       'text-slate-300'
     );
     fireEvent.click(plantCard);
@@ -2013,7 +2013,17 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByText(/Drag from the grip handle/)).not.toBeInTheDocument();
 
     const titleControls = screen.getByTestId('schedule-board-title-controls');
-    expect(titleControls).toHaveClass('ml-auto', 'shrink-0');
+    expect(titleControls).toHaveClass('ml-auto', 'flex-wrap');
+    expect(screen.getByTestId('schedule-job-stage-filters')).toHaveClass('grid-cols-3');
+    expect(screen.getByRole('tab', { name: /^All \(/ })).toHaveClass('text-[14px]');
+    expect(screen.getByLabelText('Jobs waiting to schedule')).toHaveAttribute(
+      'placeholder',
+      'Search unscheduled jobs'
+    );
+    expect(screen.getByLabelText('Jobs on board')).toHaveAttribute(
+      'placeholder',
+      'Search jobs'
+    );
     expect(titleControls).toContainElement(screen.getByTestId('schedule-primary-tabs'));
     expect(titleControls).toContainElement(screen.getByPlaceholderText('Search jobs'));
 
@@ -2045,6 +2055,18 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByRole('button', { name: 'New Project Number' })).toHaveClass('min-w-9');
     expect(screen.getByTestId('schedule-quick-add-button')).toHaveClass('min-w-9');
     expect(screen.getByTestId('schedule-settings-button')).toHaveClass('min-w-9');
+    for (const label of [
+      'Plant availability',
+      'New Quote',
+      'New Project Number',
+      'Quick add',
+      'Settings',
+    ]) {
+      const action = screen.getByRole('button', { name: label });
+      expect(action).toHaveTextContent(label);
+      expect(action.querySelector('span')).not.toHaveClass('max-w-0');
+      expect(action.querySelector('span')).toHaveClass('text-[14px]');
+    }
   });
 
   it('reschedules an existing Quote job from the board', async () => {
@@ -2311,6 +2333,103 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-daily-timeline-header')).toHaveStyle({
       width: '1440px',
     });
+  });
+
+  it('scrolls the daily timeline earlier and later without changing its range', async () => {
+    prepareDailyBoard();
+    renderBoard();
+
+    const dailyTimeline = await screen.findByTestId('schedule-daily-timeline');
+    expect(screen.queryByRole('button', { name: 'Earlier' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Scroll' }));
+
+    const content = screen.getByTestId('schedule-daily-timeline-content');
+    expect(content).toHaveStyle({ width: '1680px' });
+    expect(dailyTimeline).toHaveClass('overflow-x-auto');
+    Object.defineProperty(dailyTimeline, 'clientWidth', { configurable: true, value: 400 });
+    Object.defineProperty(dailyTimeline, 'scrollWidth', { configurable: true, value: 1680 });
+    dailyTimeline.scrollLeft = 200;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(dailyTimeline.scrollLeft).toBe(400);
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier' }));
+    expect(dailyTimeline.scrollLeft).toBe(200);
+    expect(content).toHaveStyle({ width: '1680px' });
+    expect(screen.getByRole('button', { name: 'Shrink to fit width' })).toBeEnabled();
+  });
+
+  it('shows the selected visit from the current board, excluding other visits', async () => {
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      visits: [
+        board.visits[0],
+        {
+          ...board.visits[0],
+          id: 'visit-2',
+          sequence_number: 2,
+          title: 'Afternoon visit',
+          starts_at: '2026-07-14T13:00:00.000Z',
+          ends_at: '2026-07-14T15:00:00.000Z',
+        },
+      ],
+      assignments: [
+        board.assignments[0],
+        {
+          ...board.assignments[0],
+          id: 'assignment-plant',
+          resource_type: 'plant',
+          plant_id: 'plant-1',
+          employee: null,
+          plant: {
+            id: 'plant-1',
+            plant_id: 'P001',
+            nickname: 'Loader',
+            make: 'JCB',
+            model: '403',
+            status: 'active',
+          },
+        },
+        {
+          ...board.assignments[0],
+          id: 'assignment-other-visit',
+          visit_id: 'visit-2',
+          profile_id: 'employee-2',
+          employee: board.resources.employees[1],
+        },
+      ],
+    });
+    renderBoard();
+    expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-selected-visit-details')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', {
+      name: 'Select visit 1 for JOB-101',
+    })[0]);
+
+    const details = screen.getByTestId('schedule-selected-visit-details');
+    expect(details).toHaveTextContent('JOB-101');
+    expect(details).toHaveTextContent('Crown reduction');
+    expect(details).toHaveTextContent('09:00–13:00');
+    expect(details).toHaveTextContent('Alex Smith');
+    expect(details).toHaveTextContent('Loader');
+    expect(details).not.toHaveTextContent('Bob Jones');
+    expect(details).not.toHaveTextContent('Afternoon visit');
+    expect(details).toHaveClass('max-h-40', 'overflow-y-auto');
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Jobs' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Jobs' }));
+    expect(screen.getByTestId('schedule-selected-visit-details')).toHaveTextContent('Alex Smith');
+    fireEvent.click(screen.getByTestId('schedule-selected-visit-details'));
+    expect(screen.getByTestId('schedule-selected-visit-details')).toHaveTextContent('Loader');
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plant' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Plant' }));
+    expect(screen.getByTestId('schedule-selected-visit-details')).toHaveTextContent('Loader');
   });
 
   it('disables Fit and forces Scroll when the measured scale would be too narrow', async () => {
@@ -2732,8 +2851,8 @@ describe('SchedulingManagerBoard', () => {
       ctrlKey: false,
     });
     expect(screen.getByRole('tab', { name: 'Available (2)' })).toHaveClass(
-      'whitespace-nowrap',
-      'text-[10px]'
+      'whitespace-normal',
+      'text-[14px]'
     );
     fireEvent.click(
       screen.getAllByRole('button', {

@@ -34,6 +34,8 @@ import {
   CalendarOff,
   CalendarPlus,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   ExternalLink,
   FilePlus,
@@ -294,6 +296,10 @@ import {
 } from './ScheduleCompactControls';
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 import { schedulingControlStyles } from './scheduling-control-styles';
+import {
+  resolveSelectedVisitDetails,
+  ScheduleSelectedVisitDetails,
+} from './ScheduleSelectedVisitDetails';
 import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
 import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
@@ -520,15 +526,15 @@ function DraggableQuoteCard({
           <ResourceDragCue testId="schedule-quote-drag-cue" />
         </span>
         <span className="min-w-0 flex-1 py-1 pr-1.5">
-          <span className={cn('block truncate text-xs font-semibold', selected ? 'text-slate-950' : 'text-slate-100')}>
+          <span className={cn('block truncate font-semibold', schedulingControlStyles.readableLabel, selected ? 'text-slate-950' : 'text-slate-100')}>
             {quote.base_quote_reference}
           </span>
-          <span className={cn('mt-0.5 block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')}>
+          <span className={cn('mt-0.5 block truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-800' : 'text-slate-300')}>
             {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
           </span>
-          <span className={cn('mt-0.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
+          <span className={cn('mt-0.5 flex items-center justify-between gap-2', schedulingControlStyles.readableMeta, selected ? 'text-slate-800' : 'text-slate-300')}>
             <span>{durationDays} {durationDays === 1 ? 'day' : 'days'}</span>
-            <span className={cn('truncate text-[9px]', selected ? 'text-slate-700' : 'text-slate-400')}>
+            <span className={cn('truncate', schedulingControlStyles.readableMeta, selected ? 'text-slate-700' : 'text-slate-400')}>
               {'optimistic' in quote && quote.optimistic
                 ? 'Updating…'
                 : formatQuoteStatusLabel(quote.status)}
@@ -726,7 +732,8 @@ function AssignmentChip({
       ref={ref}
       data-testid={`schedule-assignment-chip-${assignment.id}`}
       className={cn(
-        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 text-[11px] font-medium',
+        'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 font-medium',
+        schedulingControlStyles.readableMeta,
         assignment.resource_type === 'employee'
           ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
@@ -1765,14 +1772,15 @@ function BoardRowIdentity({
     return (
       <div className="min-w-0 overflow-hidden">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="block min-w-0 truncate font-semibold text-foreground">
+          <span className={cn('block min-w-0 truncate font-semibold text-foreground', schedulingControlStyles.readableLabel)}>
             {row.job.job_reference}
           </span>
           {staffingBadge ? (
             <span
               data-testid={`schedule-job-staffing-${row.job.id}`}
               className={cn(
-                'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                'shrink-0 rounded-full px-1.5 py-0.5 font-semibold tabular-nums',
+                schedulingControlStyles.readableMeta,
                 staffingBadge.short
                   ? 'bg-amber-500/20 text-amber-200'
                   : 'bg-slate-700 text-slate-200'
@@ -1783,16 +1791,16 @@ function BoardRowIdentity({
           ) : null}
         </div>
         <p
-          className="mt-1 truncate text-sm text-muted-foreground"
+          className={cn('mt-1 truncate text-muted-foreground', schedulingControlStyles.readableMeta)}
           title={`${row.job.customer_name ? `${row.job.customer_name} · ` : ''}${row.job.title}`}
         >
           {row.job.customer_name ? `${row.job.customer_name} · ` : ''}{row.job.title}
         </p>
-        <p className="truncate text-xs text-muted-foreground">
+        <p className={cn('truncate text-muted-foreground', schedulingControlStyles.readableMeta)}>
           {row.job.site_address || 'No site'}
         </p>
         {row.job.estimated_duration_minutes ? (
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className={cn('mt-1 text-muted-foreground', schedulingControlStyles.readableMeta)}>
             Estimated {Math.round(row.job.estimated_duration_minutes / 60 * 10) / 10} hours
           </p>
         ) : null}
@@ -1803,10 +1811,10 @@ function BoardRowIdentity({
   if (row.kind === 'employee' && row.employee) {
     return (
       <div className="min-w-0 overflow-hidden">
-        <span className="block truncate font-semibold text-foreground">
+        <span className={cn('block truncate font-semibold text-foreground', schedulingControlStyles.readableLabel)}>
           {row.employee.full_name}
         </span>
-        <p className="mt-1 truncate text-sm text-muted-foreground">
+        <p className={cn('mt-1 truncate text-muted-foreground', schedulingControlStyles.readableMeta)}>
           {row.employee.team_name || 'No team'}
         </p>
       </div>
@@ -1816,10 +1824,10 @@ function BoardRowIdentity({
   if (row.kind === 'plant' && row.plant) {
     return (
       <div className="min-w-0 overflow-hidden">
-        <span className="block truncate font-semibold text-foreground">
+        <span className={cn('block truncate font-semibold text-foreground', schedulingControlStyles.readableLabel)}>
           {row.plant.nickname || row.plant.plant_id}
         </span>
-        <p className="mt-1 truncate text-sm text-muted-foreground">
+        <p className={cn('mt-1 truncate text-muted-foreground', schedulingControlStyles.readableMeta)}>
           {[row.plant.plant_id, row.plant.make, row.plant.model].filter(Boolean).join(' · ')}
         </p>
       </div>
@@ -1828,8 +1836,8 @@ function BoardRowIdentity({
 
   return (
     <div className="min-w-0 overflow-hidden">
-      <span className="block truncate font-semibold text-foreground">Unassigned</span>
-      <p className="mt-1 truncate text-sm text-muted-foreground">
+      <span className={cn('block truncate font-semibold text-foreground', schedulingControlStyles.readableLabel)}>Unassigned</span>
+      <p className={cn('mt-1 truncate text-muted-foreground', schedulingControlStyles.readableMeta)}>
         Visits with no {primary === SCHEDULING_BOARD_PRIMARIES.plant ? 'plant' : 'employees'} yet
       </p>
     </div>
@@ -2757,6 +2765,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     },
     [board, selectedDate, view]
   );
+  const selectedVisitDetails = useMemo(() => {
+    if (!activeVisitTarget || !board) return null;
+    return resolveSelectedVisitDetails({
+      jobId: activeVisitTarget.job.id,
+      visitId: activeVisitTarget.visit.id,
+      jobs: board.jobs,
+      visits: board.visits,
+      assignments: board.assignments,
+      visibleDates: weekDates,
+    });
+  }, [activeVisitTarget, board, weekDates]);
   const dailyTimelineBaseRange = useMemo(
     () => getDailyTimelineRange(board?.visits || [], selectedDate),
     [board?.visits, selectedDate]
@@ -5722,9 +5741,23 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   function handleBoardClick(event: MouseEvent<HTMLDivElement>) {
     if (
       event.target instanceof Element
-      && event.target.closest('[data-schedule-visit-card]')
+      && event.target.closest(
+        '[data-schedule-visit-card], [data-testid="schedule-resource-tabs"], [data-testid="schedule-selected-visit-details"]'
+      )
     ) return;
     setActiveVisitTarget(null);
+  }
+
+  function scrollDailyTimeline(direction: -1 | 1) {
+    const viewport = dailyTimelineViewportRef.current;
+    if (!viewport || effectiveDailyTimelineMode !== 'scroll') return;
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const step = Math.max(160, Math.round(viewport.clientWidth * 0.5));
+    const next = Math.min(
+      maxScroll,
+      Math.max(0, viewport.scrollLeft + direction * step)
+    );
+    viewport.scrollLeft = next;
   }
 
   function handleTimelinePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -6091,14 +6124,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             description="Plan work across the week and allocate employees and plant with clear availability warnings."
             icon={<CalendarDays className="h-5 w-5" />}
             className="shrink-0"
-            contentClassName="flex-row flex-nowrap items-center justify-between gap-3"
+            contentClassName="flex-row flex-wrap items-center justify-between gap-3"
             headingClassName="min-w-0 shrink space-y-1"
             titleClassName="whitespace-nowrap"
             descriptionClassName="truncate"
-            actionsClassName="w-auto shrink-0 flex-nowrap"
+            actionsClassName="w-auto min-w-0 max-w-full flex-wrap justify-end md:shrink"
             actions={(
-              <ScheduleExpandingActionGroup>
+              <ScheduleExpandingActionGroup className="max-w-full flex-wrap justify-end">
                 <ScheduleExpandingAction
+                  labels="visible"
                   icon={CalendarOff}
                   label="Plant availability"
                   className={schedulingControlStyles.outline}
@@ -6109,6 +6143,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   }}
                 />
                 <ScheduleExpandingAction
+                  labels="visible"
                   icon={FilePlus}
                   label="New Quote"
                   variant="outline"
@@ -6118,6 +6153,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   onClick={() => requestCreation('quote')}
                 />
                 <ScheduleExpandingAction
+                  labels="visible"
                   icon={Hash}
                   label="New Project Number"
                   variant="outline"
@@ -6127,6 +6163,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   onClick={() => requestCreation('project')}
                 />
                 <ScheduleExpandingAction
+                  labels="visible"
                   icon={CalendarPlus}
                   label="Quick add"
                   className={schedulingControlStyles.primary}
@@ -6140,6 +6177,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   data-testid="schedule-quick-add-button"
                 />
                 <ScheduleExpandingAction
+                  labels="visible"
                   icon={Settings}
                   label="Settings"
                   variant="outline"
@@ -6193,6 +6231,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   <TabsTrigger value="plant">Plant</TabsTrigger>
                 </TabsList>
               </Tabs>
+              {selectedVisitDetails ? (
+                <ScheduleSelectedVisitDetails
+                  details={selectedVisitDetails}
+                  onClear={() => setActiveVisitTarget(null)}
+                />
+              ) : null}
               {sidebarTab === 'jobs' ? (
                 <>
                   <div className="shrink-0 space-y-2">
@@ -6202,35 +6246,48 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       setQuoteStage(value as ScheduleQuoteStage | 'projects' | 'all')
                     }
                   >
-                    <TabsList className="grid w-full grid-cols-5">
-                      <TabsTrigger value="all" className="px-1 text-[10px]">
+                    <TabsList
+                      className="grid h-auto w-full grid-cols-3"
+                      data-testid="schedule-job-stage-filters"
+                    >
+                      <TabsTrigger value="all" className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         All ({returnedVisits.length + unscheduledQuotes.length + unscheduledProjects.length})
                       </TabsTrigger>
-                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className="px-1 text-[10px]">
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Draft ({quoteStageCounts.draft})
                       </TabsTrigger>
-                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.pending} className="px-1 text-[10px]">
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.pending} className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Pending ({quoteStageCounts.pending})
                       </TabsTrigger>
-                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.accepted} className="px-1 text-[10px]">
+                      <TabsTrigger value={SCHEDULE_QUOTE_STAGES.accepted} className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Accepted ({quoteStageCounts.accepted})
                       </TabsTrigger>
-                      <TabsTrigger value="projects" className="px-1 text-[10px]">
+                      <TabsTrigger value="projects" className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Projects ({unscheduledProjects.length})
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={quoteSearch}
-                      onChange={(event) => setQuoteSearch(event.target.value)}
-                      placeholder="Search unscheduled jobs"
-                      className="pl-9"
-                    />
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="schedule-queue-job-search"
+                      className={cn('block font-medium text-foreground', schedulingControlStyles.readableLabel)}
+                    >
+                      Jobs waiting to schedule
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="schedule-queue-job-search"
+                        value={quoteSearch}
+                        onChange={(event) => setQuoteSearch(event.target.value)}
+                        placeholder="Search unscheduled jobs"
+                        aria-label="Jobs waiting to schedule"
+                        className={cn('pl-9', schedulingControlStyles.readableLabel)}
+                      />
+                    </div>
                   </div>
                   {visibleSelectedQuote ? (
-                    <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
+                    <div className={cn('flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2', schedulingControlStyles.readableLabel)}>
                       <span className="truncate text-foreground">
                         Selected: {visibleSelectedQuote.base_quote_reference}
                       </span>
@@ -6306,32 +6363,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               ) : (
                 <>
                   <div className="shrink-0 space-y-2">
-                  {activeVisitTarget ? (
-                    <div className="rounded-md border border-scheduling/40 bg-scheduling-soft p-3 text-xs">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold text-foreground">
-                            {activeVisitTarget.job.job_reference} · Visit {activeVisitTarget.visit.sequence_number}
-                          </p>
-                          <p className="mt-1 text-muted-foreground">
-                            {format(parseISO(activeVisitTarget.visit.starts_at), 'EEE d MMM')}
-                            {' · '}
-                            {formatScheduleVisitTime(activeVisitTarget.visit.starts_at)}–
-                            {formatScheduleVisitTime(activeVisitTarget.visit.ends_at)}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setActiveVisitTarget(null)}
-                          className={cn('h-7 px-2', schedulingControlStyles.ghost)}
-                          aria-label="Clear selected visit"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
                   <Tabs
                     value={resourceAvailabilityView}
                     onValueChange={(value) =>
@@ -6339,13 +6370,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     }
                   >
                     <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="all" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                      <TabsTrigger value="all" className={cn('h-auto whitespace-normal px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         All ({sidebarTab === 'employee' ? matchingEmployees.length : matchingPlant.length})
                       </TabsTrigger>
-                      <TabsTrigger value="available" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                      <TabsTrigger value="available" className={cn('h-auto whitespace-normal px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Available ({sidebarTab === 'employee' ? availableEmployees.length : availablePlant.length})
                       </TabsTrigger>
-                      <TabsTrigger value="unavailable" className="whitespace-nowrap px-0.5 text-[10px] leading-none tracking-tight">
+                      <TabsTrigger value="unavailable" className={cn('h-auto whitespace-normal px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                         Unavailable ({sidebarTab === 'employee' ? unavailableEmployees.length : unavailablePlant.length})
                       </TabsTrigger>
                     </TabsList>
@@ -6359,13 +6390,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         }
                       >
                         <TabsList className="grid w-full grid-cols-3">
-                          <TabsTrigger value="all" aria-label="All people" className="px-1 text-[10px]">
+                          <TabsTrigger value="all" aria-label="All people" className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                             All
                           </TabsTrigger>
-                          <TabsTrigger value="employee" aria-label="Employees only" className="px-1 text-[10px]">
+                          <TabsTrigger value="employee" aria-label="Employees only" className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                             Employees
                           </TabsTrigger>
-                          <TabsTrigger value="subcontractor" aria-label="Subcontractors" className="px-1 text-[10px]">
+                          <TabsTrigger value="subcontractor" aria-label="Subcontractors" className={cn('h-auto px-1.5 py-1.5', schedulingControlStyles.readableLabel)}>
                             Subcontractors
                           </TabsTrigger>
                         </TabsList>
@@ -6385,7 +6416,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       value={resourceSearch}
                       onChange={(event) => setResourceSearch(event.target.value)}
                       placeholder="Search resources"
-                      className="pl-9"
+                      aria-label="Search resources"
+                      className={cn('pl-9', schedulingControlStyles.readableLabel)}
                     />
                   </div>
                   {view === SCHEDULING_BOARD_VIEWS.daily
@@ -6395,7 +6427,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     />
                   ) : null}
                   {selectedResource ? (
-                    <div className="flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2 text-xs">
+                    <div className={cn('flex items-center justify-between rounded-md border border-scheduling/40 bg-scheduling-soft p-2', schedulingControlStyles.readableLabel)}>
                       <span className="truncate text-foreground">
                         Selected: {selectedResource.label}
                       </span>
@@ -6533,7 +6565,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           >
             <CardHeader className="shrink-0 gap-3">
               <div
-                className="flex flex-nowrap items-center gap-3"
+                className="flex flex-wrap items-center gap-3"
                 data-testid="schedule-board-title-row"
               >
                 <div className="flex min-w-0 items-center gap-1.5">
@@ -6551,7 +6583,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </ScheduleHelpHint>
                 </div>
                 <div
-                  className="ml-auto flex shrink-0 flex-nowrap items-center gap-2"
+                  className="ml-auto flex min-w-0 flex-wrap items-center gap-2"
                   data-testid="schedule-board-title-controls"
                 >
                   <SchedulingDateRangeControls
@@ -6562,14 +6594,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     primary={primary}
                     onPrimaryChange={handlePrimaryChange}
                   />
-                  <div className="relative w-36 max-w-72 shrink-0">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={jobSearch}
-                      onChange={(event) => void setJobFilters({ q: event.target.value })}
-                      placeholder="Search jobs"
-                      className="pl-9"
-                    />
+                  <div className="w-44 max-w-72 shrink-0 space-y-1">
+                    <label
+                      htmlFor="schedule-board-job-search"
+                      className={cn('block font-medium text-foreground', schedulingControlStyles.readableLabel)}
+                    >
+                      Jobs on board
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="schedule-board-job-search"
+                        value={jobSearch}
+                        onChange={(event) => void setJobFilters({ q: event.target.value })}
+                        placeholder="Search jobs"
+                        aria-label="Jobs on board"
+                        className={cn('pl-9', schedulingControlStyles.readableLabel)}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6591,7 +6633,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               ) : null}
               {view === SCHEDULING_BOARD_VIEWS.daily ? (
                 <div
-                  className="flex min-h-7 flex-nowrap items-center justify-between gap-3"
+                  className="flex min-h-7 flex-wrap items-center justify-between gap-3"
                   data-testid="schedule-daily-instruction-row"
                 >
                   <ScheduleCopyDayTeamsControl
@@ -6600,8 +6642,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     onCopy={copyDayTeamsFromDate}
                   />
                   <TooltipProvider delayDuration={200}>
+                    <div className="hidden shrink-0 items-center gap-1 md:flex">
                     <div
-                      className="hidden shrink-0 items-center gap-1 md:flex"
+                      className="flex items-center gap-1"
                       role="group"
                       aria-label="Daily timeline display mode"
                     >
@@ -6652,6 +6695,35 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         </TooltipTrigger>
                         <TooltipContent side="bottom">Scroll</TooltipContent>
                       </Tooltip>
+                    </div>
+                      {effectiveDailyTimelineMode === 'scroll' ? (
+                        <div className="flex items-center gap-1" role="group" aria-label="Daily timeline scroll">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={cn('h-7 gap-1 px-2', schedulingControlStyles.outline, schedulingControlStyles.readableLabel)}
+                            aria-label="Earlier"
+                            title="Earlier"
+                            onClick={() => scrollDailyTimeline(-1)}
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                            Earlier
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={cn('h-7 gap-1 px-2', schedulingControlStyles.outline, schedulingControlStyles.readableLabel)}
+                            aria-label="Later"
+                            title="Later"
+                            onClick={() => scrollDailyTimeline(1)}
+                          >
+                            Later
+                            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   </TooltipProvider>
                 </div>

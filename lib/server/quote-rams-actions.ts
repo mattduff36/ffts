@@ -290,8 +290,8 @@ async function defaultQuery<T = Record<string, unknown>>(
   const client = createPgClient();
   await client.connect();
   try {
-    const result = await client.query<T>(sql, params);
-    return { rows: result.rows, rowCount: result.rowCount };
+    const result = await client.query(sql, params);
+    return { rows: result.rows as T[], rowCount: result.rowCount };
   } finally {
     await client.end();
   }

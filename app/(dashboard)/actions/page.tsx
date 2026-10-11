@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BellRing, CheckCircle2, ClipboardList, EyeOff, Settings } from 'lucide-react';
+import { BellRing, CheckCircle2, ClipboardList, EyeOff, Settings, ShieldCheck } from 'lucide-react';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +25,7 @@ import { ActionsOverviewPanel } from './components/ActionsOverviewPanel';
 import { ActionsSettingsTab } from './components/ActionsSettingsTab';
 import { ActionsSummaryCards } from './components/ActionsSummaryCards';
 import { IgnoredActionsPanel } from './components/IgnoredActionsPanel';
+import { QuoteRamsActionsPanel } from './components/QuoteRamsActionsPanel';
 
 const tabTriggerClassName = 'gap-2 data-[state=active]:bg-brand-yellow data-[state=active]:text-slate-900';
 
@@ -63,7 +64,11 @@ function ActionsContent() {
   const [summaryRefreshToken, setSummaryRefreshToken] = useState(0);
   const [summary, setSummary] = useState<ActionsSummaryStats>(EMPTY_ACTIONS_SUMMARY);
   const requestedTab = searchParams.get('tab') || 'vans';
-  const pageTab: 'overview' | 'settings' = requestedTab === 'settings' && canManage ? 'settings' : 'overview';
+  const pageTab: 'overview' | 'rams' | 'settings' = requestedTab === 'settings' && canManage
+    ? 'settings'
+    : requestedTab === 'rams'
+      ? 'rams'
+      : 'overview';
   const overviewTab: ActionsOverviewTabId = isValidActionsOverviewTabId(requestedTab)
     ? requestedTab
     : REMINDER_OVERVIEW_TABS[0]?.id || 'vans';
@@ -88,6 +93,10 @@ function ActionsContent() {
       if (!canManage) {
         router.replace('/actions?tab=vans', { scroll: false });
       }
+      return;
+    }
+
+    if (requestedTab === 'rams') {
       return;
     }
 
@@ -131,6 +140,11 @@ function ActionsContent() {
   function handlePageTabChange(value: string) {
     if (value === 'settings') {
       router.push('/actions?tab=settings', { scroll: false });
+      return;
+    }
+
+    if (value === 'rams') {
+      router.push('/actions?tab=rams', { scroll: false });
       return;
     }
 
@@ -187,21 +201,26 @@ function ActionsContent() {
         icon={<BellRing className="h-5 w-5" />}
       />
 
+      <p className="mb-2 text-xs text-muted-foreground">Daily-check action totals</p>
       <ActionsSummaryCards summary={summary} />
 
       <Tabs value={pageTab} onValueChange={handlePageTabChange}>
-        {canManage ? (
-          <TabsList>
-            <TabsTrigger value="overview" className={tabTriggerClassName}>
-              <ClipboardList className="h-4 w-4" />
-              Daily Checks
-            </TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="overview" className={tabTriggerClassName}>
+            <ClipboardList className="h-4 w-4" />
+            Daily Checks
+          </TabsTrigger>
+          <TabsTrigger value="rams" className={tabTriggerClassName}>
+            <ShieldCheck className="h-4 w-4" />
+            RAMS
+          </TabsTrigger>
+          {canManage ? (
             <TabsTrigger value="settings" className={tabTriggerClassName}>
               <Settings className="h-4 w-4" />
               Settings
             </TabsTrigger>
-          </TabsList>
-        ) : null}
+          ) : null}
+        </TabsList>
 
         {pageTab === 'overview' ? (
           <div className="mt-3 flex justify-end">
@@ -236,6 +255,10 @@ function ActionsContent() {
 
         <TabsContent value="overview" className="mt-0 space-y-6">
           {renderOverviewContent()}
+        </TabsContent>
+
+        <TabsContent value="rams" className="mt-4 space-y-6">
+          <QuoteRamsActionsPanel />
         </TabsContent>
 
         {canManage ? (

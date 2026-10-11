@@ -1019,11 +1019,21 @@ export default function QuotesPage() {
 
       <QuoteMarkAsAcceptedDialog
         open={Boolean(acceptQuote)}
+        quoteId={acceptQuote?.id ?? null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setAcceptQuote(null);
         }}
         actionLoading={Boolean(acceptQuote && quickActionQuoteId === acceptQuote.id)}
         onAcceptWithoutRams={handleAcceptWithoutRams}
+        onRamsAccepted={(result) => {
+          if (result.email_warning) {
+            toast.warning('Quote accepted with a RAMS email warning', { description: result.email_warning });
+          } else {
+            toast.success('Quote accepted and RAMS assigned');
+          }
+          setAcceptQuote(null);
+          void fetchData();
+        }}
       />
     </AppPageShell>
   );

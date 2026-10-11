@@ -53,6 +53,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils/cn';
 import { buildQuoteDisplayName, buildQuotePdfFilename } from '@/lib/quotes/quote-display-name';
 import { useAuth } from '@/lib/hooks/useAuth';
+import type { QuoteRamsMutationResponse } from '@/types/quote-rams';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import {
   deleteQuoteAttachment,
@@ -73,6 +74,7 @@ import {
   getQuoteRecipientEmail,
 } from '../quote-quick-actions';
 import { QuoteMarkAsAcceptedDialog } from './QuoteMarkAsAcceptedDialog';
+import { QuoteRamsActionPanel } from './QuoteRamsActionPanel';
 
 interface QuoteDetailsModalProps {
   open: boolean;
@@ -846,6 +848,17 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     }
   }
 
+  async function handleAcceptedWithRams(result: QuoteRamsMutationResponse) {
+    if (result.email_warning) {
+      toast.warning('Quote accepted with a RAMS email warning', { description: result.email_warning });
+    } else {
+      toast.success('Quote accepted and RAMS assigned');
+    }
+    setAcceptDialogOpen(false);
+    await fetchQuote();
+    onRefresh();
+  }
+
   async function handleDuplicateQuote() {
     const ok = await callAction('duplicate', {
       version_notes: revisionNotes,
@@ -1419,6 +1432,16 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                 </TabsContent>
 
                 <TabsContent value="workflow" className="space-y-4">
+                  {activeQuoteId ? (
+                    <QuoteRamsActionPanel
+                      quoteId={activeQuoteId}
+                      active={open}
+                      onChanged={() => {
+                        void fetchQuote();
+                        onRefresh();
+                      }}
+                    />
+                  ) : null}
                   {workflowError ? (
                     <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
                       {workflowError}
@@ -2422,9 +2445,11 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     </Dialog>
     <QuoteMarkAsAcceptedDialog
       open={acceptDialogOpen}
+      quoteId={activeQuoteId}
       onOpenChange={setAcceptDialogOpen}
       actionLoading={actionLoading}
       onAcceptWithoutRams={handleAcceptWithoutRams}
+      onRamsAccepted={(result) => { void handleAcceptedWithRams(result); }}
     />
     </>
   );

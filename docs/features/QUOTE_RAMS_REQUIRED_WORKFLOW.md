@@ -1,42 +1,30 @@
 # Quote RAMS-required workflow
 
-**Status:** Planned (UI stub in place)  
-**Created:** 24 August 2026  
-**Related:** `docs/features/RAMS_FEATURE_PRD.md`, current quote accept path (`po_received` / Accepted)
+Status: Implemented locally on 11 October 2026; pending release after review.
 
-## Current shipped behaviour
+## Agreed behaviour
 
-Sent quotes now use **Mark as Accepted**. The confirm question is “Are RAMS required for this job?”
+- Yes accepts the latest sent, commercially open quote immediately (`po_received`) and creates one outstanding quote RAMS action in the same database transaction. Cancel makes no change. No preserves the existing acceptance path without RAMS.
+- Assign the active quote manager (`requester_id` in `quote_manager_series`); require explicit eligible manager selection if missing/inactive. Managers/admins can reassign an open action.
+- Email only the assigned manager after commit. No RAMS desk or automatic CC. Failure leaves acceptance and action saved with a visible warning and explicit retry. Reassignment emails the new owner.
+- Complete only with an active RAMS document linked to this quote, confirmed by its assigned manager or an admin. Record completion and assignment changes in the quote timeline.
+- Existing Projects document upload/linking is used. No placeholder documents or fabricated safety information.
 
-| Choice | Behaviour now |
-|---|---|
-| **No** | Calls `mark_as_accepted`. Status becomes `po_received` (Accepted). No RAMS email. No `rams_requested_at`. |
-| **Yes** | Does not change status. Shows “This workflow is still being developed.” |
-| **Cancel** | Closes the dialog. No status change. |
+## Implementation
 
-The old **Trigger RAMS** control called `trigger_rams`, which still exists on `PATCH /api/quotes/[id]`. That action both moves the quote to `po_received` and emails the internal RAMS inbox (`QUOTE_RAMS_REQUEST_EMAIL` or the admin template address), with optional CC from `quote_rams_request_copy`. It does **not** create an Actions reminder or notify the job manager as assignee.
+Migration `20261011220000_quote_rams_actions.sql` adds the dedicated table, one action per quote, RLS and direct-write restrictions. Applied to the shared sample database on 11 October; production code remains on the earlier team-colour release until a separate release.
 
-Quote manager identity today is `quotes.requester_id`, plus denormalised `manager_name` / `manager_email`.
+`GET/POST /api/quotes/[id]/rams-action` provides context and accept/reassign/complete/retry-email. `GET /api/quote-rams-actions` lists owned actions or authorized management actions. Both quote acceptance entry points use the new path; quote Workflow and Actions > RAMS expose tracking and completion.
 
-## Intended Yes workflow
+Quote context remains subject to Quotes permission and its sensitive-access PIN. Managers assigned an action must retain that access to use the detail UI. Standalone Reminders remains unlisted, as agreed.
 
-1. **Trigger.** User clicks Mark as Accepted on a latest-version `sent` quote (details workflow or overview/current 3-dot next-status), then chooses **Yes**.
-2. **Do not use the old RAMS email as the Yes path.** That email is an internal RAMS-desk request, not a manager action.
-3. **Create a reminder/action** for the job manager (`requester_id`). Existing `reminder_actions` are fleet-centric (`van_id` / `plant_id` / `hgv_id`, `workflow_key`). A quote RAMS item will need either:
-   - a new `workflow_key` plus `metadata.quote_id`, or
-   - a dedicated quote-linked action table.
-4. **Targeting.** Assign to `requester_id`. If that profile is missing or inactive, fail closed and ask the operator to pick a manager. Do not silently fall back to the RAMS inbox.
-5. **Email vs in-app.** Prefer an Actions item the manager already sees, plus an optional email. Do not send the current `rams_request` template unless product still wants the RAMS desk copied.
-6. **Status while waiting.** Owner decision, 11 October 2026: accept immediately (`po_received`) and track RAMS separately as outstanding. Acceptance must persist together with the outstanding RAMS record, without duplicate open actions. Do not invent a new quote status. This decision is not yet implemented by the UI stub.
-7. **Completion.** Manager completes the action (and/or links a RAMS document). Timeline should record RAMS requested and RAMS completed separately from “Quote accepted”.
-8. **Idempotency.** Repeat Yes on the same quote must not create duplicate open actions.
+## Delivery and lifecycle limits
 
-## Open questions
+- Sending is claimed atomically to prevent duplicate delivery. Sent, currently sending and uncertain deliveries are not automatically retried. An interrupted/uncertain provider result requires manual reconciliation; no background retry worker is implemented.
+- Existing accepted quotes and old Trigger RAMS activity are not automatically backfilled into actions. The legacy `trigger_rams` endpoint is preserved and is not called by the new Yes flow.
+- Quote versions have separate IDs. Superseding/cancelling an outstanding RAMS action across quote versions is not automated.
+- Provider delivery has not been tested by sending real email. Verification uses mocked delivery and real PostgreSQL transactions rolled back after assertions.
 
-- Is the assignee always the quote manager, or can it be a RAMS coordinator?
-- Should the existing RAMS desk email still go out in addition to the manager action?
-- Reuse `reminder_actions.metadata` or add a first-class `quote_id`?
+## Verification
 
-## Out of scope for the stub
-
-Creating actions, sending manager email, writing `rams_requested_at` from the Yes button, and schema/migrations.
+Focused API, service and UI tests cover acceptance, missing manager, duplicate prevention, email failure, ownership, linked documents and completion. Real PostgreSQL checks cover transaction rollback, atomic acceptance/action, duplicate requests, completion permission replay and RLS write denial. Browser checks cover the quote prompt, quote Workflow context and Actions RAMS list. No real emails were sent by these checks.

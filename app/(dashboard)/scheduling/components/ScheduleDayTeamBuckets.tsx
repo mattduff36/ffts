@@ -21,6 +21,7 @@ import type { ScheduleOccupancySegment } from '@/types/scheduling';
 import type { ScheduleDayTeamSlot, ScheduleDayTeamSlotIndex, ScheduleTeamSettings } from '@/types/scheduling';
 import { ResourceDragCue, ScheduleResourceCardShell } from './ScheduleResourceCard';
 import { schedulingControlStyles } from './scheduling-control-styles';
+import { scheduleTeamColour } from './ScheduleTeamColours';
 
 export interface ScheduleDayTeamDragData {
   workDate: string;
@@ -64,8 +65,8 @@ function DayTeamSlotCard({
       } satisfies ScheduleDayTeamDragData,
     },
   });
-  const tint = schedulingControlStyles.dayTeamTints[slot.slot_index - 1]
-    || schedulingControlStyles.resourceEmployee;
+  const colour = scheduleTeamColour(slot.slot_index);
+  const tint = `${colour.tint} shadow-sm hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current`;
 
   return (
     <div
@@ -85,6 +86,7 @@ function DayTeamSlotCard({
           isDragging && 'opacity-40'
         )}
       >
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: colour.accent }} />
         <button
           ref={handleRef}
           type="button"
@@ -107,6 +109,10 @@ function DayTeamSlotCard({
         </button>
         <div className="min-w-0 flex-1 space-y-1 p-2 pl-0">
           <div className="flex items-center justify-between gap-1">
+            <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold text-slate-950"
+              style={{ backgroundColor: colour.accent }} aria-label={`Team bucket ${slot.slot_index}`}>
+              {slot.slot_index}
+            </span>
             <span className="truncate text-sm font-semibold text-slate-100" title={teamName}>
               {teamName}
             </span>

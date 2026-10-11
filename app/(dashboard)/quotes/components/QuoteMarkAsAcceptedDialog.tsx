@@ -50,7 +50,7 @@ export function QuoteMarkAsAcceptedDialog({
           <DialogHeader>
             <DialogTitle>Are RAMS required for this job?</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Yes will start the RAMS reminder workflow. No marks this quote as accepted without requesting RAMS.
+              RAMS tracking is not available yet. Yes shows the current limitation and leaves the quote unchanged. Choose No only if RAMS are not required; this marks the quote as accepted.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">

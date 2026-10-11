@@ -27,19 +27,14 @@ Quote manager identity today is `quotes.requester_id`, plus denormalised `manage
    - a dedicated quote-linked action table.
 4. **Targeting.** Assign to `requester_id`. If that profile is missing or inactive, fail closed and ask the operator to pick a manager. Do not silently fall back to the RAMS inbox.
 5. **Email vs in-app.** Prefer an Actions item the manager already sees, plus an optional email. Do not send the current `rams_request` template unless product still wants the RAMS desk copied.
-6. **Status while waiting.** Open question. Options:
-   - stay on `sent` until RAMS is done, then `po_received`; or
-   - move to `po_received` immediately and track RAMS outstanding via `rams_requested_at` / action status.
-   Do not invent a new quote status.
+6. **Status while waiting.** Owner decision, 11 October 2026: accept immediately (`po_received`) and track RAMS separately as outstanding. Acceptance must persist together with the outstanding RAMS record, without duplicate open actions. Do not invent a new quote status. This decision is not yet implemented by the UI stub.
 7. **Completion.** Manager completes the action (and/or links a RAMS document). Timeline should record RAMS requested and RAMS completed separately from “Quote accepted”.
 8. **Idempotency.** Repeat Yes on the same quote must not create duplicate open actions.
 
 ## Open questions
 
-- Stay on `sent` until RAMS is complete, or accept immediately?
 - Is the assignee always the quote manager, or can it be a RAMS coordinator?
 - Should the existing RAMS desk email still go out in addition to the manager action?
-- Does completing RAMS auto-progress `sent` → `po_received` if we keep the quote waiting?
 - Reuse `reminder_actions.metadata` or add a first-class `quote_id`?
 
 ## Out of scope for the stub

@@ -294,6 +294,7 @@ import {
 } from './ScheduleCompactControls';
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 import { schedulingControlStyles } from './scheduling-control-styles';
+import { ScheduleTeamColoursProvider, ScheduleAssignmentTeamMarkers, ScheduleVisitTeamColours } from './ScheduleTeamColours';
 import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
 import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
@@ -749,6 +750,7 @@ function AssignmentChip({
         <GripVertical className="h-3 w-3 shrink-0 opacity-80" aria-hidden="true" />
       </button>
       <span className="flex min-w-0 items-center gap-0.5 px-0.5">
+        <ScheduleAssignmentTeamMarkers assignment={assignment} />
         {assignment.resource_type === 'employee' ? (
           <UserRound className="h-3 w-3 shrink-0" />
         ) : (
@@ -884,7 +886,7 @@ function VisitCard({
       data-testid={visitCardTestId(visit.id, dndInstanceId)}
       style={{ ...style, touchAction: 'none' }}
       className={cn(
-        'flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
+        'relative flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
         className,
         visit.status === 'cancelled' && 'opacity-60',
         isDragging && 'cursor-grabbing opacity-40',
@@ -892,6 +894,7 @@ function VisitCard({
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
     >
+      <ScheduleVisitTeamColours assignments={assignments} jobId={job.id} visitId={visit.id} workDate={workDate} />
       <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
         <button
           ref={dragHandleRef}
@@ -5839,6 +5842,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       data-testid="schedule-manager-board-root"
       data-dnd-session-epoch={dndSessionEpoch}
     >
+      <ScheduleTeamColoursProvider dayTeams={board.day_teams} settings={teamSettingsFromBoard(board)}>
       <DragDropProvider
       key={dndSessionEpoch}
       sensors={[
@@ -7579,6 +7583,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         </AlertDialogContent>
       </AlertDialog>
       </DragDropProvider>
+      </ScheduleTeamColoursProvider>
     </div>
   );
 }

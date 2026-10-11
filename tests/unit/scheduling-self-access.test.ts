@@ -86,16 +86,30 @@ describe('requireSchedulingSelfAccess', () => {
       team_id: null,
       team_name: null,
     });
-    mockCanAccess.mockResolvedValue(false);
-    mockAccessLevel.mockResolvedValue(0);
+    mockCanAccess.mockResolvedValue(true);
+    mockAccessLevel.mockResolvedValue(2);
   });
 
-  it('allows an active employee without the scheduling module and uses only their authenticated id', async () => {
+  it('denies an active employee when the scheduling matrix is closed', async () => {
+    mockCanAccess.mockResolvedValue(false);
+
     const access = await requireSchedulingSelfAccess();
 
+    expect(mockCanAccess).toHaveBeenCalledWith('scheduling');
+    expect(access).toMatchObject({
+      allowed: false,
+      status: 403,
+      error: 'Scheduling access required',
+    });
+    expect(access.userId).toBeUndefined();
+  });
+
+  it('allows an active employee with the scheduling matrix and uses only their authenticated id', async () => {
+    const access = await requireSchedulingSelfAccess();
+
+    expect(mockCanAccess).toHaveBeenCalledWith('scheduling');
     expect(access).toMatchObject({ allowed: true, status: 200, userId: 'employee-1' });
     expect(mockRole).not.toHaveBeenCalled();
-    expect(mockCanAccess).not.toHaveBeenCalled();
     expect(mockAdmin.mock.results[0]?.value.getUserById).toHaveBeenCalledWith('employee-1');
   });
 
@@ -111,8 +125,23 @@ describe('requireSchedulingSelfAccess', () => {
 
     const access = await requireSchedulingSelfAccess();
 
+    expect(mockCanAccess).toHaveBeenCalledWith('scheduling');
     expect(access.userId).toBe('real-employee');
     expect(access.userId).not.toBe('view-as-user');
+    expect(mockRole).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the scheduling matrix check throws', async () => {
+    mockCanAccess.mockRejectedValue(new Error('matrix unavailable'));
+
+    const access = await requireSchedulingSelfAccess();
+
+    expect(access).toMatchObject({
+      allowed: false,
+      status: 403,
+      error: 'Scheduling self-service is unavailable',
+    });
+    expect(access.userId).toBeUndefined();
   });
 
   it('denies an unauthenticated session', async () => {

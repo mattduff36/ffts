@@ -372,23 +372,21 @@ async function defaultLoadAssignee(profileId: string): Promise<{ email: string |
   };
 }
 
+async function quotesAccessLevelForActor(userId: string): Promise<number> {
+  const { getEffectiveRole } = await import('@/lib/utils/view-as');
+  const effectiveRole = await getEffectiveRole();
+  if (!effectiveRole.user_id || effectiveRole.user_id !== userId) return 0;
+
+  const { getEffectiveModuleAccessLevel } = await import('@/lib/utils/rbac');
+  return getEffectiveModuleAccessLevel('quotes');
+}
+
 async function defaultIsManagerOrAdmin(userId: string): Promise<boolean> {
-  const { isManagerOrAdmin } = await import('@/lib/utils/permissions');
-  return isManagerOrAdmin(userId);
+  return (await quotesAccessLevelForActor(userId)) >= 4;
 }
 
 async function defaultIsQuoteAdmin(userId: string): Promise<boolean> {
-  const { createAdminClient } = await import('@/lib/supabase/admin');
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('profiles')
-    .select('super_admin, roles!inner(role_class, is_super_admin)')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error || !data) return false;
-  const role = Array.isArray(data.roles) ? data.roles[0] : data.roles;
-  const typedRole = role as { role_class?: string | null; is_super_admin?: boolean | null } | null;
-  return data.super_admin === true || typedRole?.is_super_admin === true || typedRole?.role_class === 'admin';
+  return (await quotesAccessLevelForActor(userId)) >= 5;
 }
 
 function resolveDeps(deps?: QuoteRamsDeps) {
@@ -853,21 +851,18 @@ export async function retryQuoteRamsEmail(input: {
   actorUserId: string;
   hasQuotesAccess: boolean;
 }, deps?: QuoteRamsDeps): Promise<QuoteRamsMutationResponse> {
-  const resolved = resolveDeps(deps);
-  const existing = await loadAction(resolved.query, input.quoteId);
-  if (!existing) {
-    throw new QuoteRamsActionError({ message: 'RAMS action not found.', status: 404, code: 'action_not_found' });
-  }
-
-  const allowed = existing.assignee_profile_id === input.actorUserId
-    || input.hasQuotesAccess
-    || (await resolved.isQuoteAdmin(input.actorUserId));
-  if (!allowed) {
+  if (!input.hasQuotesAccess) {
     throw new QuoteRamsActionError({
       message: 'You cannot retry this RAMS email.',
       status: 403,
       code: 'retry_forbidden',
     });
+  }
+
+  const resolved = resolveDeps(deps);
+  const existing = await loadAction(resolved.query, input.quoteId);
+  if (!existing) {
+    throw new QuoteRamsActionError({ message: 'RAMS action not found.', status: 404, code: 'action_not_found' });
   }
 
   if (existing.email_status === 'uncertain' || existing.email_status === 'sending' || existing.email_status === 'sent') {

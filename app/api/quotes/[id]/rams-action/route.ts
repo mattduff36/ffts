@@ -86,10 +86,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     if (confirmationNote && confirmationNote.length > 4000) return privateJson({ error: 'Confirmation notes must be 4,000 characters or fewer.' }, { status: 400 });
 
-    if (action === 'accept' || action === 'reassign') {
-      const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
-      if (sensitiveAccessResponse) return sensitiveAccessResponse;
-    }
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
 
     if (action === 'accept') {
       const result = await acceptQuoteRams({ quoteId: id, actorUserId: user.id, managerProfileId });
@@ -109,11 +107,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return privateJson(result);
     }
 
-    const sensitiveAccessResponse = await requireSensitiveModuleAccess('quotes');
     const result = await retryQuoteRamsEmail({
       quoteId: id,
       actorUserId: user.id,
-      hasQuotesAccess: sensitiveAccessResponse === null,
+      hasQuotesAccess: true,
     });
     return privateJson(result);
   } catch (error) {

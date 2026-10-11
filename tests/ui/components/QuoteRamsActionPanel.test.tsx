@@ -5,10 +5,24 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { QuoteRamsActionPanel } from '@/app/(dashboard)/quotes/components/QuoteRamsActionPanel';
 
 const mockUseAuth = vi.fn();
+const mockUsePermissionSnapshot = vi.fn();
 
 vi.mock('@/lib/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
+
+vi.mock('@/lib/hooks/usePermissionSnapshot', () => ({
+  usePermissionSnapshot: () => mockUsePermissionSnapshot(),
+}));
+
+function permissions(quotesLevel: number | null, overrides: Record<string, unknown> = {}) {
+  return {
+    permissionLevels: quotesLevel == null ? null : { quotes: quotesLevel },
+    isLoading: false,
+    error: null,
+    ...overrides,
+  };
+}
 
 const quoteId = '22222222-2222-4222-8222-222222222222';
 
@@ -47,7 +61,8 @@ describe('QuoteRamsActionPanel', () => {
   });
 
   it('hides completion from someone who is not the assignee or an admin', async () => {
-    mockUseAuth.mockReturnValue({ profile: { id: 'other-user' }, isAdmin: false, isManager: false });
+    mockUseAuth.mockReturnValue({ profile: { id: 'other-user' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(3));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(contextResponse()));
 
     render(<QuoteRamsActionPanel quoteId={quoteId} />);
@@ -58,7 +73,8 @@ describe('QuoteRamsActionPanel', () => {
   });
 
   it('requires a linked document before the assignee or an admin can confirm completion', async () => {
-    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' }, isAdmin: false, isManager: true });
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(2));
     const fetchMock = vi.fn().mockResolvedValue(contextResponse());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -70,7 +86,8 @@ describe('QuoteRamsActionPanel', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/quotes/${quoteId}/rams-action`);
 
-    mockUseAuth.mockReturnValue({ profile: { id: 'admin-1' }, isAdmin: true, isManager: false });
+    mockUseAuth.mockReturnValue({ profile: { id: 'admin-1' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(5));
     rerender(<QuoteRamsActionPanel quoteId={quoteId} />);
 
     expect(screen.getByRole('button', { name: 'Confirm complete' })).toBeInTheDocument();
@@ -79,7 +96,8 @@ describe('QuoteRamsActionPanel', () => {
   });
 
   it('keeps an email failure warning visible after refreshing the saved action', async () => {
-    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' }, isAdmin: false, isManager: true });
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(1));
     const initial = contextResponse();
     const body = await initial.json();
     body.action.email_status = 'failed';
@@ -96,7 +114,8 @@ describe('QuoteRamsActionPanel', () => {
   });
 
   it('shows a quotes access error instead of an empty success state', async () => {
-    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' }, isAdmin: false, isManager: true });
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(4));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
@@ -107,5 +126,41 @@ describe('QuoteRamsActionPanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Quotes access is required.');
     expect(screen.queryByText(/No RAMS action is recorded/)).not.toBeInTheDocument();
+  });
+
+  it('matches quotes matrix levels and hides controls while permissions are loading or failed', async () => {
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(0));
+    const failedEmail = contextResponse();
+    const body = await failedEmail.json();
+    body.action.email_status = 'failed';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ...failedEmail, json: async () => body }));
+
+    const { rerender } = render(<QuoteRamsActionPanel quoteId={quoteId} />);
+    expect(await screen.findByText(/Alex Manager/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm complete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retry.*email/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reassign' })).not.toBeInTheDocument();
+
+    mockUsePermissionSnapshot.mockReturnValue(permissions(5, { isLoading: true }));
+    rerender(<QuoteRamsActionPanel quoteId={quoteId} />);
+    expect(screen.queryByRole('button', { name: 'Confirm complete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retry.*email/i })).not.toBeInTheDocument();
+
+    mockUsePermissionSnapshot.mockReturnValue(permissions(5, { error: new Error('matrix lookup failed') }));
+    rerender(<QuoteRamsActionPanel quoteId={quoteId} />);
+    expect(screen.queryByRole('button', { name: 'Confirm complete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retry.*email/i })).not.toBeInTheDocument();
+
+    mockUseAuth.mockReturnValue({ profile: { id: 'other-user' } });
+    mockUsePermissionSnapshot.mockReturnValue(permissions(4));
+    rerender(<QuoteRamsActionPanel quoteId={quoteId} />);
+    expect(screen.queryByRole('button', { name: 'Confirm complete' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reassign' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retry.*email/i })).toBeInTheDocument();
+
+    mockUsePermissionSnapshot.mockReturnValue(permissions(5));
+    rerender(<QuoteRamsActionPanel quoteId={quoteId} />);
+    expect(screen.getByRole('button', { name: 'Confirm complete' })).toBeInTheDocument();
   });
 });

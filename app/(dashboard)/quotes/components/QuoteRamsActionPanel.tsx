@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import type {
   QuoteRamsActionStatus,
   QuoteRamsContextResponse,
@@ -41,7 +42,10 @@ export function QuoteRamsActionPanel({
   active?: boolean;
   onChanged?: () => void;
 }) {
-  const { profile, isAdmin, isManager } = useAuth();
+  const { profile } = useAuth();
+  const { permissionLevels, isLoading: permissionsLoading, error: permissionsError } = usePermissionSnapshot();
+  const quotesLevel = permissionLevels?.quotes;
+  const quotesControlsReady = !permissionsLoading && !permissionsError && typeof quotesLevel === 'number' && quotesLevel > 0;
   const [context, setContext] = useState<QuoteRamsContextResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [accessMessage, setAccessMessage] = useState<string | null>(null);
@@ -146,13 +150,19 @@ export function QuoteRamsActionPanel({
 
   const action = context?.action ?? null;
   const canComplete = Boolean(
-    action
+    quotesControlsReady
+    && action
     && action.status === 'open'
-    && (isAdmin || (profile?.id && profile.id === action.assignee_profile_id))
+    && ((profile?.id && profile.id === action.assignee_profile_id) || quotesLevel >= 5)
   );
-  const canReassign = Boolean(action && action.status === 'open' && (isManager || isAdmin));
+  const canReassign = Boolean(quotesControlsReady && action && action.status === 'open' && quotesLevel >= 4);
   const emailBlocked = action?.email_status === 'sending' || action?.email_status === 'uncertain';
-  const canRetry = Boolean(action && action.status === 'open' && (action.email_status === 'pending' || action.email_status === 'failed'));
+  const canRetry = Boolean(
+    quotesControlsReady
+    && action
+    && action.status === 'open'
+    && (action.email_status === 'pending' || action.email_status === 'failed')
+  );
 
   return (
     <section className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-sm" aria-label="RAMS action">

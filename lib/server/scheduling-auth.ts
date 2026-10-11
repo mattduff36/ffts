@@ -100,6 +100,11 @@ export async function requireSchedulingSelfAccess(): Promise<SchedulingAccessRes
       return denySchedulingSelfAccess(403, SELF_ACCESS_UNAVAILABLE);
     }
 
+    const matrixAllowed = await canEffectiveRoleAccessModule('scheduling');
+    if (!matrixAllowed) {
+      return denySchedulingSelfAccess(403, 'Scheduling access required');
+    }
+
     return {
       allowed: true,
       status: 200,

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { canEffectiveRoleAccessModule } from '@/lib/utils/rbac';
-import { isManagerOrAdmin } from '@/lib/utils/permissions';
-import { callerIsQuoteAdmin, listQuoteRamsActions } from '@/lib/server/quote-rams-actions';
+import { getEffectiveModuleAccessLevel } from '@/lib/utils/rbac';
+import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
+import { listQuoteRamsActions } from '@/lib/server/quote-rams-actions';
 import type { QuoteRamsActionStatus } from '@/types/quote-rams';
 
 function privateJson(body: unknown, init: ResponseInit = {}) {
@@ -12,15 +12,6 @@ function privateJson(body: unknown, init: ResponseInit = {}) {
 export const runtime = 'nodejs';
 
 const STATUSES = new Set<QuoteRamsActionStatus>(['open', 'completed', 'cancelled']);
-
-async function canListAllQuoteRamsActions(userId: string): Promise<boolean> {
-  const [actionsAccess, managerOrAdmin, quoteAdmin] = await Promise.all([
-    canEffectiveRoleAccessModule('actions'),
-    isManagerOrAdmin(userId),
-    callerIsQuoteAdmin(userId),
-  ]);
-  return actionsAccess && (managerOrAdmin || quoteAdmin);
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,9 +26,14 @@ export async function GET(request: NextRequest) {
       return privateJson({ error: 'Choose a valid RAMS action status.', code: 'invalid_status' }, { status: 400 });
     }
 
+    const sensitiveAccessResponse = await requireSensitiveModuleAccess('actions');
+    if (sensitiveAccessResponse) return sensitiveAccessResponse;
+
+    const actionsLevel = await getEffectiveModuleAccessLevel('actions');
+    if (actionsLevel === 0) return privateJson({ error: 'Forbidden' }, { status: 403 });
     const actions = await listQuoteRamsActions({
       userId: user.id,
-      listAll: await canListAllQuoteRamsActions(user.id),
+      listAll: actionsLevel >= 4,
       status: statusParam === 'all' ? null : statusParam as QuoteRamsActionStatus,
     });
     return privateJson({ actions });

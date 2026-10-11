@@ -134,14 +134,43 @@ describe('POST/GET /api/quotes/[id]/rams-action', () => {
     });
     expect(denied.status).toBe(403);
     await expect(denied.json()).resolves.toMatchObject({ code: 'completion_forbidden' });
-    expect(harness.requireSensitiveModuleAccess).toHaveBeenCalledTimes(sensitiveCalls);
+    expect(harness.requireSensitiveModuleAccess).toHaveBeenCalledTimes(sensitiveCalls + 1);
+    expect(harness.requireSensitiveModuleAccess).toHaveBeenCalledWith('quotes');
   });
 
-  it('lets an assignee retry email without quotes-module access', async () => {
+  it('blocks complete and retry before service effects when quotes access or the PIN fails', async () => {
     const { POST } = await import('@/app/api/quotes/[id]/rams-action/route');
+    const documentId = '66666666-6666-4666-8666-666666666666';
+
     harness.requireSensitiveModuleAccess.mockResolvedValue(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     );
+    const deniedComplete = await POST(post({ action: 'complete', rams_document_id: documentId }), {
+      params: Promise.resolve({ id: QUOTE_ID }),
+    });
+    expect(deniedComplete.status).toBe(403);
+    expect(harness.completeQuoteRams).not.toHaveBeenCalled();
+
+    const deniedRetry = await POST(post({ action: 'retry-email' }), { params: Promise.resolve({ id: QUOTE_ID }) });
+    expect(deniedRetry.status).toBe(403);
+    expect(harness.retryQuoteRamsEmail).not.toHaveBeenCalled();
+
+    harness.requireSensitiveModuleAccess.mockResolvedValue(
+      NextResponse.json({ error: 'Sensitive access PIN required for protected modules.', code: 'SENSITIVE_PIN_REQUIRED' }, { status: 428 })
+    );
+    const pinComplete = await POST(post({ action: 'complete', rams_document_id: documentId }), {
+      params: Promise.resolve({ id: QUOTE_ID }),
+    });
+    expect(pinComplete.status).toBe(428);
+    await expect(pinComplete.json()).resolves.toMatchObject({ code: 'SENSITIVE_PIN_REQUIRED' });
+    const pinRetry = await POST(post({ action: 'retry-email' }), { params: Promise.resolve({ id: QUOTE_ID }) });
+    expect(pinRetry.status).toBe(428);
+    expect(harness.completeQuoteRams).not.toHaveBeenCalled();
+    expect(harness.retryQuoteRamsEmail).not.toHaveBeenCalled();
+  });
+
+  it('retries only after the quotes guard succeeds and fails closed when the matrix lookup throws', async () => {
+    const { POST } = await import('@/app/api/quotes/[id]/rams-action/route');
     harness.retryQuoteRamsEmail.mockResolvedValue({
       action: { id: 'action', email_status: 'sent' },
       created: false,
@@ -150,10 +179,19 @@ describe('POST/GET /api/quotes/[id]/rams-action', () => {
 
     const response = await POST(post({ action: 'retry-email' }), { params: Promise.resolve({ id: QUOTE_ID }) });
     expect(response.status).toBe(200);
+    expect(harness.requireSensitiveModuleAccess).toHaveBeenCalledWith('quotes');
     expect(harness.retryQuoteRamsEmail).toHaveBeenCalledWith({
       quoteId: QUOTE_ID,
       actorUserId: USER_ID,
-      hasQuotesAccess: false,
+      hasQuotesAccess: true,
     });
+
+    harness.requireSensitiveModuleAccess.mockRejectedValue(new Error('matrix lookup failed'));
+    const failed = await POST(post({ action: 'complete', rams_document_id: '66666666-6666-4666-8666-666666666666' }), {
+      params: Promise.resolve({ id: QUOTE_ID }),
+    });
+    expect(failed.status).toBe(500);
+    expect(harness.completeQuoteRams).not.toHaveBeenCalled();
+    expect(harness.retryQuoteRamsEmail).toHaveBeenCalledTimes(1);
   });
 });

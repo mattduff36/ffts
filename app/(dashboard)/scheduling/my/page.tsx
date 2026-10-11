@@ -5,12 +5,14 @@ import { CalendarCheck } from 'lucide-react';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { SchedulingEmployeeView } from '../components/SchedulingEmployeeView';
 
 export default function MySchedulePage() {
-  const { user, loading } = useAuth();
-  if (loading) return <PageLoader message="Loading your schedule..." />;
-  if (!user) return null;
+  const { user, loading: authLoading } = useAuth();
+  const { hasPermission, loading: permissionLoading } = usePermissionCheck('scheduling');
+  if (authLoading || permissionLoading) return <PageLoader message="Loading your schedule..." />;
+  if (!user || !hasPermission) return null;
 
   return (
     <AppPageShell width="wide">

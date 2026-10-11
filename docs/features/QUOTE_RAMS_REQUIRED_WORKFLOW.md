@@ -1,6 +1,6 @@
 # Quote RAMS-required workflow
 
-Status: Implemented locally on 11 October 2026; pending release after review.
+Status: Implemented on 11 October 2026; permission-matrix enforcement verified before release.
 
 ## Agreed behaviour
 
@@ -12,11 +12,13 @@ Status: Implemented locally on 11 October 2026; pending release after review.
 
 ## Implementation
 
-Migration `20261011220000_quote_rams_actions.sql` adds the dedicated table, one action per quote, RLS and direct-write restrictions. Applied to the shared sample database on 11 October; production code remains on the earlier team-colour release until a separate release.
+Migration `20261011220000_quote_rams_actions.sql` adds the dedicated table, one action per quote, RLS and direct-write restrictions. It and the matrix-access restriction migration were applied to the shared sample database on 11 October.
 
 `GET/POST /api/quotes/[id]/rams-action` provides context and accept/reassign/complete/retry-email. `GET /api/quote-rams-actions` lists owned actions or authorized management actions. Both quote acceptance entry points use the new path; quote Workflow and Actions > RAMS expose tracking and completion.
 
-Quote context remains subject to Quotes permission and its sensitive-access PIN. Managers assigned an action must retain that access to use the detail UI. Standalone Reminders remains unlisted, as agreed.
+Quote context and every mutation require Quotes permission and its configured sensitive-access PIN. Assigned managers cannot bypass these checks. Reassignment requires Quotes level 4 or 5; completion requires the assigned manager or Quotes level 5, plus a linked active RAMS document. UI controls use the same matrix snapshot as other modules, including view-as semantics.
+
+The RAMS list requires Actions permission and its configured PIN: levels below 4 see only owned actions; levels 4 and 5 see all. Migration `20261011230000_quote_rams_matrix_access.sql` revokes direct authenticated table reads as well as writes so an assignee cannot bypass the matrix through the database API. Server-only queries remain available behind the route guards. Standalone Reminders remains unlisted, as agreed.
 
 ## Delivery and lifecycle limits
 

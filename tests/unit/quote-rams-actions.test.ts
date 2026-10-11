@@ -13,8 +13,21 @@ import {
   type QuoteRamsDeps,
 } from '@/lib/server/quote-rams-actions';
 
+const matrix = vi.hoisted(() => ({
+  getEffectiveRole: vi.fn(),
+  getEffectiveModuleAccessLevel: vi.fn(),
+}));
+
 vi.mock('@/lib/server/resend', () => ({
   sendResendEmail: vi.fn(),
+}));
+
+vi.mock('@/lib/utils/view-as', () => ({
+  getEffectiveRole: matrix.getEffectiveRole,
+}));
+
+vi.mock('@/lib/utils/rbac', () => ({
+  getEffectiveModuleAccessLevel: matrix.getEffectiveModuleAccessLevel,
 }));
 
 vi.mock('@/lib/server/resend-email-config', () => ({
@@ -258,6 +271,13 @@ function createDeps(state: FakeState, overrides: Partial<QuoteRamsDeps> = {}) {
   return { deps, sent };
 }
 
+function withoutRoleOverrides(deps: QuoteRamsDeps): QuoteRamsDeps {
+  const next = { ...deps };
+  delete next.isManagerOrAdmin;
+  delete next.isQuoteAdmin;
+  return next;
+}
+
 describe('quote RAMS actions', () => {
   let state: FakeState;
 
@@ -413,7 +433,7 @@ describe('quote RAMS actions', () => {
     const retained = await retryQuoteRamsEmail({
       quoteId: QUOTE_ID,
       actorUserId: REQUESTER_ID,
-      hasQuotesAccess: false,
+      hasQuotesAccess: true,
     }, deps);
     expect(retained.email_warning).toContain('uncertain');
     expect(calls).toHaveLength(1);
@@ -428,10 +448,97 @@ describe('quote RAMS actions', () => {
     const retried = await retryQuoteRamsEmail({
       quoteId: QUOTE_ID,
       actorUserId: REQUESTER_ID,
-      hasQuotesAccess: false,
+      hasQuotesAccess: true,
     }, retryDeps);
     expect(retried.action.email_status).toBe('sent');
     expect(calls).toEqual(['send', 'manager@example.test']);
+  });
+
+  it('denies retry without quotes access even for the assignee or a quote admin', async () => {
+    const { deps, sent } = createDeps(state);
+    await acceptQuoteRams({ quoteId: QUOTE_ID, actorUserId: ACTOR_ID }, deps);
+    state.actions[0].email_status = 'failed';
+
+    await expect(retryQuoteRamsEmail({
+      quoteId: QUOTE_ID,
+      actorUserId: REQUESTER_ID,
+      hasQuotesAccess: false,
+    }, { ...deps, isQuoteAdmin: async () => true })).rejects.toMatchObject({ code: 'retry_forbidden' });
+    await expect(retryQuoteRamsEmail({
+      quoteId: QUOTE_ID,
+      actorUserId: ADMIN_ID,
+      hasQuotesAccess: false,
+    }, { ...deps, isQuoteAdmin: async () => true })).rejects.toMatchObject({ code: 'retry_forbidden' });
+
+    expect(sent).toEqual(['manager@example.test']);
+    expect(state.actions[0].email_status).toBe('failed');
+  });
+
+  it('uses quotes matrix levels for the effective user and fails closed when lookup throws', async () => {
+    const { deps, sent } = createDeps(state);
+    const defaults = withoutRoleOverrides(deps);
+    await acceptQuoteRams({ quoteId: QUOTE_ID, actorUserId: ACTOR_ID }, defaults);
+    expect(state.actions[0].assignee_profile_id).toBe(REQUESTER_ID);
+
+    matrix.getEffectiveRole.mockResolvedValue({ user_id: ACTOR_ID, role_class: 'manager', role_name: 'Manager' });
+    matrix.getEffectiveModuleAccessLevel.mockResolvedValue(3);
+    await expect(reassignQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      managerProfileId: OTHER_MANAGER_ID,
+    }, defaults)).rejects.toMatchObject({ code: 'reassign_forbidden' });
+    expect(matrix.getEffectiveModuleAccessLevel).toHaveBeenCalledWith('quotes');
+    expect(state.actions[0].assignee_profile_id).toBe(REQUESTER_ID);
+
+    matrix.getEffectiveRole.mockResolvedValue({ user_id: ACTOR_ID, role_class: 'employee', role_name: 'Employee' });
+    matrix.getEffectiveModuleAccessLevel.mockResolvedValue(4);
+    await reassignQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      managerProfileId: OTHER_MANAGER_ID,
+    }, defaults);
+    expect(state.actions[0].assignee_profile_id).toBe(OTHER_MANAGER_ID);
+
+    matrix.getEffectiveRole.mockResolvedValue({ user_id: ACTOR_ID, role_class: 'admin', role_name: 'Admin' });
+    matrix.getEffectiveModuleAccessLevel.mockResolvedValue(4);
+    await expect(completeQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      ramsDocumentId: DOC_ID,
+    }, defaults)).rejects.toMatchObject({ code: 'completion_forbidden' });
+    expect(state.actions[0].status).toBe('open');
+
+    matrix.getEffectiveModuleAccessLevel.mockClear();
+    matrix.getEffectiveRole.mockResolvedValue({ user_id: ADMIN_ID, role_class: 'admin', role_name: 'Admin' });
+    matrix.getEffectiveModuleAccessLevel.mockResolvedValue(5);
+    await expect(reassignQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      managerProfileId: REQUESTER_ID,
+    }, defaults)).rejects.toMatchObject({ code: 'reassign_forbidden' });
+    expect(matrix.getEffectiveModuleAccessLevel).not.toHaveBeenCalled();
+    expect(state.actions[0].assignee_profile_id).toBe(OTHER_MANAGER_ID);
+
+    matrix.getEffectiveRole.mockResolvedValue({ user_id: ACTOR_ID, role_class: 'employee', role_name: 'Employee' });
+    matrix.getEffectiveModuleAccessLevel.mockResolvedValue(5);
+    const completed = await completeQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      ramsDocumentId: DOC_ID,
+    }, defaults);
+    expect(completed.action.status).toBe('completed');
+    expect(completed.action.completed_by).toBe(ACTOR_ID);
+
+    state.actions[0].status = 'open';
+    matrix.getEffectiveModuleAccessLevel.mockRejectedValue(new Error('matrix lookup failed'));
+    await expect(reassignQuoteRams({
+      quoteId: QUOTE_ID,
+      actorUserId: ACTOR_ID,
+      managerProfileId: REQUESTER_ID,
+    }, defaults)).rejects.toThrow('matrix lookup failed');
+    expect(state.actions[0].status).toBe('open');
+    expect(state.actions[0].assignee_profile_id).toBe(OTHER_MANAGER_ID);
+    expect(sent).toEqual(['manager@example.test', 'manager@example.test']);
   });
 
   it('does not call Resend when NODE_ENV is test', async () => {

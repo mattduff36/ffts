@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const harness = vi.hoisted(() => ({
   getUser: vi.fn(),
-  canEffectiveRoleAccessModule: vi.fn(),
-  isManagerOrAdmin: vi.fn(),
-  callerIsQuoteAdmin: vi.fn(),
+  requireSensitiveModuleAccess: vi.fn(),
+  getEffectiveModuleAccessLevel: vi.fn(),
   listQuoteRamsActions: vi.fn(),
 }));
 
@@ -13,16 +12,15 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { getUser: harness.getUser } }),
 }));
 
-vi.mock('@/lib/utils/rbac', () => ({
-  canEffectiveRoleAccessModule: harness.canEffectiveRoleAccessModule,
+vi.mock('@/lib/server/sensitive-module-access', () => ({
+  requireSensitiveModuleAccess: harness.requireSensitiveModuleAccess,
 }));
 
-vi.mock('@/lib/utils/permissions', () => ({
-  isManagerOrAdmin: harness.isManagerOrAdmin,
+vi.mock('@/lib/utils/rbac', () => ({
+  getEffectiveModuleAccessLevel: harness.getEffectiveModuleAccessLevel,
 }));
 
 vi.mock('@/lib/server/quote-rams-actions', () => ({
-  callerIsQuoteAdmin: harness.callerIsQuoteAdmin,
   listQuoteRamsActions: harness.listQuoteRamsActions,
 }));
 
@@ -36,9 +34,8 @@ describe('GET /api/quote-rams-actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     harness.getUser.mockResolvedValue({ data: { user: { id: USER_ID } }, error: null });
-    harness.canEffectiveRoleAccessModule.mockResolvedValue(false);
-    harness.isManagerOrAdmin.mockResolvedValue(false);
-    harness.callerIsQuoteAdmin.mockResolvedValue(false);
+    harness.requireSensitiveModuleAccess.mockResolvedValue(null);
+    harness.getEffectiveModuleAccessLevel.mockResolvedValue(1);
     harness.listQuoteRamsActions.mockResolvedValue([]);
   });
 
@@ -48,21 +45,31 @@ describe('GET /api/quote-rams-actions', () => {
     const response = await GET(get());
     expect(response.status).toBe(401);
     expect(harness.listQuoteRamsActions).not.toHaveBeenCalled();
+    expect(harness.requireSensitiveModuleAccess).not.toHaveBeenCalled();
   });
 
-  it('lists own rows unless the caller is an actions manager or admin', async () => {
+  it('lists own rows below actions level 4 and every row at level 4 or above', async () => {
     const { GET } = await import('@/app/api/quote-rams-actions/route');
 
     const own = await GET(get());
     expect(own.status).toBe(200);
+    expect(harness.requireSensitiveModuleAccess).toHaveBeenCalledWith('actions');
+    expect(harness.getEffectiveModuleAccessLevel).toHaveBeenCalledWith('actions');
     expect(harness.listQuoteRamsActions).toHaveBeenLastCalledWith({
       userId: USER_ID,
       listAll: false,
       status: 'open',
     });
 
-    harness.canEffectiveRoleAccessModule.mockResolvedValue(true);
-    harness.isManagerOrAdmin.mockResolvedValue(true);
+    harness.getEffectiveModuleAccessLevel.mockResolvedValue(3);
+    await GET(get('completed'));
+    expect(harness.listQuoteRamsActions).toHaveBeenLastCalledWith({
+      userId: USER_ID,
+      listAll: false,
+      status: 'completed',
+    });
+
+    harness.getEffectiveModuleAccessLevel.mockResolvedValue(4);
     const managers = await GET(get('all'));
     expect(managers.status).toBe(200);
     expect(harness.listQuoteRamsActions).toHaveBeenLastCalledWith({
@@ -71,21 +78,42 @@ describe('GET /api/quote-rams-actions', () => {
       status: null,
     });
 
-    harness.isManagerOrAdmin.mockResolvedValue(false);
-    harness.callerIsQuoteAdmin.mockResolvedValue(true);
-    await GET(get('completed'));
-    expect(harness.listQuoteRamsActions).toHaveBeenLastCalledWith({
-      userId: USER_ID,
-      listAll: true,
-      status: 'completed',
-    });
-
-    harness.canEffectiveRoleAccessModule.mockResolvedValue(false);
+    harness.getEffectiveModuleAccessLevel.mockResolvedValue(5);
     await GET(get());
     expect(harness.listQuoteRamsActions).toHaveBeenLastCalledWith({
       userId: USER_ID,
-      listAll: false,
+      listAll: true,
       status: 'open',
     });
+  });
+
+  it('returns the actions guard response and does not list when the matrix lookup fails', async () => {
+    const { GET } = await import('@/app/api/quote-rams-actions/route');
+
+    harness.requireSensitiveModuleAccess.mockResolvedValue(
+      NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    );
+    const forbidden = await GET(get());
+    expect(forbidden.status).toBe(403);
+    expect(harness.listQuoteRamsActions).not.toHaveBeenCalled();
+
+    harness.requireSensitiveModuleAccess.mockResolvedValue(
+      NextResponse.json({ error: 'Sensitive access PIN required for protected modules.', code: 'SENSITIVE_PIN_REQUIRED' }, { status: 428 })
+    );
+    const pin = await GET(get());
+    expect(pin.status).toBe(428);
+    expect(harness.getEffectiveModuleAccessLevel).not.toHaveBeenCalled();
+    expect(harness.listQuoteRamsActions).not.toHaveBeenCalled();
+
+    harness.requireSensitiveModuleAccess.mockResolvedValue(null);
+    harness.getEffectiveModuleAccessLevel.mockResolvedValue(0);
+    const revoked = await GET(get());
+    expect(revoked.status).toBe(403);
+    expect(harness.listQuoteRamsActions).not.toHaveBeenCalled();
+
+    harness.getEffectiveModuleAccessLevel.mockRejectedValue(new Error('matrix lookup failed'));
+    const failed = await GET(get());
+    expect(failed.status).toBe(500);
+    expect(harness.listQuoteRamsActions).not.toHaveBeenCalled();
   });
 });

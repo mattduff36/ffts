@@ -9,7 +9,7 @@ const { mockAccess, mockLoadSelf } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/server/scheduling-auth', () => ({
-  requireSchedulingAccess: mockAccess,
+  requireSchedulingSelfAccess: mockAccess,
 }));
 vi.mock('@/lib/server/scheduling-board', () => ({
   loadSchedulingSelf: mockLoadSelf,
@@ -81,8 +81,8 @@ describe('GET /api/scheduling/me', () => {
     expect(mockLoadSelf).not.toHaveBeenCalled();
   });
 
-  it('does not query data without module access', async () => {
-    mockAccess.mockResolvedValue({ allowed: false, status: 403, error: 'Scheduling access required' });
+  it('does not query data when self access is denied', async () => {
+    mockAccess.mockResolvedValue({ allowed: false, status: 403, error: 'Scheduling self-service is unavailable' });
     const { GET } = await import('@/app/api/scheduling/me/route');
     const response = await GET(new NextRequest('http://localhost/api/scheduling/me'));
 

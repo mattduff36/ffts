@@ -41,7 +41,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  module?: ModuleName; // For permission checking
+  module?: ModuleName; // For permission checking and module styling
+  selfService?: boolean; // Visible without that module permission
   category?: 'employee' | 'manager' | 'admin'; // Which nav area it belongs to
   dropdownItems?: NavItem[]; // For dropdown menus
 }
@@ -150,6 +151,7 @@ const baseEmployeeNavItems: NavItem[] = [
     label: 'My Schedule',
     icon: CalendarDays,
     module: 'scheduling',
+    selfService: true,
     category: 'employee'
   },
   {
@@ -331,8 +333,9 @@ export function getFilteredEmployeeNav(
       return hasAccessToAnyChild;
     }
     
-    // Check basic permission for employees
-    if (item.module && !userPermissions.has(item.module)) {
+    // Check basic permission for employees. Self-service items keep their
+    // module for styling but do not require that module permission.
+    if (item.module && !item.selfService && !userPermissions.has(item.module)) {
       return false;
     }
     

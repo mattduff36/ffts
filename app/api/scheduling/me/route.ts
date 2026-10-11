@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadSchedulingSelf } from '@/lib/server/scheduling-board';
-import { requireSchedulingAccess } from '@/lib/server/scheduling-auth';
+import { requireSchedulingSelfAccess } from '@/lib/server/scheduling-auth';
 import { getSchedulingWeek } from '@/lib/utils/scheduling';
 
 const PRIVATE_NO_STORE = { 'Cache-Control': 'private, no-store' };
 
 export async function GET(request: NextRequest) {
   try {
-    const access = await requireSchedulingAccess();
+    const access = await requireSchedulingSelfAccess();
     if (!access.allowed) {
       return NextResponse.json(
         { error: access.error },

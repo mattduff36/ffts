@@ -1,5 +1,42 @@
 [
   {
+    "version": "1026.1.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage. Retain schedule dates and simplify training profile links. Allow active employees to view only their own jobs. Expose RAMS assignment and completion workflow. Add transactional RAMS acceptance and action tracking.",
+    "summary": "Updated Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage. Retain schedule dates and simplify training profile links. Allow active employees to view only their own jobs. Expose RAMS assignment and completion workflow. Add transactional RAMS acceptance and action tracking.",
+    "details": [
+      "Updated Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage, with changes to background routes, app screens, shared logic, shared typing, automated tests, data storage, and documentation.",
+      "Updated actions, with changes to background routes, app screens, shared logic, automated tests, and data storage.",
+      "Updated projects, with changes to background routes, shared logic, shared typing, and automated tests.",
+      "Updated training, with changes to background routes, app screens, shared logic, and automated tests.",
+      "Updated profile, with changes to background routes, shared logic, and automated tests.",
+      "Updated navigation, with changes to shared logic and automated tests.",
+      "Updated data storage, with changes to data storage.",
+      "Updated sign in, with changes to shared logic."
+    ],
+    "areas": [
+      "Quotes",
+      "Actions",
+      "Projects",
+      "Navigation",
+      "Help",
+      "FAQ",
+      "Sign in",
+      "Data storage. Retain schedule dates",
+      "Completion workflow. Add transactional RAMS acceptance",
+      "Action tracking"
+    ],
+    "areaKeys": [
+      "quotes",
+      "actions",
+      "projects",
+      "navigation",
+      "sign-in"
+    ],
+    "pushedAt": "2026-10-11T22:57:58.444Z"
+  },
+  {
     "version": "1026.0.0",
     "updateKind": "minor",
     "title": "Workflow maintenance update",

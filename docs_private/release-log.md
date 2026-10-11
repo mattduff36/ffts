@@ -2,6 +2,34 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.1.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage`
+
+**PUSHED AT**
+2026-10-11T22:57:58.444Z
+
+**WHAT CHANGED**
+Update Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage. Retain schedule dates and simplify training profile links. Allow active employees to view only their own jobs. Expose RAMS assignment and completion workflow. Add transactional RAMS acceptance and action tracking.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage, with changes to background routes, app screens, shared logic, shared typing, automated tests, data storage, and documentation.
+- Updated actions, with changes to background routes, app screens, shared logic, automated tests, and data storage.
+- Updated projects, with changes to background routes, shared logic, shared typing, and automated tests.
+- Updated training, with changes to background routes, app screens, shared logic, and automated tests.
+- Updated profile, with changes to background routes, shared logic, and automated tests.
+- Updated navigation, with changes to shared logic and automated tests.
+- Updated data storage, with changes to data storage.
+- Updated sign in, with changes to shared logic.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Actions, Projects, Navigation, Help and FAQ, Sign in, and Data storage`
+- `fix(audit): retain schedule dates and simplify training profile links`
+- `fix(scheduling): allow active employees to view only their own jobs`
+- `feat(quotes): expose RAMS assignment and completion workflow`
+- `feat(quotes): add transactional RAMS acceptance and action tracking`
+
 ## 1026.0.0
 
 **GIT COMMIT MESSAGE**

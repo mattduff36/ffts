@@ -326,6 +326,26 @@ export interface ScheduleOccupancySegment {
   state: ScheduleOccupancyState;
 }
 
+export interface ScheduleSelfJobDetails {
+  job_id: string;
+  site_name: string | null;
+  site_notes: string | null;
+  customer_contact: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    job_title: string | null;
+  } | null;
+}
+
+export interface ScheduleSelfCrewMember {
+  job_id: string;
+  work_date: string;
+  visit_id: string | null;
+  profile_id: string;
+  full_name: string;
+}
+
 export interface SchedulingSelfPayload {
   week: {
     start: string;
@@ -335,4 +355,6 @@ export interface SchedulingSelfPayload {
   jobs: ScheduleJob[];
   visits: ScheduleVisit[];
   plant_assignments: SchedulePlantAssignment[];
+  job_details?: ScheduleSelfJobDetails[];
+  crew_assignments?: ScheduleSelfCrewMember[];
 }

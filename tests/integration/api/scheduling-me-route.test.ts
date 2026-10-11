@@ -50,6 +50,35 @@ describe('GET /api/scheduling/me', () => {
       '2026-07-13',
       '2026-07-19'
     );
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+  });
+
+  it('ignores a supplied user id and still loads the authenticated profile', async () => {
+    const { GET } = await import('@/app/api/scheduling/me/route');
+    const response = await GET(
+      new NextRequest('http://localhost/api/scheduling/me?week_start=2026-07-15&user_id=intruder&profile_id=intruder')
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(mockLoadSelf).toHaveBeenCalledWith(
+      expect.anything(),
+      'employee-1',
+      '2026-07-13',
+      '2026-07-19'
+    );
+  });
+
+  it('denies the self loader when the session has no user id', async () => {
+    mockAccess.mockResolvedValue({ allowed: true, status: 200, userId: undefined });
+    const { GET } = await import('@/app/api/scheduling/me/route');
+    const response = await GET(
+      new NextRequest('http://localhost/api/scheduling/me?user_id=intruder')
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(mockLoadSelf).not.toHaveBeenCalled();
   });
 
   it('does not query data without module access', async () => {
@@ -58,6 +87,7 @@ describe('GET /api/scheduling/me', () => {
     const response = await GET(new NextRequest('http://localhost/api/scheduling/me'));
 
     expect(response.status).toBe(403);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(mockLoadSelf).not.toHaveBeenCalled();
   });
 });

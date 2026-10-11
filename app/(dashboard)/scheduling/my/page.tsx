@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { CalendarCheck } from 'lucide-react';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -15,10 +16,13 @@ export default function MySchedulePage() {
     <AppPageShell width="wide">
       <AppPageHeader
         title="My Schedule"
-        description="Your assigned jobs and plant for the selected week."
+        description="Your daily jobs, crew and the details you need on site."
+        descriptionClassName="text-[max(1rem,16px)]"
         icon={<CalendarCheck className="h-5 w-5" />}
       />
-      <SchedulingEmployeeView />
+      <Suspense fallback={<PageLoader message="Loading your schedule..." />}>
+        <SchedulingEmployeeView />
+      </Suspense>
     </AppPageShell>
   );
 }

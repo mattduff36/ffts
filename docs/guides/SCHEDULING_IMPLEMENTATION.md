@@ -15,6 +15,14 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 - Daily view: **Copy teams** sits on the left of the instruction row; calendar display-mode controls stay on the right of the same row. Copy adds another date's crews onto the selected day without changing standing leaders in Settings.
 - Board mutations update the local cache immediately and reconcile with the server in the background.
 
+## Employee My Schedule
+
+- `/scheduling/my` is a mobile-first, read-only daily job list. It opens on today in Europe/London; the date picker and previous/next day controls preserve the selected date in `?date=`. An expandable week overview retains weekly navigation and assignment counts.
+- Timed jobs are chronological; day-level work is labelled **Time to be confirmed**. Cards show saved job/visit instructions, assignment notes, address/directions, visit status, allocated plant (including asset identifiers), and crew assigned to the exact same job/date/visit.
+- Customer contact name, phone and email come from the linked customer, explicitly labelled **Customer contact**. Linked site name and notes come from the existing customer site. Missing information is omitted; no contact is assumed to be on site. Commercial customer notes and prices are not exposed.
+- The self endpoint retains scheduling permission checks, uses only the authenticated user, scopes visits and related resources to their assignments, omits cancelled/queued/missing visits and cancelled jobs, and preserves completed history. Responses are private/no-store. Query cache keys include the user and week, with no previous-user placeholder data.
+- Refresh and retry remain available; a failed refresh labels retained data as potentially out of date. This is an online view, not an offline job pack or a work-completion workflow.
+
 ## Optimistic mutation contract
 
 - The manager board renders each confirmed scheduling action from an in-memory operation ledger before its network request resolves. The ledger projects over React Query's latest server data, so a refetch cannot hide pending work.

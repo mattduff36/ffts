@@ -3,6 +3,7 @@ import { buildEmployeeCapacity, buildEmployeeDaySessions } from '@/lib/server/sc
 import { absenceCoversWorkDate, isEmployeeWorkingOnDate } from '@/lib/server/scheduling-conflicts';
 import { loadScheduleDayTeams } from '@/lib/server/scheduling-day-teams';
 import { loadScheduleTeamSettings } from '@/lib/server/scheduling-team-settings';
+import { loadSchedulingSelfDetails } from '@/lib/server/scheduling-self-details';
 import { normalizeScheduleJobTag } from '@/lib/server/scheduling-tags';
 import {
   enumerateScheduleDates,
@@ -404,6 +405,46 @@ export async function loadSchedulingBoard(
   };
 }
 
+const SELF_ASSIGNMENT_TOKEN = /^[A-Za-z0-9_-]+$/;
+const SELF_WORK_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function selfVisitId(row: { visit_id?: unknown }): string | null {
+  return typeof row.visit_id === 'string' && row.visit_id.length > 0 ? row.visit_id : null;
+}
+
+function selfSlotKey(jobId: string, workDate: string, visitId: string | null): string {
+  return `${jobId}|${workDate}|${visitId ?? ''}`;
+}
+
+function buildSchedulingSelfPlantFilter(rows: Array<Record<string, unknown>>): string | null {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const row of rows) {
+    const jobId = typeof row.job_id === 'string' ? row.job_id : '';
+    const workDate = typeof row.work_date === 'string' ? row.work_date : '';
+    const visitId = selfVisitId(row);
+    if (!SELF_ASSIGNMENT_TOKEN.test(jobId) || !SELF_WORK_DATE.test(workDate)) continue;
+    if (visitId !== null && !SELF_ASSIGNMENT_TOKEN.test(visitId)) continue;
+    const key = selfSlotKey(jobId, workDate, visitId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(
+      visitId === null
+        ? `and(job_id.eq.${jobId},work_date.eq.${workDate},visit_id.is.null)`
+        : `and(job_id.eq.${jobId},work_date.eq.${workDate},visit_id.eq.${visitId})`
+    );
+  }
+  return parts.length > 0 ? parts.join(',') : null;
+}
+
+const emptySelfSchedule = (weekStart: string, weekEnd: string): SchedulingSelfPayload => ({
+  week: { start: weekStart, end: weekEnd },
+  assignments: [],
+  jobs: [],
+  visits: [],
+  plant_assignments: [],
+});
+
 export async function loadSchedulingSelf(
   admin: SupabaseClient,
   userId: string,
@@ -419,97 +460,116 @@ export async function loadSchedulingSelf(
     .order('work_date');
   if (employeeResult.error) throw employeeResult.error;
 
-  const employeeRows = (employeeResult.data || []) as Array<Record<string, unknown>>;
-  const jobIds = Array.from(new Set(employeeRows.map((row) => String(row.job_id))));
-  if (jobIds.length === 0) {
-    return { week: { start: weekStart, end: weekEnd }, assignments: [], jobs: [], visits: [], plant_assignments: [] };
-  }
+  const employeeRows = ((employeeResult.data || []) as Array<Record<string, unknown>>)
+    .filter((row) => String(row.profile_id) === userId);
+  const jobIds = Array.from(new Set(employeeRows.map((row) => String(row.job_id)).filter(Boolean)));
+  if (jobIds.length === 0) return emptySelfSchedule(weekStart, weekEnd);
 
-  const dates = Array.from(new Set(employeeRows.map((row) => String(row.work_date))));
-  const visitRange = getScheduleLondonStartsAtRangeIso(weekStart, weekEnd);
-  const [jobsResult, visitsResult, plantAssignmentsResult] = await Promise.all([
+  const visitIds = Array.from(new Set(
+    employeeRows.map((row) => selfVisitId(row)).filter((id): id is string => Boolean(id))
+  ));
+  const plantFilter = buildSchedulingSelfPlantFilter(employeeRows);
+  const [jobsResult, visitsResult, plantAssignmentsResult, visitBacklogResult] = await Promise.all([
     admin
       .from('schedule_jobs')
       .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
       .in('id', jobIds),
-    admin
-      .from('schedule_visits')
-      .select('*')
-      .in('job_id', jobIds)
-      .gte('starts_at', visitRange.startInclusiveIso)
-      .lt('starts_at', visitRange.endExclusiveIso),
-    admin
-      .from('schedule_plant_assignments')
-      .select('*, plant:plant(id, plant_id, nickname, make, model, status)')
-      .in('job_id', jobIds)
-      .in('work_date', dates),
+    visitIds.length > 0
+      ? admin.from('schedule_visits').select('*').in('id', visitIds)
+      : Promise.resolve({ data: [], error: null }),
+    plantFilter
+      ? admin
+        .from('schedule_plant_assignments')
+        .select('*, plant:plant(id, plant_id, nickname, make, model, status)')
+        .or(plantFilter)
+      : Promise.resolve({ data: [], error: null }),
+    visitIds.length > 0
+      ? admin.from('schedule_visit_backlog').select('visit_id').in('visit_id', visitIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (jobsResult.error) throw jobsResult.error;
   if (visitsResult.error) throw visitsResult.error;
   if (plantAssignmentsResult.error) throw plantAssignmentsResult.error;
-
-  const visitBacklogResult = await admin
-    .from('schedule_visit_backlog')
-    .select('visit_id');
   if (visitBacklogResult.error) throw visitBacklogResult.error;
 
+  const requestedVisitIds = new Set(visitIds);
   const queuedVisitIds = new Set(
-    ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
-      (row) => row.visit_id
-    )
+    ((visitBacklogResult.data || []) as Array<{ visit_id: string }>)
+      .map((row) => row.visit_id)
+      .filter((visitId) => requestedVisitIds.has(visitId))
+  );
+  const jobsById = new Map(
+    ((jobsResult.data || []) as Array<Record<string, unknown>>)
+      .map(mapJob)
+      .filter((job) => job.status !== 'cancelled')
+      .map((job) => [job.id, job])
   );
   const visits = ((visitsResult.data || []) as ScheduleVisit[]).filter(
-    (visit) => !queuedVisitIds.has(visit.id)
+    (visit) =>
+      requestedVisitIds.has(visit.id)
+      && !queuedVisitIds.has(visit.id)
+      && visit.status !== 'cancelled'
+      && jobsById.has(visit.job_id)
   );
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
   const assignments: ScheduleEmployeeAssignment[] = employeeRows
-    .filter(
-      (row) =>
-        !row.visit_id
-        || (
-          !queuedVisitIds.has(String(row.visit_id))
-          && visitsById.get(String(row.visit_id))?.status !== 'cancelled'
-        )
-    )
-    .map((row) => ({
-      ...normalizeBaseAssignment(row),
-      resource_type: 'employee',
-      profile_id: userId,
-      employee: null,
-      visit: visitsById.get(String(row.visit_id)) || null,
-      conflicts: [],
-    }));
+    .filter((row) => {
+      const jobId = String(row.job_id);
+      if (!jobsById.has(jobId)) return false;
+      const visitId = selfVisitId(row);
+      return !visitId || visitsById.has(visitId);
+    })
+    .map((row) => {
+      const visitId = selfVisitId(row);
+      return {
+        ...normalizeBaseAssignment(row),
+        resource_type: 'employee' as const,
+        profile_id: userId,
+        employee: null,
+        visit: visitId ? visitsById.get(visitId) || null : null,
+        conflicts: [],
+      };
+    });
+  if (assignments.length === 0) return emptySelfSchedule(weekStart, weekEnd);
+
+  const includedSlots = new Set(
+    assignments.map((assignment) => selfSlotKey(assignment.job_id, assignment.work_date, assignment.visit_id))
+  );
+  const includedVisitIds = new Set(
+    assignments.map((assignment) => assignment.visit_id).filter((id): id is string => Boolean(id))
+  );
+  const includedJobIds = new Set(assignments.map((assignment) => assignment.job_id));
   const plantAssignments: SchedulePlantAssignment[] = (
     (plantAssignmentsResult.data || []) as Array<Record<string, unknown>>
   )
-    .filter(
-      (row) =>
-        !row.visit_id
-        || (
-          !queuedVisitIds.has(String(row.visit_id))
-          && visitsById.get(String(row.visit_id))?.status !== 'cancelled'
-        )
-    )
+    .filter((row) => includedSlots.has(selfSlotKey(String(row.job_id), String(row.work_date), selfVisitId(row))))
     .map((row) => {
       const plant = pickRelation(row.plant as Record<string, unknown> | Array<Record<string, unknown>> | null);
+      const visitId = selfVisitId(row);
       return {
         ...normalizeBaseAssignment(row),
-        resource_type: 'plant',
+        resource_type: 'plant' as const,
         plant_id: String(row.plant_id),
         plant: plant ? mapPlant(plant) : null,
-        visit: visitsById.get(String(row.visit_id)) || null,
+        visit: visitId ? visitsById.get(visitId) || null : null,
         conflicts: [],
       };
     });
 
+  const jobs = sortJobsByBoardSequence(
+      Array.from(includedJobIds).flatMap((jobId) => {
+        const job = jobsById.get(jobId);
+        return job ? [job] : [];
+      })
+  );
+  const details = await loadSchedulingSelfDetails(admin, userId, jobs, assignments);
   return {
     week: { start: weekStart, end: weekEnd },
     assignments,
-    jobs: sortJobsByBoardSequence(
-      ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob)
-    ),
-    visits,
+    jobs,
+    visits: visits.filter((visit) => includedVisitIds.has(visit.id)),
     plant_assignments: plantAssignments,
+    ...details,
   };
 }
 

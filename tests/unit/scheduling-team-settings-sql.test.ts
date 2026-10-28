@@ -14,6 +14,24 @@ const sql = readFileSync(
 );
 
 describe('schedule team settings SQL contract', () => {
+  it('keeps atomic save validation while explicitly scoping leader replacement for safeupdate', () => {
+    const repair = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/20261028101000_schedule_team_settings_safe_delete.sql'),
+      'utf8'
+    );
+    const functionStart = 'CREATE OR REPLACE FUNCTION public.save_schedule_team_settings_v1(';
+    const originalFunction = sql.slice(sql.indexOf(functionStart)).split('$$;')[0];
+    const repairedFunction = repair.slice(repair.indexOf(functionStart)).split('$$;')[0];
+    expect(repairedFunction.replace(/\r\n/g, '\n')).toBe(
+      originalFunction.replace(/\r\n/g, '\n').replace(
+        'DELETE FROM public.schedule_team_slot_leaders;',
+        'DELETE FROM public.schedule_team_slot_leaders\n  WHERE slot_index BETWEEN 1 AND 10;'
+      )
+    );
+    expect(repair).not.toMatch(/DELETE FROM public\.schedule_team_slot_leaders\s*;/);
+    expect(repair).not.toMatch(/SET\s+(?:LOCAL\s+)?safeupdate/i);
+  });
+
   it('sched-team-migration-upgrade widens slots and creates settings tables', () => {
     expect(sql).toContain('CHECK (slot_index BETWEEN 1 AND 10)');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS public.schedule_team_settings');

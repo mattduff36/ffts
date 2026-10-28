@@ -92,19 +92,24 @@ describe('PUT /api/scheduling/team-settings', () => {
     });
   });
 
-  it('sched-team-settings-persist saves through the locked RPC', async () => {
+  it.each([5, 8, 10])('sched-team-settings-persist saves %i teams and a leader through the locked RPC', async (count) => {
+    mockRpc.mockResolvedValue({ data: [{ visible_slot_count: count }], error: null });
     const { PUT } = await import('@/app/api/scheduling/team-settings/route');
     const response = await PUT(put({
-      visible_slot_count: 6,
+      visible_slot_count: count,
       leaders: [{ slot_index: 1, profile_id: '22222222-2222-4222-8222-222222222222' }],
     }));
     expect(response.status).toBe(200);
     expect(mockRpc).toHaveBeenCalledWith(
       'save_schedule_team_settings_v1',
       expect.objectContaining({
-        p_visible_slot_count: 6,
+        p_visible_slot_count: count,
+        p_leaders: expect.arrayContaining([
+          { slot_index: 1, profile_id: '22222222-2222-4222-8222-222222222222' },
+        ]),
         p_actor_user_id: managerAccess.userId,
       })
     );
+    expect((await response.json()).settings.visible_slot_count).toBe(count);
   });
 });

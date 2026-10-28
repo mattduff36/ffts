@@ -12,6 +12,7 @@ This guide captures the Schedule Board product behaviour and deferred enhancemen
 - Resource cards expose a dedicated drag handle for touch-first drag-and-drop. Selecting a visit and tapping a resource remains supported.
 - Daily team buckets (default five, up to ten via Settings) let managers assemble an organisation-shared crew of up to six employees, including a standing team leader, for the selected date, then drag the whole bucket onto a timed visit. Leaders persist in settings and are implicit members every day. Employees appear in Resources or a bucket, never both. Conflicted people are skipped and reported; the bucket stays filled. This is independent of org team filters.
 - When a bucket has no standing team leader, the first added member becomes the display name with an `(auto)` suffix, for example `Paul B's team (auto)`.
+- Settings saves require `20261028101000_schedule_team_settings_safe_delete.sql`: it explicitly scopes replacement of standing leaders so database safe-update checks do not reject the save and roll back the visible team count. Apply through the approved migration procedure; the migration does not change saved settings itself.
 - Daily view: **Copy teams** sits on the left of the instruction row; calendar display-mode controls stay on the right of the same row. Copy adds another date's crews onto the selected day without changing standing leaders in Settings.
 - Board mutations update the local cache immediately and reconcile with the server in the background.
 

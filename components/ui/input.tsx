@@ -1,9 +1,63 @@
+"use client";
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils/cn"
 
+const IN_PROGRESS_NUMERIC_DRAFT = /^-?\d*\.?\d*$/;
+
+function isNumericDraftEcho(draft: string, parentValue: unknown): boolean {
+  if (parentValue == null || parentValue === "") {
+    return draft.trim() === "";
+  }
+
+  const normalizedDraft = draft.trim();
+  if (
+    normalizedDraft === ""
+    || normalizedDraft === "-"
+    || normalizedDraft === "."
+    || normalizedDraft === "-."
+  ) {
+    return parentValue === 0 || parentValue === "0";
+  }
+
+  if (String(parentValue) === draft || String(parentValue) === normalizedDraft) {
+    return true;
+  }
+
+  if (!IN_PROGRESS_NUMERIC_DRAFT.test(normalizedDraft)) {
+    return false;
+  }
+
+  const draftNumber = Number(normalizedDraft);
+  const parentNumber = typeof parentValue === "number"
+    ? parentValue
+    : Number(String(parentValue).trim());
+
+  return Number.isFinite(draftNumber)
+    && Number.isFinite(parentNumber)
+    && draftNumber === parentNumber;
+}
+
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, value, onChange, onBlur, onFocus, ...props }, ref) => {
+    const isControlledNumber = type === "number" && value !== undefined;
+    const [draft, setDraft] = React.useState<string | null>(null);
+    const lastParentValueRef = React.useRef(value);
+
+    React.useEffect(() => {
+      if (!isControlledNumber) return;
+      if (Object.is(lastParentValueRef.current, value)) return;
+
+      lastParentValueRef.current = value;
+      setDraft((current) => {
+        if (current === null) return null;
+        return isNumericDraftEcho(current, value) ? current : null;
+      });
+    }, [isControlledNumber, value]);
+
+    const displayValue = isControlledNumber && draft !== null ? draft : value;
+
     return (
       <input
         type={type}
@@ -13,6 +67,25 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
+        value={displayValue}
+        onFocus={(event) => {
+          if (isControlledNumber) {
+            setDraft(event.currentTarget.value);
+          }
+          onFocus?.(event);
+        }}
+        onChange={(event) => {
+          if (isControlledNumber) {
+            setDraft(event.target.value);
+          }
+          onChange?.(event);
+        }}
+        onBlur={(event) => {
+          if (isControlledNumber) {
+            setDraft(null);
+          }
+          onBlur?.(event);
+        }}
       />
     )
   }

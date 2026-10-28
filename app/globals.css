@@ -1035,3 +1035,15 @@ body.app-widescreen-enabled main > .max-w-7xl {
   animation: validation-glow 1.8s ease-in-out infinite;
   outline: none;
 }
+
+/* Hide browser number spinners. Keyboard entry stays available. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

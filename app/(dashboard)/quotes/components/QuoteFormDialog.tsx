@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertTriangle, ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Send, Sparkles, Trash2, GripVertical, Upload, X } from 'lucide-react';
+import { ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Send, Trash2, GripVertical, Upload, X } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
@@ -80,13 +80,6 @@ interface ApproverOption {
   email: string | null;
 }
 
-interface QuoteAssistDraft {
-  subject_line: string;
-  project_description: string;
-  scope: string;
-  caveats: string[];
-}
-
 interface QuoteFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -130,14 +123,10 @@ function getAttachmentFileSignature(file: File) {
 function buildQuoteFormDirtySnapshot(
   form: QuoteFormData,
   attachmentFiles: File[],
-  quoteAssistEmail: string,
-  quoteAssistDraft: QuoteAssistDraft | null
 ) {
   return JSON.stringify({
     form,
     attachmentFiles: attachmentFiles.map(getAttachmentFileSignature),
-    quoteAssistEmail,
-    quoteAssistDraft,
   });
 }
 
@@ -192,19 +181,6 @@ function getCustomerSelectLabel(customer: Customer, duplicateCompanyNames: Set<s
 function getContactLabel(contact: NonNullable<Customer['secondary_contacts']>[number]): string {
   const name = contact.name?.trim() || contact.email?.trim() || 'Unnamed contact';
   return contact.job_title ? `${name} (${contact.job_title})` : name;
-}
-
-function isQuoteAssistDraft(value: unknown): value is QuoteAssistDraft {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const draft = value as Partial<QuoteAssistDraft>;
-  return typeof draft.subject_line === 'string'
-    && typeof draft.project_description === 'string'
-    && typeof draft.scope === 'string'
-    && Array.isArray(draft.caveats)
-    && draft.caveats.every(caveat => typeof caveat === 'string');
 }
 
 export function QuoteFormDialog({
@@ -270,16 +246,11 @@ export function QuoteFormDialog({
   const persistInFlightRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [quoteAssistOpen, setQuoteAssistOpen] = useState(false);
-  const [quoteAssistEmail, setQuoteAssistEmail] = useState('');
-  const [quoteAssistDraft, setQuoteAssistDraft] = useState<QuoteAssistDraft | null>(null);
-  const [quoteAssistError, setQuoteAssistError] = useState<string | null>(null);
-  const [quoteAssistLoading, setQuoteAssistLoading] = useState(false);
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
   const [initializedDialogKey, setInitializedDialogKey] = useState<string | null>(null);
-  const currentDirtySnapshot = buildQuoteFormDirtySnapshot(form, attachmentFiles, quoteAssistEmail, quoteAssistDraft);
+  const currentDirtySnapshot = buildQuoteFormDirtySnapshot(form, attachmentFiles);
   const isFormDirty = open && Boolean(initialDirtySnapshot) && currentDirtySnapshot !== initialDirtySnapshot;
   const {
     contentRef,
@@ -478,10 +449,6 @@ export function QuoteFormDialog({
     setFieldErrors({});
     setSubmitError(null);
     setAttachmentActionError(null);
-    setQuoteAssistOpen(false);
-    setQuoteAssistEmail('');
-    setQuoteAssistDraft(null);
-    setQuoteAssistError(null);
     setAttachmentFiles([]);
     setExistingAttachments(quote?.attachments || []);
     if (quote) {
@@ -518,7 +485,7 @@ export function QuoteFormDialog({
           : [{ ...EMPTY_LINE_ITEM }],
       };
       setForm(nextForm);
-      setInitialDirtySnapshot(buildQuoteFormDirtySnapshot(nextForm, [], '', null));
+      setInitialDirtySnapshot(buildQuoteFormDirtySnapshot(nextForm, []));
     } else {
       const next = applyManager(defaultManager?.profile_id || '', {
         customer_id: '',
@@ -564,7 +531,7 @@ export function QuoteFormDialog({
       }
 
       setForm(next);
-      setInitialDirtySnapshot(buildQuoteFormDirtySnapshot(next, [], '', null));
+      setInitialDirtySnapshot(buildQuoteFormDirtySnapshot(next, []));
     }
     setInitializedDialogKey(dialogKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -695,74 +662,6 @@ export function QuoteFormDialog({
       signoff_title: '',
       approver_profile_id: '',
     }));
-  }
-
-  async function generateQuoteAssistDraft() {
-    const customerEmail = quoteAssistEmail.trim();
-    if (!customerEmail) {
-      setQuoteAssistError('Paste the customer email before generating a draft.');
-      return;
-    }
-
-    setQuoteAssistLoading(true);
-    setQuoteAssistError(null);
-    setQuoteAssistDraft(null);
-
-    try {
-      const response = await fetch('/api/quotes/assist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerEmail,
-          customerName: selectedCustomer?.company_name,
-          siteAddress: form.site_address,
-          existingTitle: form.subject_line,
-          existingSummary: form.project_description,
-          existingScope: form.scope,
-        }),
-      });
-      const payload = await response.json().catch(() => null) as { error?: string } | unknown;
-
-      if (!response.ok) {
-        const message = payload && typeof payload === 'object' && 'error' in payload
-          ? String((payload as { error?: string }).error || 'Unable to generate a quote draft.')
-          : 'Unable to generate a quote draft.';
-        throw new Error(message);
-      }
-
-      if (!isQuoteAssistDraft(payload)) {
-        throw new Error('The generated draft was incomplete. Please try again.');
-      }
-
-      setQuoteAssistDraft(payload);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to generate a quote draft.';
-      setQuoteAssistError(message);
-      toast.error(message);
-    } finally {
-      setQuoteAssistLoading(false);
-    }
-  }
-
-  function applyQuoteAssistDraft() {
-    if (!quoteAssistDraft) return;
-
-    setForm(prev => ({
-      ...prev,
-      subject_line: quoteAssistDraft.subject_line,
-      project_description: quoteAssistDraft.project_description,
-      scope: quoteAssistDraft.scope,
-    }));
-    setFieldErrors(prev => {
-      const next = { ...prev };
-      delete next.subject_line;
-      delete next.project_description;
-      delete next.scope;
-      return next;
-    });
-    setSubmitError(null);
-    setQuoteAssistOpen(false);
-    toast.success('AI draft applied. Please check it before sending the quote.');
   }
 
   function updateLineItem(idx: number, field: keyof QuoteLineItem, value: string | number) {
@@ -951,118 +850,6 @@ export function QuoteFormDialog({
           {submitError ? (
             <div className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
               {submitError}
-            </div>
-          ) : null}
-
-          {!isEditing ? (
-            <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-50">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-amber-300/20 p-2 text-amber-200">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-white">Draft quote from customer email</h3>
-                      <span className="rounded-full border border-amber-300/50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100">
-                        Beta feature
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setQuoteAssistOpen(prev => !prev)}
-                  className="border-amber-300/50 bg-slate-900/40 text-amber-50 hover:bg-amber-300/10"
-                >
-                  {quoteAssistOpen ? 'Hide AI helper' : 'Open AI helper'}
-                </Button>
-              </div>
-
-              {quoteAssistOpen ? (
-                <div className="mt-4 space-y-3 border-t border-amber-300/20 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="quote-assist-email" className="text-amber-50">Customer email</Label>
-                    <Textarea
-                      id="quote-assist-email"
-                      value={quoteAssistEmail}
-                      onChange={event => {
-                        setQuoteAssistEmail(event.target.value);
-                        setQuoteAssistError(null);
-                        setQuoteAssistDraft(null);
-                      }}
-                      placeholder="Paste the customer email or enquiry here..."
-                      rows={6}
-                      className="border-amber-300/30 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-amber-300/30"
-                    />
-                    <p className="text-xs text-amber-100/80">
-                      The email is sent to the configured AI provider to generate a draft. It is not saved by this form.
-                    </p>
-                  </div>
-
-                  {quoteAssistError ? (
-                    <div className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-                      {quoteAssistError}
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      onClick={() => void generateQuoteAssistDraft()}
-                      disabled={quoteAssistLoading || !quoteAssistEmail.trim()}
-                      className="bg-amber-300 text-slate-950 hover:bg-amber-200"
-                    >
-                      {quoteAssistLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                      Generate draft
-                    </Button>
-                    {quoteAssistDraft ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={applyQuoteAssistDraft}
-                        className="border-amber-300/50 bg-slate-900/40 text-amber-50 hover:bg-amber-300/10"
-                      >
-                        Apply to quote
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {quoteAssistDraft ? (
-                    <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3 text-slate-100">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Preview title</p>
-                        <p className="mt-1">{quoteAssistDraft.subject_line}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Preview summary</p>
-                        <p className="mt-1 whitespace-pre-wrap">{quoteAssistDraft.project_description}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Preview scope</p>
-                        <p className="mt-1 whitespace-pre-wrap">{quoteAssistDraft.scope}</p>
-                      </div>
-                      {quoteAssistDraft.caveats.length > 0 ? (
-                        <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3">
-                          <div className="flex items-start gap-2 text-amber-100">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                            <div>
-                              <p className="font-medium">Check before using</p>
-                              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-amber-100/90">
-                                {quoteAssistDraft.caveats.map(caveat => (
-                                  <li key={caveat}>{caveat}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           ) : null}
 

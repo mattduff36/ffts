@@ -28,6 +28,7 @@ import { NotificationPanel } from '@/components/messages/NotificationPanel';
 import { TabletModeToggleActions } from '@/components/layout/TabletModeToggleActions';
 import { useTabletMode } from '@/components/layout/tablet-mode-context';
 import { ActiveNowUsersPanel } from '@/components/layout/ActiveNowUsersPanel';
+import { SiteUsageMonitor } from '@/components/layout/SiteUsageMonitor';
 import { SidebarNav } from './SidebarNav';
 import { createClient } from '@/lib/supabase/client';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
@@ -596,6 +597,7 @@ export function Navbar() {
                 </div>
               </Link>
               <div className="ml-auto flex items-center gap-2">
+                <SiteUsageMonitor />
                 <div className="hidden md:flex items-center">
                   <TabletModeToggleActions />
                 </div>
@@ -665,6 +667,7 @@ export function Navbar() {
 
             {/* Right side */}
             <div className="flex items-center space-x-2 ml-auto">
+              <SiteUsageMonitor />
               {/* Desktop burger menu (non-tablet mode only) */}
               <div className="hidden md:flex items-center">
                 <Button

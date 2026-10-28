@@ -11,6 +11,7 @@ import { PanelLoader } from '@/components/ui/panel-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Activity, BarChart3, BriefcaseBusiness, Building2, Clock, Eye, Gauge, Loader2, Monitor, RefreshCw, Route, Search, TrendingUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { SiteUsageRecordingsPanel } from './SiteUsageRecordingsPanel';
 import type { UsageAnalyticsBreakdown, UsageAnalyticsInsight, UsageAnalyticsPayload } from '../types';
 
 type AnalyticsRange = '24h' | '7d' | '30d' | '90d';
@@ -272,6 +273,7 @@ export function UserAnalyticsDebugPanel() {
 
   return (
     <div className="space-y-6">
+      <SiteUsageRecordingsPanel />
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

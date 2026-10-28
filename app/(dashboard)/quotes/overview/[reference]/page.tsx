@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -276,21 +278,29 @@ export default function QuoteOverviewDetailPage() {
   const [canManageScheduling, setCanManageScheduling] = useState(false);
   const [savingScheduleTags, setSavingScheduleTags] = useState(false);
   const estimatedRate = useMemo(() => Number(estimatedRateInput || 0), [estimatedRateInput]);
+  const tagsDirty = JSON.stringify([...selectedScheduleTagIds].sort()) !==
+    JSON.stringify((payload?.schedule_job?.tags.map((tag) => tag.id) || []).sort());
+  const draftBlockedRef = useRef(false);
+  draftBlockedRef.current = savingScheduleTags || tagsDirty || Boolean(newScheduleTagName);
 
-  const loadDetail = useCallback(async () => {
+  const loadDetail = useCallback(async (background = false) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const response = await fetch(`/api/quotes/overview/${encodeURIComponent(reference)}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Unable to load quote overview detail.');
+      if (background && draftBlockedRef.current) return;
       setPayload(data);
     } catch (error) {
+      if (background) return;
       toast.error(error instanceof Error ? error.message : 'Unable to load quote overview detail.');
       setPayload(null);
     } finally {
       setLoading(false);
     }
   }, [reference]);
+
+  useSoftRefresh(() => loadDetail(true), canViewQuotes && sensitiveAccess.canAccess && !loading && !savingScheduleTags && !tagsDirty && !newScheduleTagName);
 
   useEffect(() => {
     if (permissionLoading || sensitiveAccess.loading) return;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import {
   Dialog,
   DialogContent,
@@ -681,7 +682,10 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     onQuoteChange(nextQuoteId);
   }, [onQuoteChange]);
 
-  const fetchQuote = useCallback(async () => {
+  const backgroundRefreshBlocked = useRef(false);
+  backgroundRefreshBlocked.current = isDetailsDirty || isPoRequestDirty || isDuplicateDialogDirty || actionLoading || uploadingAttachment;
+
+  const fetchQuote = useCallback(async (background = false) => {
     const idToLoad = activeQuoteId;
     if (!idToLoad) return;
     activeFetchAbortRef.current?.abort();
@@ -689,18 +693,20 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     activeFetchAbortRef.current = abortController;
     const requestId = fetchRequestIdRef.current + 1;
     fetchRequestIdRef.current = requestId;
-    setLoading(true);
+    if (!background) setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/quotes/${idToLoad}`, { signal: abortController.signal });
+      const res = await fetch(`/api/quotes/${idToLoad}`, { signal: abortController.signal, cache: 'no-store' });
       if (!res.ok) {
         throw await buildResponseError(res, 'Unable to load quote details right now.');
       }
       const data = await res.json();
       if (fetchRequestIdRef.current !== requestId) return;
+      if (background && backgroundRefreshBlocked.current) return;
       applyQuoteState(data.quote);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (background) return;
       const message = error instanceof Error ? error.message : 'Unable to load quote details right now.';
       setLoadError(message);
       toast.error(message);
@@ -711,6 +717,8 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
       }
     }
   }, [activeQuoteId, applyQuoteState]);
+
+  useSoftRefresh(() => fetchQuote(true), open && !loading && !backgroundRefreshBlocked.current);
 
   useEffect(() => {
     if (open) {

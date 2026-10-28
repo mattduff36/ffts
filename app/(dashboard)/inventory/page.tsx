@@ -21,6 +21,7 @@ import { PageLoader } from '@/components/ui/page-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { AlertTriangle, Archive, CheckCircle2, MapPin, PackageSearch, Plus, Settings, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChangeInventoryLocationDialog } from './components/ChangeInventoryLocationDialog';
@@ -102,7 +103,7 @@ export default function InventoryPage() {
     search: '',
   });
 
-  const fetchInventoryData = useCallback(async () => {
+  const fetchInventoryData = useCallback(async (background = false) => {
     try {
       const contextResponse = await fetch('/api/inventory/context', { cache: 'no-store' });
       const contextPayload = await contextResponse.json();
@@ -177,12 +178,13 @@ export default function InventoryPage() {
       setSiteAssignments(siteAssignmentsPayload.assignments || []);
       setInventoryLoadError(null);
     } catch (error) {
+      if (background) return;
       console.error('Error fetching inventory data:', error);
       const errorMessage = getInventoryLoadErrorMessage(error);
       setInventoryLoadError(errorMessage);
       toast.error(errorMessage, { id: 'inventory-load-error' });
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -195,6 +197,19 @@ export default function InventoryPage() {
     }
     fetchInventoryData();
   }, [canViewInventory, fetchInventoryData, permissionLoading, router]);
+
+  const inventoryDraftOpen = itemDialogOpen
+    || locationDialogOpen
+    || changeLocationDialogOpen
+    || Boolean(retiringItem)
+    || Boolean(confirmAction)
+    || restoringMinorPlantItems
+    || movingItems.length > 0;
+
+  useSoftRefresh(
+    () => fetchInventoryData(true),
+    canViewInventory && !permissionLoading && !loading && !inventoryDraftOpen
+  );
 
   useEffect(() => {
     const requestedTab = searchParams.get('tab');

@@ -19,6 +19,7 @@ import {
 } from '@dnd-kit/dom';
 import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { pauseSoftRefresh } from '@/lib/client/soft-refresh';
 import { addMinutes, format, parseISO } from 'date-fns';
 import {
   createParser,
@@ -2049,6 +2050,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       : draggedQuote;
 
   const weekStart = getSchedulingWeek(selectedDate).start;
+  const backgroundRefreshBlocked = inFlightMutationKeys.size > 0
+    || Boolean(draggedResource || draggedAssignment || draggedQuote || draggedVisit || draggedDayTeam)
+    || quickAddOpen || jobDialogOpen || unavailabilityOpen || teamSettingsOpen
+    || quoteCreationOpen || projectCreationOpen;
+  useEffect(() => {
+    if (backgroundRefreshBlocked) return pauseSoftRefresh();
+  }, [backgroundRefreshBlocked]);
+
   const boardQuery = useQuery({
     queryKey: ['scheduling-board', weekStart],
     queryFn: () => fetchSchedulingBoard(weekStart),

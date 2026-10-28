@@ -15,6 +15,7 @@ import { formatFileSize } from '@/lib/utils/file-validation';
 import { RecordVisitorSignatureModal } from '@/components/rams/RecordVisitorSignatureModal';
 import { RAMSErrorBoundary } from '@/components/rams/RAMSErrorBoundary';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { isNetworkFetchError } from '@/lib/utils/http-error';
 
 interface RAMSDocument {
@@ -55,8 +56,8 @@ export default function RAMSPage() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [selectedDocumentTitle, setSelectedDocumentTitle] = useState<string>('');
 
-  const fetchDocuments = useCallback(async () => {
-    setLoading(true);
+  const fetchDocuments = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     try {
       // Fetch documents for all users (API handles permissions)
       const response = await fetch('/api/rams');
@@ -69,7 +70,7 @@ export default function RAMSPage() {
 
       if (data.success) {
         setDocuments(data.documents);
-        setFilteredDocuments(data.documents);
+        if (!background) setFilteredDocuments(data.documents);
       } else {
         throw new Error(data.error || 'Failed to fetch RAMS documents');
       }
@@ -87,7 +88,7 @@ export default function RAMSPage() {
         });
       }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -98,6 +99,11 @@ export default function RAMSPage() {
       setLoading(false);
     }
   }, [authLoading, projectsPermissionLoading, canViewProjects, fetchDocuments, user]);
+
+  useSoftRefresh(
+    () => fetchDocuments(true),
+    !authLoading && !projectsPermissionLoading && canViewProjects && Boolean(user) && !loading && !visitorSignModalOpen
+  );
 
   useEffect(() => {
     let filtered = documents;

@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
@@ -244,9 +246,9 @@ function InspectionsContent() {
     }
   }, [user, authLoading, canAccessInspectionModule, permissionLoading, canViewCrossUserInspections, supabase]);
 
-  const fetchInspections = useCallback(async () => {
+  const fetchInspections = useCallback(async (background = false) => {
     if (!user || authLoading || permissionLoading || !canAccessInspectionModule) return;
-    setLoading(true);
+    if (!background) setLoading(true);
 
     try {
       let query = supabase
@@ -417,7 +419,7 @@ function InspectionsContent() {
         }
       }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [
     user,
@@ -454,6 +456,8 @@ function InspectionsContent() {
   useEffect(() => {
     fetchInspections();
   }, [fetchInspections]);
+
+  useSoftRefresh(() => fetchInspections(true), Boolean(user) && !authLoading && !permissionLoading && canAccessInspectionModule && !loading);
 
   // Listen for realtime updates to inspections
   useInspectionRealtime((payload) => {

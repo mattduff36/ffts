@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { useTimesheetRealtime } from '@/lib/hooks/useRealtime';
@@ -266,10 +267,16 @@ export default function TimesheetsPage() {
     ]
   );
 
-  const fetchTimesheets = useCallback(async () => {
+  const fetchTimesheetsRequestRef = useRef(0);
+
+  const fetchTimesheets = useCallback(async (background = false) => {
     if (!supabase || !user || authLoading) return;
-    setLoading(true);
-    setFetchError(null);
+    const requestId = fetchTimesheetsRequestRef.current + 1;
+    fetchTimesheetsRequestRef.current = requestId;
+    if (!background) {
+      setLoading(true);
+      setFetchError(null);
+    }
     
     try {
       const targetCount = displayCount + 1;
@@ -306,6 +313,7 @@ export default function TimesheetsPage() {
         const { data, error } = await buildQuery(0, displayCount);
         if (error) throw error;
 
+        if (fetchTimesheetsRequestRef.current !== requestId) return;
         const rows = (data || []) as TimesheetWithProfile[];
         setHasMore(rows.length > displayCount);
         setTimesheets(rows.slice(0, displayCount));
@@ -336,9 +344,11 @@ export default function TimesheetsPage() {
         }
       }
 
+      if (fetchTimesheetsRequestRef.current !== requestId) return;
       setHasMore(collectedRows.length > displayCount);
       setTimesheets(collectedRows.slice(0, displayCount));
     } catch (error) {
+      if (fetchTimesheetsRequestRef.current !== requestId || background) return;
       const errorContextId = 'timesheets-fetch-list-error';
       const isNetworkFailure = isNetworkFetchError(error);
       const isAuthFailure = isAuthErrorStatus(getErrorStatus(error));
@@ -369,7 +379,7 @@ export default function TimesheetsPage() {
         });
       }
     } finally {
-      setLoading(false);
+      if (!background && fetchTimesheetsRequestRef.current === requestId) setLoading(false);
     }
   }, [
     user,
@@ -392,6 +402,17 @@ export default function TimesheetsPage() {
   useEffect(() => {
     fetchTimesheets();
   }, [fetchTimesheets]);
+
+  useSoftRefresh(
+    () => fetchTimesheets(true),
+    Boolean(supabase && user && hasPermission)
+      && !permissionLoading
+      && !authLoading
+      && !isAbsenceSecondaryContextLoading
+      && !loading
+      && !deleteDialogOpen
+      && !deleting
+  );
 
   // Listen for realtime updates to timesheets
   useTimesheetRealtime((payload) => {

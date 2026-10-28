@@ -2,7 +2,7 @@
 
 Use **Logging off** in the top navigation to start a diagnostic recording. The control turns red and reads **Recording**. Click again to stop. The setting and bounded pending queue belong to the current user in this browser tab. Other tabs start independently.
 
-Uploads run every five seconds. **Pending** means events have not yet been acknowledged; **Failed** means an upload failed or the bounded offline queue lost events. Leave the tab open until pending uploads finish. Network failures retry with backoff; closing the browser can lose unsent data. This is a diagnostic logger, not an audit trail or screen replay.
+Uploads run every five seconds. The button stays **Recording** throughout normal uploads. Its tooltip reports **Pending** until events are acknowledged; an amber **!** indicates a failed upload or events lost from the bounded offline queue. Leave the tab open until pending uploads finish. Network failures retry with backoff; closing the browser can lose unsent data. This is a diagnostic logger, not an audit trail or screen replay.
 
 Recorded data: navigation, active page time (excluding hidden time and inactivity after 60 seconds), clicked element types and a small allowlist of static control identifiers, same-origin request route/timing/status, and runtime error counts. It does not capture typed values, page text, request bodies, error messages, passwords, query strings, fragments or dynamic record identifiers. Existing basic usage analytics and security logs remain independent.
 

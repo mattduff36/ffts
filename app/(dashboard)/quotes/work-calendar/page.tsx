@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, eachDayOfInterval, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from 'date-fns';
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
@@ -82,8 +84,8 @@ export default function QuoteWorkCalendarPage() {
     return eachDayOfInterval({ start, end });
   }, [cursorDate]);
 
-  const fetchCalendar = useCallback(async () => {
-    setLoading(true);
+  const fetchCalendar = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     try {
       const start = format(calendarDays[0], 'yyyy-MM-dd');
       const end = format(calendarDays[calendarDays.length - 1], 'yyyy-MM-dd');
@@ -101,6 +103,8 @@ export default function QuoteWorkCalendarPage() {
       setLoading(false);
     }
   }, [calendarDays]);
+
+  useSoftRefresh(() => fetchCalendar(true), canViewQuotes && sensitiveAccess.canAccess && !loading && !saving);
 
   useEffect(() => {
     if (!permissionLoading && !sensitiveAccess.loading && canViewQuotes && sensitiveAccess.canAccess) {

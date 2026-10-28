@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, use } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -93,6 +94,9 @@ export default function CustomerHistoryPage({ params }: PageProps) {
     if (!sensitiveAccess.canAccess) return;
     Promise.all([fetchCustomer(), fetchQuotes()]).finally(() => setLoading(false));
   }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewCustomers, router, fetchCustomer, fetchQuotes]);
+
+  useSoftRefresh(() => Promise.all([fetchCustomer(), fetchQuotes()]),
+    canViewCustomers && sensitiveAccess.canAccess && !loading && !editOpen);
 
   async function handleUpdate(data: CustomerFormData) {
     const res = await fetch(`/api/customers/${id}`, {

@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
@@ -231,9 +233,9 @@ function PlantInspectionsContent() {
     }
   }, [authLoading, user, canAccessInspectionModule, permissionLoading, canViewCrossUserInspections, supabase]);
 
-  const fetchInspections = useCallback(async () => {
+  const fetchInspections = useCallback(async (background = false) => {
     if (!user || authLoading || permissionLoading || !canAccessInspectionModule) return;
-    setLoading(true);
+    if (!background) setLoading(true);
 
     try {
       let query = supabase
@@ -430,7 +432,7 @@ function PlantInspectionsContent() {
         }
       }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [
     user,
@@ -466,6 +468,8 @@ function PlantInspectionsContent() {
   useEffect(() => {
     fetchInspections();
   }, [fetchInspections]);
+
+  useSoftRefresh(() => fetchInspections(true), Boolean(user) && !authLoading && !permissionLoading && canAccessInspectionModule && !loading);
 
   // Listen for realtime updates to inspections
   usePlantInspectionRealtime((payload) => {

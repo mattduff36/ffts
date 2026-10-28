@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { useRouter } from 'next/navigation';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
@@ -61,6 +62,8 @@ export default function CustomersPage() {
     if (!sensitiveAccess.canAccess) return;
     fetchCustomers();
   }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewCustomers, router, fetchCustomers]);
+
+  useSoftRefresh(fetchCustomers, canViewCustomers && sensitiveAccess.canAccess && !loading && !formOpen);
 
   async function handleCreate(data: CustomerFormData) {
     const res = await fetch('/api/customers', {

@@ -7,6 +7,7 @@ import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import {
   FLEET_INSPECTION_OVERDUE_WORKFLOW_KEY,
@@ -107,7 +108,7 @@ function ActionsContent() {
     router.replace('/actions?tab=vans', { scroll: false });
   }, [authLoading, actionsPermissionLoading, canManage, canViewActions, requestedTab, router]);
 
-  const loadSummary = useCallback(async () => {
+  const loadSummary = useCallback(async (background = false) => {
     if (authLoading || actionsPermissionLoading || !canViewActions) {
       return;
     }
@@ -116,8 +117,8 @@ function ActionsContent() {
       const searchParams = new URLSearchParams({
         status: 'open',
         workflow: FLEET_INSPECTION_OVERDUE_WORKFLOW_KEY,
-        ensure_fresh: 'true',
       });
+      if (!background) searchParams.set('ensure_fresh', 'true');
       const response = await fetch(`/api/actions?${searchParams.toString()}`, {
         cache: 'no-store',
       });
@@ -129,13 +130,18 @@ function ActionsContent() {
       setSummary(buildActionsSummaryStats((payload.actions || []) as ReminderActionWithAsset[]));
     } catch (error) {
       console.error(error);
-      setSummary(EMPTY_ACTIONS_SUMMARY);
+      if (!background) setSummary(EMPTY_ACTIONS_SUMMARY);
     }
   }, [authLoading, actionsPermissionLoading, canViewActions]);
 
   useEffect(() => {
     void loadSummary();
   }, [loadSummary, refreshToken, summaryRefreshToken]);
+
+  useSoftRefresh(
+    () => loadSummary(true),
+    !authLoading && !actionsPermissionLoading && canViewActions
+  );
 
   function handlePageTabChange(value: string) {
     if (value === 'settings') {

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -480,9 +481,13 @@ function ApprovalsContent() {
     setVisibleAbsenceCount(APPROVALS_PAGE_SIZE);
   }, [selectedEmployeeId, effectiveTeamFilter, absenceStatusFilter, dateFrom, dateTo]);
 
-  const fetchApprovals = useCallback(async () => {
+  const fetchApprovalsRequestRef = useRef(0);
+
+  const fetchApprovals = useCallback(async (background = false) => {
+    const requestId = fetchApprovalsRequestRef.current + 1;
+    fetchApprovalsRequestRef.current = requestId;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const timesheetStatuses = getApprovalsTimesheetStatuses(timesheetFilter);
       
       // Build a lightweight list first; entry details are fetched for all filtered rows (table pagination is UI-only).
@@ -535,6 +540,7 @@ function ApprovalsContent() {
       const timesheetsToEnrich = getCurrentFilteredTimesheets(timesheetsWithLeaveTotals);
       const timesheetIdsToEnrich = timesheetsToEnrich.map((timesheet) => timesheet.id);
       const userIds = [...new Set(timesheetsToEnrich.map((timesheet) => timesheet.user_id).filter(Boolean))];
+      if (fetchApprovalsRequestRef.current !== requestId) return;
       if (timesheetIdsToEnrich.length === 0 || userIds.length === 0) {
         setTimesheets(timesheetsWithLeaveTotals);
         return;
@@ -626,6 +632,7 @@ function ApprovalsContent() {
         };
       });
 
+      if (fetchApprovalsRequestRef.current !== requestId) return;
       const enrichedById = new Map(enrichedTimesheets.map((timesheet) => [timesheet.id, timesheet]));
       setTimesheets(timesheetsWithLeaveTotals.map((timesheet) => enrichedById.get(timesheet.id) || timesheet));
     } catch (error) {
@@ -638,9 +645,9 @@ function ApprovalsContent() {
       if (shouldLogError) {
         console.error('Error fetching approvals:', error, { errorContextId });
       }
-      toast.error('Failed to load approvals', { id: errorContextId });
+      if (!background) toast.error('Failed to load approvals', { id: errorContextId });
     } finally {
-      setLoading(false);
+      if (!background && fetchApprovalsRequestRef.current === requestId) setLoading(false);
     }
   }, [
     dateFrom,
@@ -660,6 +667,11 @@ function ApprovalsContent() {
       fetchApprovals();
     }
   }, [canViewApprovals, permissionLoading, router, fetchApprovals]);
+
+  useSoftRefresh(
+    () => fetchApprovals(true),
+    canViewApprovals && !permissionLoading && !absenceSecondaryLoading && !employeesLoading && !loading && !processModalOpen && !processingInProgress
+  );
 
   const handleQuickApprove = async (_type: 'timesheet', id: string) => {
     try {

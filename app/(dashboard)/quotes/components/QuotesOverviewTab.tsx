@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -300,6 +301,8 @@ export function QuotesOverviewTab({
   const hasSearchQuery = search.trim().length > 0;
   const dateFrom = dateRange?.from ?? '';
   const dateTo = dateRange?.to ?? '';
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  useSoftRefresh(() => setRefreshVersion((value) => value + 1));
 
   useEffect(() => {
     setDateRange(readQuotesOverviewDateRange());
@@ -341,7 +344,7 @@ export function QuotesOverviewTab({
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [dateRange, search]);
+  }, [dateRange, search, refreshVersion]);
 
   useEffect(() => {
     if (!searchDropdownOpen) return;

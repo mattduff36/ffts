@@ -32,6 +32,7 @@ import {
   getFilteredEmployeeNav,
   getFilteredNavByPermissions,
 } from '@/lib/config/navigation';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { useRamsAssignmentSummary } from '@/lib/hooks/useNavMetrics';
 import { getErrorStatus, isAuthErrorStatus, isNetworkFetchError, createStatusError } from '@/lib/utils/http-error';
@@ -256,9 +257,11 @@ export default function DashboardPage() {
     setActionsUnassignedCount(metrics.actionsUnassignedCount);
   }, []);
 
-  const loadDashboardMetrics = useCallback(async (): Promise<number | null> => {
-    setLoading(true);
-    setBadgesLoading(true);
+  const loadDashboardMetrics = useCallback(async (background = false): Promise<number | null> => {
+    if (!background) {
+      setLoading(true);
+      setBadgesLoading(true);
+    }
 
     try {
       const metrics = await fetchDashboardMetrics();
@@ -267,6 +270,12 @@ export default function DashboardPage() {
       return null;
     } catch (error) {
       const errorStatus = getErrorStatus(error);
+      if (background) {
+        if (isAuthErrorStatus(errorStatus)) {
+          setMetricsErrorStatus(errorStatus);
+        }
+        return errorStatus;
+      }
       setMetricsErrorStatus(errorStatus);
       if (!isAuthErrorStatus(errorStatus) && !isNetworkFetchError(error)) {
         console.error('Error loading dashboard metrics:', error, {
@@ -290,8 +299,10 @@ export default function DashboardPage() {
 
       return errorStatus;
     } finally {
-      setLoading(false);
-      setBadgesLoading(false);
+      if (!background) {
+        setLoading(false);
+        setBadgesLoading(false);
+      }
     }
   }, [applyDashboardMetrics, canViewApprovals, fetchDashboardMetrics]);
 
@@ -302,6 +313,11 @@ export default function DashboardPage() {
 
     void loadDashboardMetrics();
   }, [authLoading, loadDashboardMetrics, permissionsLoading, profile?.id]);
+
+  useSoftRefresh(
+    () => loadDashboardMetrics(true),
+    !authLoading && !permissionsLoading && Boolean(profile?.id) && !loading
+  );
 
   useEffect(() => {
     recoveryAttemptedRef.current = false;

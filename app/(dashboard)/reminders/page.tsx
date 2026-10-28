@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -95,8 +97,8 @@ export default function RemindersPage() {
   const [loading, setLoading] = useState(true);
   const [dismissingReminderId, setDismissingReminderId] = useState<string | null>(null);
 
-  const loadReminders = useCallback(async () => {
-    setLoading(true);
+  const loadReminders = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     try {
       const response = await fetch('/api/reminders?status=pending', { cache: 'no-store' });
       const payload = (await response.json()) as RemindersResponse;
@@ -107,7 +109,7 @@ export default function RemindersPage() {
       setReminders(payload.reminders || []);
     } catch (error) {
       console.error(error);
-      setReminders([]);
+      if (!background) setReminders([]);
     } finally {
       setLoading(false);
     }
@@ -124,6 +126,8 @@ export default function RemindersPage() {
       void loadReminders();
     }
   }, [permissionLoading, canViewReminders, loadReminders]);
+
+  useSoftRefresh(() => loadReminders(true), !permissionLoading && canViewReminders && !loading && !dismissingReminderId);
 
   async function handleDismissManualReminder(reminderId: string) {
     setDismissingReminderId(reminderId);

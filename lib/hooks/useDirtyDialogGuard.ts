@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { triggerShakeAnimation } from '@/lib/utils/animations';
+import { pauseSoftRefresh } from '@/lib/client/soft-refresh';
 
 interface PreventableDialogEvent {
   preventDefault: () => void;
@@ -25,6 +26,9 @@ export function useDirtyDialogGuard({
 }: UseDirtyDialogGuardOptions) {
   const contentRef = useRef<HTMLDivElement>(null);
   const shouldBlockClose = isDirty && !disabled;
+  useEffect(() => {
+    if (isDirty) return pauseSoftRefresh();
+  }, [isDirty]);
   const implicitDismissRef = useRef(false);
 
   const markImplicitDismiss = useCallback(() => {

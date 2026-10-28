@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -185,9 +187,9 @@ function HgvInspectionsContent() {
     }
   }, [authLoading, canAccessInspectionModule, permissionLoading, canViewCrossUserInspections, supabase, user]);
 
-  const fetchInspections = useCallback(async () => {
+  const fetchInspections = useCallback(async (background = false) => {
     if (!user || authLoading || permissionLoading || !canAccessInspectionModule) return;
-    setLoading(true);
+    if (!background) setLoading(true);
 
     try {
       let query = supabase
@@ -326,7 +328,7 @@ function HgvInspectionsContent() {
         toast.error('Failed to load HGV inspections', { id: errorContextId });
       }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [
     authLoading,
@@ -366,6 +368,8 @@ function HgvInspectionsContent() {
   useEffect(() => {
     fetchInspections();
   }, [fetchInspections]);
+
+  useSoftRefresh(() => fetchInspections(true), Boolean(user) && !authLoading && !permissionLoading && canAccessInspectionModule && !loading);
 
   const handleDownloadPDF = async (e: React.MouseEvent, inspectionId: string) => {
     e.preventDefault();

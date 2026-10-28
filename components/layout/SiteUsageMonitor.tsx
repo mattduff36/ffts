@@ -74,7 +74,7 @@ export function SiteUsageMonitor() {
       type="button"
       data-testid="site-usage-monitor"
       aria-pressed={status.enabled}
-      aria-label={aria}
+      aria-label={`Site usage ${captureLabel}`}
       title={`${aria}. Optional diagnostic recording: navigation, active time and control usage. No typed values or page contents. Keep this tab open until uploads finish.`}
       className={`inline-flex max-w-[9.5rem] items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold leading-none hover:bg-slate-800/70 ${tone}`}
       onClick={() => {
@@ -87,7 +87,7 @@ export function SiteUsageMonitor() {
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${status.enabled ? 'bg-red-400' : 'bg-slate-500'}`} aria-hidden="true" />
       <span>{status.enabled ? 'Recording' : 'Logging off'}</span>
-      {pendingLabel ? <span>{pendingLabel}</span> : null}
+      {pendingLabel === 'Failed' ? <span aria-label="Upload failed">!</span> : null}
     </button>
   );
 }

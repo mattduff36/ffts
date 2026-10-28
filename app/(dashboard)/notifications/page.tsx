@@ -1,5 +1,7 @@
 'use client';
 
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -475,6 +477,8 @@ function NotificationsContent() {
       setHasLoadedNotifications(true);
     }
   }, [hasLoadedNotifications]);
+
+  useSoftRefresh(() => fetchNotifications(true), hasLoadedNotifications && !loading);
 
   useEffect(() => {
     fetchNotifications();

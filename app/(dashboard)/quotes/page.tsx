@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -418,8 +419,8 @@ export default function QuotesPage() {
     }
   }, [canViewCustomers, customerId, handleQuotesSensitiveAccessRequired]);
 
-  const fetchLegacyQuotes = useCallback(async () => {
-    setLegacyLoading(true);
+  const fetchLegacyQuotes = useCallback(async (background = false) => {
+    if (!background) setLegacyLoading(true);
     try {
       const legacyQuotesResult = await fetchAllPaginatedItems<LegacyQuote>('/api/quotes/legacy', 'legacy_quotes', {
         limit: 250,
@@ -443,8 +444,8 @@ export default function QuotesPage() {
     }
   }, [handleQuotesSensitiveAccessRequired]);
 
-  const fetchProjectNumbers = useCallback(async () => {
-    setProjectNumbersLoading(true);
+  const fetchProjectNumbers = useCallback(async (background = false) => {
+    if (!background) setProjectNumbersLoading(true);
     try {
       const projectNumbersRes = await fetch('/api/quotes/project-numbers');
       if (!projectNumbersRes.ok) {
@@ -511,6 +512,14 @@ export default function QuotesPage() {
       fetchProjectNumbers(),
     ]);
   }, [fetchData, fetchProjectNumbers]);
+
+  useSoftRefresh(async () => {
+    await Promise.all([
+      fetchData(),
+      ...(pageTab === 'legacy' ? [fetchLegacyQuotes(true)] : []),
+      ...(pageTab === 'projects' ? [fetchProjectNumbers(true)] : []),
+    ]);
+  }, canViewQuotes && sensitiveAccess.canAccess && !loading && !formOpen);
 
   useEffect(() => {
     if (permissionLoading || customerPermissionLoading || sensitiveAccess.loading) return;

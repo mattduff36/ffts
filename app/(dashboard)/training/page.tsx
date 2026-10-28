@@ -23,6 +23,7 @@ import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
+import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import {
   TRAINING_VALIDATION_STATUS_OPTIONS,
   type TrainingPerson,
@@ -184,7 +185,7 @@ function TrainingContent() {
     ? searchParams.get('tab')
     : 'overview') as TrainingTab;
 
-  const loadTrainingData = useCallback(async (showRefreshing = false) => {
+  const loadTrainingData = useCallback(async (showRefreshing = false, background = false) => {
     if (showRefreshing) setRefreshing(true);
     try {
       const [summaryResponse, recordsResult, peopleResult, qualificationResult, notesResult] = await Promise.all([
@@ -204,10 +205,10 @@ function TrainingContent() {
         notes: notesResult.items,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load training data');
+      if (!background) toast.error(error instanceof Error ? error.message : 'Failed to load training data');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!background) setLoading(false);
+      if (showRefreshing) setRefreshing(false);
     }
   }, []);
 
@@ -220,6 +221,17 @@ function TrainingContent() {
     }
     loadTrainingData();
   }, [hasPermission, loadTrainingData, permissionLoading, router]);
+
+  const trainingDraftOpen = Boolean(editingRecord)
+    || creatingRecord
+    || Boolean(editingPerson)
+    || Boolean(editingQualification)
+    || Boolean(archivingRecordId);
+
+  useSoftRefresh(
+    () => loadTrainingData(false, true),
+    hasPermission && !permissionLoading && !loading && !refreshing && !exporting && !trainingDraftOpen
+  );
 
   function setTab(tab: TrainingTab) {
     router.replace(`/training?tab=${tab}`, { scroll: false });

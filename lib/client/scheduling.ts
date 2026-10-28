@@ -73,18 +73,18 @@ function assertNoProvisionalIds(
 }
 
 export async function fetchSchedulingContext(): Promise<SchedulingContext> {
-  return readResponse(await fetch('/api/scheduling/context'));
+  return readResponse(await fetch('/api/scheduling/context', { cache: 'no-store' }));
 }
 
 export async function fetchSchedulingBoard(weekStart: string): Promise<SchedulingBoardPayload> {
   return readResponse(
-    await fetch(`/api/scheduling/board?week_start=${encodeURIComponent(weekStart)}`)
+    await fetch(`/api/scheduling/board?week_start=${encodeURIComponent(weekStart)}`, { cache: 'no-store' })
   );
 }
 
 export async function fetchMySchedule(weekStart: string): Promise<SchedulingSelfPayload> {
   return readResponse(
-    await fetch(`/api/scheduling/me?week_start=${encodeURIComponent(weekStart)}`)
+    await fetch(`/api/scheduling/me?week_start=${encodeURIComponent(weekStart)}`, { cache: 'no-store' })
   );
 }
 
@@ -243,21 +243,21 @@ export async function deleteScheduleJob(id: string): Promise<DeleteScheduleJobRe
 
 export async function fetchScheduleQuoteCandidates(): Promise<ScheduleQuoteCandidate[]> {
   const payload = await readResponse<{ quotes: ScheduleQuoteCandidate[] }>(
-    await fetch('/api/scheduling/quotes')
+    await fetch('/api/scheduling/quotes', { cache: 'no-store' })
   );
   return payload.quotes;
 }
 
 export async function fetchScheduleProjectCandidates(): Promise<ScheduleProjectCandidate[]> {
   const payload = await readResponse<{ projects: ScheduleProjectCandidate[] }>(
-    await fetch('/api/scheduling/projects')
+    await fetch('/api/scheduling/projects', { cache: 'no-store' })
   );
   return payload.projects;
 }
 
 export async function fetchScheduleVisitBacklog(): Promise<ScheduleVisitBacklogItem[]> {
   const payload = await readResponse<{ items: ScheduleVisitBacklogItem[] }>(
-    await fetch('/api/scheduling/visit-backlog')
+    await fetch('/api/scheduling/visit-backlog', { cache: 'no-store' })
   );
   return payload.items;
 }
@@ -267,7 +267,7 @@ export async function previewScheduleVisitBacklog(
 ): Promise<ScheduleVisitBacklogPreview> {
   assertNoProvisionalIds({ visit_id: visitId });
   const payload = await readResponse<{ preview: ScheduleVisitBacklogPreview }>(
-    await fetch(`/api/scheduling/visits/${visitId}/backlog`)
+    await fetch(`/api/scheduling/visits/${visitId}/backlog`, { cache: 'no-store' })
   );
   return payload.preview;
 }

@@ -2,6 +2,30 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.3.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation`
+
+**PUSHED AT**
+2026-10-28T11:16:51.896Z
+
+**WHAT CHANGED**
+Update Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation, with changes to app screens.
+- Updated daily tasks, with changes to app screens.
+- Updated help and FAQ, with changes to documentation.
+- Updated customers, with changes to app screens.
+- Updated timesheets, with changes to app screens.
+- Updated dashboard, with changes to app screens.
+- Updated approvals, with changes to app screens.
+- Updated training, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation`
+
 ## 1026.2.0
 
 **GIT COMMIT MESSAGE**

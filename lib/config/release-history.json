@@ -1,5 +1,55 @@
 [
   {
+    "version": "1026.3.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation.",
+    "summary": "Updated Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation.",
+    "details": [
+      "Updated Quotes, Daily Tasks, Customers, Help and FAQ, Timesheets, Dashboard, Approvals, Training, Inventory, Projects, Actions, Reminders, Notifications, and Navigation, with changes to app screens.",
+      "Updated daily tasks, with changes to app screens.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated customers, with changes to app screens.",
+      "Updated timesheets, with changes to app screens.",
+      "Updated dashboard, with changes to app screens.",
+      "Updated approvals, with changes to app screens.",
+      "Updated training, with changes to app screens."
+    ],
+    "areas": [
+      "Quotes",
+      "Daily Tasks",
+      "Customers",
+      "Help",
+      "FAQ",
+      "Timesheets",
+      "Dashboard",
+      "Approvals",
+      "Training",
+      "Inventory",
+      "Projects",
+      "Actions",
+      "Reminders",
+      "Notifications",
+      "Navigation"
+    ],
+    "areaKeys": [
+      "quotes",
+      "daily-tasks",
+      "customers",
+      "timesheets",
+      "dashboard",
+      "approvals",
+      "training",
+      "inventory",
+      "projects",
+      "actions",
+      "reminders",
+      "notifications",
+      "navigation"
+    ],
+    "pushedAt": "2026-10-28T11:16:51.896Z"
+  },
+  {
     "version": "1026.2.0",
     "updateKind": "major",
     "title": "Debug tools update",

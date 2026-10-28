@@ -1,5 +1,31 @@
 [
   {
+    "version": "1026.2.0",
+    "updateKind": "major",
+    "title": "Debug tools update",
+    "description": "Updated Debug tools, Navigation, Help and FAQ, and Data storage.",
+    "summary": "Updated Debug tools, Navigation, Help and FAQ, and Data storage.",
+    "details": [
+      "Updated Debug tools, Navigation, Help and FAQ, and Data storage, with changes to background routes and app screens.",
+      "Updated data storage, with changes to data storage.",
+      "Updated navigation, with changes to interface components.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Debug tools",
+      "Navigation",
+      "Help",
+      "FAQ",
+      "Data storage"
+    ],
+    "areaKeys": [
+      "debug",
+      "navigation",
+      "data-storage"
+    ],
+    "pushedAt": "2026-10-28T10:48:36.482Z"
+  },
+  {
     "version": "1026.1.0",
     "updateKind": "major",
     "title": "Quotes update",

@@ -2,6 +2,30 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.2.0
+
+**GIT COMMIT MESSAGE**
+`feat(debug): update Debug tools, Navigation, Help and FAQ, and Data storage`
+
+**PUSHED AT**
+2026-10-28T10:48:36.482Z
+
+**WHAT CHANGED**
+Update Debug tools, Navigation, Help and FAQ, and Data storage.
+
+**VERSION HISTORY DETAILS**
+- Updated Debug tools, Navigation, Help and FAQ, and Data storage, with changes to background routes and app screens.
+- Updated data storage, with changes to data storage.
+- Updated navigation, with changes to interface components.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(debug): update Debug tools, Navigation, Help and FAQ, and Data storage`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 1026.1.0
 
 **GIT COMMIT MESSAGE**

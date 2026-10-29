@@ -9,6 +9,7 @@ The untouched 300 x 88 original is included. All variants preserve its artwork; 
 - `logo-monochrome-white` / `logo-monochrome-black`: single-colour silhouettes.
 - `leaf-transparent`: original leaf alone with transparency.
 - `leaf-on-light` / `leaf-on-dark`: square app marks with contrasting backgrounds.
+- `ios-app-icon`: opaque leaf with FFTS lettering below, used for every Apple touch icon size.
 - `icon-16/32/48/192/512.png`: browser and PWA sizes.
 - `icon-maskable-512.png`: opaque PWA icon with a protected central safe zone.
 - `social-card.png`: 1200 x 630 Open Graph / Twitter sharing image.

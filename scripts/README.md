@@ -158,3 +158,5 @@ DIRECT/TEE-LIGHT is a workflow preference, not a bypass of FFTS mechanical relea
 ## FFTS logo pack
 
 Run `node scripts/branding/build-logo-pack.mjs` to regenerate `public/branding/` variants, `app/favicon.ico`, root SVG favicon/Apple/PWA assets and legacy `/images/forest-farm/` compatibility assets from the untouched source PNG. This is a local asset-only operation; it does not deploy or change data. SVGs embed raster artwork; see `public/branding/README.md` for usage and resolution limits. After changes, recreate the downloadable ZIP from the branding files (excluding the ZIP itself) plus `app/favicon.ico`, root SVG favicon and Apple/PWA icons.
+
+Apple touch icons use the `ios-app-icon` leaf-and-FFTS variant. After regenerating icons, version the Apple icon URLs in `app/layout.tsx` and rebuild the downloadable pack. Login uses safe-area padding rather than a visual transform, so the status area and scrollable form remain separate.

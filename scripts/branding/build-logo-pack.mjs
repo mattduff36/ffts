@@ -17,6 +17,7 @@ const variants={
  'leaf-transparent':wrap(94,88,img),
  'leaf-on-light':wrap(256,256,`<rect width="256" height="256" rx="54" fill="#f5f7f1"/><svg x="32" y="38" width="192" height="180" viewBox="0 0 94 88">${img}</svg>`),
  'leaf-on-dark':wrap(256,256,`<rect width="256" height="256" rx="54" fill="#131614"/><svg x="32" y="38" width="192" height="180" viewBox="0 0 94 88">${filters}<g filter="url(#bright)">${img}</g></svg>`),
+ 'ios-app-icon':wrap(256,256,`<rect width="256" height="256" fill="#f5f7f1"/><svg x="52" y="24" width="152" height="143" viewBox="0 0 94 88">${img}</svg><text x="128" y="222" fill="#153d22" font-family="Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="2" text-anchor="middle">FFTS</text>`),
  'social-card':wrap(1200,630,`<rect width="1200" height="630" fill="#131614"/><rect x="80" y="75" width="1040" height="4" fill="#a0d06d"/><svg x="120" y="150" width="960" height="282" viewBox="0 0 300 88">${darkBody}</svg><text x="600" y="505" fill="#d4dad5" font-family="Arial,sans-serif" font-size="32" text-anchor="middle">Field Operations</text>`),
 };
 for(const [name,svg] of Object.entries(variants)){await fs.writeFile(path.join(out,name+'.svg'),svg);await sharp(Buffer.from(svg),{density:name==='social-card'?72:144}).png().toFile(path.join(out,name+'.png'))}
@@ -27,7 +28,7 @@ await sharp(Buffer.from(mask)).png().toFile(path.join(out,'icon-maskable-512.png
 await fs.writeFile(path.join(root,'public/favicon.svg'),variants['leaf-on-light']);
 const pngs=await Promise.all([16,32,48].map(n=>sharp(icon).resize(n,n).png().toBuffer()));
 const header=Buffer.alloc(6+16*pngs.length);header.writeUInt16LE(1,2);header.writeUInt16LE(pngs.length,4);let offset=header.length;pngs.forEach((b,i)=>{const at=6+16*i,n=[16,32,48][i];header[at]=n;header[at+1]=n;header.writeUInt16LE(1,at+4);header.writeUInt16LE(32,at+6);header.writeUInt32LE(b.length,at+8);header.writeUInt32LE(offset,at+12);offset+=b.length});await fs.writeFile(path.join(root,'app/favicon.ico'),Buffer.concat([header,...pngs]));
-for(const size of [120,152,167,180]){const png=await sharp(icon).resize(size,size).flatten({background:'#f5f7f1'}).png().toBuffer();for(const name of [`apple-touch-icon-${size}x${size}.png`,`apple-touch-icon-${size}x${size}-precomposed.png`,...(size===180?['apple-touch-icon.png','apple-touch-icon-precomposed.png']:[])])await fs.writeFile(path.join(root,'public',name),png)}
+for(const size of [120,152,167,180]){const png=await sharp(Buffer.from(variants['ios-app-icon'])).resize(size,size).flatten({background:'#f5f7f1'}).png().toBuffer();for(const name of [`apple-touch-icon-${size}x${size}.png`,`apple-touch-icon-${size}x${size}-precomposed.png`,...(size===180?['apple-touch-icon.png','apple-touch-icon-precomposed.png']:[])])await fs.writeFile(path.join(root,'public',name),png)}
 for(const size of [192,512])await fs.copyFile(path.join(out,`icon-${size}.png`),path.join(root,`public/icon-${size}x${size}.png`));
 // Preserve established asset URLs for environment overrides and PDF logo loading.
 await fs.writeFile(path.join(root,'public/images/forest-farm/logo.svg'),variants['logo-light']);

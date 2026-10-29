@@ -195,13 +195,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center px-4 pb-4 pt-0 sm:pt-16 md:pt-24 relative overflow-y-auto overflow-x-hidden bg-slate-950">
+    <div className="login-viewport h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center relative overflow-y-auto overflow-x-hidden bg-slate-950">
       {/* Fixed background starts at the viewport edge so iOS can render it under the native status bar. */}
       <div className="fixed inset-0 z-0 pointer-events-none app-canvas">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(160,208,109,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(160,208,109,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
       </div>
 
-      <div className="w-full max-w-lg relative z-10 translate-y-[clamp(1.5rem,10svh,5rem)] sm:translate-y-0">
+      <div className="w-full max-w-lg shrink-0 relative z-10">
         <div className="flex justify-center mb-8 px-6">
           <BrandLogo priority />
         </div>

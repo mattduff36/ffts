@@ -1071,3 +1071,18 @@ input[type="number"] {
 @media (min-width: 2560px) {
   .schedule-team-grid { grid-template-columns: repeat(var(--team-wide-columns), minmax(0, 1fr)); }
 }
+
+/* Keep login content below the iPhone status area, including standalone PWA mode.
+   Real padding keeps the space in scroll layout when the keyboard opens. */
+.login-viewport {
+  padding-top: calc(var(--login-safe-top, env(safe-area-inset-top, 0px)) + clamp(1.5rem, 10svh, 5rem));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) {
+  .login-viewport { padding-top: calc(var(--login-safe-top, env(safe-area-inset-top, 0px)) + 4rem); }
+}
+@media (min-width: 768px) {
+  .login-viewport { padding-top: calc(var(--login-safe-top, env(safe-area-inset-top, 0px)) + 6rem); }
+}

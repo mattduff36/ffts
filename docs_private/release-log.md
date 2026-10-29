@@ -2,6 +2,25 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.8.0
+
+**GIT COMMIT MESSAGE**
+`feat(layout): update Navigation, Workshop Tasks, and Profile`
+
+**PUSHED AT**
+2026-10-29T11:39:59.163Z
+
+**WHAT CHANGED**
+Update Navigation, Workshop Tasks, and Profile.
+
+**VERSION HISTORY DETAILS**
+- Updated Navigation, Workshop Tasks, and Profile across 2 changed files.
+- Updated workshop tasks, with changes to app screens.
+- Updated profile, with changes to interface components.
+
+**COMMITS IN THIS RELEASE**
+- `feat(layout): update Navigation, Workshop Tasks, and Profile`
+
 ## 1026.7.1
 
 **GIT COMMIT MESSAGE**

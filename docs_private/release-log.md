@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.5.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes and Help and FAQ`
+
+**PUSHED AT**
+2026-10-29T00:28:01.852Z
+
+**WHAT CHANGED**
+Update Quotes and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes and Help and FAQ, with changes to app screens and automated tests.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes and Help and FAQ`
+
 ## 1026.4.0
 
 **GIT COMMIT MESSAGE**

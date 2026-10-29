@@ -1,5 +1,25 @@
 [
   {
+    "version": "1026.5.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes and Help and FAQ.",
+    "summary": "Updated Quotes and Help and FAQ.",
+    "details": [
+      "Updated Quotes and Help and FAQ, with changes to app screens and automated tests.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Quotes",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "quotes"
+    ],
+    "pushedAt": "2026-10-29T00:28:01.852Z"
+  },
+  {
     "version": "1026.4.0",
     "updateKind": "major",
     "title": "Quotes update",

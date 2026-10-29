@@ -35,6 +35,7 @@ function buildQuote(overrides: Partial<Quote>): Quote {
     parent_quote_id: null,
     customer_id: 'customer-1',
     customer_site_id: null,
+    customer_site: overrides.customer_site,
     requester_id: overrides.requester_id ?? 'manager-1',
     requester_initials: overrides.requester_initials ?? 'LC',
     quote_date: overrides.quote_date || '2026-06-12',
@@ -238,6 +239,7 @@ describe('QuotesTable filters', () => {
     const quotes = [
       buildQuote({
         id: 'details-cleanup',
+        customer_site: { site_name: 'Pump Station' },
         quote_reference: '50001-LC',
         customer: {
           id: 'customer-details',
@@ -258,7 +260,8 @@ describe('QuotesTable filters', () => {
 
     const firstRowCells = container.querySelectorAll('tbody tr:first-child td');
     expect(firstRowCells[2]).toHaveTextContent('Pump station repair');
-    expect(firstRowCells[2]).toHaveTextContent('Drainage works');
+    expect(firstRowCells[2]).toHaveTextContent('Pump Station');
+    expect(firstRowCells[2]).not.toHaveTextContent('Drainage works');
     expect(firstRowCells[2]).not.toHaveTextContent('50001-LC');
     expect(firstRowCells[2]).not.toHaveTextContent('Details Customer Ltd');
   });

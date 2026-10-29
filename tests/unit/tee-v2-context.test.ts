@@ -58,11 +58,11 @@ describe('TEE V2.2 FFTS project context', () => {
     expect(core).not.toMatch(/do \*\*not\*\* authorize a push/iu);
     expect(core).toContain('finalise and push');
     expect(core).toContain('finalise:push');
-    expect(finaliseCommands).toMatch(/Map `finalise and push` and `fap`/);
-    expect(finaliseCommands).toMatch(/Map `finalise full and push` and `ffap`/);
-    expect(finaliseCommands).toMatch(/ordinary work runs `npm run finalise`/i);
-    expect(finaliseCommands).toMatch(/ordinary work runs `npm run finalise:full`/i);
-    expect(finaliseCommands).toMatch(/Do not invoke `finalise:push` \/ `finalise:full:push` for ordinary work/);
+    expect(finaliseCommands).toMatch(/Explicit current-action `finalise and push` or `fap`.*COMPLETE_AND_RELEASE\(normal\)/);
+    expect(finaliseCommands).toMatch(/`finalise full and push` or `ffap`.*COMPLETE_AND_RELEASE\(full\)/);
+    expect(finaliseCommands).toContain('`npm run finalise` / `npm run finalise:full`; neither authorises a push');
+    expect(finaliseCommands).toContain('Ordinary complete-and-release runs local finalise');
+    expect(finaliseCommands).toContain('Protected CRITICAL / C9 work uses `npm run finalise:push` or `npm run finalise:full:push`');
     expect(finaliseCommands).not.toMatch(/do \*\*not\*\* authorize a push/iu);
     expect(finaliseCommands).toContain('finalise and push');
     expect(fixerrors).toContain('fixerrors-exact-snapshot-v4');

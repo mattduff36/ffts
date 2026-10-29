@@ -31,3 +31,7 @@ Tests that require a configured Supabase target must remain skipped unless `RUN_
 - `/fleet/plant/[plantId]/history`
 
 Tests must clean up only records they created and use `example.test` addresses and fictional names.
+
+Quote identity fixtures distinguish the saved site name from its address snapshot. Release-command contract tests follow the current explicit-action wording in .cursor/rules/finalise-commands.mdc while preserving the local-finalise/no-push boundary.
+
+The combined Git rehome fixture has a 120-second budget, matching the standard suite timeout: its many real Git repositories take about 70 seconds on this Windows host. Its validation assertions are unchanged.

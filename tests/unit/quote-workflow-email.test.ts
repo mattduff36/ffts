@@ -65,6 +65,7 @@ function buildQuoteBundle(overrides: Partial<QuoteBundle['quote']> = {}): QuoteB
       subject_line: 'Concrete repairs',
       scope: 'Repair the concrete.',
       site_address: '1 Road Lane',
+      customer_site: { site_name: 'West Woodland' },
       manager_email: 'stored-manager@example.test',
       pricing_mode: 'itemized',
       total: 0,
@@ -197,12 +198,12 @@ describe('sendQuoteToCustomerEmail', () => {
       to: ['alex@example.com'],
       cc: ['manager-copy@example.test', 'no-reply@example.test'],
       reply_to: ['sender@example.test', 'manager-copy@example.test'],
-      subject: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs',
+      subject: 'Q-001 - Acme Ltd - West Woodland - Concrete repairs',
     }));
     expect(String(body.html)).toContain(VAT_NOTICE);
     expect(body.attachments).toEqual([
       expect.objectContaining({
-        filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
+        filename: 'Q-001 - Acme Ltd - West Woodland - Concrete repairs.pdf',
       }),
     ]);
   });
@@ -276,14 +277,14 @@ describe('sendQuoteToCustomerEmail', () => {
       to: ['alex@example.com'],
       cc: ['workflow-copy@example.test', 'no-reply@example.test'],
       reply_to: ['sender@example.test', 'workflow-copy@example.test'],
-      subject: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs',
+      subject: 'Q-001 - Acme Ltd - West Woodland - Concrete repairs',
     }));
     expect(String(body.html)).toContain('Please can I have a purchase order for the attached quotation.');
     expect(String(body.html)).toContain(VAT_NOTICE);
     expect(String(body.html)).toContain('Kind Regards<br>Example Manager');
     expect(body.attachments).toEqual([
       expect.objectContaining({
-        filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
+        filename: 'Q-001 - Acme Ltd - West Woodland - Concrete repairs.pdf',
       }),
     ]);
   });
@@ -356,7 +357,7 @@ describe('sendQuoteToCustomerEmail', () => {
     expect(String(body.html)).toContain('Hi Alex Customer,<br>Please send a PO to Example Manager.');
     expect(body.attachments).toEqual([
       expect.objectContaining({
-        filename: 'Q-001 - Acme Ltd - 1 Road Lane - Concrete repairs.pdf',
+        filename: 'Q-001 - Acme Ltd - West Woodland - Concrete repairs.pdf',
       }),
     ]);
   });

@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.8.2
+
+**GIT COMMIT MESSAGE**
+`fix(layout): update Navigation and Sign in`
+
+**PUSHED AT**
+2026-10-29T14:00:55.977Z
+
+**WHAT CHANGED**
+Update Navigation and Sign in.
+
+**VERSION HISTORY DETAILS**
+- Updated Navigation and Sign in across 2 changed files.
+- Updated sign in across 1 changed file.
+
+**COMMITS IN THIS RELEASE**
+- `fix(layout): update Navigation and Sign in`
+
 ## 1026.8.1
 
 **GIT COMMIT MESSAGE**

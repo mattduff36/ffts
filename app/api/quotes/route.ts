@@ -124,24 +124,37 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_latest_version', true);
     }
 
-    let summaryQuery = supabase
-      .from('quotes')
-      .select('status, total');
+    const includeSummary = searchParams.get('include_summary') !== 'false';
+    const listRequest = query;
+    let data: Awaited<typeof listRequest>['data'] = null;
+    let summaryRows: Array<{ status: string | null; total: number | null }> | null = null;
 
-    if (customerId) {
-      summaryQuery = summaryQuery.eq('customer_id', customerId);
+    if (includeSummary) {
+      let summaryQuery = supabase
+        .from('quotes')
+        .select('status, total');
+
+      if (customerId) {
+        summaryQuery = summaryQuery.eq('customer_id', customerId);
+      }
+
+      if (!includeVersions) {
+        summaryQuery = summaryQuery.eq('is_latest_version', true);
+      }
+
+      const [listResult, summaryResult] = await Promise.all([
+        listRequest,
+        summaryQuery,
+      ]);
+      if (listResult.error) throw listResult.error;
+      if (summaryResult.error) throw summaryResult.error;
+      data = listResult.data;
+      summaryRows = summaryResult.data;
+    } else {
+      const listResult = await listRequest;
+      if (listResult.error) throw listResult.error;
+      data = listResult.data;
     }
-
-    if (!includeVersions) {
-      summaryQuery = summaryQuery.eq('is_latest_version', true);
-    }
-
-    const [{ data, error }, { data: summaryRows, error: summaryError }] = await Promise.all([
-      query,
-      summaryQuery,
-    ]);
-    if (error) throw error;
-    if (summaryError) throw summaryError;
 
     const quotes = data || [];
     const threadIds = quotes.map(quote => quote.quote_thread_id).filter(Boolean);
@@ -257,12 +270,14 @@ export async function GET(request: NextRequest) {
           sage_status: getQuoteSageStatus(version),
         })),
       })),
-      summary: {
-        total_quotes: statusCounts.all,
-        status_counts: statusCounts,
-        accepted_quotes: acceptedQuotes,
-        accepted_value: acceptedValue,
-      },
+      summary: includeSummary
+        ? {
+          total_quotes: statusCounts.all,
+          status_counts: statusCounts,
+          accepted_quotes: acceptedQuotes,
+          accepted_value: acceptedValue,
+        }
+        : null,
       pagination: {
         offset,
         limit,

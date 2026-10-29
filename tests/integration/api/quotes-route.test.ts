@@ -66,13 +66,16 @@ vi.mock('@/lib/server/quote-workflow', () => ({
   loadQuoteModuleSettings: mockLoadQuoteModuleSettings,
 }));
 
-function createQueryableResult<T>(rows: T[]) {
-  const result = { data: rows, error: null };
+function createQueryableResult<T>(rows: T[], error: { message: string } | null = null) {
+  const result = { data: error ? null : rows, error };
   return createSupabaseQueryMock(result, ['eq', 'in', 'order']);
 }
 
-function createPaginatedQuoteQuery(rows: Array<Record<string, unknown>>) {
-  const query = createQueryableResult(rows);
+function createPaginatedQuoteQuery(
+  rows: Array<Record<string, unknown>>,
+  error: { message: string } | null = null,
+) {
+  const query = createQueryableResult(rows, error);
   const range = vi.fn().mockReturnValue(query);
   const order = vi.fn().mockReturnValue({ range });
 
@@ -213,6 +216,288 @@ describe('GET /api/quotes', () => {
       'not_on_sage',
       'on_sage',
     ]);
+  });
+
+  function installQuotesList(options: {
+    paginatedQuotes?: Array<Record<string, unknown>>;
+    previousVersions?: Array<Record<string, unknown>>;
+    summaryRows?: Array<{ status: string; total: number }>;
+    invoices?: Array<{ quote_id: string; amount: number; invoice_date: string | null }>;
+    listError?: { message: string } | null;
+    summaryError?: { message: string } | null;
+  } = {}) {
+    const paginatedQuotes = options.paginatedQuotes ?? [];
+    const previousVersions = options.previousVersions ?? [];
+    const summaryRows = options.summaryRows ?? [];
+    const { query: listQuery, order, range } = createPaginatedQuoteQuery(paginatedQuotes, options.listError ?? null);
+    const previousVersionsQuery = createQueryableResult(previousVersions);
+    const summaryQuery = createQueryableResult(summaryRows, options.summaryError ?? null);
+    const invoiceIn = vi.fn().mockResolvedValue({ data: options.invoices ?? [], error: null });
+    const invoiceRequestIn = vi.fn().mockResolvedValue({ data: [], error: null });
+    let quoteSelectCount = 0;
+    let statusTotalSelects = 0;
+    const selectQuotes = vi.fn((columns: string) => {
+      if (columns.includes('customer:customers')) {
+        quoteSelectCount += 1;
+        if (quoteSelectCount === 1) {
+          return { order };
+        }
+
+        return previousVersionsQuery;
+      }
+
+      if (columns === 'status, total') {
+        statusTotalSelects += 1;
+        return summaryQuery;
+      }
+
+      throw new Error(`Unexpected select columns: ${columns}`);
+    });
+
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'quotes') {
+          return { select: selectQuotes };
+        }
+
+        if (table === 'quote_invoices') {
+          return { select: vi.fn(() => ({ in: invoiceIn })) };
+        }
+
+        if (table === 'quote_invoice_requests') {
+          return { select: vi.fn(() => ({ in: invoiceRequestIn })) };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    } as unknown as SupabaseClient);
+
+    return {
+      listQuery,
+      range,
+      previousVersionsQuery,
+      summaryQuery,
+      invoiceIn,
+      invoiceRequestIn,
+      selectQuotes,
+      getStatusTotalSelects: () => statusTotalSelects,
+    };
+  }
+
+  const defaultSummaryRows = [
+    { status: 'draft', total: 1200 },
+    { status: 'in_progress', total: 2500 },
+    { status: 'invoiced', total: 3000 },
+    { status: 'lost', total: 900 },
+  ];
+
+  const expectedSummary = {
+    total_quotes: 4,
+    status_counts: expect.objectContaining({
+      all: 4,
+      draft: 1,
+      in_progress: 1,
+      invoiced: 1,
+    }),
+    accepted_quotes: 2,
+    accepted_value: 5500,
+  };
+
+  it.each([
+    ['missing', 'http://localhost/api/quotes?limit=2&offset=0'],
+    ['true', 'http://localhost/api/quotes?include_summary=true&limit=2&offset=0'],
+    ['other', 'http://localhost/api/quotes?include_summary=FALSE&limit=2&offset=0'],
+  ])('keeps the global status,total summary when include_summary is %s', async (_label, url) => {
+    const { summaryQuery, getStatusTotalSelects } = installQuotesList({
+      paginatedQuotes: [{
+        id: 'quote-1',
+        quote_thread_id: 'thread-1',
+        total: 1200,
+        status: 'draft',
+      }],
+      summaryRows: defaultSummaryRows,
+    });
+
+    const response = await GET(new NextRequest(url));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getStatusTotalSelects()).toBe(1);
+    expect(summaryQuery.eq).toHaveBeenCalledWith('is_latest_version', true);
+    expect(payload.summary).toEqual(expectedSummary);
+  });
+
+  it('skips the global status,total scan and returns summary null only for include_summary=false', async () => {
+    const previousVersion = {
+      id: 'quote-1-old',
+      quote_thread_id: 'thread-1',
+      quote_reference: 'Q-001-A',
+      total: 800,
+      status: 'sent',
+      sage_posted_at: '2026-03-01T10:00:00.000Z',
+    };
+    const {
+      listQuery,
+      previousVersionsQuery,
+      invoiceIn,
+      invoiceRequestIn,
+      selectQuotes,
+      getStatusTotalSelects,
+    } = installQuotesList({
+      paginatedQuotes: [{
+        id: 'quote-1',
+        quote_thread_id: 'thread-1',
+        quote_reference: 'Q-001',
+        total: 1200,
+        status: 'draft',
+        customer_id: 'customer-9',
+      }],
+      previousVersions: [previousVersion],
+      invoices: [{ quote_id: 'quote-1', amount: 400, invoice_date: '2026-04-01' }],
+      summaryRows: defaultSummaryRows,
+    });
+
+    const response = await GET(new NextRequest(
+      'http://localhost/api/quotes?include_summary=false&customer_id=customer-9&limit=2&offset=0'
+    ));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getStatusTotalSelects()).toBe(0);
+    expect(selectQuotes).not.toHaveBeenCalledWith('status, total');
+    expect(listQuery.eq).toHaveBeenCalledWith('customer_id', 'customer-9');
+    expect(listQuery.eq).toHaveBeenCalledWith('is_latest_version', true);
+    expect(previousVersionsQuery.in).toHaveBeenCalledWith('quote_thread_id', ['thread-1']);
+    expect(invoiceIn).toHaveBeenCalledWith('quote_id', ['quote-1', 'quote-1-old']);
+    expect(invoiceRequestIn).toHaveBeenCalledWith('quote_id', ['quote-1', 'quote-1-old']);
+    expect(payload.summary).toBeNull();
+    expect(payload.pagination).toEqual({ offset: 0, limit: 2, has_more: false });
+    expect(payload.quotes).toHaveLength(1);
+    expect(payload.quotes[0].invoice_summary).toEqual(expect.objectContaining({
+      invoicedTotal: 400,
+      status: 'not_invoiced',
+    }));
+    expect(payload.quotes[0].sage_status).toBe('not_on_sage');
+    expect(payload.quotes[0].previous_versions).toEqual([
+      expect.objectContaining({
+        id: 'quote-1-old',
+        sage_status: 'on_sage',
+        invoice_summary: expect.objectContaining({ invoicedTotal: 0 }),
+      }),
+    ]);
+  });
+
+  it('still filters the summary scan by customer when the summary is requested', async () => {
+    const { listQuery, summaryQuery, getStatusTotalSelects } = installQuotesList({
+      paginatedQuotes: [{
+        id: 'quote-1',
+        quote_thread_id: 'thread-1',
+        total: 100,
+        status: 'draft',
+      }],
+      summaryRows: [{ status: 'draft', total: 100 }],
+    });
+
+    const response = await GET(new NextRequest(
+      'http://localhost/api/quotes?customer_id=customer-9&include_summary=true&limit=1&offset=0'
+    ));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getStatusTotalSelects()).toBe(1);
+    expect(listQuery.eq).toHaveBeenCalledWith('customer_id', 'customer-9');
+    expect(summaryQuery.eq).toHaveBeenCalledWith('customer_id', 'customer-9');
+    expect(summaryQuery.eq).toHaveBeenCalledWith('is_latest_version', true);
+    expect(payload.summary).toEqual(expect.objectContaining({
+      total_quotes: 1,
+      accepted_quotes: 0,
+      accepted_value: 0,
+    }));
+  });
+
+  it('does not apply the latest-version summary filter when versions are included', async () => {
+    const { listQuery, summaryQuery, selectQuotes, previousVersionsQuery, getStatusTotalSelects } = installQuotesList({
+      paginatedQuotes: [{
+        id: 'quote-1',
+        quote_thread_id: 'thread-1',
+        total: 100,
+        status: 'sent',
+      }],
+      summaryRows: [{ status: 'sent', total: 100 }],
+    });
+
+    const response = await GET(new NextRequest(
+      'http://localhost/api/quotes?include_versions=true&customer_id=customer-9&limit=1&offset=0'
+    ));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getStatusTotalSelects()).toBe(1);
+    expect(listQuery.eq).toHaveBeenCalledWith('customer_id', 'customer-9');
+    expect(listQuery.eq).not.toHaveBeenCalledWith('is_latest_version', true);
+    expect(summaryQuery.eq).toHaveBeenCalledWith('customer_id', 'customer-9');
+    expect(summaryQuery.eq).not.toHaveBeenCalledWith('is_latest_version', true);
+    expect(previousVersionsQuery.in).not.toHaveBeenCalled();
+    expect(selectQuotes.mock.calls.filter(([columns]) => String(columns).includes('customer:customers'))).toHaveLength(1);
+    expect(payload.quotes[0].previous_versions).toEqual([]);
+    expect(payload.summary.total_quotes).toBe(1);
+  });
+
+  it('returns an empty page without invoice scans and still builds the default summary', async () => {
+    const { invoiceIn, invoiceRequestIn, getStatusTotalSelects } = installQuotesList({
+      paginatedQuotes: [],
+      summaryRows: [{ status: 'draft', total: 50 }],
+    });
+
+    const response = await GET(new NextRequest('http://localhost/api/quotes?limit=2&offset=4'));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getStatusTotalSelects()).toBe(1);
+    expect(payload.quotes).toEqual([]);
+    expect(payload.pagination).toEqual({ offset: 4, limit: 2, has_more: false });
+    expect(payload.summary.total_quotes).toBe(1);
+    expect(invoiceIn).not.toHaveBeenCalled();
+    expect(invoiceRequestIn).not.toHaveBeenCalled();
+  });
+
+  it('returns a load error when the quote list fails', async () => {
+    const { getStatusTotalSelects } = installQuotesList({
+      listError: { message: 'list failed' },
+      summaryRows: defaultSummaryRows,
+    });
+
+    const response = await GET(new NextRequest('http://localhost/api/quotes?include_summary=false'));
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ error: 'Unable to load quotes right now.' });
+    expect(getStatusTotalSelects()).toBe(0);
+  });
+
+  it('returns a load error when the summary scan fails and the summary was requested', async () => {
+    const { getStatusTotalSelects } = installQuotesList({
+      paginatedQuotes: [{
+        id: 'quote-1',
+        quote_thread_id: 'thread-1',
+        total: 100,
+        status: 'draft',
+      }],
+      summaryError: { message: 'summary failed' },
+    });
+
+    const response = await GET(new NextRequest('http://localhost/api/quotes?include_summary=true'));
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ error: 'Unable to load quotes right now.' });
+    expect(getStatusTotalSelects()).toBe(1);
   });
 });
 

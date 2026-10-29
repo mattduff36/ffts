@@ -383,7 +383,12 @@ export default function QuotesPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const url = customerId ? `/api/quotes?customer_id=${customerId}` : '/api/quotes';
+      const quoteListParams = new URLSearchParams();
+      quoteListParams.set('include_summary', 'false');
+      if (customerId) {
+        quoteListParams.set('customer_id', customerId);
+      }
+      const url = `/api/quotes?${quoteListParams.toString()}`;
       const [quotesResult, metadataRes] = await Promise.all([
         fetchAllPaginatedItems<Quote>(url, 'quotes', {
           limit: 250,

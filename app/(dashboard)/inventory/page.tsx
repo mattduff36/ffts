@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
@@ -80,6 +80,18 @@ export default function InventoryPage() {
   const [siteAssignmentUsers, setSiteAssignmentUsers] = useState<InventorySiteAssignmentUser[]>([]);
   const [assignableSiteLocations, setAssignableSiteLocations] = useState<InventoryLocation[]>([]);
   const [siteAssignments, setSiteAssignments] = useState<InventorySiteAssignment[]>([]);
+  const [assignmentStatus, setAssignmentStatus] = useState({ loaded: false, loading: false, error: null as string | null });
+  const assignmentContext = useRef<InventoryContext | null>(null);
+  const assignmentKey = useRef('');
+  const assignmentLoaded = useRef(false);
+  const assignmentAttempted = useRef(false);
+  const assignmentGeneration = useRef(0);
+  const assignmentFlight = useRef<Promise<void> | null>(null);
+  const lifecycleGeneration = useRef(0);
+  const inventoryRequestGeneration = useRef(0);
+  const accessAllowed = useRef(false);
+  accessAllowed.current = canViewInventory && !permissionLoading;
+  const assignmentDemand = useRef(false);
   const [groups, setGroups] = useState<InventoryItemGroup[]>([]);
   const [categories, setCategories] = useState<InventoryItemCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +115,78 @@ export default function InventoryPage() {
     search: '',
   });
 
-  const fetchInventoryData = useCallback(async (background = false) => {
+  assignmentDemand.current = pageTab === 'locations'
+    || searchParams.get('tab') === 'locations'
+    || (searchParams.get('tab') === 'settings' && searchParams.get('settings') === 'locations');
+
+  const clearSiteAssignments = useCallback(() => {
+    assignmentGeneration.current += 1;
+    assignmentLoaded.current = false;
+    assignmentAttempted.current = false;
+    assignmentFlight.current = null;
+    setSiteAssignmentUsers([]);
+    setAssignableSiteLocations([]);
+    setSiteAssignments([]);
+    setAssignmentStatus({ loaded: false, loading: false, error: null });
+  }, []);
+
+  const fetchSiteAssignments = useCallback((force = false): Promise<void> => {
+    if (!accessAllowed.current || !assignmentContext.current?.can_manage_site_locations) return Promise.resolve();
+    if (!force && assignmentFlight.current) return assignmentFlight.current;
+    if (!force && assignmentAttempted.current) return Promise.resolve();
+    assignmentAttempted.current = true;
+    const generation = ++assignmentGeneration.current;
+    const lifecycle = lifecycleGeneration.current;
+    const key = assignmentKey.current;
+    const isCurrent = () => accessAllowed.current && generation === assignmentGeneration.current
+      && lifecycle === lifecycleGeneration.current && key === assignmentKey.current;
+    setAssignmentStatus((current) => ({ ...current, loading: true, error: null }));
+    const promise = (async () => {
+      try {
+        const response = await fetch('/api/inventory/site-assignments', { cache: 'no-store' });
+        const payload = await response.json();
+        if (!isCurrent()) return;
+        if (!response.ok) throw new Error(payload.error || 'Failed to fetch Site assignments');
+        setSiteAssignmentUsers(payload.users || []);
+        setAssignableSiteLocations(payload.active_sites || []);
+        setSiteAssignments(payload.assignments || []);
+        assignmentLoaded.current = true;
+        setAssignmentStatus({ loaded: true, loading: false, error: null });
+      } catch (error) {
+        if (!isCurrent()) return;
+        setAssignmentStatus((current) => ({ ...current, loading: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch Site assignments' }));
+      } finally {
+        if (isCurrent()) assignmentFlight.current = null;
+      }
+    })();
+    assignmentFlight.current = promise;
+    return promise;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      lifecycleGeneration.current += 1;
+      assignmentGeneration.current += 1;
+      assignmentFlight.current = null;
+      assignmentContext.current = null;
+      assignmentKey.current = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!canViewInventory || permissionLoading) {
+      lifecycleGeneration.current += 1;
+      assignmentContext.current = null;
+      assignmentKey.current = '';
+      clearSiteAssignments();
+    }
+  }, [canViewInventory, permissionLoading, clearSiteAssignments]);
+
+  const fetchInventoryData = useCallback(async (background = false, forceSiteAssignments = false) => {
+    if (!accessAllowed.current) return;
+    const lifecycle = lifecycleGeneration.current;
+    const requestGeneration = ++inventoryRequestGeneration.current;
     try {
       const contextResponse = await fetch('/api/inventory/context', { cache: 'no-store' });
       const contextPayload = await contextResponse.json();
@@ -111,8 +194,20 @@ export default function InventoryPage() {
         throw new Error(contextPayload.error || 'Failed to fetch inventory context');
       }
 
+      if (!accessAllowed.current || lifecycle !== lifecycleGeneration.current || requestGeneration !== inventoryRequestGeneration.current) return;
+      const nextAssignmentKey = JSON.stringify([contextPayload.user_id, contextPayload.role_name,
+        contextPayload.role_class, contextPayload.team_id, contextPayload.team_name,
+        contextPayload.is_manager_or_admin, contextPayload.can_manage_site_locations]);
+      if (assignmentKey.current !== nextAssignmentKey) {
+        clearSiteAssignments();
+        assignmentKey.current = nextAssignmentKey;
+      }
+      assignmentContext.current = contextPayload;
       const isManagerOrAdmin = contextPayload.is_manager_or_admin === true;
       const canManageSiteLocations = contextPayload.can_manage_site_locations === true;
+      if (canManageSiteLocations && (!isManagerOrAdmin || assignmentDemand.current || assignmentLoaded.current || forceSiteAssignments)) {
+        void fetchSiteAssignments(assignmentLoaded.current || forceSiteAssignments);
+      }
       const [
         { items: inventoryItems },
         { items: retiredInventoryItems },
@@ -120,7 +215,6 @@ export default function InventoryPage() {
         fleetAssetsResponse,
         categoriesResponse,
         groupsResponse,
-        siteAssignmentsResponse,
       ] = await Promise.all([
         fetchAllPaginatedItems<InventoryItem>('/api/inventory', 'inventory', {
           limit: 500,
@@ -136,7 +230,6 @@ export default function InventoryPage() {
         fetch('/api/inventory/fleet-assets', { cache: 'no-store' }),
         fetch('/api/inventory/categories', { cache: 'no-store' }),
         isManagerOrAdmin ? fetch('/api/inventory/groups', { cache: 'no-store' }) : Promise.resolve(null),
-        canManageSiteLocations ? fetch('/api/inventory/site-assignments', { cache: 'no-store' }) : Promise.resolve(null),
       ]);
 
       const locationsPayload = await locationsResponse.json();
@@ -159,13 +252,7 @@ export default function InventoryPage() {
         throw new Error(groupsPayload.error || 'Failed to fetch inventory groups');
       }
 
-      const siteAssignmentsPayload = siteAssignmentsResponse
-        ? await siteAssignmentsResponse.json()
-        : { active_sites: [], users: [], assignments: [] };
-      if (siteAssignmentsResponse && !siteAssignmentsResponse.ok) {
-        throw new Error(siteAssignmentsPayload.error || 'Failed to fetch Site assignments');
-      }
-
+      if (!accessAllowed.current || lifecycle !== lifecycleGeneration.current || requestGeneration !== inventoryRequestGeneration.current) return;
       setInventoryContext(contextPayload);
       setItems(inventoryItems);
       setRetiredItems(retiredInventoryItems);
@@ -173,20 +260,17 @@ export default function InventoryPage() {
       setFleetAssets(fleetAssetsPayload.assets || []);
       setCategories(categoriesPayload.categories || []);
       setGroups(groupsPayload.groups || []);
-      setSiteAssignmentUsers(siteAssignmentsPayload.users || []);
-      setAssignableSiteLocations(siteAssignmentsPayload.active_sites || []);
-      setSiteAssignments(siteAssignmentsPayload.assignments || []);
       setInventoryLoadError(null);
     } catch (error) {
-      if (background) return;
+      if (background || !accessAllowed.current || lifecycle !== lifecycleGeneration.current || requestGeneration !== inventoryRequestGeneration.current) return;
       console.error('Error fetching inventory data:', error);
       const errorMessage = getInventoryLoadErrorMessage(error);
       setInventoryLoadError(errorMessage);
       toast.error(errorMessage, { id: 'inventory-load-error' });
     } finally {
-      if (!background) setLoading(false);
+      if (!background && lifecycle === lifecycleGeneration.current && requestGeneration === inventoryRequestGeneration.current) setLoading(false);
     }
-  }, []);
+  }, [clearSiteAssignments, fetchSiteAssignments]);
 
   useEffect(() => {
     if (permissionLoading) return;
@@ -197,6 +281,13 @@ export default function InventoryPage() {
     }
     fetchInventoryData();
   }, [canViewInventory, fetchInventoryData, permissionLoading, router]);
+
+  useEffect(() => {
+    if (inventoryContext?.can_manage_site_locations
+      && (!inventoryContext.is_manager_or_admin || assignmentDemand.current)) {
+      void fetchSiteAssignments();
+    }
+  }, [inventoryContext, pageTab, searchParams, fetchSiteAssignments]);
 
   const inventoryDraftOpen = itemDialogOpen
     || locationDialogOpen
@@ -534,25 +625,43 @@ export default function InventoryPage() {
   }
 
   async function handleAssignSiteLocation({ userId, locationId }: { userId: string; locationId: string }) {
-    const response = await fetch('/api/inventory/site-assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, location_id: locationId }),
-    });
-    await parseJsonResponse(response, 'Failed to assign Site location');
+    const key = assignmentKey.current;
+    const lifecycle = lifecycleGeneration.current;
+    if (!accessAllowed.current || !assignmentContext.current?.can_manage_site_locations) return;
+    try {
+      const response = await fetch('/api/inventory/site-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, location_id: locationId }),
+      });
+      await parseJsonResponse(response, 'Failed to assign Site location');
+    } catch (error) {
+      if (accessAllowed.current && lifecycle === lifecycleGeneration.current && key === assignmentKey.current) throw error;
+      return;
+    }
+    if (!accessAllowed.current || lifecycle !== lifecycleGeneration.current || key !== assignmentKey.current) return;
     toast.success('Site location assigned');
-    await fetchInventoryData();
+    await fetchInventoryData(false, true);
   }
 
   async function handleRemoveSiteLocationAssignment({ userId, locationId }: { userId: string; locationId: string }) {
-    const response = await fetch('/api/inventory/site-assignments', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, location_id: locationId }),
-    });
-    await parseJsonResponse(response, 'Failed to remove Site location assignment');
+    const key = assignmentKey.current;
+    const lifecycle = lifecycleGeneration.current;
+    if (!accessAllowed.current || !assignmentContext.current?.can_manage_site_locations) return;
+    try {
+      const response = await fetch('/api/inventory/site-assignments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, location_id: locationId }),
+      });
+      await parseJsonResponse(response, 'Failed to remove Site location assignment');
+    } catch (error) {
+      if (accessAllowed.current && lifecycle === lifecycleGeneration.current && key === assignmentKey.current) throw error;
+      return;
+    }
+    if (!accessAllowed.current || lifecycle !== lifecycleGeneration.current || key !== assignmentKey.current) return;
     toast.success('Site location assignment removed');
-    await fetchInventoryData();
+    await fetchInventoryData(false, true);
   }
 
   function buildInventoryCategoryPayload(data: InventoryItemCategoryFormData) {
@@ -645,7 +754,29 @@ export default function InventoryPage() {
     });
   }
 
-  if (permissionLoading || loading) {
+  const siteAssignmentPanel = inventoryContext?.can_manage_site_locations ? (
+    <div className="space-y-3">
+      {assignmentStatus.loading ? <div role="status">Loading Site assignments...</div> : null}
+      {assignmentStatus.error ? (
+        <div role="alert" className="rounded-lg border border-red-500/30 p-4">
+          <p>{assignmentStatus.error}</p>
+          <Button variant="outline" onClick={() => { void fetchSiteAssignments(true); }}>Retry Site assignments</Button>
+        </div>
+      ) : null}
+      {assignmentStatus.loaded ? (
+        <InventorySiteAssignmentsPanel
+          key={assignmentKey.current}
+          users={siteAssignmentUsers}
+          activeSites={assignableSiteLocations}
+          assignments={siteAssignments}
+          onAssign={handleAssignSiteLocation}
+          onRemove={handleRemoveSiteLocationAssignment}
+        />
+      ) : null}
+    </div>
+  ) : null;
+
+  if (permissionLoading || !canViewInventory || loading) {
     return <PageLoader message="Loading inventory..." />;
   }
 
@@ -697,15 +828,7 @@ export default function InventoryPage() {
           <InventoryLoadErrorNotice message={inventoryLoadError} onRetry={fetchInventoryData} />
         ) : null}
 
-        {inventoryContext?.can_manage_site_locations ? (
-          <InventorySiteAssignmentsPanel
-            users={siteAssignmentUsers}
-            activeSites={assignableSiteLocations}
-            assignments={siteAssignments}
-            onAssign={handleAssignSiteLocation}
-            onRemove={handleRemoveSiteLocationAssignment}
-          />
-        ) : null}
+        {siteAssignmentPanel}
 
         <InventoryEmployeeView
           items={items}
@@ -957,15 +1080,7 @@ export default function InventoryPage() {
               Add Location
             </Button>
           </div>
-          {inventoryContext?.can_manage_site_locations ? (
-            <InventorySiteAssignmentsPanel
-              users={siteAssignmentUsers}
-              activeSites={assignableSiteLocations}
-              assignments={siteAssignments}
-              onAssign={handleAssignSiteLocation}
-              onRemove={handleRemoveSiteLocationAssignment}
-            />
-          ) : null}
+          {siteAssignmentPanel}
           <InventoryLocationsPanel
             locations={locations}
             fleetAssets={fleetAssets}

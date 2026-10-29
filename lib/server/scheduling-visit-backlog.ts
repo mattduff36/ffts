@@ -68,6 +68,7 @@ export async function loadScheduleVisitBacklog(
           created_at,
           updated_at,
           board_sequence,
+          customer_site:customer_sites!schedule_jobs_customer_site_id_fkey(site_name),
           customer:customers(company_name)
         )
       )
@@ -122,6 +123,7 @@ export async function loadScheduleVisitBacklog(
       customer_site_id:
         typeof job.customer_site_id === 'string' ? job.customer_site_id : null,
       customer_name: customerName,
+      site_name: pickRelation(job.customer_site as { site_name?: string } | Array<{ site_name?: string }> | null)?.site_name || null,
       is_drop_on_ready: job.is_drop_on_ready === true,
       tags: [],
       created_by: typeof job.created_by === 'string' ? job.created_by : null,
@@ -152,6 +154,7 @@ export async function loadScheduleVisitBacklog(
       job_title: String(job.title),
       source_type: job.source_type as ScheduleVisitBacklogItem['source_type'],
       customer_name: customerName,
+      site_name: pickRelation(job.customer_site as { site_name?: string } | Array<{ site_name?: string }> | null)?.site_name || null,
       sequence_number: Number(visit.sequence_number),
       title: typeof visit.title === 'string' ? visit.title : null,
       notes: typeof visit.notes === 'string' ? visit.notes : null,

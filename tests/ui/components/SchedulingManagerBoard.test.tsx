@@ -124,8 +124,10 @@ const {
   mockSaveVisit,
   mockToastInfo,
   mockAddDayTeamMember,
+  mockAddDayTeamPlant,
   mockCopyDayTeams,
   mockRemoveDayTeamMember,
+  mockRemoveDayTeamPlant,
   mockAssignDayTeam,
   mockSaveTeamSettings,
 } = vi.hoisted(() => ({
@@ -165,8 +167,10 @@ const {
   mockSaveVisit: vi.fn(),
   mockToastInfo: vi.fn(),
   mockAddDayTeamMember: vi.fn(),
+  mockAddDayTeamPlant: vi.fn(),
   mockCopyDayTeams: vi.fn(),
   mockRemoveDayTeamMember: vi.fn(),
+  mockRemoveDayTeamPlant: vi.fn(),
   mockAssignDayTeam: vi.fn(),
   mockSaveTeamSettings: vi.fn(),
 }));
@@ -279,8 +283,10 @@ vi.mock('@/lib/client/scheduling', async () => {
     saveQuoteSchedule: mockSaveQuoteSchedule,
     saveScheduleVisit: mockSaveVisit,
     addScheduleDayTeamMember: mockAddDayTeamMember,
+    addScheduleDayTeamPlant: mockAddDayTeamPlant,
     copyScheduleDayTeams: mockCopyDayTeams,
     removeScheduleDayTeamMember: mockRemoveDayTeamMember,
+    removeScheduleDayTeamPlant: mockRemoveDayTeamPlant,
     assignScheduleDayTeam: mockAssignDayTeam,
     saveScheduleTeamSettings: mockSaveTeamSettings,
   };
@@ -606,12 +612,23 @@ describe('SchedulingManagerBoard', () => {
         created_at: '2026-07-14T08:00:00.000Z',
       },
     });
+    mockAddDayTeamPlant.mockResolvedValue({
+      plant: {
+        work_date: formatScheduleDate(new Date()),
+        slot_index: 1,
+        plant_id: 'plant-1',
+        added_by: 'manager-1',
+        created_at: '2026-07-14T08:00:00.000Z',
+      },
+    });
     mockCopyDayTeams.mockResolvedValue({
       members: [],
+      plants: [],
       copied: 0,
       skipped: 0,
     });
     mockRemoveDayTeamMember.mockResolvedValue({ success: true });
+    mockRemoveDayTeamPlant.mockResolvedValue({ success: true });
     mockAssignDayTeam.mockResolvedValue({
       assignments: [],
       skipped: [],
@@ -1042,12 +1059,12 @@ describe('SchedulingManagerBoard', () => {
     expect(quoteDragCue).toHaveClass('pointer-events-none');
     expect(quoteDragCue).not.toHaveAttribute('tabindex');
     expect(draftCard.querySelector('button')).toBeNull();
-    expect(screen.queryByText('Q-SCHEDULED')).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'All (3)' })).toHaveAttribute(
+    expect(screen.getByText('Q-SCHEDULED')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'All (4)' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    expect(screen.getByRole('tab', { name: 'Draft (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Draft (2)' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Pending (1)' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Accepted (1)' })).toBeInTheDocument();
 
@@ -1292,6 +1309,7 @@ describe('SchedulingManagerBoard', () => {
       quote_id: 'quote-draft',
       start_date: '2026-07-14',
       end_date: '2026-07-16',
+      initial_visit: { starts_at: '2026-07-14T07:00:00.000Z', ends_at: '2026-07-14T10:00:00.000Z' },
     });
     expect(screen.queryByRole('button', {
       name: 'Q-DRAFT: select job or drag to a calendar date',
@@ -1332,6 +1350,7 @@ describe('SchedulingManagerBoard', () => {
         quote_id: '33333333-3333-4333-8333-333333333333',
         start_date: '2026-07-14',
         end_date: '2026-07-14',
+        initial_visit: { starts_at: '2026-07-14T07:00:00.000Z', ends_at: '2026-07-14T10:00:00.000Z' },
       })
     );
   });
@@ -1544,9 +1563,7 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(visitDroppables.map((options) => options.id).sort()).toEqual([
       'desktop:visit:visit-1',
-      'desktop:visit:visit-cancelled',
       'mobile:visit:visit-1',
-      'mobile:visit:visit-cancelled',
     ]);
     expect(visitDroppables).not.toEqual(
       expect.arrayContaining([
@@ -1578,14 +1595,6 @@ describe('SchedulingManagerBoard', () => {
             workDate: '2026-07-14',
           }),
           disabled: false,
-        }),
-        expect.objectContaining({
-          id: 'desktop:visit:visit-cancelled',
-          disabled: true,
-        }),
-        expect.objectContaining({
-          id: 'mobile:visit:visit-cancelled',
-          disabled: true,
         }),
       ])
     );
@@ -1619,8 +1628,8 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-day-team-buckets-desktop')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-day-team-buckets-mobile')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-day-team-slot-desktop-1')).toBeInTheDocument();
-    expect(screen.getByTestId('schedule-day-team-slot-desktop-5')).toBeInTheDocument();
-    expect(screen.queryByTestId('schedule-day-team-slot-desktop-6')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-day-team-slot-desktop-8')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-day-team-slot-desktop-9')).not.toBeInTheDocument();
     expect(screen.getByTestId('schedule-settings-button')).toBeInTheDocument();
   });
 
@@ -1635,6 +1644,7 @@ describe('SchedulingManagerBoard', () => {
         added_by: 'manager-1',
         created_at: `${today}T08:00:00.000Z`,
       }],
+      plants: [],
       copied: 1,
       skipped: 0,
     });
@@ -1656,8 +1666,9 @@ describe('SchedulingManagerBoard', () => {
     prepareDailyBoard();
     mockSaveTeamSettings.mockResolvedValue({
       settings: {
-        visible_slot_count: 6,
+        visible_slot_count: 9,
         leaders: [],
+        names: {},
         updated_by: 'manager-1',
         updated_at: '2026-09-01T08:00:00.000Z',
       },
@@ -1669,17 +1680,25 @@ describe('SchedulingManagerBoard', () => {
     fireEvent.click(screen.getByTestId('schedule-team-add-extra'));
     fireEvent.click(screen.getByTestId('schedule-team-settings-save'));
     await waitFor(() => expect(mockSaveTeamSettings).toHaveBeenCalledWith({
-      visible_slot_count: 6,
-      leaders: [
-        { slot_index: 1, profile_id: null },
-        { slot_index: 2, profile_id: null },
-        { slot_index: 3, profile_id: null },
-        { slot_index: 4, profile_id: null },
-        { slot_index: 5, profile_id: null },
-      ],
+      visible_slot_count: 9,
+      leaders: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot_index) => ({
+        slot_index,
+        profile_id: null,
+      })),
+      names: {
+        '1': '',
+        '2': '',
+        '3': '',
+        '4': '',
+        '5': '',
+        '6': '',
+        '7': '',
+        '8': '',
+        '9': '',
+      },
     }));
-    expect(await screen.findByTestId('schedule-day-team-slot-desktop-6')).toBeInTheDocument();
-    expect(screen.getAllByText('Team 6').length).toBeGreaterThan(0);
+    expect(await screen.findByTestId('schedule-day-team-slot-desktop-9')).toBeInTheDocument();
+    expect(screen.getAllByText('Team 9').length).toBeGreaterThan(0);
   });
 
   it('sched-resource-inline-assignment keeps leaders and that day’s members in Employees', async () => {
@@ -1931,24 +1950,83 @@ describe('SchedulingManagerBoard', () => {
     }));
   });
 
-  it('rejects plant drops onto a day-team bucket', async () => {
-    prepareDailyBoard();
+  it('adds and removes a plant in a day-team bucket and rolls back a failed add', async () => {
+    const today = prepareDailyBoard();
+    const plant = {
+      id: 'plant-1',
+      plant_id: 'P001',
+      nickname: 'Chipper',
+      make: null,
+      model: null,
+      status: 'active' as const,
+    };
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: getSchedulingWeek(today),
+      jobs: [{
+        ...board.jobs[0],
+        start_date: getSchedulingWeek(today).start,
+        end_date: getSchedulingWeek(today).end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+      resources: { ...board.resources, plant: [plant] },
+      day_teams: [{
+        date: today,
+        slots: [{
+          work_date: today,
+          slot_index: 2,
+          members: [],
+          plants: [{
+            work_date: today,
+            slot_index: 2,
+            plant_id: 'plant-1',
+            plant,
+            added_by: 'manager-1',
+            created_at: `${today}T08:00:00.000Z`,
+          }],
+        }],
+      }],
+    });
+    const { toast } = await import('sonner');
+    mockAddDayTeamPlant.mockRejectedValueOnce(new Error('Plant bucket save failed'));
     renderBoard();
     expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-day-team-plant-desktop-plant-1')).toBeInTheDocument();
+
     await act(async () => {
       dndState.onDragEnd?.({
         operation: {
           source: {
-            data: {
-              resource: { type: 'plant', id: 'plant-1', label: 'Chipper' },
-            },
+            data: { resource: { type: 'plant', id: 'plant-1', label: 'Chipper' } },
           },
-          target: { data: { dayTeamSlotIndex: 1, workDate: formatScheduleDate(new Date()) } },
+          target: { data: { dayTeamSlotIndex: 1, workDate: today } },
         },
       });
     });
+    await waitFor(() => expect(mockAddDayTeamPlant).toHaveBeenCalledWith({
+      work_date: today,
+      slot_index: 1,
+      plant_id: 'plant-1',
+    }));
     expect(mockAddDayTeamMember).not.toHaveBeenCalled();
-    expect(mockToastInfo).toHaveBeenCalledWith('Day teams only accept employees.');
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.queryByTestId('schedule-day-team-plant-desktop-plant-1')).toBeInTheDocument();
+    expect(screen.getAllByTestId('schedule-day-team-plant-desktop-plant-1')).toHaveLength(1);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove Chipper from Team 2' })[0]);
+    await waitFor(() => expect(mockRemoveDayTeamPlant).toHaveBeenCalledWith({
+      work_date: today,
+      slot_index: 2,
+      plant_id: 'plant-1',
+    }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('schedule-day-team-plant-desktop-plant-1')).not.toBeInTheDocument();
+    });
   });
 
   it('toasts when an empty team is dropped on a visit', async () => {
@@ -1966,7 +2044,189 @@ describe('SchedulingManagerBoard', () => {
       });
     });
     expect(mockAssignDayTeam).not.toHaveBeenCalled();
-    expect(mockToastInfo).toHaveBeenCalledWith('Add employees to this team first.');
+    expect(mockToastInfo).toHaveBeenCalledWith('Add employees or plant to this team first.');
+  });
+
+  it('assigns a plant-only bucket and a mixed employee-plus-plant bucket', async () => {
+    const today = prepareDailyBoard();
+    const plant = {
+      id: 'plant-1',
+      plant_id: 'P001',
+      nickname: 'Chipper',
+      make: null,
+      model: null,
+      status: 'active' as const,
+    };
+    mockAssignDayTeam.mockResolvedValue({
+      assignments: [{
+        id: 'assignment-plant',
+        job_id: 'job-1',
+        work_date: today,
+        visit_id: 'visit-1',
+        plant_id: 'plant-1',
+        resource_type: 'plant',
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: 'manager-1',
+        notes: null,
+        created_at: `${today}T08:00:00.000Z`,
+        updated_at: `${today}T08:00:00.000Z`,
+      }, {
+        id: 'assignment-employee',
+        job_id: 'job-1',
+        work_date: today,
+        visit_id: 'visit-1',
+        profile_id: 'employee-2',
+        resource_type: 'employee',
+        conflict_override: false,
+        conflict_codes: [],
+        conflict_override_by: null,
+        conflict_override_at: null,
+        assigned_by: 'manager-1',
+        notes: null,
+        created_at: `${today}T08:00:00.000Z`,
+        updated_at: `${today}T08:00:00.000Z`,
+      }],
+      skipped: [],
+      already_assigned_count: 0,
+      employee_capacity: [],
+    });
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: getSchedulingWeek(today),
+      jobs: [{
+        ...board.jobs[0],
+        start_date: getSchedulingWeek(today).start,
+        end_date: getSchedulingWeek(today).end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+      resources: { ...board.resources, plant: [plant] },
+      day_teams: [{
+        date: today,
+        slots: [
+          {
+            work_date: today,
+            slot_index: 1,
+            members: [],
+            plants: [{
+              work_date: today,
+              slot_index: 1,
+              plant_id: 'plant-1',
+              plant,
+              added_by: 'manager-1',
+              created_at: `${today}T08:00:00.000Z`,
+            }],
+          },
+          {
+            work_date: today,
+            slot_index: 3,
+            members: [{
+              work_date: today,
+              slot_index: 3,
+              profile_id: 'employee-2',
+              employee: board.resources.employees[1],
+              added_by: 'manager-1',
+              created_at: `${today}T08:00:00.000Z`,
+            }],
+            plants: [{
+              work_date: today,
+              slot_index: 3,
+              plant_id: 'plant-1',
+              plant,
+              added_by: 'manager-1',
+              created_at: `${today}T08:00:00.000Z`,
+            }],
+          },
+        ],
+      }],
+    });
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-day-team-drag-handle-desktop-1')).toBeEnabled();
+
+    await act(async () => {
+      dndState.onDragEnd?.({
+        operation: {
+          source: { data: { dayTeam: { workDate: today, slotIndex: 1 } } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1' } },
+        },
+      });
+    });
+    await waitFor(() => expect(mockAssignDayTeam).toHaveBeenCalledWith({
+      visit_id: 'visit-1',
+      slot_index: 1,
+      member_request_ids: { 'plant-1': expect.any(String) },
+    }));
+
+    mockAssignDayTeam.mockClear();
+    await act(async () => {
+      dndState.onDragEnd?.({
+        operation: {
+          source: { data: { dayTeam: { workDate: today, slotIndex: 3 } } },
+          target: { data: { jobId: 'job-1', visitId: 'visit-1' } },
+        },
+      });
+    });
+    await waitFor(() => expect(mockAssignDayTeam).toHaveBeenCalledWith({
+      visit_id: 'visit-1',
+      slot_index: 3,
+      member_request_ids: {
+        'employee-2': expect.any(String),
+        'plant-1': expect.any(String),
+      },
+    }));
+  });
+
+  it('shows plants returned by a day-team copy', async () => {
+    const today = prepareDailyBoard();
+    const plant = {
+      id: 'plant-9',
+      plant_id: 'P009',
+      nickname: 'Trailer',
+      make: null,
+      model: null,
+      status: 'active' as const,
+    };
+    mockCopyDayTeams.mockResolvedValue({
+      members: [],
+      plants: [{
+        work_date: today,
+        slot_index: 4,
+        plant_id: 'plant-9',
+        added_by: 'manager-1',
+        created_at: `${today}T08:00:00.000Z`,
+      }],
+      copied: 1,
+      skipped: 0,
+    });
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: getSchedulingWeek(today),
+      jobs: [{
+        ...board.jobs[0],
+        start_date: getSchedulingWeek(today).start,
+        end_date: getSchedulingWeek(today).end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+      resources: { ...board.resources, plant: [plant] },
+    });
+    renderBoard();
+    expect(await screen.findByText('Daily job board')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('schedule-copy-day-teams-button'));
+    fireEvent.click(screen.getByTestId('schedule-copy-day-teams-confirm'));
+    expect(await screen.findByTestId('schedule-day-team-plant-desktop-plant-9')).toBeInTheDocument();
   });
 
   it('opens a clicked weekly date in daily view and persists the preference', async () => {
@@ -2097,27 +2357,13 @@ describe('SchedulingManagerBoard', () => {
     );
   });
 
-  it('toggles crew offer directly with optimistic rollback protection', async () => {
-    renderBoard();
+  it('does not expose retired crew-offer actions or filters', async () => {
+    renderBoard('?ready=true');
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-    const actions = screen.getByTestId('schedule-job-actions-desktop-job-1');
-    const toggle = within(actions).getByRole('button', {
-      name: 'Offer if crew finishes early',
-    });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    await waitFor(() =>
-      expect(mockSaveScheduleJob).toHaveBeenCalledWith(
-        { is_drop_on_ready: true },
-        'job-1'
-      )
-    );
-
-    mockSaveScheduleJob.mockRejectedValueOnce(new Error('Unable to update'));
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.queryByRole('button', { name: 'Offer if crew finishes early' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-job-actions-desktop-job-1')).toBeInTheDocument();
+    expect(mockSaveScheduleJob).not.toHaveBeenCalled();
   });
 
   it('restores the saved view for the current user', async () => {
@@ -2143,8 +2389,8 @@ describe('SchedulingManagerBoard', () => {
 
     expect(await screen.findByText('Daily job board')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Daily' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId(`schedule-cell-job-1-${today}`)).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^schedule-cell-/)).toHaveLength(1);
+    expect(screen.queryByTestId(`schedule-cell-job-1-${today}`)).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^schedule-cell-/)).toHaveLength(0);
   });
 
   it('places accessible daily display controls beside the assignment instructions', async () => {
@@ -2534,7 +2780,7 @@ describe('SchedulingManagerBoard', () => {
     expect(within(layout).queryByTestId('schedule-assignment-overflow-visit-1')).not.toBeInTheDocument();
     expect(within(dailyTimeline).getByTestId('schedule-timeline-visit-visit-1')).toHaveStyle({
       top: '8px',
-      height: '152px',
+      height: '196px',
     });
     expect(layout).toHaveClass('mt-auto', 'shrink-0');
     expect(layout).not.toHaveClass('overflow-hidden');
@@ -2591,14 +2837,156 @@ describe('SchedulingManagerBoard', () => {
       'schedule-timeline-visit-visit-2'
     );
 
-    expect(timelineCell).toHaveStyle({ height: '188px' });
+    expect(timelineCell).toHaveStyle({ height: '272px' });
     expect(screen.getByTestId('schedule-daily-job-cell-job-1')).toHaveStyle({
-      height: '188px',
+      height: '272px',
     });
-    expect(firstPlacement).toHaveStyle({ top: '8px', height: '82px' });
-    expect(secondPlacement).toHaveStyle({ top: '98px', height: '82px' });
-    expect(8 + 82).toBeLessThan(98);
-    expect(98 + 82).toBeLessThanOrEqual(188);
+    expect(firstPlacement).toHaveStyle({ top: '8px', height: '124px' });
+    expect(secondPlacement).toHaveStyle({ top: '140px', height: '124px' });
+    expect(8 + 124).toBeLessThan(140);
+    expect(140 + 124).toBeLessThanOrEqual(272);
+  });
+
+  it('moves a daily visit as a whole with keyboard controls', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    renderBoard();
+
+    const resizeEnd = await screen.findByLabelText('Move visit 1 for JOB-101');
+    fireEvent.keyDown(resizeEnd, { key: 'ArrowRight' });
+
+    await waitFor(() =>
+      expect(mockSaveVisit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          starts_at: `${today}T10:30:00.000Z`,
+          ends_at: `${today}T12:30:00.000Z`,
+        }),
+        'visit-1'
+      )
+    );
+  });
+
+  it('keeps the full card width while moving both visit times', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    renderBoard();
+
+    const card = await screen.findByLabelText('Move visit 1 for JOB-101');
+    const width = card.style.width;
+    const left = card.style.left;
+    fireEvent.pointerDown(card, { pointerId: 71, button: 0, clientX: 100 });
+    fireEvent.pointerMove(card, { pointerId: 71, clientX: 140 });
+    expect(card.style.width).toBe(width);
+    expect(card.style.left).not.toBe(left);
+    fireEvent.pointerUp(card, { pointerId: 71, clientX: 140 });
+    await waitFor(() => expect(mockSaveVisit).toHaveBeenCalledWith(expect.objectContaining({
+      starts_at: `${today}T10:30:00.000Z`, ends_at: `${today}T12:30:00.000Z`,
+    }), 'visit-1'));
+  });
+
+  it('restores a cancelled pointer move without saving', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    renderBoard();
+
+    const card = await screen.findByLabelText('Move visit 1 for JOB-101');
+    const left = card.style.left;
+    fireEvent.pointerDown(card, { pointerId: 72, button: 0, clientX: 100 });
+    fireEvent.pointerMove(card, { pointerId: 72, clientX: 140 });
+    fireEvent.pointerCancel(card, { pointerId: 72 });
+    expect(card.style.left).toBe(left);
+    expect(mockSaveVisit).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the displayed card when a move is rejected', async () => {
+    const today = formatScheduleDate(new Date());
+    const currentWeek = getSchedulingWeek(today);
+    localStorage.setItem(
+      getSchedulingViewStorageKey('manager-1'),
+      SCHEDULING_BOARD_VIEWS.daily
+    );
+    mockFetchBoard.mockResolvedValue({
+      ...board,
+      week: currentWeek,
+      jobs: [{
+        ...board.jobs[0],
+        start_date: currentWeek.start,
+        end_date: currentWeek.end,
+      }],
+      visits: [{
+        ...board.visits[0],
+        starts_at: `${today}T10:00:00.000Z`,
+        ends_at: `${today}T12:00:00.000Z`,
+      }],
+      assignments: [],
+    });
+    mockSaveVisit.mockRejectedValueOnce(new SchedulingApiError('Move rejected.', 409, {}));
+    renderBoard();
+
+    const card = await screen.findByLabelText('Move visit 1 for JOB-101');
+    const left = card.style.left;
+    fireEvent.pointerDown(card, { pointerId: 73, button: 0, clientX: 100 });
+    fireEvent.pointerMove(card, { pointerId: 73, clientX: 140 });
+    fireEvent.pointerUp(card, { pointerId: 73, clientX: 140 });
+    await waitFor(() => expect(mockSaveVisit).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText('Move visit 1 for JOB-101').style.left).toBe(left));
   });
 
   it('resizes daily visits in 30-minute keyboard increments', async () => {
@@ -3307,12 +3695,7 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(selectedTagButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
     expect(selectedTagButton.querySelector('.lucide-check')).not.toBeNull();
-    const crewOfferButton = screen.getByRole('button', { name: 'Offer if crew free' });
-    expect(crewOfferButton).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
-    expect(crewOfferButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
+    expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
     expect(screen.queryByText('Crew offer')).not.toBeInTheDocument();
     expect(screen.queryByText('Drop-on ready')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear filters' })).toHaveClass(
@@ -3616,59 +3999,26 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-job-footer-desktop-job-1')).toBeInTheDocument();
   });
 
-  it('groups the board by employee, hides the row employee chip, and shows Unassigned', async () => {
-    const openVisit = {
-      ...board.visits[0],
-      id: 'visit-open',
-      sequence_number: 2,
-      title: 'Unstaffed visit',
-      starts_at: '2026-07-14T13:00:00Z',
-      ends_at: '2026-07-14T16:00:00Z',
-    };
-    mockFetchBoard.mockResolvedValue({
-      ...board,
-      visits: [...board.visits, openVisit],
-    });
+  it('groups the board by scheduling buckets with no Unassigned row', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Employees' }), {
-      button: 0,
-      ctrlKey: false,
-    });
-
-    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
-    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
-    expect(screen.getByTestId('schedule-board-row-employee-employee-1')).toBeInTheDocument();
-    expect(screen.getByTestId('schedule-board-row-unassigned')).toBeInTheDocument();
-    expect(screen.queryByTestId('schedule-job-footer-desktop-job-1')).not.toBeInTheDocument();
-
-    const employeeRow = screen.getByTestId('schedule-board-row-employee-employee-1');
-    expect(within(employeeRow).queryByTestId('schedule-assignment-chip-assignment-1'))
-      .not.toBeInTheDocument();
-    expect(within(employeeRow).getByText('JOB-101')).toBeInTheDocument();
-    expect(
-      within(employeeRow).getByTestId('schedule-visit-employee:employee-1-visit-1')
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId('schedule-board-row-unassigned')).getByTestId(
-        'schedule-visit-unassigned-visit-open'
-      )
-    ).toBeInTheDocument();
-    expect(localStorage.getItem(getSchedulingPrimaryStorageKey('manager-1'))).toBe(
-      SCHEDULING_BOARD_PRIMARIES.employee
-    );
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Teams' }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText('Weekly team board')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-board-row-team-1')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-board-row-team-8')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-unassigned')).not.toBeInTheDocument();
+    expect(localStorage.getItem(getSchedulingPrimaryStorageKey('manager-1'))).toBe('team');
     expect(mockCreateAssignment).not.toHaveBeenCalled();
   });
 
   it('keeps empty-day resource drops as visit assignments after switching primary', async () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Employees' }), {
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Teams' }), {
       button: 0,
       ctrlKey: false,
     });
-    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
+    expect(await screen.findByText('Weekly team board')).toBeInTheDocument();
 
     act(() => {
       dndState.onDragEnd?.({
@@ -3691,16 +4041,16 @@ describe('SchedulingManagerBoard', () => {
   it('restores the stored primary grouping preference', async () => {
     localStorage.setItem(
       getSchedulingPrimaryStorageKey('manager-1'),
-      SCHEDULING_BOARD_PRIMARIES.employee
+      SCHEDULING_BOARD_PRIMARIES.team
     );
     renderBoard();
 
-    expect(await screen.findByText('Weekly employee board')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Primary Employees' })).toHaveAttribute(
+    expect(await screen.findByText('Weekly team board')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Primary Teams' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    expect(screen.getByTestId('schedule-board-row-employee-employee-1')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-board-row-team-1')).toBeInTheDocument();
   });
 
   it('UI-001/002 keeps a second employee assignment visible while the first persist is held', async () => {

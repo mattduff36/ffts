@@ -14,7 +14,12 @@ import {
   visibleScheduleDayTeamSlotIndexes,
 } from '@/lib/utils/scheduling-day-teams';
 import { formatScheduleTeamName } from '@/lib/utils/scheduling';
-import type { ScheduleDayTeamMember, ScheduleTeamSettings, SchedulingBoardPayload } from '@/types/scheduling';
+import type {
+  ScheduleDayTeamMember,
+  ScheduleDayTeamSlotIndex,
+  ScheduleTeamSettings,
+  SchedulingBoardPayload,
+} from '@/types/scheduling';
 
 const settings = (overrides: Partial<ScheduleTeamSettings> = {}): ScheduleTeamSettings => ({
   visible_slot_count: 5,
@@ -24,7 +29,11 @@ const settings = (overrides: Partial<ScheduleTeamSettings> = {}): ScheduleTeamSe
   ...overrides,
 });
 
-const member = (profileId: string, slot: 1 | 2 | 3 | 4 | 5 | 6, isLeader = false): ScheduleDayTeamMember => ({
+const member = (
+  profileId: string,
+  slot: ScheduleDayTeamSlotIndex,
+  isLeader = false
+): ScheduleDayTeamMember => ({
   work_date: '2026-09-01',
   slot_index: slot,
   profile_id: profileId,
@@ -60,26 +69,43 @@ function boardWithTeams(
 }
 
 describe('schedule day team helpers', () => {
-  it('exports ten bounded slot indexes and five visible by default', () => {
-    expect(SCHEDULE_DAY_TEAM_SLOT_INDEXES).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  it('exports sixteen bounded slot indexes and eight visible by default', () => {
+    expect(SCHEDULE_DAY_TEAM_SLOT_INDEXES).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    ]);
     expect(SCHEDULE_DAY_TEAM_SLOT_CAPACITY).toBe(6);
-    expect(visibleScheduleDayTeamSlotIndexes()).toEqual([1, 2, 3, 4, 5]);
+    expect(visibleScheduleDayTeamSlotIndexes()).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(visibleScheduleDayTeamSlotIndexes(16)).toHaveLength(16);
+    expect(visibleScheduleDayTeamSlotIndexes(3)).toHaveLength(8);
   });
 
-  it('synthesizes five empty slots when a date is missing', () => {
-    expect(emptyScheduleDayTeamSlots('2026-09-01').map((slot) => slot.slot_index)).toEqual([1, 2, 3, 4, 5]);
-    expect(slotsForScheduleDate([], '2026-09-01')).toHaveLength(5);
+  it('synthesizes eight empty slots when a date is missing', () => {
+    expect(emptyScheduleDayTeamSlots('2026-09-01').map((slot) => slot.slot_index)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
+    expect(slotsForScheduleDate([], '2026-09-01')).toHaveLength(8);
   });
 
   it('rebuilds implicit leaders and visible slots from incomplete stored payload', () => {
     const teamSettings = settings({
-      visible_slot_count: 6,
+      visible_slot_count: 9,
       leaders: [{
         slot_index: 1,
         profile_id: 'leader-1',
         employee: {
           id: 'leader-1',
           full_name: 'Tom Reed',
+          employee_id: null,
+          team_id: null,
+          team_name: null,
+          kind: 'employee',
+        },
+      }, {
+        slot_index: 9,
+        profile_id: 'leader-9',
+        employee: {
+          id: 'leader-9',
+          full_name: 'Alex Quinn',
           employee_id: null,
           team_id: null,
           team_name: null,
@@ -99,9 +125,10 @@ describe('schedule day team helpers', () => {
       '2026-09-01',
       teamSettings
     );
-    expect(slots.map((slot) => slot.slot_index)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(slots.map((slot) => slot.slot_index)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(slots[0].members.map((item) => item.profile_id)).toEqual(['leader-1', 'e1']);
     expect(slots[0].members[0].is_leader).toBe(true);
+    expect(slots[8].members.map((item) => item.profile_id)).toEqual(['leader-9']);
   });
 
   it('sched-team-leader-implicit prepends a standing leader without a daily row', () => {
@@ -325,6 +352,32 @@ describe('schedule day team helpers', () => {
       }],
     }))).toBe("Tom R's team");
     expect(resolveScheduleDayTeamName({ slot_index: 3, members: [] })).toBe('Team 3');
+  });
+
+  it('prefers a trimmed custom name and falls back to leader or member naming when blank', () => {
+    const leader = {
+      slot_index: 1 as const,
+      profile_id: 'leader-1',
+      employee: {
+        id: 'leader-1',
+        full_name: 'Tom Reed',
+        employee_id: null,
+        team_id: null,
+        team_name: null,
+        kind: 'employee' as const,
+      },
+    };
+    const named = settings({
+      names: { '1': '  Yard  ', '3': '   ' },
+      leaders: [leader],
+    });
+    expect(resolveScheduleDayTeamName({ slot_index: 1, members: [] }, named)).toBe('Yard');
+    expect(resolveScheduleDayTeamName({ slot_index: 3, members: [] }, named)).toBe('Team 3');
+    expect(resolveScheduleDayTeamName({
+      slot_index: 1,
+      members: [],
+    }, settings({ names: { '1': '' }, leaders: [leader] }))).toBe("Tom R's team");
+    expect(resolveScheduleDayTeamName({ slot_index: 16, members: [] }, settings())).toBe('Team 16');
   });
 
   it('moves an employee between slots instead of duplicating them', () => {

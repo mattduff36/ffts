@@ -3,8 +3,8 @@ import { formatScheduleVisitTime } from '@/lib/utils/scheduling';
 export const VISIT_ASSIGNMENT_WIDE_CARD_MIN = 260;
 export const VISIT_ASSIGNMENT_MEDIUM_CARD_MIN = 140;
 export const DAILY_VISIT_MIN_WIDTH = 48;
-export const DAILY_VISIT_LANE_MIN_HEIGHT = 82;
-export const VISIT_CARD_CHROME_HEIGHT = 60;
+export const DAILY_VISIT_LANE_MIN_HEIGHT = 124;
+export const VISIT_CARD_CHROME_HEIGHT = 104;
 export const VISIT_ASSIGNMENT_ROW_HEIGHT = 20;
 export const VISIT_ASSIGNMENT_ROW_GAP = 4;
 

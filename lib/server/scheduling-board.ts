@@ -59,6 +59,18 @@ function mapPlant(row: Record<string, unknown>): SchedulePlantResource {
   };
 }
 
+function isBoardVisibleTimedVisit(
+  visit: ScheduleVisit,
+  rangeStartMs: number,
+  rangeEndMs: number
+): boolean {
+  if (visit.status === 'cancelled') return false;
+  const startMs = Date.parse(visit.starts_at);
+  const endMs = Date.parse(visit.ends_at);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return false;
+  return startMs < rangeEndMs && endMs > rangeStartMs;
+}
+
 function mapJob(row: Record<string, unknown>): ScheduleJob {
   const customer = pickRelation(row.customer as { company_name?: string | null } | Array<{ company_name?: string | null }> | null);
   const tagLinks = Array.isArray(row.tag_links)
@@ -74,6 +86,7 @@ function mapJob(row: Record<string, unknown>): ScheduleJob {
   return {
     ...job,
     customer_name: customer?.company_name || null,
+    site_name: pickRelation(row.customer_site as { site_name?: string } | Array<{ site_name?: string }> | null)?.site_name || null,
     is_drop_on_ready: row.is_drop_on_ready === true,
     tags,
     board_sequence: readBoardSequence(row.board_sequence),
@@ -226,15 +239,8 @@ export async function loadSchedulingBoard(
   weekEnd: string
 ): Promise<SchedulingBoardPayload> {
   const visitRange = getScheduleLondonStartsAtRangeIso(weekStart, weekEnd);
-  const [jobsResult, tagsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
+  const [tagsResult, visitsResult, employeeAssignmentsResult, plantAssignmentsResult, employeesResult, plantResult, blocksResult, absencesResult, shiftsResult] =
     await Promise.all([
-      admin
-        .from('schedule_jobs')
-        .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
-        .lte('start_date', weekEnd)
-        .gte('end_date', weekStart)
-        .order('board_sequence')
-        .order('id'),
       admin
         .from('schedule_job_tags')
         .select('id, name, color, description, is_active')
@@ -243,8 +249,9 @@ export async function loadSchedulingBoard(
       admin
         .from('schedule_visits')
         .select('*')
-        .gte('starts_at', visitRange.startInclusiveIso)
         .lt('starts_at', visitRange.endExclusiveIso)
+        .gte('ends_at', visitRange.startInclusiveIso)
+        .neq('status', 'cancelled')
         .order('starts_at'),
       admin
         .from('schedule_employee_assignments')
@@ -282,7 +289,6 @@ export async function loadSchedulingBoard(
     ]);
 
   const results = [
-    jobsResult,
     tagsResult,
     visitsResult,
     employeeAssignmentsResult,
@@ -303,22 +309,33 @@ export async function loadSchedulingBoard(
     .select('visit_id');
   if (visitBacklogResult.error) throw visitBacklogResult.error;
 
-  const jobs = sortJobsByBoardSequence(
-    ((jobsResult.data || []) as Array<Record<string, unknown>>).map(mapJob)
+  const rangeStartMs = Date.parse(visitRange.startInclusiveIso);
+  const rangeEndMs = Date.parse(visitRange.endExclusiveIso);
+  const visitRows = ((visitsResult.data || []) as ScheduleVisit[]).filter((visit) =>
+    isBoardVisibleTimedVisit(visit, rangeStartMs, rangeEndMs)
   );
-  const visitRows = (visitsResult.data || []) as ScheduleVisit[];
   const queuedVisitIds = new Set(
     ((visitBacklogResult.data || []) as Array<{ visit_id: string }>).map(
       (row) => row.visit_id
     )
   );
-  const queuedJobIds = new Set(
-    visitRows
-      .filter((visit) => queuedVisitIds.has(visit.id))
-      .map((visit) => visit.job_id)
-  );
   const visits = visitRows.filter(
     (visit) => !queuedVisitIds.has(visit.id)
+  );
+  const visibleJobIds = new Set(visits.map((visit) => visit.job_id));
+  const jobsResult = visibleJobIds.size === 0
+    ? { data: [], error: null }
+    : await admin
+      .from('schedule_jobs')
+      .select('*, customer_site:customer_sites!schedule_jobs_customer_site_id_fkey(site_name), customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
+      .in('id', [...visibleJobIds])
+      .order('board_sequence')
+      .order('id');
+  if (jobsResult.error) throw jobsResult.error;
+  const jobs = sortJobsByBoardSequence(
+    ((jobsResult.data || []) as Array<Record<string, unknown>>)
+      .map(mapJob)
+      .filter((job) => visibleJobIds.has(job.id))
   );
   const employeeRows = (
     (employeeAssignmentsResult.data || []) as Array<Record<string, unknown>>
@@ -353,14 +370,6 @@ export async function loadSchedulingBoard(
   const plantsById = new Map(plants.map((plant) => [plant.id, plant]));
   const visitsById = new Map(visits.map((visit) => [visit.id, visit]));
   const weekDates = enumerateScheduleDates(weekStart, weekEnd);
-  const visibleJobIds = new Set([
-    ...visits.map((visit) => visit.job_id),
-    ...employeeRows.map((row) => String(row.job_id)),
-    ...plantRows.map((row) => String(row.job_id)),
-  ]);
-  const visibleJobs = jobs.filter(
-    (job) => !queuedJobIds.has(job.id) || visibleJobIds.has(job.id)
-  );
 
   const employeeAssignments: ScheduleEmployeeAssignment[] = employeeRows.map((row) => ({
     ...normalizeBaseAssignment(row),
@@ -381,7 +390,7 @@ export async function loadSchedulingBoard(
 
   return {
     week: { start: weekStart, end: weekEnd },
-    jobs: visibleJobs,
+    jobs,
     tags: ((tagsResult.data || []) as Array<Record<string, unknown>>).map(normalizeScheduleJobTag),
     visits,
     assignments: [...employeeAssignments, ...plantAssignments],
@@ -401,7 +410,14 @@ export async function loadSchedulingBoard(
     }),
     plant_unavailability: (blocksResult.data || []) as SchedulingBoardPayload['plant_unavailability'],
     team_settings: teamSettings,
-    day_teams: await loadScheduleDayTeams(admin, weekStart, weekEnd, employeesById, teamSettings),
+    day_teams: await loadScheduleDayTeams(
+      admin,
+      weekStart,
+      weekEnd,
+      employeesById,
+      teamSettings,
+      plantsById
+    ),
   };
 }
 
@@ -472,7 +488,7 @@ export async function loadSchedulingSelf(
   const [jobsResult, visitsResult, plantAssignmentsResult, visitBacklogResult] = await Promise.all([
     admin
       .from('schedule_jobs')
-      .select('*, customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
+      .select('*, customer_site:customer_sites!schedule_jobs_customer_site_id_fkey(site_name), customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
       .in('id', jobIds),
     visitIds.length > 0
       ? admin.from('schedule_visits').select('*').in('id', visitIds)

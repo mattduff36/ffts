@@ -46,3 +46,5 @@ npx tsx testsuite/runner/run.ts --grep "reminders"
 - Treat cleanup residue as a failed run; investigate the printed table/id pairs rather than broadly deleting production rows.
 
 Generated reports and auth state are written under ignored `testsuite/reports/` and `testsuite/.state/`.
+
+Scheduling smoke coverage includes the retirement of crew-offer controls. Meeting preview checks must preserve existing sample records and keep their test artifacts under `testsuite/reports/`.

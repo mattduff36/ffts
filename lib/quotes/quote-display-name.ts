@@ -6,6 +6,7 @@ export interface QuoteDisplayNameInput {
   quote_reference?: string | null;
   customer?: QuoteDisplayCustomer | null;
   site_address?: string | null;
+  customer_site?: { site_name?: string | null } | null;
   subject_line?: string | null;
 }
 
@@ -47,7 +48,7 @@ export function buildQuoteDisplayName(quote: QuoteDisplayNameInput): string {
   return [
     normalizeSegment(quote.quote_reference, 'Quote'),
     normalizeSegment(quote.customer?.company_name, 'Customer'),
-    normalizeSegment(getQuoteLocationSegment(quote.site_address), 'Site'),
+    normalizeSegment(quote.customer_site?.site_name, 'Site not set'),
     normalizeSegment(quote.subject_line, 'Quote'),
   ].join(' - ');
 }

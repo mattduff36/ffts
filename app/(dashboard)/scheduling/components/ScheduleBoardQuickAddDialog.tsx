@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { CustomerFormDialog } from '@/app/(dashboard)/customers/components/CustomerFormDialog';
+import { CustomerSiteFormDialog } from '@/app/(dashboard)/customers/components/CustomerSiteFormDialog';
+import type { CustomerFormData } from '@/app/(dashboard)/customers/types';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -108,6 +111,8 @@ export function ScheduleBoardQuickAddDialog({
     required_staff_count: initialInput?.required_staff_count?.toString() || '',
   });
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [siteOpen, setSiteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [requestId, setRequestId] = useState(
     () => initialInput?.request_id || crypto.randomUUID()
@@ -158,6 +163,15 @@ export function ScheduleBoardQuickAddDialog({
       .catch(() => toast.error('Unable to load customers.'));
   }, [defaultDate, open]);
 
+  async function createCustomer(data: CustomerFormData) {
+    const response = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const payload = await response.json();
+    if (!response.ok || !payload.customer?.id) throw new Error(payload.error || 'Unable to create customer.');
+    const customer = payload.customer as CustomerOption;
+    setCustomers(current => [customer, ...current.filter(item => item.id !== customer.id)]);
+    setForm(current => ({ ...current, customer_id: customer.id, site_id: customer.sites?.find(site => site.is_active && site.is_default)?.id || '' }));
+  }
+
   function handleSubmit() {
     if (
       !form.manager_profile_id
@@ -193,7 +207,7 @@ export function ScheduleBoardQuickAddDialog({
     onClose();
   }
 
-  return (
+  return (<>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={contentRef}
@@ -250,6 +264,7 @@ export function ScheduleBoardQuickAddDialog({
             <Select
               value={form.customer_id}
               onValueChange={(value) => {
+                if (value === '__new_customer') { setCustomerOpen(true); return; }
                 const customer = customers.find((item) => item.id === value);
                 setForm((current) => ({
                   ...current,
@@ -264,6 +279,7 @@ export function ScheduleBoardQuickAddDialog({
                 <SelectValue placeholder="Select customer" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="__new_customer">+ New customer</SelectItem>
                 {customers.map((customer) => (
                   <SelectItem key={customer.id} value={customer.id}>
                     {customer.company_name}
@@ -276,18 +292,17 @@ export function ScheduleBoardQuickAddDialog({
             <Label>Site</Label>
             <Select
               value={form.site_id || 'none'}
-              onValueChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  site_id: value === 'none' ? '' : value,
-                }))
-              }
+              onValueChange={(value) => {
+                if (value === '__new_site') { setSiteOpen(true); return; }
+                setForm(current => ({ ...current, site_id: value === 'none' ? '' : value }));
+              }}
               disabled={!form.customer_id}
             >
               <SelectTrigger className="min-h-11">
                 <SelectValue placeholder="Select site" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="__new_site">+ New site</SelectItem>
                 <SelectItem value="none">No saved site</SelectItem>
                 {sites
                   .filter((site) => site.is_active)
@@ -393,5 +408,10 @@ export function ScheduleBoardQuickAddDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+    {customerOpen && <CustomerFormDialog open onClose={() => setCustomerOpen(false)} onSubmit={createCustomer} />}
+    {siteOpen && form.customer_id && <CustomerSiteFormDialog open customerId={form.customer_id} onClose={() => setSiteOpen(false)} onCreated={site => {
+      setCustomers(current => current.map(customer => customer.id === site.customer_id ? { ...customer, sites: [site, ...(customer.sites || [])] } : customer));
+      setForm(current => ({ ...current, site_id: site.id }));
+    }} />}
+  </>);
 }

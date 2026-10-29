@@ -12,8 +12,9 @@ describe('quote display names', () => {
       quote_reference: '80000-MD',
       customer: { company_name: 'Acme Ltd' },
       site_address: '1 Road Lane\nSecond line',
+      customer_site: { site_name: 'North Yard' },
       subject_line: 'Concrete repairs',
-    })).toBe('80000-MD - Acme Ltd - 1 Road Lane - Concrete repairs');
+    })).toBe('80000-MD - Acme Ltd - North Yard - Concrete repairs');
   });
 
   it('uses the first non-empty site address line', () => {
@@ -26,14 +27,14 @@ describe('quote display names', () => {
       customer: null,
       site_address: null,
       subject_line: '',
-    })).toBe('80001-CD - Customer - Site - Quote');
+    })).toBe('80001-CD - Customer - Site not set - Quote');
   });
 
   it('sanitizes unsafe filename characters and keeps the pdf extension', () => {
     const filename = buildQuotePdfFilename({
       quote_reference: '80002/RB',
       customer: { company_name: 'A&B: Demo <Ltd>' },
-      site_address: 'Site / One',
+      customer_site: { site_name: 'Site / One' },
       subject_line: 'Walls * gutters?',
     });
 
@@ -44,7 +45,7 @@ describe('quote display names', () => {
     const header = buildQuotePdfContentDisposition({
       quote_reference: '80003–MD',
       customer: { company_name: 'Café Repairs Ltd' },
-      site_address: 'Main Yard – North',
+      customer_site: { site_name: 'Main Yard – North' },
       subject_line: 'Façade repairs',
     });
 

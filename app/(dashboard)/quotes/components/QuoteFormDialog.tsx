@@ -29,6 +29,7 @@ import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
 import { cn } from '@/lib/utils/cn';
 import { getQuoteRichPasteText } from '@/lib/quotes/quote-rich-text';
 import { toast } from 'sonner';
+import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import { normalizeRequiredStaffCount } from '@/lib/utils/scheduling-staffing';
 import {
   cloneSelectedQuoteFiles,
@@ -38,6 +39,8 @@ import {
   replaceQuoteAttachment,
 } from '../quote-attachment-client';
 import type { Quote, QuoteAttachment, QuoteFormData, QuoteFormSubmitIntent, QuoteLineItem, QuoteManagerOption } from '../types';
+import { CustomerSiteFormDialog } from '@/app/(dashboard)/customers/components/CustomerSiteFormDialog';
+import type { CustomerSite } from '@/app/(dashboard)/customers/types';
 
 interface Customer {
   id: string;
@@ -93,6 +96,7 @@ interface QuoteFormDialogProps {
   createdCustomerId?: string | null;
   onCreatedCustomerApplied?: () => void;
   onAddCustomer?: () => void;
+  onSiteCreated?: (site: CustomerSite) => void;
 }
 
 const EMPTY_LINE_ITEM: QuoteLineItem = {
@@ -105,6 +109,7 @@ const EMPTY_LINE_ITEM: QuoteLineItem = {
 };
 
 const QUOTE_SITE_CUSTOM_VALUE = 'custom';
+const QUOTE_NEW_SITE_VALUE = '__new_site__';
 
 function normalizeQuoteSiteId(customerSiteId: string): string {
   return !customerSiteId || customerSiteId === QUOTE_SITE_CUSTOM_VALUE ? '' : customerSiteId;
@@ -195,6 +200,7 @@ export function QuoteFormDialog({
   createdCustomerId,
   onCreatedCustomerApplied,
   onAddCustomer,
+  onSiteCreated,
 }: QuoteFormDialogProps) {
   const { profile } = useAuth();
   const isEditing = !!quote;
@@ -232,6 +238,7 @@ export function QuoteFormDialog({
     start_date: '',
     start_alert_days: '',
     estimated_duration_days: '',
+    estimated_duration_hours: '',
     required_staff_count: '',
     secondary_contact_ids: [],
     line_items: [{ ...EMPTY_LINE_ITEM }],
@@ -243,6 +250,7 @@ export function QuoteFormDialog({
   const [replacingAttachmentId, setReplacingAttachmentId] = useState<string | null>(null);
   const [attachmentActionError, setAttachmentActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [siteDialogOpen, setSiteDialogOpen] = useState(false);
   const persistInFlightRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -476,7 +484,8 @@ export function QuoteFormDialog({
         version_notes: quote.version_notes || '',
         start_date: quote.start_date || '',
         start_alert_days: quote.start_alert_days || '',
-        estimated_duration_days: quote.estimated_duration_days || '',
+        estimated_duration_days: quote.estimated_duration_minutes ? '' : quote.estimated_duration_days || '',
+        estimated_duration_hours: quote.estimated_duration_minutes ? quote.estimated_duration_minutes / 60 : '',
         required_staff_count: quote.required_staff_count || '',
         secondary_contact_ids: quote.selected_secondary_contact_ids || [],
         request_id: crypto.randomUUID(),
@@ -512,6 +521,7 @@ export function QuoteFormDialog({
         start_date: '',
         start_alert_days: '',
         estimated_duration_days: '',
+    estimated_duration_hours: '',
         required_staff_count: '',
         secondary_contact_ids: [],
         line_items: [{ ...EMPTY_LINE_ITEM }],
@@ -581,6 +591,7 @@ export function QuoteFormDialog({
   }
 
   function handleCustomerChange(customerId: string) {
+    setSiteDialogOpen(false);
     clearFieldError('customer_id');
     clearFieldError('site_address');
     setSubmitError(null);
@@ -601,6 +612,10 @@ export function QuoteFormDialog({
   }
 
   function handleSiteChange(customerSiteId: string) {
+    if (customerSiteId === QUOTE_NEW_SITE_VALUE) {
+      if (form.customer_id && onSiteCreated) setSiteDialogOpen(true);
+      return;
+    }
     clearFieldError('customer_site_id');
     clearFieldError('site_address');
     setSubmitError(null);
@@ -610,6 +625,18 @@ export function QuoteFormDialog({
       customer_site_id: site?.id || QUOTE_SITE_CUSTOM_VALUE,
       site_address: site ? buildAddress(site) : prev.site_address,
     }));
+  }
+
+  function handleCreatedCustomerSite(site: CustomerSite) {
+    clearFieldError('customer_site_id');
+    clearFieldError('site_address');
+    setSubmitError(null);
+    setForm(prev => ({
+      ...prev,
+      customer_site_id: site.id,
+      site_address: buildAddress(site),
+    }));
+    onSiteCreated?.(site);
   }
 
   useEffect(() => {
@@ -728,7 +755,7 @@ export function QuoteFormDialog({
       await deleteQuoteAttachment(quote.id, attachment.id);
       const fallbackAttachments = existingAttachments.filter(item => item.id !== attachment.id);
       await refreshExistingAttachments(quote.id, fallbackAttachments);
-      toast.success('Attachment removed');
+      acknowledgeSuccess();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to remove this attachment right now.';
       setAttachmentActionError(message);
@@ -757,7 +784,7 @@ export function QuoteFormDialog({
         ...existingAttachments.filter(item => item.id !== attachment.id),
       ];
       await refreshExistingAttachments(quote.id, fallbackAttachments);
-      toast.success('Attachment replaced');
+      acknowledgeSuccess();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to replace this attachment right now.';
       setAttachmentActionError(message);
@@ -828,14 +855,39 @@ export function QuoteFormDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={contentRef}
         className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white"
-        onInteractOutside={handleInteractOutside}
-        onPointerDownOutside={handlePointerDownOutside}
-        onFocusOutside={handleFocusOutside}
-        onEscapeKeyDown={handleEscapeKeyDown}
+        onInteractOutside={(event) => {
+          if (siteDialogOpen) {
+            event.preventDefault();
+            return;
+          }
+          handleInteractOutside(event);
+        }}
+        onPointerDownOutside={(event) => {
+          if (siteDialogOpen) {
+            event.preventDefault();
+            return;
+          }
+          handlePointerDownOutside(event);
+        }}
+        onFocusOutside={(event) => {
+          if (siteDialogOpen) {
+            event.preventDefault();
+            return;
+          }
+          handleFocusOutside(event);
+        }}
+        onEscapeKeyDown={(event) => {
+          if (siteDialogOpen) {
+            event.preventDefault();
+            return;
+          }
+          handleEscapeKeyDown(event);
+        }}
       >
         <form onSubmit={handleSubmit} noValidate onKeyDown={handleEnterAdvancesFields}>
           <DialogHeader>
@@ -964,6 +1016,9 @@ export function QuoteFormDialog({
                       <SelectValue placeholder="Choose site" />
                     </SelectTrigger>
                     <SelectContent>
+                      {onSiteCreated && form.customer_id ? (
+                        <SelectItem value={QUOTE_NEW_SITE_VALUE}>New site</SelectItem>
+                      ) : null}
                       <SelectItem value="custom">Custom / snapshot only</SelectItem>
                       {activeCustomerSites.map(site => (
                         <SelectItem key={site.id} value={site.id}>
@@ -1022,7 +1077,7 @@ export function QuoteFormDialog({
                     disabled={areCustomerDependentFieldsDisabled}
                     aria-label="Validity days"
                     aria-invalid={!!fieldErrors.validity_days}
-                    onChange={e => updateField('validity_days', parseInt(e.target.value) || 30)}
+                    onChange={e => updateField('validity_days', e.target.value === '' ? 0 : Number(e.target.value))}
                     className={getFieldClassName('validity_days')}
                   />
                   {renderFieldError('validity_days')}
@@ -1230,16 +1285,24 @@ export function QuoteFormDialog({
                   {renderFieldError('required_staff_count')}
                 </div>
                 <div className="space-y-2">
-                  <Label>Estimated Duration (days)</Label>
+                  <Label htmlFor="quote-duration-days">Estimated Duration (days)</Label>
                   <Input
                     type="number"
                     min={0}
+                    id="quote-duration-days"
                     value={form.estimated_duration_days}
-                    onChange={e => updateField('estimated_duration_days', e.target.value ? Number(e.target.value) : '')}
+                    onChange={e => setForm(current => ({ ...current, estimated_duration_days: e.target.value ? Number(e.target.value) : '', estimated_duration_hours: '' }))}
                     placeholder="e.g. 5"
                     className={getFieldClassName('estimated_duration_days')}
                   />
                   {renderFieldError('estimated_duration_days')}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quote-duration-hours">Estimated Duration (hours)</Label>
+                  <Input id="quote-duration-hours" type="number" min={0} max={1680} step="any" value={form.estimated_duration_hours ?? ''}
+                    onChange={e => setForm(current => ({ ...current, estimated_duration_hours: e.target.value ? Number(e.target.value) : '', estimated_duration_days: '' }))} placeholder="e.g. 2.5" />
+                  <p className="text-xs text-slate-400">Enter days or hours. Timed visits control the schedule.</p>
+                  {renderFieldError('estimated_duration_minutes')}
                 </div>
               </div>
               <div className="space-y-2">
@@ -1487,5 +1550,14 @@ export function QuoteFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+    {siteDialogOpen && form.customer_id ? (
+      <CustomerSiteFormDialog
+        open
+        customerId={form.customer_id}
+        onClose={() => setSiteDialogOpen(false)}
+        onCreated={handleCreatedCustomerSite}
+      />
+    ) : null}
+    </>
   );
 }

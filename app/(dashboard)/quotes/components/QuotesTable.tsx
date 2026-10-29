@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Receipt,
 } from 'lucide-react';
-import { buildQuoteDisplayName, getQuoteLocationSegment } from '@/lib/quotes/quote-display-name';
+import { buildQuoteDisplayName } from '@/lib/quotes/quote-display-name';
 import { cn } from '@/lib/utils';
 import { getQuoteManagerNameFilterValue, isQuoteManagerNameFilterValue } from '../types';
 import type { Quote, QuoteListSummary, QuoteSageStatus, QuoteStatus } from '../types';
@@ -81,7 +81,7 @@ function isTestCustomerName(name: string | null | undefined) {
 
 function getQuoteDetailsLines(quote: Quote) {
   const lines = [
-    getQuoteLocationSegment(quote.site_address),
+    quote.customer_site?.site_name || 'Site not set',
     quote.subject_line,
     quote.project_description,
   ]

@@ -112,9 +112,6 @@ export function ScheduleJobDialog({
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
     initialInput?.tag_ids || (job?.tags || []).map((tag) => tag.id)
   );
-  const [isDropOnReady, setIsDropOnReady] = useState(
-    initialInput?.is_drop_on_ready ?? job?.is_drop_on_ready === true
-  );
   const [newTagName, setNewTagName] = useState('');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [customersLoading, setCustomersLoading] = useState(true);
@@ -289,7 +286,7 @@ export function ScheduleJobDialog({
     const requiredStaff = requiredStaffCount ? Number(requiredStaffCount) : null;
     const input: ScheduleJobUpdateInput = isQuoteJob
         ? {
-            is_drop_on_ready: isDropOnReady,
+            is_drop_on_ready: job?.is_drop_on_ready === true,
             tag_ids: selectedTagIds,
             required_staff_count: requiredStaff,
           }
@@ -309,7 +306,7 @@ export function ScheduleJobDialog({
             end_date: endDate,
             estimated_duration_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
             required_staff_count: requiredStaff,
-            is_drop_on_ready: isDropOnReady,
+            is_drop_on_ready: job?.is_drop_on_ready === true,
             tag_ids: selectedTagIds,
           };
     onSubmit(input, job);
@@ -577,7 +574,7 @@ export function ScheduleJobDialog({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Operational classification</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tags, required staff, and crew-offer availability can be updated here for both Project and Quote jobs.
+                Tags and required staff can be updated here for both Project and Quote jobs.
               </p>
             </div>
             <div className="space-y-2">
@@ -592,25 +589,6 @@ export function ScheduleJobDialog({
                 placeholder="e.g. 3"
               />
             </div>
-            <label
-              htmlFor="schedule-job-drop-on-ready"
-              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2"
-            >
-              <Checkbox
-                id="schedule-job-drop-on-ready"
-                checked={isDropOnReady}
-                onCheckedChange={(checked) => setIsDropOnReady(checked === true)}
-                className={schedulingControlStyles.checkbox}
-              />
-              <span>
-                <span className="block text-sm font-medium text-foreground">
-                  Offer if crew finishes early
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Makes this scheduled job available to offer when a crew finishes its planned work early.
-                </span>
-              </span>
-            </label>
             <div className="space-y-2">
               <Label>Job tags</Label>
               {availableTags.length > 0 ? (

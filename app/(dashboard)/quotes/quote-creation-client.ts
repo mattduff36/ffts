@@ -22,9 +22,10 @@ export async function markQuoteAsSent(quoteId: string): Promise<Quote> {
 }
 
 export function buildQuoteCreatePayload(data: QuoteFormData) {
-  const { attachment_files: _attachmentFiles, ...payload } = data;
+  const { attachment_files: _attachmentFiles, estimated_duration_hours, ...payload } = data;
   return {
     ...payload,
+    ...(estimated_duration_hours !== undefined ? { estimated_duration_minutes: estimated_duration_hours === '' ? null : Math.round(Number(estimated_duration_hours) * 60) } : {}),
     request_id: data.request_id || crypto.randomUUID(),
   };
 }

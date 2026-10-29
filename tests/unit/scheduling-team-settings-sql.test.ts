@@ -73,24 +73,28 @@ describe('schedule team settings SQL contract', () => {
 
   it('sched-team-slot-range hides slots above the visible count', () => {
     expect(isVisibleScheduleDayTeamSlotIndex(5, 5)).toBe(true);
-    expect(isVisibleScheduleDayTeamSlotIndex(6, 5)).toBe(false);
+    expect(isVisibleScheduleDayTeamSlotIndex(9, 8)).toBe(false);
     expect(isVisibleScheduleDayTeamSlotIndex(11, 10)).toBe(false);
     expect((sql.match(/IF p_slot_index > v_visible THEN/g) || []).length).toBeGreaterThanOrEqual(2);
   });
 
-  it('normalizes five leader slots for a settings save', () => {
+  it('normalizes eight leader slots for a settings save', () => {
     expect(normalizeTeamSettingsSaveInput({
-      visible_slot_count: 7,
+      visible_slot_count: 8,
       leaders: [{ slot_index: 2, profile_id: '22222222-2222-4222-8222-222222222222' }],
     })).toEqual({
-      visible_slot_count: 7,
+      visible_slot_count: 8,
       leaders: [
         { slot_index: 1, profile_id: null },
         { slot_index: 2, profile_id: '22222222-2222-4222-8222-222222222222' },
         { slot_index: 3, profile_id: null },
         { slot_index: 4, profile_id: null },
         { slot_index: 5, profile_id: null },
+        { slot_index: 6, profile_id: null },
+        { slot_index: 7, profile_id: null },
+        { slot_index: 8, profile_id: null },
       ],
+      names: null,
     });
   });
 });

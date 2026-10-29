@@ -45,6 +45,7 @@ export interface ScheduleJob {
   quote_project_number_id: string | null;
   customer_id: string | null;
   customer_site_id: string | null;
+  site_name?: string | null;
   customer_name?: string | null;
   is_drop_on_ready: boolean;
   tags: ScheduleJobTag[];
@@ -60,6 +61,7 @@ export interface ScheduleQuoteCandidate {
   quote_reference: string;
   base_quote_reference: string;
   title: string;
+  site_name?: string | null;
   customer_name: string | null;
   status: string | null;
   start_date: string | null;
@@ -88,7 +90,8 @@ export type SchedulingQueueItem =
       quote_reference: string;
       base_quote_reference: string;
       title: string;
-      customer_name: null;
+      site_name?: string | null;
+  customer_name: null;
       status: 'Project';
       start_date: null;
       end_date: null;
@@ -102,7 +105,8 @@ export type SchedulingQueueItem =
       quote_reference: string;
       base_quote_reference: string;
       title: string;
-      customer_name: string | null;
+      site_name?: string | null;
+  customer_name: string | null;
       status: 'Returned visit';
       start_date: null;
       end_date: null;
@@ -132,6 +136,7 @@ export interface ScheduleVisitBacklogItem {
   job_reference: string;
   job_title: string;
   source_type: ScheduleJobSource;
+  site_name?: string | null;
   customer_name: string | null;
   sequence_number: number;
   title: string | null;
@@ -231,7 +236,23 @@ export interface SchedulePlantUnavailability {
   plant?: SchedulePlantResource | null;
 }
 
-export type ScheduleDayTeamSlotIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type ScheduleDayTeamSlotIndex =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10
+  | 11
+  | 12
+  | 13
+  | 14
+  | 15
+  | 16;
 
 export interface ScheduleTeamSlotLeader {
   slot_index: ScheduleDayTeamSlotIndex;
@@ -242,6 +263,8 @@ export interface ScheduleTeamSlotLeader {
 export interface ScheduleTeamSettings {
   visible_slot_count: number;
   leaders: ScheduleTeamSlotLeader[];
+  /** Optional custom names keyed by slot index ("1".."16"). Omitted by older fixtures. */
+  names?: Record<string, string>;
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -256,10 +279,38 @@ export interface ScheduleDayTeamMember {
   is_leader?: boolean;
 }
 
+export interface ScheduleDayTeamPlant {
+  work_date: string;
+  slot_index: ScheduleDayTeamSlotIndex;
+  plant_id: string;
+  plant: SchedulePlantResource | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+/** Employee day-team writes. Existing clients send this shape with no plant id. */
+export interface ScheduleDayTeamEmployeeRequest {
+  work_date: string;
+  slot_index: number;
+  profile_id: string;
+}
+
+/** Plant day-team writes. Mutually exclusive with an employee profile id. */
+export interface ScheduleDayTeamPlantRequest {
+  work_date: string;
+  slot_index: number;
+  plant_id: string;
+}
+
 export interface ScheduleDayTeamSlot {
   work_date: string;
   slot_index: ScheduleDayTeamSlotIndex;
   members: ScheduleDayTeamMember[];
+  /**
+   * Plant memberships for this bucket. Optional so existing slot literals stay valid.
+   * Builders always set an array, including an empty one.
+   */
+  plants?: ScheduleDayTeamPlant[];
 }
 
 export interface ScheduleDayTeams {

@@ -96,4 +96,37 @@ describe('POST /api/scheduling/day-teams/copy', () => {
       error: 'Choose a different date to copy from.',
     });
   });
+
+  it('returns copied plants beside members with the helper counts', async () => {
+    mockCopy.mockResolvedValue({
+      members: [{
+        work_date: '2026-09-21',
+        slot_index: 2,
+        profile_id: '22222222-2222-4222-8222-222222222222',
+        added_by: managerAccess.userId,
+        created_at: '2026-09-21T08:00:00.000Z',
+      }],
+      plants: [{
+        work_date: '2026-09-21',
+        slot_index: 2,
+        plant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        added_by: managerAccess.userId,
+        created_at: '2026-09-21T08:05:00.000Z',
+      }],
+      copied: 2,
+      skipped: 1,
+    });
+    const { POST } = await import('@/app/api/scheduling/day-teams/copy/route');
+    const response = await POST(post({
+      from_date: '2026-09-20',
+      to_date: '2026-09-21',
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      members: [expect.objectContaining({ profile_id: '22222222-2222-4222-8222-222222222222' })],
+      plants: [expect.objectContaining({ plant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })],
+      copied: 2,
+      skipped: 1,
+    });
+  });
 });

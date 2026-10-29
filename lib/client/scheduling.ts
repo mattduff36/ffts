@@ -11,6 +11,8 @@ import type {
   ScheduleVisitBacklogPreview,
   EnqueueScheduleVisitResult,
   ScheduleQueuedVisitResult,
+  ScheduleDayTeamEmployeeRequest,
+  ScheduleDayTeamPlantRequest,
   ScheduleTeamSettings,
   SchedulingBoardPayload,
   SchedulingConflict,
@@ -409,6 +411,13 @@ export async function copyScheduleDayTeams(input: {
     added_by: string | null;
     created_at: string;
   }>;
+  plants: Array<{
+    work_date: string;
+    slot_index: number;
+    plant_id: string;
+    added_by: string | null;
+    created_at: string;
+  }>;
   copied: number;
   skipped: number;
 }> {
@@ -421,11 +430,9 @@ export async function copyScheduleDayTeams(input: {
   );
 }
 
-export async function addScheduleDayTeamMember(input: {
-  work_date: string;
-  slot_index: number;
-  profile_id: string;
-}): Promise<{ member: Record<string, unknown> }> {
+export async function addScheduleDayTeamMember(
+  input: ScheduleDayTeamEmployeeRequest
+): Promise<{ member: Record<string, unknown> }> {
   assertNoProvisionalIds(input);
   return readResponse(
     await fetch('/api/scheduling/day-teams', {
@@ -436,11 +443,9 @@ export async function addScheduleDayTeamMember(input: {
   );
 }
 
-export async function removeScheduleDayTeamMember(input: {
-  work_date: string;
-  slot_index: number;
-  profile_id: string;
-}): Promise<{ success: boolean }> {
+export async function removeScheduleDayTeamMember(
+  input: ScheduleDayTeamEmployeeRequest
+): Promise<{ success: boolean }> {
   assertNoProvisionalIds(input);
   const params = new URLSearchParams({
     work_date: input.work_date,
@@ -454,11 +459,41 @@ export async function removeScheduleDayTeamMember(input: {
   );
 }
 
+export async function addScheduleDayTeamPlant(
+  input: ScheduleDayTeamPlantRequest
+): Promise<{ plant: Record<string, unknown> }> {
+  assertNoProvisionalIds(input);
+  return readResponse(
+    await fetch('/api/scheduling/day-teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  );
+}
+
+export async function removeScheduleDayTeamPlant(
+  input: ScheduleDayTeamPlantRequest
+): Promise<{ success: boolean }> {
+  assertNoProvisionalIds(input);
+  const params = new URLSearchParams({
+    work_date: input.work_date,
+    slot_index: String(input.slot_index),
+    plant_id: input.plant_id,
+  });
+  return readResponse(
+    await fetch(`/api/scheduling/day-teams?${params.toString()}`, {
+      method: 'DELETE',
+    })
+  );
+}
+
 export interface DayTeamAssignSkippedMember {
-  profile_id: string;
   full_name: string;
   reason: 'conflict' | 'overlap';
   conflicts: SchedulingConflict[];
+  profile_id?: string;
+  plant_id?: string;
 }
 
 export interface DayTeamAssignResult {
@@ -473,6 +508,7 @@ export interface DayTeamAssignResult {
 export async function saveScheduleTeamSettings(input: {
   visible_slot_count: number;
   leaders: Array<{ slot_index: number; profile_id: string | null }>;
+  names?: Record<string, string>;
 }): Promise<{ settings: ScheduleTeamSettings }> {
   return readResponse(
     await fetch('/api/scheduling/team-settings', {

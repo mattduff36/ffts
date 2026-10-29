@@ -10,6 +10,7 @@ import {
   patchBoardWithVisit,
 } from '@/app/(dashboard)/scheduling/components/scheduling-board-cache';
 import { loadSchedulingBoard } from '@/lib/server/scheduling-board';
+import { getScheduleLondonStartsAtRangeIso } from '@/lib/utils/scheduling';
 import {
   insertJobInBoardOrder,
   sortJobsByBoardSequence,
@@ -428,7 +429,10 @@ describe('Schedule Board job order', () => {
   it('JOB-ORDER-010: board load orders by board_sequence then id', async () => {
     const orders: RecordedOrder[] = [];
     await loadSchedulingBoard(
-      fakeAdmin({ schedule_jobs: [jobC] }, orders),
+      fakeAdmin({
+        schedule_jobs: [jobC],
+        schedule_visits: [visit('visit-c', jobC.id, '2026-09-04T08:00:00.000Z')],
+      }, orders),
       '2026-08-31',
       '2026-09-06'
     );
@@ -436,6 +440,81 @@ describe('Schedule Board job order', () => {
       .filter((entry) => entry.table === 'schedule_jobs')
       .map((entry) => entry.column);
     expect(jobOrders).toEqual(['board_sequence', 'id']);
+  });
+
+  it('returns only jobs with active timed visits overlapping the requested week', async () => {
+    const range = getScheduleLondonStartsAtRangeIso('2026-08-31', '2026-09-06');
+    const rangeStartMs = Date.parse(range.startInclusiveIso);
+    const rangeEndMs = Date.parse(range.endExclusiveIso);
+    const inside = job('job-inside', { board_sequence: 1 });
+    const mismatched = job('job-mismatch', {
+      board_sequence: 2,
+      start_date: '2026-10-01',
+      end_date: '2026-10-02',
+    });
+    const noVisits = job('job-none', { board_sequence: 3 });
+    const legacyOnly = job('job-legacy', { board_sequence: 4 });
+    const cancelled = job('job-cancelled', { board_sequence: 5 });
+    const otherPeriod = job('job-other', {
+      board_sequence: 6,
+      start_date: '2026-10-01',
+      end_date: '2026-10-02',
+    });
+    const touchStart = job('job-touch-start', { board_sequence: 7 });
+    const touchEnd = job('job-touch-end', { board_sequence: 8 });
+    const timedVisit = (
+      id: string,
+      jobId: string,
+      startsAt: string,
+      endsAt: string,
+      status: ScheduleVisit['status'] = 'planned'
+    ): ScheduleVisit => ({
+      ...visit(id, jobId, startsAt),
+      ends_at: endsAt,
+      status,
+    });
+
+    const board = await loadSchedulingBoard(
+      fakeAdmin({
+        schedule_jobs: [inside, mismatched, noVisits, legacyOnly, cancelled, otherPeriod, touchStart, touchEnd],
+        schedule_visits: [
+          timedVisit('visit-inside', inside.id, '2026-09-02T08:00:00.000Z', '2026-09-02T12:00:00.000Z'),
+          timedVisit(
+            'visit-mismatch',
+            mismatched.id,
+            new Date(rangeStartMs - 60 * 60_000).toISOString(),
+            new Date(rangeStartMs + 60 * 60_000).toISOString()
+          ),
+          timedVisit('visit-cancelled', cancelled.id, '2026-09-02T08:00:00.000Z', '2026-09-02T12:00:00.000Z', 'cancelled'),
+          timedVisit('visit-other', otherPeriod.id, '2026-10-02T08:00:00.000Z', '2026-10-02T12:00:00.000Z'),
+          timedVisit(
+            'visit-touch-start',
+            touchStart.id,
+            new Date(rangeStartMs - 60 * 60_000).toISOString(),
+            new Date(rangeStartMs).toISOString()
+          ),
+          timedVisit(
+            'visit-touch-end',
+            touchEnd.id,
+            new Date(rangeEndMs).toISOString(),
+            new Date(rangeEndMs + 60 * 60_000).toISOString()
+          ),
+        ],
+        schedule_employee_assignments: [{
+          id: 'legacy-1',
+          job_id: legacyOnly.id,
+          work_date: '2026-09-02',
+          visit_id: null,
+          profile_id: 'employee-1',
+        }],
+        schedule_visit_backlog: [],
+      }, []),
+      '2026-08-31',
+      '2026-09-06'
+    );
+
+    expect(board.jobs.map((item) => item.id)).toEqual(['job-inside', 'job-mismatch']);
+    expect(board.visits.map((item) => item.id).sort()).toEqual(['visit-inside', 'visit-mismatch']);
   });
 
   it('appends unsaved jobs and inserts persisted jobs by sequence', () => {

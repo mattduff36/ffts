@@ -31,6 +31,14 @@ function pickRelation<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
+function isValidTimedVisit(row: Record<string, unknown>): boolean {
+  if (row.status === 'cancelled') return false;
+  if (typeof row.starts_at !== 'string' || typeof row.ends_at !== 'string') return false;
+  const startMs = Date.parse(row.starts_at);
+  const endMs = Date.parse(row.ends_at);
+  return Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+}
+
 function mapQuoteCandidate(row: Record<string, unknown>): ScheduleQuoteCandidate {
   const customer = pickRelation(
     row.customer as CustomerRelation | CustomerRelation[] | null
@@ -50,6 +58,7 @@ function mapQuoteCandidate(row: Record<string, unknown>): ScheduleQuoteCandidate
       || (typeof row.project_description === 'string' && row.project_description.trim())
       || 'Quoted work',
     customer_name: customer?.company_name || null,
+    site_name: pickRelation(row.customer_site as { site_name?: string } | Array<{ site_name?: string }> | null)?.site_name || null,
     status: typeof row.status === 'string' ? row.status : null,
     start_date: startDate,
     end_date:
@@ -84,6 +93,7 @@ export async function GET() {
         start_date,
         estimated_duration_days,
         estimated_duration_minutes,
+        customer_site:customer_sites!quotes_customer_site_id_fkey(site_name),
         customer:customers(company_name)
       `)
       .eq('is_latest_version', true)
@@ -91,8 +101,38 @@ export async function GET() {
       .order('quote_reference');
     if (error) throw error;
 
+    const quotes = ((data || []) as Array<Record<string, unknown>>).map(mapQuoteCandidate);
+    if (quotes.length === 0) {
+      return NextResponse.json({ quotes: [] });
+    }
+
+    const jobsResult = await admin
+      .from('schedule_jobs')
+      .select('id, quote_id')
+      .in('quote_id', quotes.map((quote) => quote.id))
+      .eq('source_type', 'quote');
+    if (jobsResult.error) throw jobsResult.error;
+
+    const relatedJobs = ((jobsResult.data || []) as Array<{ id?: string; quote_id?: string | null }>)
+      .filter((job) => typeof job.id === 'string' && typeof job.quote_id === 'string');
+    const quoteIdByJobId = new Map(relatedJobs.map((job) => [String(job.id), String(job.quote_id)]));
+    const blockedQuoteIds = new Set<string>();
+    if (relatedJobs.length > 0) {
+      const visitsResult = await admin
+        .from('schedule_visits')
+        .select('job_id, starts_at, ends_at, status')
+        .in('job_id', relatedJobs.map((job) => String(job.id)))
+        .neq('status', 'cancelled');
+      if (visitsResult.error) throw visitsResult.error;
+      for (const visit of (visitsResult.data || []) as Array<Record<string, unknown>>) {
+        if (!isValidTimedVisit(visit)) continue;
+        const quoteId = quoteIdByJobId.get(String(visit.job_id));
+        if (quoteId) blockedQuoteIds.add(quoteId);
+      }
+    }
+
     return NextResponse.json({
-      quotes: ((data || []) as Array<Record<string, unknown>>).map(mapQuoteCandidate),
+      quotes: quotes.filter((quote) => !blockedQuoteIds.has(quote.id)),
     });
   } catch (error) {
     console.error('Error loading Quotes for scheduling:', error);

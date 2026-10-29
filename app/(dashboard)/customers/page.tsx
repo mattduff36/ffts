@@ -7,6 +7,7 @@ import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
 import { Building2, Plus, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { getErrorStatus } from '@/lib/utils/http-error';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -75,7 +76,7 @@ export default function CustomersPage() {
       const err = await res.json();
       throw new Error(err.error || 'Failed to create customer');
     }
-    toast.success('Customer added');
+    acknowledgeSuccess();
     await fetchCustomers();
   }
 
@@ -90,7 +91,7 @@ export default function CustomersPage() {
       const err = await res.json();
       throw new Error(err.error || 'Failed to update customer');
     }
-    toast.success('Customer updated');
+    acknowledgeSuccess();
     setEditingCustomer(null);
     await fetchCustomers();
   }

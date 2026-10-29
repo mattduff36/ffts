@@ -206,6 +206,7 @@ export function dayTeamAssignClaims(input: {
   jobId: string;
   visitId: string;
   memberIds: readonly string[];
+  plantIds?: readonly string[];
 }): SchedulingMutationClaim[] {
   return [
     exclusiveDayTeamDateClaim(input.workDate),
@@ -214,6 +215,11 @@ export function dayTeamAssignClaims(input: {
     ...input.memberIds.map((profileId) => ({
       scope: 'resource-day' as const,
       id: resourceDayClaimId('employee', profileId, input.workDate),
+      mode: 'exclusive' as const,
+    })),
+    ...(input.plantIds || []).map((plantId) => ({
+      scope: 'resource-day' as const,
+      id: resourceDayClaimId('plant', plantId, input.workDate),
       mode: 'exclusive' as const,
     })),
   ];

@@ -18,7 +18,7 @@ describe('daily visit assignment layout', () => {
   it('sizes empty and sparsely assigned lanes to the current minimum', () => {
     expect(getDailyVisitLaneHeight(0, 184)).toBe(DAILY_VISIT_LANE_MIN_HEIGHT);
     expect(getDailyVisitLaneHeight(2, 184)).toBe(DAILY_VISIT_LANE_MIN_HEIGHT);
-    expect(getDailyVisitLaneHeight(3, 184)).toBe(104);
+    expect(getDailyVisitLaneHeight(3, 184)).toBe(148);
   });
 
   it('grows the lane so every assignment row stays visible', () => {

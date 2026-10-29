@@ -68,6 +68,20 @@ describe('QuoteFormDialog', () => {
     approvers: [],
   };
 
+  it('uses days OR hours and restores an existing sub-day estimate', () => {
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    render(<QuoteFormDialog {...baseProps} quote={{ id: 'q-duration', estimated_duration_days: null,
+      estimated_duration_minutes: 90, customer_id: 'customer-1', validity_days: 30, line_items: [] } as unknown as Quote} />);
+    const days = screen.getByLabelText('Estimated Duration (days)');
+    const hours = screen.getByLabelText('Estimated Duration (hours)');
+    expect(hours).toHaveValue(1.5);
+    fireEvent.change(days, { target: { value: '3' } });
+    expect(hours).toHaveValue(null);
+    fireEvent.change(hours, { target: { value: '2.25' } });
+    expect(days).toHaveValue(null);
+    expect(hours).toHaveValue(2.25);
+  });
+
   it('preserves in-progress form values when auth state refreshes while open', () => {
     mockUseAuth.mockReturnValue({
       profile: {

@@ -185,7 +185,6 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
     setForm(prev => ({
       ...prev,
       sites: [
-        ...prev.sites,
         {
           site_name: '',
           address_line_1: '',
@@ -197,6 +196,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
           is_default: prev.sites.every(site => !site.is_active),
           notes: '',
         },
+        ...prev.sites,
       ],
     }));
   }
@@ -483,7 +483,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
                 <div className="space-y-4">
                   {form.sites.map((site, index) => (
                     <div
-                      key={site.id || index}
+                      key={site.id || `site-${index}`}
                       className="rounded-lg border border-slate-700 bg-slate-950/30 p-4"
                     >
                       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

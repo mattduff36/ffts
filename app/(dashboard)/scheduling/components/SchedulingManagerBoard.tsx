@@ -24,7 +24,6 @@ import { addMinutes, format, parseISO } from 'date-fns';
 import {
   createParser,
   parseAsArrayOf,
-  parseAsBoolean,
   parseAsString,
   useQueryState,
   useQueryStates,
@@ -56,6 +55,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +83,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   addScheduleDayTeamMember,
+  addScheduleDayTeamPlant,
   assignScheduleDayTeam,
   copyScheduleDayTeams,
   createProjectScheduleJob,
@@ -100,6 +101,7 @@ import {
   previewScheduleVisitBacklog,
   quickAddScheduleProject,
   removeScheduleDayTeamMember,
+  removeScheduleDayTeamPlant,
   scheduleQueuedVisit,
   saveQuoteSchedule,
   savePlantUnavailability,
@@ -192,11 +194,13 @@ import {
 } from '@/lib/utils/scheduling-availability';
 import {
   isScheduleDayTeamSlotIndex,
+  removeScheduleDayTeamPlant as removePlantFromDayTeamBoard,
   resolveScheduleDayTeamName,
   scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
   slotsForScheduleDate,
   teamSettingsFromBoard,
+  upsertScheduleDayTeamPlant,
 } from '@/lib/utils/scheduling-day-teams';
 import {
   countAssignedStaffForJobDate,
@@ -227,6 +231,7 @@ import {
 } from './ScheduleResourceCard';
 import { ResourceOccupancyLegend } from './ResourceOccupancyStrip';
 import {
+  buildDateOnlyQuoteInitialVisit,
   buildScheduleBoardRows,
   filterHiddenBoardAssignments,
   getScheduleBoardAxisLabel,
@@ -489,7 +494,10 @@ function DraggableQuoteCard({
     type: 'schedule-queue-item',
     data: { quote },
   });
-  const durationDays = quote.estimated_duration_days || 1;
+  const durationDays = quote.estimated_duration_days;
+  const durationLabel = quote.kind === 'returned_visit' || (!durationDays && quote.estimated_duration_minutes)
+    ? `${Math.round((quote.estimated_duration_minutes || 0) / 60 * 100) / 100} hours`
+    : durationDays ? `${durationDays} ${durationDays === 1 ? 'day' : 'days'}` : 'No estimate';
   const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onSelect);
 
   return (
@@ -529,10 +537,12 @@ function DraggableQuoteCard({
             {quote.base_quote_reference}
           </span>
           <span className={cn('mt-0.5 block truncate text-[11px]', selected ? 'text-slate-800' : 'text-slate-300')}>
-            {quote.customer_name ? `${quote.customer_name} · ` : ''}{quote.title}
+            <span className="block truncate">{quote.customer_name || 'Customer not set'}</span>
+            <span className="block truncate">{quote.site_name || 'Site not set'}</span>
+            <span className="block truncate">{quote.title}</span>
           </span>
           <span className={cn('mt-0.5 flex items-center justify-between gap-2 text-[10px]', selected ? 'text-slate-800' : 'text-slate-300')}>
-            <span>{durationDays} {durationDays === 1 ? 'day' : 'days'}</span>
+            <span>{durationLabel}</span>
             <span className={cn('truncate text-[9px]', selected ? 'text-slate-700' : 'text-slate-400')}>
               {'optimistic' in quote && quote.optimistic
                 ? 'Updating…'
@@ -549,24 +559,20 @@ interface ScheduledJobActionsProps {
   job: ScheduleJob;
   visitDate?: string;
   isMobile?: boolean;
-  isCrewOfferPending: boolean;
   onAddVisit: () => void;
   onEdit: () => void;
   onRemove: () => void;
   onReschedule: () => void;
-  onToggleCrewOffer: () => void;
 }
 
 function ScheduledJobActions({
   job,
   visitDate,
   isMobile = false,
-  isCrewOfferPending,
   onAddVisit,
   onEdit,
   onRemove,
   onReschedule,
-  onToggleCrewOffer,
 }: ScheduledJobActionsProps) {
   const buttonClass = cn(
     'p-0',
@@ -595,24 +601,6 @@ function ScheduledJobActions({
           <Plus className={iconClass} />
         </Button>
       ) : null}
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className={cn(
-          buttonClass,
-          job.is_drop_on_ready
-            ? schedulingControlStyles.primary
-            : schedulingControlStyles.ghost
-        )}
-        onClick={onToggleCrewOffer}
-        aria-label="Offer if crew finishes early"
-        aria-pressed={job.is_drop_on_ready}
-        disabled={isCrewOfferPending}
-        title="Offer if crew finishes early"
-      >
-        <Check className={cn(iconClass, !job.is_drop_on_ready && 'opacity-40')} />
-      </Button>
       {job.source_type === 'quote' && job.quote_id ? (
         <>
           <Button
@@ -793,6 +781,7 @@ interface DayCellProps {
 }
 
 interface VisitCardProps {
+  disableDrag?: boolean;
   job: ScheduleJob;
   visit: ScheduleVisit;
   assignments: ScheduleAssignment[];
@@ -832,6 +821,7 @@ function VisitCard({
   cardWidth,
   dndInstanceId,
   hiddenAssignment = null,
+  disableDrag = false,
 }: VisitCardProps) {
   const workDate = getScheduleVisitDate(visit.starts_at);
   const cardAssignments = filterHiddenBoardAssignments(assignments, hiddenAssignment);
@@ -861,7 +851,7 @@ function VisitCard({
   } = useDraggable({
     id: visitDraggableId,
     type: 'schedule-board-visit',
-    disabled: visit.status !== 'planned',
+    disabled: disableDrag || visit.status !== 'planned',
     data: { visit, job },
   });
   const { handleClick, resetDragState } = useDragSafeActivation(
@@ -902,6 +892,7 @@ function VisitCard({
       <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
         <button
           ref={dragHandleRef}
+          data-schedule-visit-move-handle
           type="button"
           onClick={handleClick}
           onPointerDown={resetDragState}
@@ -925,14 +916,9 @@ function VisitCard({
               </span>
             ) : null}
           </span>
-          {visit.title ? (
-            <span
-              className="mt-0.5 block truncate font-normal text-muted-foreground"
-              title={visit.title}
-            >
-              {visit.title}
-            </span>
-          ) : null}
+          <span className="mt-0.5 block truncate font-normal" title={job.customer_name || undefined}>{job.customer_name || 'Customer not set'}</span>
+          <span className="block truncate font-normal text-muted-foreground" title={job.site_name || undefined}>{job.site_name || 'Site not set'}</span>
+          <span className="block truncate font-normal text-muted-foreground" title={visit.title || job.title}>{visit.title || job.title}</span>
           {dndInstanceId || (cardWidth !== undefined && cardWidth >= 120) ? (
             <span
               className="mt-0.5 block truncate text-[10px] font-medium text-slate-300"
@@ -1011,10 +997,10 @@ function DayCell({
   onDeleteAssignment,
 }: DayCellProps) {
   const job = row.job;
-  const active = row.kind === 'job' && job
-    ? date >= job.start_date && date <= job.end_date
-    : true;
   const placements = row.visitsByDate[date] || [];
+  const active = row.kind !== 'job' || !job
+    || placements.length > 0
+    || (date >= job.start_date && date <= job.end_date);
   const legacyAssignments = row.legacyAssignmentsByDate[date] || [];
   const dndInstanceId = boardRowDndInstanceId(row);
 
@@ -1342,7 +1328,7 @@ function DailyTimelineHeader({
   );
 }
 
-type VisitResizeEdge = 'start' | 'end';
+type VisitResizeEdge = 'start' | 'end' | 'move';
 
 interface VisitResizeTimes {
   startsAt: string;
@@ -1385,6 +1371,15 @@ function getResizedVisitTimes(
   const startsAtMinutes = getScheduleTimeMinutes(visit.startsAt);
   const endsAtMinutes = getScheduleTimeMinutes(visit.endsAt);
 
+  if (edge === 'move') {
+    const boundedDelta = Math.max(rangeStartMinutes - startsAtMinutes,
+      Math.min(deltaMinutes, rangeEndMinutes - endsAtMinutes));
+    return {
+      startsAt: addMinutes(parseISO(visit.startsAt), boundedDelta).toISOString(),
+      endsAt: addMinutes(parseISO(visit.endsAt), boundedDelta).toISOString(),
+    };
+  }
+
   if (edge === 'start') {
     const nextStartMinutes = Math.min(
       Math.max(startsAtMinutes + deltaMinutes, rangeStartMinutes),
@@ -1412,30 +1407,6 @@ function getResizedVisitTimes(
   };
 }
 
-const VISIT_RESIZE_DRAFT_KEY = 'ffts-schedule-visit-resize-drafts';
-
-function readVisitResizeDrafts(): Record<string, VisitResizeTimes> {
-  try {
-    return JSON.parse(sessionStorage.getItem(VISIT_RESIZE_DRAFT_KEY) || '{}') as Record<
-      string,
-      VisitResizeTimes
-    >;
-  } catch {
-    return {};
-  }
-}
-
-function writeVisitResizeDraft(visitId: string, next: VisitResizeTimes | null) {
-  const drafts = readVisitResizeDrafts();
-  if (next) drafts[visitId] = next;
-  else delete drafts[visitId];
-  sessionStorage.setItem(VISIT_RESIZE_DRAFT_KEY, JSON.stringify(drafts));
-}
-
-function sameVisitClock(left: string, right: string) {
-  return parseISO(left).getTime() === parseISO(right).getTime();
-}
-
 function ResizableDailyVisit({
   job,
   visit,
@@ -1453,28 +1424,22 @@ function ResizableDailyVisit({
   hiddenAssignment = null,
 }: ResizableDailyVisitProps) {
   const [draftTimes, setDraftTimesState] = useState<VisitResizeTimes | null>(
-    () => readVisitResizeDrafts()[visit.id] || null
+    null
   );
   const resizeOperation = useRef<VisitResizeOperation | null>(null);
+  const movedPointer = useRef(false);
+  const resumeRefresh = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    const operation = resizeOperation.current;
+    resizeOperation.current = null;
+    if (operation) releaseSchedulePointerCaptures(operation.pointerId);
+    resumeRefresh.current?.();
+  }, []);
 
   function setDraftTimes(next: VisitResizeTimes | null) {
-    writeVisitResizeDraft(visit.id, next);
     setDraftTimesState(next);
   }
 
-  useEffect(() => {
-    const stored = readVisitResizeDrafts()[visit.id];
-    if (!stored) return;
-    if (
-      sameVisitClock(visit.starts_at, stored.startsAt)
-      && sameVisitClock(visit.ends_at, stored.endsAt)
-    ) {
-      writeVisitResizeDraft(visit.id, null);
-      // Draft store is external; clear the matching local draft after persist.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync from session draft
-      setDraftTimesState(null);
-    }
-  }, [visit.id, visit.starts_at, visit.ends_at]);
   const displayedVisit = draftTimes
     ? { ...visit, starts_at: draftTimes.startsAt, ends_at: draftTimes.endsAt }
     : visit;
@@ -1495,11 +1460,14 @@ function ResizableDailyVisit({
   });
 
   function handleResizePointerDown(
-    event: PointerEvent<HTMLButtonElement>,
+    event: PointerEvent<HTMLElement>,
     edge: VisitResizeEdge
   ) {
     event.preventDefault();
     event.stopPropagation();
+    movedPointer.current = false;
+    resumeRefresh.current?.();
+    resumeRefresh.current = pauseSoftRefresh();
     clearScheduleTextSelection();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     rememberSchedulePointerCapture(event.currentTarget, event.pointerId);
@@ -1514,7 +1482,7 @@ function ResizableDailyVisit({
     };
   }
 
-  function handleResizePointerMove(event: PointerEvent<HTMLButtonElement>) {
+  function handleResizePointerMove(event: PointerEvent<HTMLElement>) {
     const operation = resizeOperation.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
     event.preventDefault();
@@ -1527,17 +1495,20 @@ function ResizableDailyVisit({
       snappedDeltaMinutes,
       range
     );
+    movedPointer.current = movedPointer.current || nextTimes.startsAt !== operation.startsAt || nextTimes.endsAt !== operation.endsAt;
     operation.nextStartsAt = nextTimes.startsAt;
     operation.nextEndsAt = nextTimes.endsAt;
     setDraftTimes(nextTimes);
   }
 
-  function finishResize(event: PointerEvent<HTMLButtonElement>) {
+  function finishResize(event: PointerEvent<HTMLElement>) {
     const operation = resizeOperation.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     resizeOperation.current = null;
+    resumeRefresh.current?.();
+    resumeRefresh.current = null;
     releaseSchedulePointerCaptures(event.pointerId);
     clearScheduleTextSelection();
     if (
@@ -1555,19 +1526,20 @@ function ResizableDailyVisit({
       visit,
       operation.nextStartsAt,
       operation.nextEndsAt
-    ).catch(() => {
-      setDraftTimes(null);
-    });
+    ).catch(() => undefined).finally(() => setDraftTimes(null));
   }
 
-  function cancelResize(event: PointerEvent<HTMLButtonElement>) {
+  function cancelResize(event: PointerEvent<HTMLElement>) {
     if (resizeOperation.current?.pointerId !== event.pointerId) return;
     resizeOperation.current = null;
+    resumeRefresh.current?.();
+    resumeRefresh.current = null;
+    releaseSchedulePointerCaptures(event.pointerId);
     setDraftTimes(null);
   }
 
   function handleResizeKeyDown(
-    event: KeyboardEvent<HTMLButtonElement>,
+    event: KeyboardEvent<HTMLElement>,
     edge: VisitResizeEdge
   ) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -1620,7 +1592,24 @@ function ResizableDailyVisit({
 
   return (
     <div
-      className="absolute"
+      className="absolute touch-none"
+      tabIndex={visit.status === 'cancelled' ? undefined : 0}
+      aria-label={`Move visit ${visit.sequence_number} for ${job.job_reference}`}
+      onPointerDown={(event) => {
+        if (visit.status === 'cancelled' || event.button !== 0) return;
+        const interactive = (event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]');
+        if (interactive && !interactive.hasAttribute('data-schedule-visit-move-handle')) return;
+        handleResizePointerDown(event, 'move');
+      }}
+      onPointerMove={handleResizePointerMove}
+      onPointerUp={finishResize}
+      onPointerCancel={cancelResize}
+      onLostPointerCapture={finishResize}
+      onKeyDown={(event) => { if (event.target === event.currentTarget) handleResizeKeyDown(event, 'move'); }}
+      onClickCapture={(event) => {
+        if (!movedPointer.current) return;
+        event.preventDefault(); event.stopPropagation(); movedPointer.current = false;
+      }}
       style={{ left, top, width, height }}
       data-testid={
         dndInstanceId
@@ -1629,6 +1618,7 @@ function ResizableDailyVisit({
       }
     >
       <VisitCard
+        disableDrag
         job={job}
         visit={displayedVisit}
         assignments={assignments}
@@ -1807,6 +1797,10 @@ function BoardRowIdentity({
     );
   }
 
+  if (row.kind === 'team') {
+    return <span className="block truncate font-semibold text-foreground">{row.teamName}</span>;
+  }
+
   if (row.kind === 'employee' && row.employee) {
     return (
       <div className="min-w-0 overflow-hidden">
@@ -1918,7 +1912,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     {
       q: parseAsString.withDefault(''),
       tags: parseAsArrayOf(parseAsString).withDefault([]),
-      ready: parseAsBoolean.withDefault(false),
     },
     { history: 'replace' }
   );
@@ -2007,9 +2000,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [pendingRemoveJob, setPendingRemoveJob] = useState<ScheduleJob | null>(null);
   const [isRemovingJob, setIsRemovingJob] = useState(false);
   const isSchedulingQuote = false;
-  const [pendingCrewOfferJobIds, setPendingCrewOfferJobIds] = useState<Set<string>>(
-    () => new Set()
-  );
   const [dailyTimelineMode, setDailyTimelineMode] =
     useState<DailyTimelineMode>('fit');
   const [dailyTimelineViewportWidth, setDailyTimelineViewportWidth] =
@@ -2528,6 +2518,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   function isBoardPointerBusy() {
     return (
       boardInteractionBusyRef.current
+      || capturedSchedulePointers.size > 0
       || Boolean(dailyTimelinePanOperation.current)
       || Object.values(dragUiRef.current).some(Boolean)
     );
@@ -2874,9 +2865,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [board]);
   const unscheduledQuotes = useMemo<SchedulingQueueItem[]>(
     () => (projectedState.quoteCandidates || []).filter(
-      (quote) =>
-        !quote.start_date
-        && (quote.optimistic || getScheduleQuoteStage(quote.status) !== null)
+      (quote) => quote.optimistic || getScheduleQuoteStage(quote.status) !== null
     ).map((quote) => ({ ...quote, kind: 'quote' as const })),
     [projectedState.quoteCandidates]
   );
@@ -2905,6 +2894,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       base_quote_reference: `${item.job_reference} · Visit ${item.sequence_number}`,
       title: item.title || item.job_title,
       customer_name: item.customer_name,
+      site_name: item.site_name,
       status: 'Returned visit' as const,
       start_date: null,
       end_date: null,
@@ -2966,16 +2956,25 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const settings = teamSettingsFromBoard(board);
     const occupancy: Partial<Record<ScheduleDayTeamSlotIndex, ScheduleOccupancySegment[]>> = {};
     for (const slot of slotsForScheduleDate(board?.day_teams, selectedDate, settings)) {
-      occupancy[slot.slot_index] = mergeTeamOccupancySegments(
-        slot.members.map((member) =>
+      occupancy[slot.slot_index] = mergeTeamOccupancySegments([
+        ...slot.members.map((member) =>
           buildEmployeeOccupancySegments({
             profileId: member.profile_id,
             workDate: selectedDate,
             assignments: board?.assignments || [],
             sessions: board?.employee_day_sessions,
           })
-        )
-      );
+        ),
+        ...(slot.plants || []).map((plant) =>
+          buildPlantOccupancySegments({
+            plantId: plant.plant_id,
+            workDate: selectedDate,
+            assignments: board?.assignments || [],
+            unavailability: board?.plant_unavailability,
+            status: plant.plant?.status,
+          })
+        ),
+      ]);
     }
     return occupancy;
   }, [board, selectedDate]);
@@ -3030,13 +3029,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         : matchingPlant;
   const filteredJobs = useMemo(() => {
     const search = jobSearch.trim().toLowerCase();
-    const rangeStart = weekDates[0];
-    const rangeEnd = weekDates[weekDates.length - 1];
     return (board?.jobs || []).filter(
       (job) =>
-        (!rangeStart || !rangeEnd || (job.start_date <= rangeEnd && job.end_date >= rangeStart))
-        && (!jobFilters.ready || job.is_drop_on_ready)
-        && (
+        (
           jobFilters.tags.length === 0
           || (job.tags || []).some((tag) => jobFilters.tags.includes(tag.id))
         )
@@ -3047,11 +3042,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           || (job.site_address || '').toLowerCase().includes(search)
         )
     );
-  }, [board, jobFilters.ready, jobFilters.tags, jobSearch, weekDates]);
+  }, [board, jobFilters.tags, jobSearch]);
   const boardRows = useMemo(
     () =>
       buildScheduleBoardRows({
         primary,
+        dayTeams: board?.day_teams,
+        teamSettings: board?.team_settings,
         jobs: filteredJobs,
         visits: board?.visits || [],
         assignments: board?.assignments || [],
@@ -3062,7 +3059,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     [board, filteredJobs, primary, weekDates]
   );
   const hasActiveJobFilters =
-    Boolean(jobSearch.trim()) || jobFilters.ready || jobFilters.tags.length > 0;
+    Boolean(jobSearch.trim()) || jobFilters.tags.length > 0;
 
   function applyCapacity(
     boardData: SchedulingBoardPayload,
@@ -3116,57 +3113,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       plant_id: plantId,
       plant: board?.resources.plant.find((plant) => plant.id === plantId) || null,
     };
-  }
-
-  async function toggleCrewOffer(job: ScheduleJob) {
-    if (isOptimisticEntityId(job.id)) {
-      toast.info('Wait for this new job to finish saving.');
-      return;
-    }
-    if (pendingCrewOfferJobIds.has(job.id)) return;
-    const nextValue = !job.is_drop_on_ready;
-    const operation = registerOptimisticOperation({
-      kind: 'toggle-crew-offer',
-      lockKeys: [`job:${job.id}`],
-      queryKeys: [`board:${weekStart}`],
-      proofs: {
-        [`board:${weekStart}`]: (state) =>
-          state.board?.jobs.some(
-            (item) => item.id === job.id && item.is_drop_on_ready === nextValue
-          ) === true,
-      },
-      apply: (state) => ({
-        ...state,
-        board: state.board
-          ? patchBoardWithJob(state.board, { ...job, is_drop_on_ready: nextValue })
-          : state.board,
-      }),
-    });
-    if (!operation) return;
-    setPendingCrewOfferJobIds((current) => new Set(current).add(job.id));
-    try {
-      const authoritative = await saveScheduleJob({ is_drop_on_ready: nextValue }, job.id);
-      setBoardBaseData((current) => patchBoardWithJob(current, authoritative));
-      settleOptimisticOperation(operation.id, 'success', undefined, {
-        proofs: { [`board:${weekStart}`]: provesJob(authoritative) },
-        apply: (state) => ({
-          ...state,
-          board: state.board
-            ? patchBoardWithJob(state.board, authoritative)
-            : state.board,
-        }),
-      });
-      toast.success(nextValue ? 'Crew offer enabled' : 'Crew offer disabled');
-    } catch (error) {
-      settleOptimisticOperation(operation.id, 'failure', error);
-      toast.error(error instanceof Error ? error.message : 'Unable to update crew offer');
-    } finally {
-      setPendingCrewOfferJobIds((current) => {
-        const next = new Set(current);
-        next.delete(job.id);
-        return next;
-      });
-    }
   }
 
   async function scheduleQuoteFromDate(
@@ -3307,7 +3253,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               (current: ScheduleVisitBacklogItem[] | undefined) =>
                 removeVisitBacklogItem(current, scheduledVisit.id)
             );
-            toast.success(`${quote.base_quote_reference} returned to the schedule`);
+            acknowledgeSuccess();
             return {
               kind: 'success' as const,
               proofs: {
@@ -3354,6 +3300,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       setProjectPlacement({ project: quote.project, date: startDate, initialVisit });
       return;
     }
+    const placementVisit = initialVisit ?? buildDateOnlyQuoteInitialVisit(
+      startDate,
+      quote.estimated_duration_minutes
+    );
     const endDate = getScheduleQuoteEndDate(
       startDate,
       quote.estimated_duration_days
@@ -3377,6 +3327,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       customer_id: null,
       customer_site_id: null,
       customer_name: quote.customer_name,
+      site_name: quote.site_name,
       is_drop_on_ready: false,
       tags: [],
       created_by: null,
@@ -3384,22 +3335,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       created_at: now,
       updated_at: now,
     };
-    const optimisticVisit = initialVisit
-      ? {
-          id: createOptimisticEntityId(operationId, 'visit'),
-          job_id: optimisticJob.id,
-          sequence_number: 1,
-          title: null,
-          starts_at: initialVisit.starts_at,
-          ends_at: initialVisit.ends_at,
-          status: 'planned' as const,
-          notes: null,
-          created_by: null,
-          updated_by: userId,
-          created_at: now,
-          updated_at: now,
-        }
-      : null;
+    const optimisticVisit = {
+      id: createOptimisticEntityId(operationId, 'visit'),
+      job_id: optimisticJob.id,
+      sequence_number: 1,
+      title: null,
+      starts_at: placementVisit.starts_at,
+      ends_at: placementVisit.ends_at,
+      status: 'planned' as const,
+      notes: null,
+      created_by: null,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    };
     const operation = registerOptimisticOperation({
       id: operationId,
       kind: 'schedule-quote',
@@ -3436,10 +3385,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         quote_id: quote.id,
         start_date: startDate,
         end_date: endDate,
-        ...(initialVisit ? { initial_visit: initialVisit } : {}),
+        initial_visit: placementVisit,
       });
+      if (!result.visit) {
+        throw new Error('Scheduled Quote did not include a timed visit.');
+      }
       const scheduledVisit = adoptAuthoritativeVisit({
-        optimisticVisitId: optimisticVisit?.id,
+        optimisticVisitId: optimisticVisit.id,
         visit: result.visit,
         optimisticJobId: optimisticJob.id,
         job: result.job,
@@ -3458,8 +3410,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       settleOptimisticOperation(operation.id, 'success', undefined, {
         proofs: {
           [`board:${weekStart}`]: (state) =>
-            provesJob(result.job)(state)
-            && (!scheduledVisit || provesVisit(scheduledVisit)(state)),
+            Boolean(scheduledVisit)
+            && provesJob(result.job)(state)
+            && provesVisit(scheduledVisit as ScheduleVisit)(state),
           quotes: (state) =>
             state.quoteCandidates?.every(
               (candidate) => candidate.id !== quote.id
@@ -3478,9 +3431,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           quoteCandidates: removeQuoteCandidate(state.quoteCandidates, quote.id),
         }),
       });
-      toast.success(
-        `${quote.base_quote_reference} scheduled ${startDate === endDate ? `for ${startDate}` : `from ${startDate} to ${endDate}`}`
-      );
+      acknowledgeSuccess();
     } catch (error) {
       if (optimisticVisit) getMutationCoordinator().cancelWaiters(optimisticVisit.id);
       if (optimisticJob) getMutationCoordinator().cancelWaiters(optimisticJob.id);
@@ -3630,7 +3581,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               : current
           );
         }
-        toast.success(`${project.project_reference} scheduled`);
+        acknowledgeSuccess();
       })
       .catch((error) => {
         if (optimisticVisit) getMutationCoordinator().cancelWaiters(optimisticVisit.id);
@@ -3705,7 +3656,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           }),
         });
         setQuoteScheduleDraft(null);
-        toast.success('Quote schedule updated');
+        acknowledgeSuccess();
       })
       .catch((error) => {
         settleOptimisticOperation(operation.id, 'failure', error);
@@ -3775,9 +3726,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           }),
         });
         setJobDraft(null);
-        toast.success(
-          job.source_type === 'quote' ? 'Job metadata updated' : 'Job updated'
-        );
+        acknowledgeSuccess();
       })
       .catch((error) => {
         settleOptimisticOperation(operation.id, 'failure', error);
@@ -3849,7 +3798,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           }),
         });
         setPlantBlockDraft(null);
-        toast.success('Plant availability updated');
+        acknowledgeSuccess();
       })
       .catch((error) => {
         settleOptimisticOperation(operation.id, 'failure', error);
@@ -3894,7 +3843,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               : state.board,
           }),
         });
-        toast.success('Unavailability removed');
+        acknowledgeSuccess();
       })
       .catch((error) => {
         settleOptimisticOperation(operation.id, 'failure', error);
@@ -3937,6 +3886,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       job_title: target.job.title,
       source_type: target.job.source_type,
       customer_name: target.job.customer_name || null,
+      site_name: target.job.site_name,
       sequence_number: target.visit.sequence_number,
       title: target.visit.title,
       notes: target.visit.notes,
@@ -4039,9 +3989,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             (current: ScheduleVisitBacklogItem[] | undefined) =>
               upsertVisitBacklogItem(current, authoritativeBacklogItem)
           );
-          toast.success(
-            `${target.job.job_reference} · Visit ${target.visit.sequence_number} returned to Jobs`
-          );
+          acknowledgeSuccess();
           return {
             kind: 'success' as const,
             proofs: {
@@ -4240,7 +4188,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             patchBoardWithVisit(current, savedVisit, existingVisit ? undefined : optimisticVisit.id)
           );
           setVisitDraft(null);
-          toast.success(existingVisit ? 'Visit updated' : 'Visit added');
+          acknowledgeSuccess();
           return {
             kind: 'success' as const,
             identityAliases: existingVisit
@@ -4307,7 +4255,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               : state.board,
           }),
         });
-        toast.success('Visit deleted');
+        acknowledgeSuccess();
       })
       .catch((error) => {
         settleOptimisticOperation(operation.id, 'failure', error);
@@ -4380,7 +4328,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             notes: visit.notes,
           }, visitId);
           setBoardBaseData((current) => patchBoardWithVisit(current, authoritative, visit.id));
-          toast.success('Visit times updated');
+          acknowledgeSuccess();
           return {
             kind: 'success' as const,
             proofs: { [`board:${weekStart}`]: provesVisit(authoritative) },
@@ -4546,7 +4494,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               )
             );
           }
-          toast.success(`${resource.label} assigned`);
+          acknowledgeSuccess();
           return { kind: 'success' };
         } catch (error) {
           if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
@@ -4723,6 +4671,141 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
+  async function addPlantToDayTeam(
+    workDate: string,
+    slotIndex: ScheduleDayTeamSlotIndex,
+    resource: SelectedScheduleResource
+  ) {
+    if (resource.type !== 'plant') return;
+    const plant = board?.resources.plant.find((item) => item.id === resource.id);
+    if (!plant) {
+      toast.error('That plant is no longer available.');
+      return;
+    }
+    const mutationKey = `day-team:${workDate}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const membership = {
+      work_date: workDate,
+      slot_index: slotIndex,
+      plant_id: resource.id,
+      plant,
+      added_by: userId,
+      created_at: new Date().toISOString(),
+    };
+    const plantIsInSlot = (state: { board?: SchedulingBoardPayload | null }) =>
+      state.board?.day_teams.some((entry) =>
+        entry.date === workDate
+        && entry.slots.some(
+          (slot) =>
+            slot.slot_index === slotIndex
+            && (slot.plants || []).some((item) => item.plant_id === resource.id)
+        )
+      ) === true;
+    const operation = registerOptimisticOperation({
+      kind: 'day-team-add',
+      lockKeys: [`day-team:${workDate}`, `day-team-plant:${workDate}:${resource.id}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: plantIsInSlot,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? upsertScheduleDayTeamPlant(state.board, membership)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
+    try {
+      const result = await addScheduleDayTeamPlant({
+        work_date: workDate,
+        slot_index: slotIndex,
+        plant_id: resource.id,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      const createdAt = typeof result.plant?.created_at === 'string'
+        ? result.plant.created_at
+        : membership.created_at;
+      const addedBy = typeof result.plant?.added_by === 'string'
+        ? result.plant.added_by
+        : membership.added_by;
+      settleOptimisticOperation(operation.id, 'success', undefined, {
+        proofs: {
+          [`board:${weekStart}`]: plantIsInSlot,
+        },
+        apply: (state) => ({
+          ...state,
+          board: state.board
+            ? upsertScheduleDayTeamPlant(state.board, {
+                ...membership,
+                added_by: addedBy,
+                created_at: createdAt,
+              })
+            : state.board,
+        }),
+      });
+    } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update this team');
+    } finally {
+      endMutation(mutationKey);
+    }
+  }
+
+  async function removePlantFromDayTeam(
+    slotIndex: ScheduleDayTeamSlotIndex,
+    plantId: string
+  ) {
+    const workDate = selectedDate;
+    const mutationKey = `day-team:${workDate}`;
+    const mutationEpoch = beginMutation(mutationKey);
+    if (mutationEpoch == null) return;
+    const operation = registerOptimisticOperation({
+      kind: 'day-team-remove',
+      lockKeys: [`day-team:${workDate}`, `day-team-plant:${workDate}:${plantId}`],
+      queryKeys: [`board:${weekStart}`],
+      proofs: {
+        [`board:${weekStart}`]: (state) =>
+          state.board?.day_teams.some((entry) =>
+            entry.date === workDate
+            && entry.slots.some(
+              (slot) =>
+                slot.slot_index === slotIndex
+                && (slot.plants || []).some((item) => item.plant_id === plantId)
+            )
+          ) !== true,
+      },
+      apply: (state) => ({
+        ...state,
+        board: state.board
+          ? removePlantFromDayTeamBoard(state.board, workDate, slotIndex, plantId)
+          : state.board,
+      }),
+    });
+    if (!operation) {
+      endMutation(mutationKey);
+      return;
+    }
+    try {
+      await removeScheduleDayTeamPlant({
+        work_date: workDate,
+        slot_index: slotIndex,
+        plant_id: plantId,
+      });
+      if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
+      settleOptimisticOperation(operation.id);
+    } catch (error) {
+      settleOptimisticOperation(operation.id, 'failure', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update this team');
+    } finally {
+      endMutation(mutationKey);
+    }
+  }
+
   async function copyDayTeamsFromDate(fromDate: string) {
     if (!board) return;
     const toDate = selectedDate;
@@ -4786,6 +4869,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       const employeesById = new Map(
         (board.resources.employees || []).map((employee) => [employee.id, employee])
       );
+      const plantsById = new Map(
+        (board.resources.plant || []).map((plant) => [plant.id, plant])
+      );
       const copiedMembers = result.members.flatMap((row) => {
         if (!isScheduleDayTeamSlotIndex(row.slot_index)) return [];
         return [{
@@ -4795,39 +4881,51 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           employee: employeesById.get(row.profile_id) || null,
           added_by: row.added_by,
           created_at: row.created_at,
-          is_leader: false,
+          is_leader: false as const,
         }];
       });
+      const copiedPlants = (result.plants || []).flatMap((row) => {
+        if (!isScheduleDayTeamSlotIndex(row.slot_index)) return [];
+        return [{
+          work_date: row.work_date,
+          slot_index: row.slot_index,
+          plant_id: row.plant_id,
+          plant: plantsById.get(row.plant_id) || null,
+          added_by: row.added_by,
+          created_at: row.created_at,
+        }];
+      });
+      const applyCopiedTeams = (source: SchedulingBoardPayload | undefined) => {
+        if (!source) return source;
+        const withMembers = copiedMembers.reduce(
+          (nextBoard, member) => patchBoardWithDayTeamMember(nextBoard, member),
+          source
+        );
+        return copiedPlants.reduce(
+          (nextBoard, plant) => upsertScheduleDayTeamPlant(nextBoard, plant),
+          withMembers
+        );
+      };
       if (operation) {
         settleOptimisticOperation(operation.id, 'success', undefined, {
           apply: (state) => ({
             ...state,
-            board: copiedMembers.reduce(
-              (nextBoard, member) => (
-                nextBoard ? patchBoardWithDayTeamMember(nextBoard, member) : nextBoard
-              ),
-              state.board
-            ),
+            board: applyCopiedTeams(state.board),
           }),
         });
-      } else {
-        setBoardBaseData((current) =>
-          copiedMembers.reduce(
-            (nextBoard, member) => patchBoardWithDayTeamMember(nextBoard, member),
-            current
-          )
-        );
+      } else if (copiedMembers.length > 0 || copiedPlants.length > 0) {
+        setBoardBaseData((current) => applyCopiedTeams(current) || current);
       }
       if (result.copied === 0 && result.skipped === 0) {
         toast.info('No team members to copy from that date.');
         return;
       }
       if (result.copied > 0) {
-        toast.success(
-          result.skipped > 0
-            ? `Copied ${result.copied} team member${result.copied === 1 ? '' : 's'}; skipped ${result.skipped}.`
-            : `Copied ${result.copied} team member${result.copied === 1 ? '' : 's'}.`
-        );
+        if (result.skipped > 0) {
+          toast.info(`Copied ${result.copied} resources; skipped ${result.skipped}.`);
+        } else {
+          acknowledgeSuccess();
+        }
         return;
       }
       toast.info('Those team members could not be copied onto this day.');
@@ -4841,6 +4939,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   async function handleTeamSettingsSave(input: {
+    names?: Record<string, string>;
     visible_slot_count: number;
     leaders: Array<{ slot_index: number; profile_id: string | null }>;
   }) {
@@ -4850,7 +4949,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       const result = await saveScheduleTeamSettings(input);
       setBoardBaseData((current) => patchBoardWithTeamSettings(current, result.settings));
       setTeamSettingsOpen(false);
-      toast.success('Team settings saved');
+      acknowledgeSuccess();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to save team settings');
     } finally {
@@ -4869,38 +4968,61 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Wait for this new visit to finish saving before assigning a team.');
       return;
     }
-    const members = slotsForScheduleDate(
+    const slot = slotsForScheduleDate(
       board?.day_teams,
       selectedDate,
       teamSettingsFromBoard(board)
-    )
-      .find((slot) => slot.slot_index === slotIndex)
-      ?.members || [];
-    if (members.length === 0) {
-      toast.info('Add employees to this team first.');
+    ).find((item) => item.slot_index === slotIndex);
+    const members = slot?.members || [];
+    const plants = slot?.plants || [];
+    if (members.length === 0 && plants.length === 0) {
+      toast.info('Add employees or plant to this team first.');
       return;
     }
     const memberIds = members.map((member) => member.profile_id);
+    const plantIds = plants.map((plant) => plant.plant_id);
     const memberRequestIds = Object.fromEntries(
-      memberIds.map((profileId) => [profileId, crypto.randomUUID()])
+      [...memberIds, ...plantIds].map((resourceId) => [resourceId, crypto.randomUUID()])
     );
     const operationId = crypto.randomUUID();
-    const optimisticAssignments = members
-      .filter((member) =>
-        !board?.assignments.some(
-          (assignment) =>
-            assignment.visit_id === target.visit.id
-            && 'profile_id' in assignment
-            && assignment.profile_id === member.profile_id
+    const optimisticAssignments = [
+      ...members
+        .filter((member) =>
+          !board?.assignments.some(
+            (assignment) =>
+              assignment.visit_id === target.visit.id
+              && assignment.resource_type === 'employee'
+              && assignment.profile_id === member.profile_id
+          )
         )
-      )
-      .map((member) =>
-        createOptimisticAssignment(
-          target,
-          { type: 'employee', id: member.profile_id, label: member.employee?.full_name || 'Employee' },
-          `${operationId}:${member.profile_id}`
+        .map((member) =>
+          createOptimisticAssignment(
+            target,
+            { type: 'employee', id: member.profile_id, label: member.employee?.full_name || 'Employee' },
+            `${operationId}:${member.profile_id}`
+          )
+        ),
+      ...plants
+        .filter((plant) =>
+          !board?.assignments.some(
+            (assignment) =>
+              assignment.visit_id === target.visit.id
+              && assignment.resource_type === 'plant'
+              && assignment.plant_id === plant.plant_id
+          )
         )
-      );
+        .map((plant) =>
+          createOptimisticAssignment(
+            target,
+            {
+              type: 'plant',
+              id: plant.plant_id,
+              label: plant.plant?.nickname || plant.plant?.plant_id || 'Plant',
+            },
+            `${operationId}:${plant.plant_id}`
+          )
+        ),
+    ];
     function reportDayTeamResult(result: Awaited<ReturnType<typeof assignScheduleDayTeam>>) {
       const skipSummary = result.skipped
         .map((item) => `${item.full_name} (${item.conflicts[0]?.message || item.reason})`)
@@ -4908,19 +5030,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       if (result.partial) {
         toast.error(result.error || 'Some team members were assigned before this request failed.');
       } else if (result.assignments.length > 0 && result.skipped.length > 0) {
-        toast.success(`Assigned ${result.assignments.length}. Skipped: ${skipSummary}`);
+        toast.info(`Assigned ${result.assignments.length}. Skipped: ${skipSummary}`);
       } else if (result.assignments.length > 0) {
-        toast.success(
-          result.assignments.length === 1
-            ? 'Team member assigned'
-            : `${result.assignments.length} team members assigned`
-        );
+        acknowledgeSuccess();
       } else if (result.skipped.length > 0) {
-        toast.info(`Nobody was assigned. ${skipSummary}`);
+        toast.info(`No resources were assigned. ${skipSummary}`);
       } else if (result.already_assigned_count > 0) {
-        toast.info('Those employees are already on this visit.');
+        toast.info('Those resources are already on this visit.');
       } else {
-        toast.info('Add employees to this team first.');
+        toast.info('Add employees or plant to this team first.');
       }
     }
     admitBoardCommand({
@@ -4931,6 +5049,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         jobId: target.job.id,
         visitId: target.visit.id,
         memberIds,
+        plantIds,
       }),
       queryKeys: [`board:${weekStart}`],
       apply: (state) => ({
@@ -4964,11 +5083,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
           }
           reportDayTeamResult(result);
-          const createdProfileIds = new Set(
-            result.assignments
-              .map((row) => ('profile_id' in row ? row.profile_id : null))
-              .filter((id): id is string => Boolean(id))
-          );
+          const createdAssignmentIds = result.assignments.map((row) => String(row.id));
           return {
             kind: 'success',
             apply: (state) => ({
@@ -4986,13 +5101,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             }),
             proofs: {
               [`board:${weekStart}`]: (state) =>
-                createdProfileIds.size === 0
-                || [...createdProfileIds].every((profileId) =>
+                createdAssignmentIds.length === 0
+                || createdAssignmentIds.every((assignmentId) =>
                   state.board?.assignments.some(
-                    (assignment) =>
-                      assignment.visit_id === target.visit.id
-                      && 'profile_id' in assignment
-                      && assignment.profile_id === profileId
+                    (assignment) => assignment.id === assignmentId
                   ) === true
                 ),
             },
@@ -5092,7 +5204,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           } else if (result.employee_capacity) {
             setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
           }
-          toast.success('Assignment moved');
+          acknowledgeSuccess();
           return { kind: 'success' };
         } catch (error) {
           if (error instanceof SchedulingApiError && error.status === 409 && error.payload.conflicts_by_date) {
@@ -5237,7 +5349,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
             }
             if (targetJob) activateVisit(targetJob, targetVisit);
-            toast.success('Assignment moved with conflict override');
+            acknowledgeSuccess();
           } else {
             result = await createScheduleAssignment({
               ...conflict.input,
@@ -5261,7 +5373,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               setBoardBaseData((current) => applyCapacity(current, result.employee_capacity));
             }
             if (targetJob) activateVisit(targetJob, targetVisit);
-            toast.success('Resource assigned with conflict override');
+            acknowledgeSuccess();
           }
           setPendingConflict(null);
           setSelectedResource(null);
@@ -5402,7 +5514,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           applyCapacity(current, restoreResult.employee_capacity)
                         );
                       }
-                      toast.success('Assignment restored');
+                      acknowledgeSuccess();
                       return { kind: 'success' };
                     } catch (error) {
                       if (error instanceof SchedulingApiError && error.status >= 400 && error.status < 500) {
@@ -5573,7 +5685,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             ? { job: result.job, visit: scheduledVisit }
             : current
         );
-        toast.success(`${result.project_reference} added to the schedule`);
+        acknowledgeSuccess();
       })
       .catch((error) => {
         const rollback = shouldRollbackOptimisticQuickAdd(error);
@@ -5603,6 +5715,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             base_quote_reference: job.job_reference,
             title: job.title,
             customer_name: job.customer_name || null,
+            site_name: job.site_name,
             status: null,
             start_date: null,
             end_date: null,
@@ -5705,11 +5818,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             : state.projectCandidates,
         }),
       });
-      toast.success(
-        job.source_type === 'quote'
-          ? `${job.job_reference} returned to the Jobs queue`
-          : `${job.job_reference} schedule removed`
-      );
+      acknowledgeSuccess();
     } catch (error) {
       settleOptimisticOperation(operation.id, 'failure', error);
       setPendingRemoveJob(job);
@@ -6083,11 +6192,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           return;
         }
         if (sourceResource && targetData?.dayTeamSlotIndex) {
-          void addEmployeeToDayTeam(
-            targetData.workDate || selectedDate,
-            targetData.dayTeamSlotIndex,
-            sourceResource
-          );
+          const slotDate = targetData.workDate || selectedDate;
+          if (sourceResource.type === 'plant') {
+            void addPlantToDayTeam(slotDate, targetData.dayTeamSlotIndex, sourceResource);
+          } else {
+            void addEmployeeToDayTeam(slotDate, targetData.dayTeamSlotIndex, sourceResource);
+          }
           return;
         }
         if (!sourceResource && !sourceAssignment) return;
@@ -6615,6 +6725,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="desktop"
                     onRemoveMember={removeEmployeeFromDayTeam}
+                    onRemovePlant={removePlantFromDayTeam}
                   />
                 </div>
               ) : null}
@@ -6686,20 +6797,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center gap-2" aria-label="Job classification filters">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className={
-                    jobFilters.ready
-                      ? schedulingControlStyles.primary
-                      : schedulingControlStyles.outline
-                  }
-                  aria-pressed={jobFilters.ready}
-                  onClick={() => void setJobFilters({ ready: !jobFilters.ready })}
-                >
-                  Offer if crew free
-                </Button>
                 {(board.tags || []).map((tag) => {
                   const isSelected = jobFilters.tags.includes(tag.id);
                   return (
@@ -6727,13 +6824,13 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     </Button>
                   );
                 })}
-                {(jobFilters.ready || jobFilters.tags.length > 0 || jobSearch) ? (
+                {(jobFilters.tags.length > 0 || jobSearch) ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     className={schedulingControlStyles.ghost}
-                    onClick={() => void setJobFilters({ q: '', tags: [], ready: false })}
+                    onClick={() => void setJobFilters({ q: '', tags: [] })}
                   >
                     Clear filters
                   </Button>
@@ -6966,7 +7063,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           </div>
                           <ScheduledJobActions
                             job={job}
-                            isCrewOfferPending={pendingCrewOfferJobIds.has(job.id)}
+
                             visitDate={
                               view === SCHEDULING_BOARD_VIEWS.daily
                                 ? selectedDate
@@ -6980,7 +7077,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             }}
                             onRemove={() => setPendingRemoveJob(job)}
                             onReschedule={() => openQuoteScheduler(job)}
-                            onToggleCrewOffer={() => void toggleCrewOffer(job)}
+
                           />
                         </div>
                         ) : null}
@@ -7084,6 +7181,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="mobile"
                     onRemoveMember={removeEmployeeFromDayTeam}
+                    onRemovePlant={removePlantFromDayTeam}
                   />
                 ) : null}
                 <div
@@ -7114,7 +7212,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   const job = row.job;
                   const dndInstanceId = boardRowDndInstanceId(row);
                   const mobileDates = job
-                    ? weekDates.filter((date) => date >= job.start_date && date <= job.end_date)
+                    ? weekDates.filter((date) =>
+                        (row.visitsByDate[date]?.length || 0) > 0
+                        || (date >= job.start_date && date <= job.end_date)
+                      )
                     : weekDates;
                   return (
                   <div
@@ -7162,7 +7263,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               : undefined
                           }
                           isMobile
-                          isCrewOfferPending={pendingCrewOfferJobIds.has(job.id)}
+
                           onAddVisit={() => openVisitEditor(job, selectedDate)}
                           onEdit={() => {
                             setJobDraft(null);
@@ -7171,7 +7272,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           }}
                           onRemove={() => setPendingRemoveJob(job)}
                           onReschedule={() => openQuoteScheduler(job)}
-                          onToggleCrewOffer={() => void toggleCrewOffer(job)}
+
                         />
                       </div>
                       ) : null}
@@ -7414,7 +7515,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 start_date: null,
                 end_date: null,
                 estimated_duration_days: quote.estimated_duration_days || null,
-                estimated_duration_minutes: null,
+                estimated_duration_minutes: quote.estimated_duration_minutes || null,
+                site_name: quote.customer_site?.site_name || null,
               };
               queryClient.setQueryData(
                 ['scheduling-quote-candidates'],

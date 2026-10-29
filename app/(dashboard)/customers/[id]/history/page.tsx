@@ -6,6 +6,7 @@ import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import {
@@ -15,17 +16,20 @@ import {
   Phone,
   MapPin,
   Pencil,
+  Plus,
   Receipt,
   FileText,
   Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { SensitiveModuleGate, SensitiveModuleSessionManager, useSensitiveModuleAccess } from '@/components/security/SensitiveModuleGate';
 import { CustomerFormDialog } from '../../components/CustomerFormDialog';
-import type { Customer, CustomerFormData } from '../../types';
+import { CustomerSiteFormDialog } from '../../components/CustomerSiteFormDialog';
+import type { Customer, CustomerFormData, CustomerSite } from '../../types';
 import { ACCEPTED_QUOTE_STATUSES, getQuoteStatusConfig, type QuoteListSummary, type QuoteStatus } from '@/app/(dashboard)/quotes/types';
 
 interface QuoteSummary {
@@ -34,6 +38,7 @@ interface QuoteSummary {
   base_quote_reference: string;
   version_label: string | null;
   subject_line: string | null;
+  customer_site?: { site_name: string | null } | null;
   status: string;
   total: number;
   quote_date: string;
@@ -59,6 +64,9 @@ export default function CustomerHistoryPage({ params }: PageProps) {
   const [quoteSummary, setQuoteSummary] = useState<QuoteListSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [siteFormOpen, setSiteFormOpen] = useState(false);
+  const [siteQuery, setSiteQuery] = useState('');
+  const [sitesExpanded, setSitesExpanded] = useState(false);
 
   const fetchCustomer = useCallback(async () => {
     try {
@@ -96,7 +104,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
   }, [permissionLoading, sensitiveAccess.loading, sensitiveAccess.canAccess, canViewCustomers, router, fetchCustomer, fetchQuotes]);
 
   useSoftRefresh(() => Promise.all([fetchCustomer(), fetchQuotes()]),
-    canViewCustomers && sensitiveAccess.canAccess && !loading && !editOpen);
+    canViewCustomers && sensitiveAccess.canAccess && !loading && !editOpen && !siteFormOpen);
 
   async function handleUpdate(data: CustomerFormData) {
     const res = await fetch(`/api/customers/${id}`, {
@@ -105,7 +113,7 @@ export default function CustomerHistoryPage({ params }: PageProps) {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Update failed');
-    toast.success('Customer updated');
+    acknowledgeSuccess();
     await fetchCustomer();
   }
 
@@ -121,6 +129,33 @@ export default function CustomerHistoryPage({ params }: PageProps) {
   }
 
   if (!customer) return null;
+
+  const siteSearch = siteQuery.trim().toLowerCase();
+  const filteredSites = (customer.sites || []).filter(site => {
+    if (!siteSearch) return true;
+    return [
+      site.site_name,
+      site.address_line_1,
+      site.address_line_2,
+      site.city,
+      site.county,
+      site.postcode,
+      site.notes,
+    ].filter(Boolean).join(' ').toLowerCase().includes(siteSearch);
+  });
+  const siteBrowseLimit = 6;
+  const canCollapseSites = !siteSearch && filteredSites.length > siteBrowseLimit;
+  const visibleSites = canCollapseSites && !sitesExpanded
+    ? filteredSites.slice(0, siteBrowseLimit)
+    : filteredSites;
+
+  function handleSiteCreated(site: CustomerSite) {
+    setCustomer(current => current ? {
+      ...current,
+      sites: [site, ...(current.sites || []).filter(existing => existing.id !== site.id)],
+    } : current);
+    void fetchCustomer();
+  }
 
   const statusColor = customer.status === 'active'
     ? 'border-green-500/30 text-green-400 bg-green-500/10'
@@ -289,15 +324,36 @@ export default function CustomerHistoryPage({ params }: PageProps) {
 
       <Card className="bg-slate-800/50 border-slate-700">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <MapPin className="h-4 w-4" />
-            Customer Sites
-          </CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+              <MapPin className="h-4 w-4" />
+              Customer Sites
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSiteFormOpen(true)}
+              className="border-slate-600 text-muted-foreground"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add site
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent>
-          {customer.sites?.length ? (
+        <CardContent className="space-y-3">
+          {(customer.sites || []).length > 4 ? (
+            <Input
+              value={siteQuery}
+              onChange={event => setSiteQuery(event.target.value)}
+              placeholder="Search sites"
+              aria-label="Search sites"
+              className="bg-slate-900 border-slate-600"
+            />
+          ) : null}
+          {visibleSites.length ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              {customer.sites.map(site => (
+              {visibleSites.map(site => (
                 <div key={site.id} className="rounded-lg border border-slate-700 bg-slate-950/30 p-3">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <p className="font-medium text-white">{site.site_name}</p>
@@ -331,8 +387,21 @@ export default function CustomerHistoryPage({ params }: PageProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No saved customer sites.</p>
+            <p className="text-sm text-muted-foreground">
+              {siteSearch ? 'No sites match your search.' : 'No saved customer sites.'}
+            </p>
           )}
+          {canCollapseSites ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSitesExpanded(current => !current)}
+              className="border-slate-600 text-muted-foreground"
+            >
+              {sitesExpanded ? 'Show newest sites' : `Show all sites (${filteredSites.length})`}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -357,7 +426,9 @@ export default function CustomerHistoryPage({ params }: PageProps) {
                     <div className="flex items-center gap-3">
                       <span className="font-mono font-semibold text-brand-yellow text-sm">{q.quote_reference}</span>
                       <div>
-                        <span className="text-sm text-slate-300 truncate max-w-[200px] block">{q.subject_line || 'Untitled'}</span>
+                        <span className="text-sm text-slate-300 truncate max-w-[200px] block">{customer.company_name}</span>
+                        <span className="block truncate text-xs text-slate-400">{q.customer_site?.site_name || 'Site not set'}</span>
+                        <span className="block truncate text-sm text-slate-300">{q.subject_line || 'Untitled'}</span>
                         <span className="text-xs text-muted-foreground">
                           {q.version_label || 'Original'}{q.po_number ? ` • PO ${q.po_number}` : ''}
                         </span>
@@ -408,6 +479,12 @@ export default function CustomerHistoryPage({ params }: PageProps) {
         onClose={() => setEditOpen(false)}
         onSubmit={handleUpdate}
         customer={customer}
+      />
+      <CustomerSiteFormDialog
+        open={siteFormOpen}
+        onClose={() => setSiteFormOpen(false)}
+        customerId={customer.id}
+        onCreated={handleSiteCreated}
       />
     </div>
   );

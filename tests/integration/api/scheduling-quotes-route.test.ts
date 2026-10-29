@@ -8,6 +8,8 @@ const {
   mockAppendTimeline,
   mockQuote,
   mockQuoteList,
+  mockRelatedJobs,
+  mockRelatedVisits,
   mockScheduleJob,
   mockRpc,
   mockUpdate,
@@ -16,6 +18,8 @@ const {
   mockAppendTimeline: vi.fn(),
   mockQuote: vi.fn(),
   mockQuoteList: vi.fn(),
+  mockRelatedJobs: vi.fn(),
+  mockRelatedVisits: vi.fn(),
   mockScheduleJob: vi.fn(),
   mockRpc: vi.fn(),
   mockUpdate: vi.fn(),
@@ -34,18 +38,27 @@ vi.mock('@/lib/supabase/admin', () => ({
     rpc: mockRpc,
     from: (table: string) => {
       let updateValues: Record<string, unknown> | null = null;
+      const resolveList = () => {
+        if (table === 'quotes') return { data: mockQuoteList(), error: null };
+        if (table === 'schedule_jobs') return { data: mockRelatedJobs(), error: null };
+        if (table === 'schedule_visits') return { data: mockRelatedVisits(), error: null };
+        return { data: [], error: null };
+      };
       const query = {
         select: () => query,
         eq: () => query,
+        in: () => query,
+        neq: () => query,
         update: (values: Record<string, unknown>) => {
           updateValues = values;
           mockUpdate(values);
           return query;
         },
-        order: async () => ({
-          data: table === 'quotes' ? mockQuoteList() : [],
-          error: null,
-        }),
+        order: async () => resolveList(),
+        then: (
+          onfulfilled?: ((value: { data: unknown; error: null }) => unknown) | null,
+          onrejected?: ((reason: unknown) => unknown) | null
+        ) => Promise.resolve(resolveList()).then(onfulfilled, onrejected),
         maybeSingle: async () => {
           if (table === 'schedule_jobs') {
             return { data: mockScheduleJob(), error: null };
@@ -97,6 +110,8 @@ describe('/api/scheduling/quotes', () => {
       estimated_duration_days: null,
       customer: { company_name: 'Example Customer' },
     }]);
+    mockRelatedJobs.mockReturnValue([]);
+    mockRelatedVisits.mockReturnValue([]);
     mockScheduleJob.mockReturnValue({
       id: '22222222-2222-4222-8222-222222222222',
       quote_id: quoteId,
@@ -125,6 +140,60 @@ describe('/api/scheduling/quotes', () => {
     expect(payload.quotes[0]).not.toHaveProperty('total');
   });
 
+  it('keeps a dated quote with no timed visit in Resources', async () => {
+    mockQuoteList.mockReturnValue([{
+      ...mockQuoteList()[0],
+      start_date: '2026-07-13',
+      estimated_duration_days: 2,
+    }]);
+    const { GET } = await import('@/app/api/scheduling/quotes/route');
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.quotes.map((quote: { id: string }) => quote.id)).toEqual([quoteId]);
+  });
+
+  it('excludes a quote that already has a non-cancelled timed visit', async () => {
+    mockRelatedJobs.mockReturnValue([{ id: 'job-timed', quote_id: quoteId }]);
+    mockRelatedVisits.mockReturnValue([{
+      job_id: 'job-timed',
+      starts_at: '2026-07-13T07:00:00.000Z',
+      ends_at: '2026-07-13T10:00:00.000Z',
+      status: 'planned',
+    }]);
+    const { GET } = await import('@/app/api/scheduling/quotes/route');
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.quotes).toEqual([]);
+  });
+
+  it('keeps a quote whose only visit is cancelled or has no positive duration', async () => {
+    mockRelatedJobs.mockReturnValue([{ id: 'job-open', quote_id: quoteId }]);
+    mockRelatedVisits.mockReturnValue([
+      {
+        job_id: 'job-open',
+        starts_at: '2026-07-13T07:00:00.000Z',
+        ends_at: '2026-07-13T10:00:00.000Z',
+        status: 'cancelled',
+      },
+      {
+        job_id: 'job-open',
+        starts_at: '2026-07-13T11:00:00.000Z',
+        ends_at: '2026-07-13T11:00:00.000Z',
+        status: 'planned',
+      },
+    ]);
+    const { GET } = await import('@/app/api/scheduling/quotes/route');
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.quotes.map((quote: { id: string }) => quote.id)).toEqual([quoteId]);
+  });
+
   it('updates planning dates without changing Quote status and audits the action', async () => {
     const { POST } = await import('@/app/api/scheduling/quotes/route');
     const response = await POST(postRequest({
@@ -140,6 +209,7 @@ describe('/api/scheduling/quotes', () => {
       estimated_duration_days: 3,
       updated_by: 'manager-1',
     });
+    expect(mockRpc).not.toHaveBeenCalled();
     expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty('status');
     expect(mockAppendTimeline).toHaveBeenCalledWith(
       expect.anything(),

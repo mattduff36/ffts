@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SCHEDULING_BOARD_PRIMARIES } from '@/lib/config/scheduling-primary-preference';
+import { formatScheduleVisitTime, toScheduleLondonDateTimeIso } from '@/lib/utils/scheduling';
 import {
+  buildDateOnlyQuoteInitialVisit,
   buildScheduleBoardRows,
   getScheduleBoardRowTestId,
 } from '@/lib/utils/scheduling-board-primary';
@@ -189,39 +191,28 @@ describe('buildScheduleBoardRows', () => {
     expect(rows.some((row) => row.kind === 'unassigned')).toBe(false);
   });
 
-  it('splits a two-person visit onto employee rows and puts unstaffed visits in Unassigned', () => {
+  it('maps daily buckets from people or plant, preserving all chips and excluding unassigned visits', () => {
     const rows = buildScheduleBoardRows({
-      primary: SCHEDULING_BOARD_PRIMARIES.employee,
-      jobs: [jobOne, jobTwo],
-      visits: [sharedVisit, unstaffedVisit],
-      assignments: [
-        employeeAssignment('a1', 'job-1', 'visit-shared', 'employee-1', '2026-07-14', alex),
-        employeeAssignment('a2', 'job-1', 'visit-shared', 'employee-2', '2026-07-14', bob),
-        plantAssignment('p1', 'job-1', 'visit-shared', 'plant-1', '2026-07-14', loader),
-      ],
-      employees: [alex, bob],
-      plant: [loader],
-      dates: DATES,
+      primary: SCHEDULING_BOARD_PRIMARIES.team,
+      jobs: [jobOne, jobTwo], visits: [sharedVisit, unstaffedVisit],
+      assignments: [employeeAssignment('a1', 'job-1', 'visit-shared', 'employee-1', '2026-07-14', alex),
+        plantAssignment('p1', 'job-1', 'visit-shared', 'plant-1', '2026-07-14', loader)],
+      employees: [alex], plant: [loader], dates: DATES,
+      teamSettings: { visible_slot_count: 8, names: { '1': 'Oak crew' }, leaders: [], updated_by: null, updated_at: null },
+      dayTeams: [{ date: '2026-07-14', slots: [
+        { slot_index: 1, work_date: '2026-07-14', members: [{ profile_id: alex.id, employee: alex, work_date: '2026-07-14', slot_index: 1, added_by: null, created_at: '' }], plants: [] },
+        { slot_index: 2, work_date: '2026-07-14', members: [], plants: [{ plant_id: loader.id, plant: loader, work_date: '2026-07-14', slot_index: 2, added_by: null, created_at: '' }] },
+      ] }],
     });
-
-    expect(rows.map((row) => row.id)).toEqual([
-      'employee:employee-1',
-      'employee:employee-2',
-      'unassigned',
-    ]);
-    expect(getScheduleBoardRowTestId(rows[0]!)).toBe('schedule-board-row-employee-employee-1');
-    expect(getScheduleBoardRowTestId(rows[2]!)).toBe('schedule-board-row-unassigned');
-
-    const alexVisitIds = rows[0]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id);
-    const bobVisitIds = rows[1]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id);
-    expect(alexVisitIds).toEqual(['visit-shared']);
-    expect(bobVisitIds).toEqual(['visit-shared']);
-    expect(alexVisitIds?.[0]).toBe(bobVisitIds?.[0]);
-
-    expect(rows[0]?.visitsByDate['2026-07-14']?.[0]?.assignments).toHaveLength(3);
-    expect(rows[2]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id)).toEqual([
-      'visit-open',
-    ]);
+    expect(rows).toHaveLength(8);
+    expect(rows[0]?.teamName).toBe('Oak crew');
+    expect(getScheduleBoardRowTestId(rows[0]!)).toBe('schedule-board-row-team-1');
+    for (const row of rows.slice(0, 2)) {
+      expect(row.visitsByDate['2026-07-14'].map(item => item.visit.id)).toEqual(['visit-shared']);
+      expect(row.visitsByDate['2026-07-14'][0].assignments).toHaveLength(2);
+      expect(row.visitsByDate['2026-07-15']).toEqual([]);
+    }
+    expect(rows.some(row => row.kind === 'unassigned')).toBe(false);
   });
 
   it('groups plant primary the same way, with Unassigned for visits without plant', () => {
@@ -249,56 +240,122 @@ describe('buildScheduleBoardRows', () => {
     expect(rows[2]?.visitsByDate['2026-07-14']?.[0]?.visit.id).toBe('visit-open');
   });
 
-  it('hides resource rows when job filters remove all of their visits', () => {
-    const rows = buildScheduleBoardRows({
-      primary: SCHEDULING_BOARD_PRIMARIES.employee,
-      jobs: [jobTwo],
-      visits: [sharedVisit, unstaffedVisit],
-      assignments: [
-        employeeAssignment('a1', 'job-1', 'visit-shared', 'employee-1', '2026-07-14', alex),
-      ],
-      employees: [alex, bob],
-      plant: [],
-      dates: DATES,
-    });
-
-    expect(rows.map((row) => row.id)).toEqual(['unassigned']);
-    expect(rows[0]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id)).toEqual([
-      'visit-open',
-    ]);
+  it('keeps empty bucket rows without displaying untimed or unteamed work', () => {
+    const rows = buildScheduleBoardRows({ primary: SCHEDULING_BOARD_PRIMARIES.team,
+      jobs: [jobOne], visits: [sharedVisit], assignments: [employeeAssignment('legacy', 'job-1', null, alex.id, '2026-07-14', alex)],
+      employees: [alex], plant: [], dates: DATES });
+    expect(rows).toHaveLength(8);
+    expect(rows.every(row => Object.values(row.visitsByDate).every(visits => visits.length === 0))).toBe(true);
+    expect(rows.some(row => row.kind === 'unassigned')).toBe(false);
   });
 
-  it('omits Unassigned and empty resource rows when every in-range visit is staffed', () => {
+  it('omits jobs with no visits, legacy assignments, cancelled visits, or visits outside the dates', () => {
+    const legacyOnly = job('job-legacy', { start_date: '2026-07-13', end_date: '2026-07-15' });
+    const untimed = job('job-none');
+    const cancelled = job('job-cancelled');
+    const otherPeriod = job('job-other', { start_date: '2026-08-01', end_date: '2026-08-02' });
     const rows = buildScheduleBoardRows({
-      primary: SCHEDULING_BOARD_PRIMARIES.employee,
-      jobs: [jobOne],
-      visits: [sharedVisit],
-      assignments: [
-        employeeAssignment('a1', 'job-1', 'visit-shared', 'employee-1', '2026-07-14', alex),
+      primary: SCHEDULING_BOARD_PRIMARIES.job,
+      jobs: [jobOne, legacyOnly, untimed, cancelled, otherPeriod],
+      visits: [
+        sharedVisit,
+        { ...visit('visit-cancelled', 'job-cancelled', '2026-07-14T08:00:00Z', '2026-07-14T10:00:00Z'), status: 'cancelled' },
+        visit('visit-other', 'job-other', '2026-08-01T08:00:00Z', '2026-08-01T10:00:00Z'),
       ],
-      employees: [alex, bob],
-      plant: [],
-      dates: DATES,
-    });
-
-    expect(rows.map((row) => row.id)).toEqual(['employee:employee-1']);
-    expect(rows.some((row) => row.kind === 'unassigned')).toBe(false);
-  });
-
-  it('does not create an employee row for untimed own assignments only', () => {
-    const rows = buildScheduleBoardRows({
-      primary: SCHEDULING_BOARD_PRIMARIES.employee,
-      jobs: [jobOne],
-      visits: [sharedVisit],
       assignments: [
-        employeeAssignment('legacy-1', 'job-1', null, 'employee-1', '2026-07-14', alex),
+        employeeAssignment('legacy-1', 'job-legacy', null, 'employee-1', '2026-07-14', alex),
       ],
       employees: [alex],
       plant: [],
       dates: DATES,
     });
 
-    expect(rows.map((row) => row.id)).toEqual(['unassigned']);
+    expect(rows.map((row) => row.id)).toEqual(['job:job-1']);
     expect(rows[0]?.legacyAssignmentsByDate['2026-07-14']).toEqual([]);
+  });
+
+  it('keeps a visit that overlaps a day even when the job plan dates do not', () => {
+    const mismatched = job('job-mismatch', {
+      start_date: '2026-08-01',
+      end_date: '2026-08-02',
+    });
+    const overnight = visit(
+      'visit-overnight',
+      'job-mismatch',
+      toScheduleLondonDateTimeIso('2026-07-13', '22:00'),
+      toScheduleLondonDateTimeIso('2026-07-14', '01:00')
+    );
+    const rows = buildScheduleBoardRows({
+      primary: SCHEDULING_BOARD_PRIMARIES.job,
+      jobs: [mismatched],
+      visits: [overnight],
+      assignments: [],
+      employees: [],
+      plant: [],
+      dates: ['2026-07-14'],
+    });
+
+    expect(rows.map((row) => row.id)).toEqual(['job:job-mismatch']);
+    expect(rows[0]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id)).toEqual([
+      'visit-overnight',
+    ]);
+  });
+
+  it('includes boundary overlap and excludes visits that only touch a day boundary', () => {
+    const boundaryJob = job('job-boundary');
+    const overlapping = visit(
+      'visit-overlap',
+      'job-boundary',
+      toScheduleLondonDateTimeIso('2026-07-13', '23:00'),
+      toScheduleLondonDateTimeIso('2026-07-14', '00:30')
+    );
+    const endsAtStart = visit(
+      'visit-touch-start',
+      'job-boundary',
+      toScheduleLondonDateTimeIso('2026-07-13', '22:00'),
+      toScheduleLondonDateTimeIso('2026-07-14', '00:00')
+    );
+    const startsAtEnd = visit(
+      'visit-touch-end',
+      'job-boundary',
+      toScheduleLondonDateTimeIso('2026-07-15', '00:00'),
+      toScheduleLondonDateTimeIso('2026-07-15', '02:00')
+    );
+    const rows = buildScheduleBoardRows({
+      primary: SCHEDULING_BOARD_PRIMARIES.job,
+      jobs: [boundaryJob],
+      visits: [endsAtStart, overlapping, startsAtEnd],
+      assignments: [],
+      employees: [],
+      plant: [],
+      dates: ['2026-07-14'],
+    });
+
+    expect(rows[0]?.visitsByDate['2026-07-14']?.map((item) => item.visit.id)).toEqual([
+      'visit-overlap',
+    ]);
+  });
+
+  it('keeps plant assignment on the overlapping day of an overnight visit', () => {
+    const machine = plantResource('plant-night', 'Night chipper');
+    const overnight = visit('night', 'job-1', toScheduleLondonDateTimeIso('2026-07-13', '22:00'), toScheduleLondonDateTimeIso('2026-07-14', '01:00'));
+    const rows = buildScheduleBoardRows({
+      primary: SCHEDULING_BOARD_PRIMARIES.plant, jobs: [jobOne], visits: [overnight],
+      assignments: [plantAssignment('night-assignment', 'job-1', 'night', machine.id, '2026-07-13', machine)],
+      employees: [], plant: [machine], dates: ['2026-07-14'],
+    });
+    expect(rows.map(row => row.id)).toEqual(['plant:plant-night']);
+    expect(rows[0].visitsByDate['2026-07-14'][0].visit.id).toBe('night');
+  });
+
+  it('builds an 08:00 initial visit capped by the existing estimate helper', () => {
+    const defaultVisit = buildDateOnlyQuoteInitialVisit('2026-07-14', null);
+    const shortVisit = buildDateOnlyQuoteInitialVisit('2026-07-14', 60);
+    const cappedVisit = buildDateOnlyQuoteInitialVisit('2026-07-14', 400);
+
+    expect(formatScheduleVisitTime(defaultVisit.starts_at)).toBe('08:00');
+    expect(formatScheduleVisitTime(defaultVisit.ends_at)).toBe('11:00');
+    expect(formatScheduleVisitTime(shortVisit.ends_at)).toBe('09:00');
+    expect(formatScheduleVisitTime(cappedVisit.ends_at)).toBe('11:00');
   });
 });

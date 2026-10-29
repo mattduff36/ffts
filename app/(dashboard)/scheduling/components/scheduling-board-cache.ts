@@ -14,6 +14,7 @@ import type {
 } from '@/types/scheduling';
 import {
   buildScheduleDayTeams,
+  storedScheduleDayTeamPlants,
   removeScheduleDayTeamMember as removeDayTeamMemberFromBoard,
   upsertScheduleDayTeamMember,
 } from '@/lib/utils/scheduling-day-teams';
@@ -88,7 +89,7 @@ export function patchBoardWithTeamSettings(
   return {
     ...board,
     team_settings: settings,
-    day_teams: buildScheduleDayTeams(dates, storedMembers, settings),
+    day_teams: buildScheduleDayTeams(dates, storedMembers, settings, storedScheduleDayTeamPlants(board.day_teams)),
   };
 }
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
 import {
+  ScheduleTeamSettingsInputError,
   loadScheduleTeamSettings,
   mapTeamSettingsRpcError,
   normalizeTeamSettingsSaveInput,
@@ -10,13 +11,14 @@ import {
 import type { ScheduleEmployeeResource } from '@/types/scheduling';
 
 const leaderSchema = z.object({
-  slot_index: z.number().int().min(1).max(5),
+  slot_index: z.number().int().min(1).max(16),
   profile_id: z.uuid().nullable(),
 });
 
 const saveSchema = z.object({
-  visible_slot_count: z.number().int().min(5).max(10),
-  leaders: z.array(leaderSchema).max(5),
+  visible_slot_count: z.number().int().min(8).max(16),
+  leaders: z.array(leaderSchema).max(16),
+  names: z.record(z.string(), z.string()).optional(),
 });
 
 export async function PUT(request: NextRequest) {
@@ -36,9 +38,10 @@ export async function PUT(request: NextRequest) {
 
     const payload = normalizeTeamSettingsSaveInput(parsed.data);
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc('save_schedule_team_settings_v1', {
+    const { data, error } = await admin.rpc('save_schedule_team_settings_v2', {
       p_visible_slot_count: payload.visible_slot_count,
       p_leaders: payload.leaders,
+      p_names: payload.names,
       p_actor_user_id: access.userId,
     });
     if (error) {
@@ -81,6 +84,9 @@ export async function PUT(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ScheduleTeamSettingsInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error('Error saving schedule team settings:', error);
     return NextResponse.json({ error: 'Unable to save team settings.' }, { status: 500 });
   }

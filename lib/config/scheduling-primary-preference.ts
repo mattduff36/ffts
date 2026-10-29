@@ -3,7 +3,7 @@ export const SCHEDULING_PRIMARY_STORAGE_KEY_PREFIX =
 
 export const SCHEDULING_BOARD_PRIMARIES = {
   job: 'job',
-  employee: 'employee',
+  team: 'team',
   plant: 'plant',
 } as const;
 
@@ -19,7 +19,7 @@ export function isSchedulingBoardPrimary(
 ): value is SchedulingBoardPrimary {
   return (
     value === SCHEDULING_BOARD_PRIMARIES.job
-    || value === SCHEDULING_BOARD_PRIMARIES.employee
+    || value === SCHEDULING_BOARD_PRIMARIES.team
     || value === SCHEDULING_BOARD_PRIMARIES.plant
   );
 }
@@ -35,6 +35,7 @@ export function readSchedulingPrimaryPreference(
     const storedPrimary = localStorage.getItem(
       getSchedulingPrimaryStorageKey(userId)
     );
+    if (storedPrimary === 'employee') return SCHEDULING_BOARD_PRIMARIES.team;
     return isSchedulingBoardPrimary(storedPrimary)
       ? storedPrimary
       : SCHEDULING_BOARD_PRIMARIES.job;

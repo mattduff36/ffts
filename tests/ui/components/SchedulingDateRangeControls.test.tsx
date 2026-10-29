@@ -82,11 +82,11 @@ describe('SchedulingDateRangeControls', () => {
       'aria-selected',
       'true'
     );
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Employees' }), {
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Primary Teams' }), {
       button: 0,
       ctrlKey: false,
     });
-    expect(screen.getByRole('tab', { name: 'Primary Employees' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Primary Teams' })).toHaveAttribute(
       'aria-selected',
       'true'
     );

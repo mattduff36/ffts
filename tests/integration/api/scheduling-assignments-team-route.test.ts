@@ -122,4 +122,107 @@ describe('POST /api/scheduling/assignments/team (SCH-TEAM-API-002, SCH-TEAM-API-
     }));
     expect(response.status).toBe(404);
   });
+
+  it('returns mixed employee and plant rows without reshaping them', async () => {
+    const plantId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mockAssign.mockResolvedValue({
+      assignments: [
+        {
+          id: 'assignment-1',
+          job_id: '11111111-1111-4111-8111-111111111111',
+          work_date: '2026-09-01',
+          visit_id: '55555555-5555-4555-8555-555555555555',
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: managerAccess.userId,
+          created_at: '2026-09-01T08:00:00.000Z',
+          updated_at: '2026-09-01T08:00:00.000Z',
+          resource_type: 'employee',
+          profile_id: '22222222-2222-4222-8222-222222222222',
+        },
+        {
+          id: 'assignment-plant',
+          job_id: '11111111-1111-4111-8111-111111111111',
+          work_date: '2026-09-01',
+          visit_id: '55555555-5555-4555-8555-555555555555',
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: managerAccess.userId,
+          created_at: '2026-09-01T08:00:00.000Z',
+          updated_at: '2026-09-01T08:00:00.000Z',
+          resource_type: 'plant',
+          plant_id: plantId,
+        },
+      ],
+      skipped: [{
+        plant_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        full_name: 'Roller',
+        reason: 'conflict',
+        conflicts: [{
+          code: 'plant_double_booked',
+          severity: 'warning',
+          message: 'Plant already booked',
+        }],
+      }],
+      already_assigned_count: 0,
+      employee_capacity: [],
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/team/route');
+    const response = await POST(post({
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      slot_index: 1,
+      member_request_ids: {
+        [plantId]: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    }));
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(mockAssign).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        memberRequestIds: {
+          [plantId]: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      })
+    );
+    expect(payload.assignments[1]).toEqual(expect.objectContaining({
+      resource_type: 'plant',
+      plant_id: plantId,
+    }));
+    expect(payload.assignments[1].profile_id).toBeUndefined();
+    expect(payload.skipped[0]).toEqual(expect.objectContaining({
+      plant_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      full_name: 'Roller',
+    }));
+  });
+
+  it('maps a partial helper result to 207', async () => {
+    mockAssign.mockResolvedValue({
+      assignments: [{
+        id: 'assignment-1',
+        resource_type: 'employee',
+        profile_id: '22222222-2222-4222-8222-222222222222',
+      }],
+      skipped: [],
+      already_assigned_count: 0,
+      employee_capacity: [],
+      partial_error: 'Some team members were assigned before this request failed. Refresh the board and try the rest again.',
+    });
+    const { POST } = await import('@/app/api/scheduling/assignments/team/route');
+    const response = await POST(post({
+      visit_id: '55555555-5555-4555-8555-555555555555',
+      slot_index: 1,
+    }));
+    const payload = await response.json();
+    expect(response.status).toBe(207);
+    expect(payload.partial).toBe(true);
+    expect(payload.error).toMatch(/try the rest/i);
+    expect(payload.assignments).toHaveLength(1);
+  });
 });

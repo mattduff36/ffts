@@ -11,10 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT,
+  SCHEDULE_DAY_TEAM_SLOT_INDEXES,
   SCHEDULE_DAY_TEAM_MIN_VISIBLE_SLOT_COUNT,
   extraSlotHasDailyMembers,
 } from '@/lib/utils/scheduling-day-teams';
@@ -46,21 +48,26 @@ export function ScheduleTeamSettingsDialog({
   onSave: (input: {
     visible_slot_count: number;
     leaders: Array<{ slot_index: number; profile_id: string | null }>;
+    names: Record<string, string>;
   }) => void;
 }) {
   const [visibleSlotCount, setVisibleSlotCount] = useState(settings.visible_slot_count);
-  const [leaderIds, setLeaderIds] = useState<Array<string | null>>([null, null, null, null, null]);
-  const settingsKey = `${open}:${settings.visible_slot_count}:${settings.updated_at || ''}:${settings.leaders
-    .map((leader) => `${leader.slot_index}:${leader.profile_id}`)
-    .join(',')}`;
-  const [syncedKey, setSyncedKey] = useState(settingsKey);
-  if (open && syncedKey !== settingsKey) {
-    setSyncedKey(settingsKey);
-    setVisibleSlotCount(settings.visible_slot_count);
-    setLeaderIds([1, 2, 3, 4, 5].map((slotIndex) =>
-      settings.leaders.find((leader) => leader.slot_index === slotIndex)?.profile_id || null
-    ));
+  const [leaderIds, setLeaderIds] = useState<Array<string | null>>(() =>
+    SCHEDULE_DAY_TEAM_SLOT_INDEXES.map(slot => settings.leaders.find(leader => leader.slot_index === slot)?.profile_id || null)
+  );
+  const [names, setNames] = useState<Record<string, string>>(settings.names || {});
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setVisibleSlotCount(settings.visible_slot_count);
+      setLeaderIds(SCHEDULE_DAY_TEAM_SLOT_INDEXES.map(slot =>
+        settings.leaders.find(leader => leader.slot_index === slot)?.profile_id || null
+      ));
+      setNames(settings.names || {});
+    }
   }
+  const visibleSlots = SCHEDULE_DAY_TEAM_SLOT_INDEXES.slice(0, visibleSlotCount);
 
   const lastExtraHasMembers = useMemo(
     () => extraSlotHasDailyMembers({ day_teams: dayTeams }, visibleSlotCount),
@@ -78,20 +85,29 @@ export function ScheduleTeamSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-testid="schedule-team-settings-dialog">
+      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto" data-testid="schedule-team-settings-dialog">
         <DialogHeader>
           <DialogTitle>Scheduling settings</DialogTitle>
           <DialogDescription>
-            Set the five main team leaders and how many team buckets appear on the daily board.
+            Set team names and leaders. Eight teams are shown by default; add up to sixteen.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((slotIndex) => {
+          <div className="grid max-h-[55dvh] gap-3 overflow-y-auto p-1 sm:grid-cols-2">
+            {visibleSlots.map((slotIndex) => {
               const selectedId = leaderIds[slotIndex - 1];
               const selected = employees.find((employee) => employee.id === selectedId);
               return (
-                <div key={slotIndex} className="space-y-1.5">
+                <div key={slotIndex} className="space-y-1.5 rounded-md border border-border p-3">
+                  <Label htmlFor={`schedule-team-name-${slotIndex}`}>Team {slotIndex} name</Label>
+                  <Input
+                    id={`schedule-team-name-${slotIndex}`}
+                    value={names[String(slotIndex)] || ''}
+                    maxLength={80}
+                    placeholder={formatScheduleTeamName(selected?.full_name, slotIndex)}
+                    onChange={event => setNames(current => ({ ...current, [slotIndex]: event.target.value }))}
+                    disabled={saving}
+                  />
                   <Label htmlFor={`schedule-team-leader-${slotIndex}`}>
                     Team {slotIndex} leader
                   </Label>
@@ -129,7 +145,7 @@ export function ScheduleTeamSettingsDialog({
             <div>
               <p className="text-sm font-medium">Visible teams</p>
               <p className="text-xs text-muted-foreground">
-                {visibleSlotCount} of {SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT}. Extra teams stay unnamed.
+                {visibleSlotCount} of {SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT}. Names apply across all dates.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -138,10 +154,13 @@ export function ScheduleTeamSettingsDialog({
                 variant="outline"
                 className={schedulingControlStyles.outline}
                 disabled={
-                  visibleSlotCount <= SCHEDULE_DAY_TEAM_MIN_VISIBLE_SLOT_COUNT
+                  saving || visibleSlotCount <= SCHEDULE_DAY_TEAM_MIN_VISIBLE_SLOT_COUNT
                   || lastExtraHasMembers
                 }
-                onClick={() => setVisibleSlotCount((count) => count - 1)}
+                onClick={() => {
+                  setLeaderIds(current => current.map((id, index) => index === visibleSlotCount - 1 ? null : id));
+                  setVisibleSlotCount(count => count - 1);
+                }}
                 data-testid="schedule-team-remove-extra"
               >
                 <Minus className="h-4 w-4" />
@@ -151,7 +170,7 @@ export function ScheduleTeamSettingsDialog({
                 type="button"
                 variant="outline"
                 className={schedulingControlStyles.outline}
-                disabled={visibleSlotCount >= SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT}
+                disabled={saving || visibleSlotCount >= SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT}
                 onClick={() => setVisibleSlotCount((count) => count + 1)}
                 data-testid="schedule-team-add-extra"
               >
@@ -178,7 +197,8 @@ export function ScheduleTeamSettingsDialog({
             onClick={() => {
               onSave({
                 visible_slot_count: visibleSlotCount,
-                leaders: [1, 2, 3, 4, 5].map((slotIndex) => ({
+                names: Object.fromEntries(visibleSlots.map(slot => [String(slot), (names[String(slot)] || '').trim()])),
+                leaders: visibleSlots.map((slotIndex) => ({
                   slot_index: slotIndex,
                   profile_id: leaderIds[slotIndex - 1],
                 })),

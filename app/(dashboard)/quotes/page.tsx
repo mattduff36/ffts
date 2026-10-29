@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { AppPageShell } from '@/components/layout/AppPageShell';
 import { Archive, BriefcaseBusiness, CalendarClock, LayoutDashboard, Plus, Receipt, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { createStatusError, getErrorStatus, isNetworkFetchError } from '@/lib/utils/http-error';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -24,7 +25,7 @@ import { QuoteMarkAsAcceptedDialog } from './components/QuoteMarkAsAcceptedDialo
 import { getQuoteManagerNameFilterValue, normalizeQuoteManagerName } from './types';
 import type { LegacyQuote, Quote, QuoteFormData, QuoteFormSubmitIntent, QuoteManagerOption, QuoteProjectNumber } from './types';
 import type { LegacyQuoteEditForm } from './components/LegacyQuotesTable';
-import type { CustomerFormData } from '../customers/types';
+import type { CustomerFormData, CustomerSite } from '../customers/types';
 
 interface CustomerOption {
   id: string;
@@ -577,14 +578,14 @@ export default function QuotesPage() {
     if (intent === 'mark_as_sent') {
       try {
         await markQuoteAsSent(payload.quote.id);
-        toast.success('Quote marked as sent');
+        acknowledgeSuccess();
       } catch (error) {
         setEditingQuote(payload.quote);
         await fetchData();
         throw error;
       }
     } else {
-      toast.success('Quote created');
+      acknowledgeSuccess();
     }
     await fetchData();
   }
@@ -603,9 +604,9 @@ export default function QuotesPage() {
     await uploadClientQuoteAttachments(editingQuote.id, data.attachment_files);
     if (intent === 'mark_as_sent') {
       await markQuoteAsSent(editingQuote.id);
-      toast.success('Quote marked as sent');
+      acknowledgeSuccess();
     } else {
-      toast.success('Quote updated');
+      acknowledgeSuccess();
     }
     setEditingQuote(null);
     await fetchData();
@@ -629,7 +630,7 @@ export default function QuotesPage() {
     setLegacyQuotes((current) => current.map((quote) => (
       quote.id === payload.legacy_quote?.id ? payload.legacy_quote : quote
     )));
-    toast.success('Legacy quote updated');
+    acknowledgeSuccess();
     return payload.legacy_quote;
   }
 
@@ -646,10 +647,21 @@ export default function QuotesPage() {
     }
 
     const payload = await res.json() as { customer?: { id?: string } };
-    toast.success('Customer added');
+    acknowledgeSuccess();
     if (payload.customer?.id) setCreatedQuoteCustomerId(payload.customer.id);
     await fetchCustomers();
     await fetchData();
+  }
+
+  function handleQuoteSiteCreated(site: CustomerSite) {
+    setCustomers(current => current.map(customer => {
+      if (customer.id !== site.customer_id) return customer;
+      const sites = customer.sites || [];
+      return {
+        ...customer,
+        sites: [site, ...sites.filter(existing => existing.id !== site.id)],
+      };
+    }));
   }
 
   async function handleEditingQuoteAttachmentsChange(quoteId: string) {
@@ -710,9 +722,9 @@ export default function QuotesPage() {
     setQuickActionQuoteId(quote.id);
     try {
       await runQuoteWorkflowAction(quote.id, action);
-      if (action === 'mark_as_sent') toast.success('Quote marked as sent');
+      if (action === 'mark_as_sent') acknowledgeSuccess();
       if (action === 'toggle_closed') {
-        toast.success(quote.commercial_status === 'closed' ? 'Quote restored' : 'Quote archived');
+        acknowledgeSuccess();
       }
       await fetchData();
     } catch (error) {
@@ -728,7 +740,7 @@ export default function QuotesPage() {
     setQuickActionQuoteId(acceptQuote.id);
     try {
       await runQuoteWorkflowAction(acceptQuote.id, 'mark_as_accepted');
-      toast.success('Quote marked as accepted');
+      acknowledgeSuccess();
       setAcceptQuote(null);
       await fetchData();
     } catch (error) {
@@ -775,7 +787,7 @@ export default function QuotesPage() {
         throw await buildResponseError(res, 'Unable to delete this quote right now.');
       }
 
-      toast.success(`Quote ${quote.quote_reference} deleted`);
+      acknowledgeSuccess();
       if (detailQuoteId === quote.id) {
         handleCloseQuoteDetails();
       }
@@ -1015,6 +1027,7 @@ export default function QuotesPage() {
           createdCustomerId={createdQuoteCustomerId}
           onCreatedCustomerApplied={() => setCreatedQuoteCustomerId(null)}
           onAddCustomer={() => setCustomerFormOpen(true)}
+          onSiteCreated={handleQuoteSiteCreated}
         />
       ) : null}
 
@@ -1038,7 +1051,7 @@ export default function QuotesPage() {
           if (result.email_warning) {
             toast.warning('Quote accepted with a RAMS email warning', { description: result.email_warning });
           } else {
-            toast.success('Quote accepted and RAMS assigned');
+            acknowledgeSuccess();
           }
           setAcceptQuote(null);
           void fetchData();

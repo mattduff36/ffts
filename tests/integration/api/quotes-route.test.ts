@@ -524,7 +524,7 @@ describe('POST /api/quotes', () => {
     ]);
   });
 
-  it('applies quote module defaults when schedule fields are blank', async () => {
+  it.each([null, 30, 150])('uses default days only without an hours estimate (%s minutes)', async (minutes) => {
     const quoteInsert = vi.fn().mockResolvedValue({ error: null });
     const lineItemInsert = vi.fn().mockResolvedValue({ error: null });
     const profileSingle = vi.fn().mockResolvedValue({
@@ -587,6 +587,7 @@ describe('POST /api/quotes', () => {
         pricing_mode: 'attachments_only',
         start_alert_days: '',
         estimated_duration_days: '',
+        estimated_duration_minutes: minutes,
         line_items: [],
       }),
       headers: { 'Content-Type': 'application/json' },
@@ -595,7 +596,8 @@ describe('POST /api/quotes', () => {
     expect(response.status).toBe(201);
     expect(quoteInsert).toHaveBeenCalledWith(expect.objectContaining({
       start_alert_days: 7,
-      estimated_duration_days: 3,
+      estimated_duration_days: minutes ? null : 3,
+      estimated_duration_minutes: minutes,
     }));
   });
 

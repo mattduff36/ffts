@@ -1,20 +1,25 @@
 import { formatScheduleTeamName } from '@/lib/utils/scheduling';
 import type {
   ScheduleDayTeamMember,
+  ScheduleDayTeamPlant,
   ScheduleDayTeamSlot,
   ScheduleDayTeamSlotIndex,
   ScheduleDayTeams,
   ScheduleEmployeeResource,
+  SchedulePlantResource,
   ScheduleTeamSettings,
   ScheduleTeamSlotLeader,
   SchedulingBoardPayload,
 } from '@/types/scheduling';
 
-export const SCHEDULE_DAY_TEAM_SLOT_INDEXES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const SCHEDULE_DAY_TEAM_SLOT_INDEXES = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+] as const;
 export const SCHEDULE_DAY_TEAM_SLOT_CAPACITY = 6;
-export const SCHEDULE_DAY_TEAM_MIN_VISIBLE_SLOT_COUNT = 5;
-export const SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT = 10;
-export const SCHEDULE_DAY_TEAM_DEFAULT_VISIBLE_SLOT_COUNT = 5;
+export const SCHEDULE_DAY_TEAM_MIN_VISIBLE_SLOT_COUNT = 8;
+export const SCHEDULE_DAY_TEAM_MAX_SLOT_COUNT = 16;
+export const SCHEDULE_DAY_TEAM_DEFAULT_VISIBLE_SLOT_COUNT = 8;
+export const SCHEDULE_TEAM_SLOT_NAME_MAX_LENGTH = 80;
 export const SCHEDULE_TEAM_SETTINGS_LOCK_KEY = 'schedule-team-settings';
 export const SCHEDULE_DAY_TEAM_DATE_LOCK_PREFIX = 'schedule-day-team:';
 
@@ -22,9 +27,21 @@ export function defaultScheduleTeamSettings(): ScheduleTeamSettings {
   return {
     visible_slot_count: SCHEDULE_DAY_TEAM_DEFAULT_VISIBLE_SLOT_COUNT,
     leaders: [],
+    names: {},
     updated_by: null,
     updated_at: null,
   };
+}
+
+export function customScheduleTeamSlotName(
+  settings: ScheduleTeamSettings | undefined,
+  slotIndex: number
+): string | null {
+  const raw = settings?.names?.[String(slotIndex)];
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, SCHEDULE_TEAM_SLOT_NAME_MAX_LENGTH);
 }
 
 export function teamSettingsFromBoard(
@@ -94,6 +111,7 @@ export function emptyScheduleDayTeamSlots(
     work_date: workDate,
     slot_index: slotIndex,
     members: [],
+    plants: [],
   }));
 }
 
@@ -116,7 +134,8 @@ function implicitLeaderMember(
 export function buildScheduleDayTeams(
   dates: string[],
   members: ScheduleDayTeamMember[],
-  settings: ScheduleTeamSettings = defaultScheduleTeamSettings()
+  settings: ScheduleTeamSettings = defaultScheduleTeamSettings(),
+  plants: ScheduleDayTeamPlant[] = []
 ): ScheduleDayTeams[] {
   const visibleCount = clampVisibleScheduleDayTeamSlotCount(settings.visible_slot_count);
   const leaders = (settings.leaders || []).filter((leader) =>
@@ -140,8 +159,39 @@ export function buildScheduleDayTeams(
       if (slot.members.length >= SCHEDULE_DAY_TEAM_SLOT_CAPACITY) continue;
       slot.members.push({ ...member, is_leader: false });
     }
+    for (const plant of plants) {
+      if (plant.work_date !== date) continue;
+      const slot = slots.find((item) => item.slot_index === plant.slot_index);
+      if (!slot) continue;
+      const bucketPlants = slot.plants || [];
+      if (bucketPlants.some((item) => item.plant_id === plant.plant_id)) continue;
+      slot.plants = [...bucketPlants, plant];
+    }
     return { date, slots };
   });
+}
+
+export function storedScheduleDayTeamPlants(
+  dayTeams: ScheduleDayTeams[] | undefined
+): ScheduleDayTeamPlant[] {
+  return (dayTeams || []).flatMap((entry) =>
+    entry.slots.flatMap((slot) =>
+      (slot.plants || []).map((plant) => ({
+        ...plant,
+        work_date: entry.date,
+        slot_index: slot.slot_index,
+      }))
+    )
+  );
+}
+
+function storedPlantsForScheduleDate(
+  dayTeams: ScheduleDayTeams[] | undefined,
+  workDate: string
+): ScheduleDayTeamPlant[] {
+  return storedScheduleDayTeamPlants(dayTeams)
+    .filter((plant) => plant.work_date === workDate)
+    .map((plant) => ({ ...plant, work_date: workDate }));
 }
 
 function storedMembersForScheduleDate(
@@ -160,6 +210,8 @@ export function resolveScheduleDayTeamName(
   settings: ScheduleTeamSettings = defaultScheduleTeamSettings()
 ): string {
   const slotIndex = slot?.slot_index || 1;
+  const customName = customScheduleTeamSlotName(settings, slotIndex);
+  if (customName) return customName;
   const leader = slot ? leaderBySlotIndex(settings, slot.slot_index) : undefined;
   if (leader) {
     return formatScheduleTeamName(leader.employee?.full_name, slotIndex);
@@ -184,7 +236,8 @@ export function slotsForScheduleDate(
   return buildScheduleDayTeams(
     [workDate],
     storedMembersForScheduleDate(dayTeams, workDate),
-    settings
+    settings,
+    storedPlantsForScheduleDate(dayTeams, workDate)
   )[0].slots;
 }
 
@@ -209,10 +262,44 @@ export function mapDayTeamMemberRow(
   };
 }
 
+export function mapDayTeamPlantRow(
+  row: Record<string, unknown>,
+  plantsById: Map<string, SchedulePlantResource>
+): ScheduleDayTeamPlant | null {
+  const slotIndex = Number(row.slot_index);
+  if (!isScheduleDayTeamSlotIndex(slotIndex)) return null;
+  const plantId = String(row.plant_id || '');
+  if (!plantId) return null;
+  const workDate = String(row.work_date || '').slice(0, 10);
+  if (!workDate) return null;
+  return {
+    work_date: workDate,
+    slot_index: slotIndex,
+    plant_id: plantId,
+    plant: plantsById.get(plantId) || null,
+    added_by: typeof row.added_by === 'string' ? row.added_by : null,
+    created_at: String(row.created_at || new Date().toISOString()),
+  };
+}
+
+/** True when a plant sits in a bucket that the proposed visible count would hide. */
+export function scheduleDayTeamPlantsOccupyHiddenSlots(
+  plants: Array<{ slot_index: number }>,
+  visibleSlotCount: number
+): boolean {
+  if (!Number.isFinite(visibleSlotCount)) return false;
+  const visible = Math.trunc(visibleSlotCount);
+  return plants.some((plant) => plant.slot_index > visible);
+}
+
 function storedMembersFromBoard(board: SchedulingBoardPayload): ScheduleDayTeamMember[] {
   return (board.day_teams || []).flatMap((entry) =>
     entry.slots.flatMap((slot) => slot.members)
   ).filter((item) => item.is_leader !== true);
+}
+
+function storedPlantsFromBoard(board: SchedulingBoardPayload): ScheduleDayTeamPlant[] {
+  return storedScheduleDayTeamPlants(board.day_teams);
 }
 
 export function upsertScheduleDayTeamMember(
@@ -227,7 +314,8 @@ export function upsertScheduleDayTeamMember(
       day_teams: buildScheduleDayTeams(
         board.day_teams?.map((entry) => entry.date) || [member.work_date],
         storedMembersFromBoard(board),
-        settings
+        settings,
+        storedPlantsFromBoard(board)
       ),
     };
   }
@@ -242,7 +330,12 @@ export function upsertScheduleDayTeamMember(
   return {
     ...board,
     team_settings: settings,
-    day_teams: buildScheduleDayTeams(dates, [...existingMembers, { ...member, is_leader: false }], settings),
+    day_teams: buildScheduleDayTeams(
+      dates,
+      [...existingMembers, { ...member, is_leader: false }],
+      settings,
+      storedPlantsFromBoard(board)
+    ),
   };
 }
 
@@ -260,7 +353,8 @@ export function removeScheduleDayTeamMember(
       day_teams: buildScheduleDayTeams(
         board.day_teams?.map((entry) => entry.date) || [workDate],
         storedMembersFromBoard(board),
-        settings
+        settings,
+        storedPlantsFromBoard(board)
       ),
     };
   }
@@ -277,7 +371,59 @@ export function removeScheduleDayTeamMember(
   return {
     ...board,
     team_settings: settings,
-    day_teams: buildScheduleDayTeams(dates, remaining, settings),
+    day_teams: buildScheduleDayTeams(dates, remaining, settings, storedPlantsFromBoard(board)),
+  };
+}
+
+export function upsertScheduleDayTeamPlant(
+  board: SchedulingBoardPayload,
+  plant: ScheduleDayTeamPlant
+): SchedulingBoardPayload {
+  const settings = teamSettingsFromBoard(board);
+  const currentTeams = board.day_teams || [];
+  const dates = currentTeams.some((entry) => entry.date === plant.work_date)
+    ? currentTeams.map((entry) => entry.date)
+    : [...currentTeams.map((entry) => entry.date), plant.work_date].sort();
+  const existingPlants = storedPlantsFromBoard(board).filter(
+    (item) => !(item.work_date === plant.work_date && item.plant_id === plant.plant_id)
+  );
+  return {
+    ...board,
+    team_settings: settings,
+    day_teams: buildScheduleDayTeams(
+      dates,
+      storedMembersFromBoard(board),
+      settings,
+      [...existingPlants, plant]
+    ),
+  };
+}
+
+export function removeScheduleDayTeamPlant(
+  board: SchedulingBoardPayload,
+  workDate: string,
+  slotIndex: ScheduleDayTeamSlotIndex,
+  plantId: string
+): SchedulingBoardPayload {
+  const settings = teamSettingsFromBoard(board);
+  const dates = (board.day_teams || []).map((entry) => entry.date);
+  const remaining = storedPlantsFromBoard(board).filter(
+    (item) =>
+      !(
+        item.work_date === workDate
+        && item.slot_index === slotIndex
+        && item.plant_id === plantId
+      )
+  );
+  return {
+    ...board,
+    team_settings: settings,
+    day_teams: buildScheduleDayTeams(
+      dates,
+      storedMembersFromBoard(board),
+      settings,
+      remaining
+    ),
   };
 }
 

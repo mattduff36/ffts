@@ -46,14 +46,14 @@ describe('scheduling primary preference', () => {
 
   it('restores a stored employee primary and ignores invalid values', () => {
     const storage = createMemoryStorage({
-      [getSchedulingPrimaryStorageKey('manager-1')]: SCHEDULING_BOARD_PRIMARIES.employee,
+      [getSchedulingPrimaryStorageKey('manager-1')]: 'employee',
       [getSchedulingPrimaryStorageKey('manager-2')]: 'crew',
     });
     vi.stubGlobal('window', {});
     vi.stubGlobal('localStorage', storage);
 
     expect(readSchedulingPrimaryPreference('manager-1')).toBe(
-      SCHEDULING_BOARD_PRIMARIES.employee
+      SCHEDULING_BOARD_PRIMARIES.team
     );
     expect(readSchedulingPrimaryPreference('manager-2')).toBe(
       SCHEDULING_BOARD_PRIMARIES.job

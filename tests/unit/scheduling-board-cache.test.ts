@@ -5,6 +5,7 @@ import {
   patchBoardWithAssignment,
   patchBoardWithJob,
   patchBoardWithQuickAdd,
+  patchBoardWithTeamSettings,
   replaceEmployeeCapacity,
   snapshotBoard,
 } from '@/app/(dashboard)/scheduling/components/scheduling-board-cache';
@@ -190,6 +191,38 @@ describe('scheduling-board-cache', () => {
     const replaced = patchBoardWithJob(withBoth, updatedZebra);
     expect(replaced.jobs.map((item) => item.id)).toEqual(['job-z', 'job-a']);
     expect(replaced.jobs[0].title).toBe('Zebra updated');
+  });
+
+  it('keeps day-team plants when team settings are patched', () => {
+    const board = boardFixture();
+    board.day_teams = [{
+      date: '2026-07-14',
+      slots: [{
+        work_date: '2026-07-14',
+        slot_index: 1,
+        members: [],
+        plants: [{
+          work_date: '2026-07-14',
+          slot_index: 1,
+          plant_id: 'plant-1',
+          plant: null,
+          added_by: null,
+          created_at: '2026-07-14T08:00:00.000Z',
+        }],
+      }],
+    }];
+    const next = patchBoardWithTeamSettings(board, {
+      visible_slot_count: 8,
+      leaders: [],
+      names: { '1': 'North' },
+      updated_by: null,
+      updated_at: null,
+    });
+    const slot = next.day_teams.find((entry) => entry.date === '2026-07-14')
+      ?.slots.find((item) => item.slot_index === 1);
+    expect(slot?.plants?.map((plant) => plant.plant_id)).toEqual(['plant-1']);
+    expect(next.team_settings?.names?.['1']).toBe('North');
+    expect(next.assignments).toEqual([]);
   });
 
   it('merges capacity updates by date', () => {

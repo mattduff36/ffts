@@ -62,7 +62,7 @@ export function SchedulingDateRangeControls({
   function handlePrimaryChange(value: string) {
     if (
       value === SCHEDULING_BOARD_PRIMARIES.job
-      || value === SCHEDULING_BOARD_PRIMARIES.employee
+      || value === SCHEDULING_BOARD_PRIMARIES.team
       || value === SCHEDULING_BOARD_PRIMARIES.plant
     ) {
       onPrimaryChange(value);
@@ -95,11 +95,11 @@ export function SchedulingDateRangeControls({
             Jobs
           </TabsTrigger>
           <TabsTrigger
-            value={SCHEDULING_BOARD_PRIMARIES.employee}
+            value={SCHEDULING_BOARD_PRIMARIES.team}
             className="px-3"
-            aria-label="Primary Employees"
+            aria-label="Primary Teams"
           >
-            Employees
+            Teams
           </TabsTrigger>
           <TabsTrigger
             value={SCHEDULING_BOARD_PRIMARIES.plant}

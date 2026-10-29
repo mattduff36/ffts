@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assignmentCreateInputHash } from '@/lib/server/scheduling-assignment-idempotency';
 import { assignDayTeamToVisit } from '@/lib/server/scheduling-day-teams';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('server-only', () => ({}));
 
-const { mockDetect, mockCapacity } = vi.hoisted(() => ({
+const { mockDetect, mockDetectPlant, mockCapacity } = vi.hoisted(() => ({
   mockDetect: vi.fn(),
+  mockDetectPlant: vi.fn(),
   mockCapacity: vi.fn(),
 }));
 
 vi.mock('@/lib/server/scheduling-conflicts', () => ({
   detectEmployeeConflicts: mockDetect,
+  detectPlantConflicts: mockDetectPlant,
 }));
 vi.mock('@/lib/server/scheduling-assignment-capacity', () => ({
   loadEmployeeCapacityForDates: mockCapacity,
@@ -25,8 +28,11 @@ const alreadyId = '66666666-6666-4666-8666-666666666666';
 function createAdmin(options: {
   members?: string[];
   memberRows?: Array<{ work_date: string; slot_index: number; profile_id: string }>;
+  plantRows?: Array<{ work_date: string; slot_index: number; plant_id: string }>;
+  plantLabels?: Record<string, { nickname?: string | null; plant_id?: string | null }>;
   leaders?: Array<{ slot_index: number; profile_id: string }>;
   alreadyOnVisit: string[];
+  plantsAlreadyOnVisit?: string[];
   visitStartsAt?: string;
   rpcErrorFor?: string;
   rpcOverlapFor?: string;
@@ -48,7 +54,12 @@ function createAdmin(options: {
   const memberQueries: Array<Record<string, unknown>> = [];
   const rpc = vi.fn(async (
     _name: string,
-    args: { p_resource_id?: string; p_work_date?: string; p_request_id?: string }
+    args: {
+      p_resource_id?: string;
+      p_resource_type?: string;
+      p_work_date?: string;
+      p_request_id?: string;
+    }
   ) => {
     if (_name === 'schedule_assignment_request_replay_v2') {
       const replay = args.p_request_id ? options.rpcReplayFor?.[args.p_request_id] : null;
@@ -60,13 +71,16 @@ function createAdmin(options: {
     if (options.rpcOverlapFor === args.p_resource_id) {
       return { data: null, error: { message: 'RESOURCE_OVERLAP', code: 'P0001' } };
     }
+    const isPlant = args.p_resource_type === 'plant';
     return {
       data: [{
         assignment_id: `asg-${args.p_resource_id}`,
         job_id: jobId,
         visit_id: visitId,
         work_date: args.p_work_date ?? '2026-09-01',
-        profile_id: args.p_resource_id,
+        resource_type: isPlant ? 'plant' : 'employee',
+        profile_id: isPlant ? null : args.p_resource_id,
+        plant_id: isPlant ? args.p_resource_id : null,
         notes: null,
         conflict_override: false,
         conflict_codes: [],
@@ -96,7 +110,12 @@ function createAdmin(options: {
       maybeSingle: async () => {
         if (table === 'schedule_team_settings') {
           return {
-            data: { visible_slot_count: 5, updated_by: 'manager-1', updated_at: '2026-09-01T08:00:00.000Z' },
+            data: {
+              visible_slot_count: 5,
+              names: {},
+              updated_by: 'manager-1',
+              updated_at: '2026-09-01T08:00:00.000Z',
+            },
             error: null,
           };
         }
@@ -114,6 +133,17 @@ function createAdmin(options: {
             && options.alreadyOnVisit.includes(profileId)
           ) {
             return { data: { id: `existing-${profileId}` }, error: null };
+          }
+          return { data: null, error: null };
+        }
+        if (table === 'schedule_plant_assignments') {
+          const plantId = filters.plant_id;
+          if (
+            filters.visit_id === visitId
+            && typeof plantId === 'string'
+            && (options.plantsAlreadyOnVisit || []).includes(plantId)
+          ) {
+            return { data: { id: `existing-plant-${plantId}` }, error: null };
           }
           return { data: null, error: null };
         }
@@ -156,6 +186,51 @@ function createAdmin(options: {
             .filter((row) => visitFilter == null || row.visit_id === visitFilter);
           return Promise.resolve(resolve({ data, error: null }));
         }
+        if (table === 'schedule_day_team_plants') {
+          const workDate = filters.work_date;
+          const slotIndex = filters.slot_index;
+          const data = (options.plantRows || [])
+            .filter((row) => (workDate == null || row.work_date === workDate)
+              && (slotIndex == null || row.slot_index === Number(slotIndex)))
+            .map((row) => ({
+              ...row,
+              added_by: 'manager-1',
+              created_at: '2026-09-01T07:00:00.000Z',
+            }));
+          return Promise.resolve(resolve({ data, error: null }));
+        }
+        if (table === 'schedule_plant_assignments') {
+          const visitFilter = filters.visit_id;
+          const plantIn = filters.plant_id_in;
+          const allowed = Array.isArray(plantIn) ? new Set(plantIn) : null;
+          const data = (options.plantsAlreadyOnVisit || [])
+            .filter((plantId) => allowed == null || allowed.has(plantId))
+            .map((plantId) => ({
+              id: `existing-plant-${plantId}`,
+              plant_id: plantId,
+              visit_id: visitId,
+            }))
+            .filter((row) => visitFilter == null || row.visit_id === visitFilter);
+          return Promise.resolve(resolve({ data, error: null }));
+        }
+        if (table === 'plant') {
+          const plantIn = filters.id_in;
+          const allowed = Array.isArray(plantIn) ? new Set(plantIn) : null;
+          const ids = (options.plantRows || [])
+            .map((row) => row.plant_id)
+            .filter((id, index, all) => all.indexOf(id) === index)
+            .filter((id) => allowed == null || allowed.has(id));
+          return Promise.resolve(resolve({
+            data: ids.map((id) => ({
+              id,
+              plant_id: options.plantLabels?.[id]?.plant_id ?? 'EX-1',
+              nickname: options.plantLabels?.[id]?.nickname ?? 'Excavator',
+              make: null,
+              model: null,
+            })),
+            error: null,
+          }));
+        }
         if (table === 'profiles') {
           const profileIn = filters.id_in;
           const allowed = Array.isArray(profileIn) ? new Set(profileIn) : null;
@@ -187,6 +262,7 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCapacity.mockResolvedValue([]);
+    mockDetectPlant.mockResolvedValue([]);
     mockDetect.mockImplementation(async (_admin: unknown, input: { profileId: string }) => {
       if (input.profileId === busyId) {
         return [{
@@ -333,12 +409,12 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
   it('rejects assigning a hidden extra slot', async () => {
     const admin = createAdmin({
       members: [clearId],
-      memberRows: [{ work_date: '2026-09-01', slot_index: 6, profile_id: clearId }],
+      memberRows: [{ work_date: '2026-09-01', slot_index: 9, profile_id: clearId }],
       alreadyOnVisit: [],
     });
     const result = await assignDayTeamToVisit(admin, {
       visitId,
-      slotIndex: 6,
+      slotIndex: 9,
       actorUserId: 'manager-1',
     });
     expect(result).toEqual({
@@ -403,6 +479,190 @@ describe('assignDayTeamToVisit (SCH-TEAM-API-002, SCH-TEAM-API-003)', () => {
     expect(admin.rpc).not.toHaveBeenCalledWith(
       'create_schedule_assignment_v2',
       expect.anything()
+    );
+  });
+
+  it('assigns a plant-only bucket with resource_type plant and no profile id', async () => {
+    const plantId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const admin = createAdmin({
+      members: [],
+      plantRows: [{ work_date: '2026-09-01', slot_index: 1, plant_id: plantId }],
+      plantLabels: { [plantId]: { nickname: 'Digger', plant_id: 'PLT-9' } },
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments).toEqual([
+      expect.objectContaining({
+        resource_type: 'plant',
+        plant_id: plantId,
+      }),
+    ]);
+    expect(result.assignments[0]).not.toHaveProperty('profile_id');
+    expect(admin.rpc).toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.objectContaining({
+        p_resource_type: 'plant',
+        p_resource_id: plantId,
+        p_work_date: '2026-09-01',
+      })
+    );
+    expect(mockDetect).not.toHaveBeenCalled();
+    expect(mockDetectPlant).toHaveBeenCalledWith(
+      admin,
+      expect.objectContaining({ plantId, jobId, workDate: '2026-09-01' })
+    );
+  });
+
+  it('assigns employees and plants from the same bucket', async () => {
+    const plantId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const admin = createAdmin({
+      members: [clearId],
+      plantRows: [{ work_date: '2026-09-01', slot_index: 1, plant_id: plantId }],
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments.map((item) => item.resource_type)).toEqual(['employee', 'plant']);
+    expect(result.assignments.map((item) => item.profile_id ?? item.plant_id)).toEqual([
+      clearId,
+      plantId,
+    ]);
+  });
+
+  it('skips a conflicting plant and keeps its display label', async () => {
+    const plantId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    mockDetectPlant.mockImplementation(async (_admin: unknown, input: { plantId: string }) => {
+      if (input.plantId === plantId) {
+        return [{
+          code: 'plant_double_booked',
+          severity: 'warning',
+          message: 'Plant already booked',
+        }];
+      }
+      return [];
+    });
+    const admin = createAdmin({
+      members: [clearId],
+      plantRows: [{ work_date: '2026-09-01', slot_index: 1, plant_id: plantId }],
+      plantLabels: { [plantId]: { nickname: 'Roller', plant_id: 'PLT-2' } },
+      alreadyOnVisit: [],
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments.map((item) => item.profile_id)).toEqual([clearId]);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({
+        plant_id: plantId,
+        full_name: 'Roller',
+        reason: 'conflict',
+      }),
+    ]);
+    expect(result.skipped[0]).not.toHaveProperty('profile_id');
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.objectContaining({ p_resource_id: plantId })
+    );
+  });
+
+  it('replays a plant request with the plant resource hash', async () => {
+    const plantId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const requestId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const admin = createAdmin({
+      members: [],
+      plantRows: [{ work_date: '2026-09-01', slot_index: 1, plant_id: plantId }],
+      alreadyOnVisit: [],
+      plantsAlreadyOnVisit: [plantId],
+      rpcReplayFor: {
+        [requestId]: {
+          assignment_id: 'asg-plant-replay',
+          job_id: jobId,
+          visit_id: visitId,
+          work_date: '2026-09-01',
+          resource_type: 'plant',
+          profile_id: null,
+          plant_id: plantId,
+          notes: null,
+          conflict_override: false,
+          conflict_codes: [],
+          conflict_override_by: null,
+          conflict_override_at: null,
+          assigned_by: 'manager-1',
+          created_at: '2026-09-01T08:00:00.000Z',
+          updated_at: '2026-09-01T08:00:00.000Z',
+        },
+      },
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+      memberRequestIds: { [plantId]: requestId },
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments).toEqual([
+      expect.objectContaining({
+        id: 'asg-plant-replay',
+        resource_type: 'plant',
+        plant_id: plantId,
+      }),
+    ]);
+    expect(result.assignments[0]).not.toHaveProperty('profile_id');
+    expect(result.already_assigned_count).toBe(1);
+    expect(mockDetectPlant).not.toHaveBeenCalled();
+    expect(admin.rpc).toHaveBeenCalledWith(
+      'schedule_assignment_request_replay_v2',
+      expect.objectContaining({
+        p_request_id: requestId,
+        p_action: 'create',
+        p_input_hash: assignmentCreateInputHash({
+          jobId,
+          visitId,
+          resourceType: 'plant',
+          resourceId: plantId,
+          workDate: '2026-09-01',
+          notes: null,
+          overrideConflicts: false,
+        }),
+      })
+    );
+    expect(admin.rpc).not.toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.anything()
+    );
+  });
+
+  it('returns a partial error when a later plant assignment fails', async () => {
+    const plantId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const admin = createAdmin({
+      members: [clearId],
+      plantRows: [{ work_date: '2026-09-01', slot_index: 1, plant_id: plantId }],
+      alreadyOnVisit: [],
+      rpcErrorFor: plantId,
+    });
+    const result = await assignDayTeamToVisit(admin, {
+      visitId,
+      slotIndex: 1,
+      actorUserId: 'manager-1',
+    });
+    if ('status' in result) throw new Error(result.error);
+    expect(result.assignments.map((item) => item.profile_id)).toEqual([clearId]);
+    expect(result.partial_error).toMatch(/try the rest/i);
+    expect(admin.rpc).toHaveBeenCalledWith(
+      'create_schedule_assignment_v1',
+      expect.objectContaining({ p_resource_type: 'plant', p_resource_id: plantId })
     );
   });
 });

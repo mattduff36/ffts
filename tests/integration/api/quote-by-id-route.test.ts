@@ -206,6 +206,24 @@ describe('PATCH /api/quotes/[id]', () => {
     });
   });
 
+  it.each([
+    [{ estimated_duration_minutes: 90 }, { estimated_duration_minutes: 90, estimated_duration_days: null }, 200],
+    [{ estimated_duration_days: 2 }, { estimated_duration_days: 2, estimated_duration_minutes: null }, 200],
+    [{ estimated_duration_days: 2, estimated_duration_minutes: 90 }, {}, 400],
+    [{ estimated_duration_minutes: -1 }, {}, 400],
+    [{ estimated_duration_minutes: 1.2 }, {}, 400],
+    [{ estimated_duration_minutes: 100801 }, {}, 400],
+  ])('validates mutually exclusive estimates on update: %j', async (body, expected, status) => {
+    const { PATCH } = await import('@/app/api/quotes/[id]/route');
+    mockFetchQuoteBundle.mockResolvedValue({ quote: { id: 'quote-1', status: 'draft', is_latest_version: true,
+      estimated_duration_days: 3, estimated_duration_minutes: null }, lineItems: [], selectedSecondaryContacts: [] });
+    const response = await PATCH(new NextRequest('http://localhost/api/quotes/quote-1', { method: 'PATCH', body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id: 'quote-1' }) });
+    expect(response.status).toBe(status);
+    if (status === 200) expect(mockQuoteUpdate).toHaveBeenCalledWith(expect.objectContaining(expected));
+    else expect(mockQuoteUpdate).not.toHaveBeenCalled();
+  });
+
   it('returns a validation error when confirm_and_send has no customer email', async () => {
     const { PATCH } = await import('@/app/api/quotes/[id]/route');
     mockFetchQuoteBundle.mockResolvedValue({
@@ -787,7 +805,8 @@ describe('PATCH /api/quotes/[id]', () => {
         quote_thread_id: 'thread-1',
         quote_reference: 'Q-001',
         subject_line: 'Fence repairs',
-        site_address: 'Depot Yard',
+        site_address: '1 Different Street',
+        customer_site: { site_name: 'Depot Yard' },
         customer: {
           id: 'customer-1',
           company_name: 'Acme Ltd',

@@ -1,3 +1,4 @@
+import { normalizeEstimatedDuration, estimatedDurationErrors } from '@/lib/quotes/estimated-duration';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -208,7 +209,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ? quoteUpdates.po_value
       : quoteUpdates.po_value ?? null;
     const normalizedStartAlertDays = normalizeOptionalInteger(quoteUpdates.start_alert_days);
-    const normalizedEstimatedDurationDays = normalizeOptionalInteger(quoteUpdates.estimated_duration_days);
+    const normalizedEstimatedDurationDays = normalizeEstimatedDuration(quoteUpdates.estimated_duration_days);
+    const normalizedEstimatedDurationMinutes = normalizeEstimatedDuration(quoteUpdates.estimated_duration_minutes);
     const normalizedRequiredStaffCount = normalizeRequiredStaffCount(quoteUpdates.required_staff_count);
     const pricingMode = quoteUpdates.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
     const normalizedSecondaryContactIds = normalizeSecondaryContactIds(secondary_contact_ids);
@@ -754,6 +756,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       };
 
       delete (insertPayload as { customer?: unknown }).customer;
+      delete (insertPayload as { customer_site?: unknown }).customer_site;
       delete (insertPayload as { selected_secondary_contact_ids?: unknown }).selected_secondary_contact_ids;
       delete (insertPayload as { selected_secondary_contacts?: unknown }).selected_secondary_contacts;
 
@@ -884,7 +887,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         fieldErrors.start_alert_days = 'Alert days before start must be a whole number.';
       }
 
-      if (Number.isNaN(normalizedEstimatedDurationDays)) {
+      Object.assign(fieldErrors, estimatedDurationErrors(normalizedEstimatedDurationDays, normalizedEstimatedDurationMinutes));
+
+    if (Number.isNaN(normalizedEstimatedDurationDays)) {
         fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
       }
 
@@ -1019,6 +1024,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       if ('estimated_duration_days' in quoteUpdates) {
         updates.estimated_duration_days = normalizedEstimatedDurationDays;
+        if (normalizedEstimatedDurationDays) updates.estimated_duration_minutes = null;
+      }
+
+      if ('estimated_duration_minutes' in quoteUpdates) {
+        updates.estimated_duration_minutes = normalizedEstimatedDurationMinutes;
+        if (normalizedEstimatedDurationMinutes) updates.estimated_duration_days = null;
       }
 
       if ('required_staff_count' in quoteUpdates) {

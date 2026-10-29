@@ -615,16 +615,7 @@ test.describe('@scheduling Scheduling', () => {
     });
     await page.goto('/scheduling');
 
-    const offerButton = page.getByRole('button', { name: 'Offer if crew free' });
-    const offerOff = await readControlContrast(offerButton);
-    expect(offerOff.ratio).toBeGreaterThanOrEqual(4.5);
-    await offerButton.click();
-    await expect(offerButton).toHaveAttribute('aria-pressed', 'true');
-    await page.waitForTimeout(200);
-    const activeOffer = await readControlContrast(offerButton);
-    expect(activeOffer.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-    expect(activeOffer.ratio).toBeGreaterThanOrEqual(4.5);
-    await offerButton.click();
+    await expect(page.getByRole('button', { name: 'Offer if crew free' })).toHaveCount(0);
 
     const tagButton = page.getByRole('button', { name: 'Hospital' });
     await tagButton.click();
@@ -659,21 +650,11 @@ test.describe('@scheduling Scheduling', () => {
     expect((await readControlContrast(overrideButton)).ratio).toBeGreaterThanOrEqual(4.5);
   });
 
-  test('board actions persist crew-offer toggles', async ({ page }) => {
-    const { jobPatchRequests } = await mockManagerBoard(page);
+  test('retired crew-offer actions are absent', async ({ page }) => {
+    await mockManagerBoard(page);
     await page.goto('/scheduling');
-
-    const actions = page.getByTestId(
-      'schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111'
-    );
-    const crewOffer = actions.getByRole('button', {
-      name: 'Offer if crew finishes early',
-    });
-    await crewOffer.click();
-    await expect(crewOffer).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => jobPatchRequests).toEqual([
-      { is_drop_on_ready: true },
-    ]);
+    await expect(page.getByTestId('schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Offer if crew/ })).toHaveCount(0);
   });
 
   test('Projects queue places an open Project through customer selection', async ({ page }) => {

@@ -1,8 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  SCHEDULE_DAY_TEAM_DEFAULT_VISIBLE_SLOT_COUNT,
+  SCHEDULE_TEAM_SLOT_NAME_MAX_LENGTH,
   clampVisibleScheduleDayTeamSlotCount,
   defaultScheduleTeamSettings,
   isScheduleDayTeamSlotIndex,
+  visibleScheduleDayTeamSlotIndexes,
 } from '@/lib/utils/scheduling-day-teams';
 import type {
   ScheduleEmployeeResource,
@@ -29,7 +32,7 @@ export function mapTeamSettingsRpcError(error: { code?: string; message?: string
 } | null {
   const message = error.message || '';
   if (message.includes('TEAM_SLOT_IN_USE')) {
-    return { status: 409, error: 'Remove employees from extra teams before hiding those buckets.' };
+    return { status: 409, error: 'Remove employees and plant from extra teams before hiding those buckets.' };
   }
   if (message.includes('TEAM_SLOT_FULL')) {
     return {
@@ -41,7 +44,10 @@ export function mapTeamSettingsRpcError(error: { code?: string; message?: string
     return { status: 409, error: 'Change this team leader in Settings instead.' };
   }
   if (message.includes('TEAM_SLOT_INVALID')) {
-    return { status: 400, error: 'Choose between 5 and 10 teams, with leaders on the first five only.' };
+    return {
+      status: 400,
+      error: 'Choose between 8 and 16 teams. Leaders and custom names must use visible teams.',
+    };
   }
   if (message.includes('TEAM_PROFILE_INVALID')) {
     return { status: 400, error: 'Choose distinct active employees as team leaders.' };
@@ -49,12 +55,21 @@ export function mapTeamSettingsRpcError(error: { code?: string; message?: string
   return null;
 }
 
+export class ScheduleTeamSettingsInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ScheduleTeamSettingsInputError';
+  }
+}
+
+const CANONICAL_SLOT_KEY = /^(?:[1-9]|1[0-6])$/;
+
 function mapLeaderRow(
   row: Record<string, unknown>,
   employeesById: Map<string, ScheduleEmployeeResource>
 ): ScheduleTeamSlotLeader | null {
   const slotIndex = Number(row.slot_index);
-  if (!isScheduleDayTeamSlotIndex(slotIndex) || slotIndex > 5) return null;
+  if (!isScheduleDayTeamSlotIndex(slotIndex)) return null;
   const profileId = String(row.profile_id || '');
   if (!profileId) return null;
   return {
@@ -71,7 +86,7 @@ export async function loadScheduleTeamSettings(
   const [settingsResult, leadersResult] = await Promise.all([
     admin
       .from('schedule_team_settings')
-      .select('visible_slot_count, updated_by, updated_at')
+      .select('visible_slot_count, names, updated_by, updated_at')
       .eq('id', true)
       .maybeSingle(),
     admin
@@ -99,27 +114,89 @@ export async function loadScheduleTeamSettings(
 
   return {
     visible_slot_count: clampVisibleScheduleDayTeamSlotCount(
-      Number(settings.visible_slot_count || 5)
+      Number(settings.visible_slot_count ?? SCHEDULE_DAY_TEAM_DEFAULT_VISIBLE_SLOT_COUNT)
     ),
     leaders,
+    names: mapStoredTeamNames(settings.names),
     updated_by: typeof settings.updated_by === 'string' ? settings.updated_by : null,
     updated_at: typeof settings.updated_at === 'string' ? settings.updated_at : null,
   };
 }
 
+function mapStoredTeamNames(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const names: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!CANONICAL_SLOT_KEY.test(key) || typeof raw !== 'string') continue;
+    const trimmed = raw.trim().slice(0, SCHEDULE_TEAM_SLOT_NAME_MAX_LENGTH);
+    if (!trimmed) continue;
+    names[key] = trimmed;
+  }
+  return names;
+}
+
 export function normalizeTeamSettingsSaveInput(input: {
   visible_slot_count: number;
   leaders: Array<{ slot_index: number; profile_id: string | null }>;
+  names?: Record<string, string> | null;
 }): {
   visible_slot_count: number;
   leaders: Array<{ slot_index: number; profile_id: string | null }>;
+  names: Record<string, string> | null;
 } {
+  const visibleSlotCount = clampVisibleScheduleDayTeamSlotCount(input.visible_slot_count);
+  const seenSlots = new Set<number>();
+  const seenProfiles = new Set<string>();
+  const leadersBySlot = new Map<number, string | null>();
+
+  for (const leader of input.leaders) {
+    if (!isScheduleDayTeamSlotIndex(leader.slot_index) || leader.slot_index > visibleSlotCount) {
+      throw new ScheduleTeamSettingsInputError('Leaders can only be set on visible teams.');
+    }
+    if (seenSlots.has(leader.slot_index)) {
+      throw new ScheduleTeamSettingsInputError('Each team slot can have only one leader.');
+    }
+    seenSlots.add(leader.slot_index);
+    const profileId = leader.profile_id || null;
+    if (profileId) {
+      if (seenProfiles.has(profileId)) {
+        throw new ScheduleTeamSettingsInputError('Choose distinct active employees as team leaders.');
+      }
+      seenProfiles.add(profileId);
+    }
+    leadersBySlot.set(leader.slot_index, profileId);
+  }
+
   return {
-    visible_slot_count: clampVisibleScheduleDayTeamSlotCount(input.visible_slot_count),
-    leaders: [1, 2, 3, 4, 5].map((slotIndex) => ({
+    visible_slot_count: visibleSlotCount,
+    leaders: visibleScheduleDayTeamSlotIndexes(visibleSlotCount).map((slotIndex) => ({
       slot_index: slotIndex,
-      profile_id:
-        input.leaders.find((leader) => leader.slot_index === slotIndex)?.profile_id || null,
+      profile_id: leadersBySlot.get(slotIndex) || null,
     })),
+    names: input.names === undefined || input.names === null
+      ? null
+      : normalizeTeamSlotNames(input.names, visibleSlotCount),
   };
+}
+
+function normalizeTeamSlotNames(
+  names: Record<string, string>,
+  visibleSlotCount: number
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(names)) {
+    if (!CANONICAL_SLOT_KEY.test(key) || Number(key) > visibleSlotCount) {
+      throw new ScheduleTeamSettingsInputError('Custom team names must use a visible team slot.');
+    }
+    if (typeof raw !== 'string') {
+      throw new ScheduleTeamSettingsInputError('Custom team names must be text.');
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > SCHEDULE_TEAM_SLOT_NAME_MAX_LENGTH) {
+      throw new ScheduleTeamSettingsInputError('Custom team names must be 80 characters or fewer.');
+    }
+    normalized[key] = trimmed;
+  }
+  return normalized;
 }

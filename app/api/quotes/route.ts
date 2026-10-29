@@ -1,3 +1,4 @@
+import { normalizeEstimatedDuration, estimatedDurationErrors } from '@/lib/quotes/estimated-duration';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -109,6 +110,7 @@ export async function GET(request: NextRequest) {
       .from('quotes')
       .select(`
         *,
+        customer_site:customer_sites!quotes_customer_site_id_fkey(site_name),
         customer:customers(${customerSelect})
       `)
       .order('created_at', { ascending: false })
@@ -151,7 +153,8 @@ export async function GET(request: NextRequest) {
         .from('quotes')
         .select(`
           *,
-          customer:customers(${customerSelect})
+          customer_site:customer_sites!quotes_customer_site_id_fkey(site_name),
+        customer:customers(${customerSelect})
         `)
         .in('quote_thread_id', threadIds)
         .eq('is_latest_version', false)
@@ -318,7 +321,8 @@ export async function POST(request: NextRequest) {
       ? approver_profile_id.trim()
       : null;
     const normalizedStartAlertDays = normalizeOptionalInteger(quoteData.start_alert_days);
-    const normalizedEstimatedDurationDays = normalizeOptionalInteger(quoteData.estimated_duration_days);
+    const normalizedEstimatedDurationDays = normalizeEstimatedDuration(quoteData.estimated_duration_days);
+    const normalizedEstimatedDurationMinutes = normalizeEstimatedDuration(quoteData.estimated_duration_minutes);
     const normalizedRequiredStaffCount = normalizeRequiredStaffCount(quoteData.required_staff_count);
     const normalizedValidityDays = Number(quoteData.validity_days);
     const pricingMode = quoteData.pricing_mode === 'attachments_only' ? 'attachments_only' : 'itemized';
@@ -374,6 +378,8 @@ export async function POST(request: NextRequest) {
     if (Number.isNaN(normalizedStartAlertDays)) {
       fieldErrors.start_alert_days = 'Alert days before start must be a whole number.';
     }
+
+    Object.assign(fieldErrors, estimatedDurationErrors(normalizedEstimatedDurationDays, normalizedEstimatedDurationMinutes));
 
     if (Number.isNaN(normalizedEstimatedDurationDays)) {
       fieldErrors.estimated_duration_days = 'Estimated duration must be a whole number.';
@@ -483,7 +489,7 @@ export async function POST(request: NextRequest) {
 
     const moduleSettings = await loadQuoteModuleSettings(admin);
     const startAlertDays = normalizedStartAlertDays ?? moduleSettings.default_start_alert_days;
-    const estimatedDurationDays = normalizedEstimatedDurationDays ?? moduleSettings.default_estimated_duration_days;
+    const estimatedDurationDays = normalizedEstimatedDurationMinutes ? null : normalizedEstimatedDurationDays ?? moduleSettings.default_estimated_duration_days;
     const items = pricingMode === 'attachments_only' ? [] : normalizedItems
       .filter(item => isMeaningfulLineItem(item))
       .map(({ originalIndex: _originalIndex, ...item }) => item);
@@ -523,6 +529,7 @@ export async function POST(request: NextRequest) {
       start_date: normalizeOptionalString(quoteData.start_date),
       start_alert_days: startAlertDays,
       estimated_duration_days: estimatedDurationDays,
+      estimated_duration_minutes: normalizedEstimatedDurationMinutes,
       required_staff_count: normalizedRequiredStaffCount,
       pricing_mode: pricingMode,
       subtotal: totals.subtotal,

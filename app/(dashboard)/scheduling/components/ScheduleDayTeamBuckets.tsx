@@ -18,7 +18,12 @@ import {
 } from '@/lib/utils/scheduling-day-teams';
 import { formatScheduleEmployeeCompactName } from '@/lib/utils/scheduling';
 import type { ScheduleOccupancySegment } from '@/types/scheduling';
-import type { ScheduleDayTeamSlot, ScheduleDayTeamSlotIndex, ScheduleTeamSettings } from '@/types/scheduling';
+import type {
+  ScheduleDayTeamPlant,
+  ScheduleDayTeamSlot,
+  ScheduleDayTeamSlotIndex,
+  ScheduleTeamSettings,
+} from '@/types/scheduling';
 import { ResourceDragCue, ScheduleResourceCardShell } from './ScheduleResourceCard';
 import { schedulingControlStyles } from './scheduling-control-styles';
 import { scheduleTeamColour } from './ScheduleTeamColours';
@@ -28,6 +33,14 @@ export interface ScheduleDayTeamDragData {
   slotIndex: ScheduleDayTeamSlotIndex;
 }
 
+function slotHasResources(slot: ScheduleDayTeamSlot): boolean {
+  return slot.members.length > 0 || (slot.plants?.length || 0) > 0;
+}
+
+function plantChipLabel(plant: ScheduleDayTeamPlant): string {
+  return plant.plant?.nickname || plant.plant?.plant_id || 'Plant';
+}
+
 function DayTeamSlotCard({
   slot,
   workDate,
@@ -35,6 +48,7 @@ function DayTeamSlotCard({
   teamName,
   occupancySegments,
   onRemoveMember,
+  onRemovePlant,
 }: {
   slot: ScheduleDayTeamSlot;
   workDate: string;
@@ -42,6 +56,7 @@ function DayTeamSlotCard({
   teamName: string;
   occupancySegments?: ScheduleOccupancySegment[];
   onRemoveMember: (slotIndex: ScheduleDayTeamSlotIndex, profileId: string) => void;
+  onRemovePlant: (slotIndex: ScheduleDayTeamSlotIndex, plantId: string) => void;
 }) {
   const droppableId = `${dndScope}:day-team-slot:${workDate}:${slot.slot_index}`;
   const draggableId = `${dndScope}:day-team:${workDate}:${slot.slot_index}`;
@@ -57,7 +72,7 @@ function DayTeamSlotCard({
   const { ref: dragRef, handleRef, isDragging } = useDraggable({
     id: draggableId,
     type: 'schedule-day-team',
-    disabled: slot.members.length === 0,
+    disabled: !slotHasResources(slot),
     data: {
       dayTeam: {
         workDate,
@@ -90,17 +105,17 @@ function DayTeamSlotCard({
         <button
           ref={handleRef}
           type="button"
-          disabled={slot.members.length === 0}
+          disabled={!slotHasResources(slot)}
           className={cn(
             'flex min-h-11 min-w-11 touch-none items-center justify-center self-stretch',
-            slot.members.length > 0
+            slotHasResources(slot)
               ? 'cursor-grab active:cursor-grabbing'
               : 'cursor-default'
           )}
-          style={slot.members.length > 0 ? { touchAction: 'none' } : undefined}
+          style={slotHasResources(slot) ? { touchAction: 'none' } : undefined}
           data-testid={`schedule-day-team-drag-handle-${dndScope}-${slot.slot_index}`}
           aria-label={
-            slot.members.length > 0
+            slotHasResources(slot)
               ? `Drag ${teamName} onto a timed visit`
               : `${teamName} is empty`
           }
@@ -121,9 +136,9 @@ function DayTeamSlotCard({
             </span>
           </div>
           <div className="flex min-h-5 flex-wrap gap-1">
-            {slot.members.length === 0 ? (
+            {slot.members.length === 0 && (slot.plants?.length || 0) === 0 ? (
               <p className="px-0.5 text-[11px] leading-4 text-slate-300">
-                Drop employees here
+                Drop employees or plant here
               </p>
             ) : (
               slot.members.map((member) => {
@@ -167,6 +182,42 @@ function DayTeamSlotCard({
                 );
               })
             )}
+            {(slot.plants || []).map((plant) => {
+              const label = plantChipLabel(plant);
+              return (
+                <span
+                  key={plant.plant_id}
+                  className={cn(
+                    'inline-flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium',
+                    schedulingControlStyles.sourceBadge
+                  )}
+                  data-testid={`schedule-day-team-plant-${dndScope}-${plant.plant_id}`}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="truncate">{label}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {plant.plant?.plant_id ? `${label} (${plant.plant.plant_id})` : label}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
+                    aria-label={`Remove ${label} from ${teamName}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onRemovePlant(slot.slot_index, plant.plant_id);
+                    }}
+                  >
+                    <X className="h-3 w-3" aria-hidden="true" />
+                  </Button>
+                </span>
+              );
+            })}
           </div>
         </div>
       </ScheduleResourceCardShell>
@@ -181,6 +232,7 @@ export function ScheduleDayTeamBuckets({
   teamSettings,
   occupancyBySlot,
   onRemoveMember,
+  onRemovePlant,
 }: {
   workDate: string;
   slots: ScheduleDayTeamSlot[];
@@ -188,18 +240,20 @@ export function ScheduleDayTeamBuckets({
   teamSettings?: ScheduleTeamSettings;
   occupancyBySlot?: Partial<Record<ScheduleDayTeamSlotIndex, ScheduleOccupancySegment[]>>;
   onRemoveMember: (slotIndex: ScheduleDayTeamSlotIndex, profileId: string) => void;
+  onRemovePlant: (slotIndex: ScheduleDayTeamSlotIndex, plantId: string) => void;
 }) {
   const settings = teamSettings || defaultScheduleTeamSettings();
   const resolvedSlots = buildScheduleDayTeams(
     [workDate],
     slots.flatMap((slot) => slot.members).filter((member) => member.is_leader !== true),
-    settings
+    settings,
+    slots.flatMap((slot) => slot.plants || [])
   )[0].slots;
 
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="grid w-full grid-cols-5 gap-2"
+        className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8"
         data-testid={`schedule-day-team-buckets-${dndScope}`}
         aria-label="Day team buckets"
       >
@@ -212,6 +266,7 @@ export function ScheduleDayTeamBuckets({
             teamName={resolveScheduleDayTeamName(slot, settings)}
             occupancySegments={occupancyBySlot?.[slot.slot_index]}
             onRemoveMember={onRemoveMember}
+            onRemovePlant={onRemovePlant}
           />
         ))}
       </div>

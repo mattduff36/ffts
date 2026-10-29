@@ -144,7 +144,7 @@ export async function fetchCustomerSitesByCustomerId(
     .from('customer_sites')
     .select('*')
     .in('customer_id', uniqueCustomerIds)
-    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: false })
     .order('site_name', { ascending: true });
 
   if (error) throw error;

@@ -379,6 +379,7 @@ export async function fetchQuoteBundle(supabase: ReturnType<typeof createAdminCl
     .from('quotes')
     .select(`
       *,
+      customer_site:customer_sites!quotes_customer_site_id_fkey(site_name),
       customer:customers(
         id,
         company_name,

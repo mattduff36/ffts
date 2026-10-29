@@ -2,6 +2,25 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.8.1
+
+**GIT COMMIT MESSAGE**
+`fix(layout): update Navigation, Sign in, and Help and FAQ`
+
+**PUSHED AT**
+2026-10-29T12:59:54.552Z
+
+**WHAT CHANGED**
+Update Navigation, Sign in, and Help and FAQ.
+
+**VERSION HISTORY DETAILS**
+- Updated Navigation, Sign in, and Help and FAQ, with changes to interface components.
+- Updated sign in across 1 changed file.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `fix(layout): update Navigation, Sign in, and Help and FAQ`
+
 ## 1026.8.0
 
 **GIT COMMIT MESSAGE**

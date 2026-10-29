@@ -1,5 +1,28 @@
 [
   {
+    "version": "1026.8.1",
+    "updateKind": "minor",
+    "title": "Navigation improvements",
+    "description": "Updated Navigation, Sign in, and Help and FAQ.",
+    "summary": "Updated Navigation, Sign in, and Help and FAQ.",
+    "details": [
+      "Updated Navigation, Sign in, and Help and FAQ, with changes to interface components.",
+      "Updated sign in across 1 changed file.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Navigation",
+      "Sign in",
+      "Help",
+      "FAQ"
+    ],
+    "areaKeys": [
+      "navigation",
+      "sign-in"
+    ],
+    "pushedAt": "2026-10-29T12:59:54.552Z"
+  },
+  {
     "version": "1026.8.0",
     "updateKind": "major",
     "title": "Navigation update",

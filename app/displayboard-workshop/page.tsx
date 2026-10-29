@@ -613,7 +613,7 @@ export default function WorkshopDisplayBoardPage() {
   }
 
   return (
-    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#001102,#001f04_48%,#0d2911)] p-6 text-white">
+    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#101010,#1c1c1c_48%,#282828)] p-6 text-white">
       <div className="grid h-full grid-rows-[88px_auto_minmax(0,1fr)] gap-5">
         <header className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.06] px-7 shadow-2xl shadow-black/20">
           <div className="flex items-center gap-4">

@@ -14,18 +14,18 @@ export const schedulingControlStyles = {
   sourceBadge:
     'border-[#64748b] bg-slate-900 text-[#cbd5e1]',
   resourceJob:
-    'border border-sky-700/60 bg-green-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+    'border border-sky-700/60 bg-slate-900 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
   resourceEmployee:
     'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
   dayTeamTints: [
     'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-emerald-700/60 bg-emerald-950/35 text-emerald-50 shadow-sm hover:border-emerald-500/70 hover:bg-emerald-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
-    'border border-green-700/60 bg-green-950/35 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+    'border border-green-700/60 bg-slate-900 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-lime-700/60 bg-lime-950/30 text-lime-50 shadow-sm hover:border-lime-500/70 hover:bg-lime-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
-    'border border-cyan-700/60 bg-green-950/30 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-green-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+    'border border-cyan-700/60 bg-slate-900 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-teal-600/70 bg-teal-900/40 text-teal-50 shadow-sm hover:border-teal-400/70 hover:bg-teal-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-emerald-600/70 bg-emerald-900/40 text-emerald-50 shadow-sm hover:border-emerald-400/70 hover:bg-emerald-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
-    'border border-green-600/70 bg-green-900/40 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+    'border border-green-600/70 bg-slate-800 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-lime-600/70 bg-lime-900/35 text-lime-50 shadow-sm hover:border-lime-400/70 hover:bg-lime-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
     'border border-cyan-600/70 bg-green-900/35 text-cyan-50 shadow-sm hover:border-cyan-400/70 hover:bg-green-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
   ] as const,

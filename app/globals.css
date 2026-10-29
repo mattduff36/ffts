@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-/* FFTS leaf-outline surfaces. Legacy slate/brand-yellow names remain compatible
+/* Neutral working surfaces with FFTS green accents. Legacy slate/brand-yellow names remain compatible
    with existing components; only the app palette changes. */
 @theme inline {
-  --color-slate-950: #001102;
-  --color-slate-900: #001f04;
-  --color-slate-800: #0d2911;
-  --color-slate-700: #1f3d24;
-  --color-slate-600: #436e49;
-  --color-slate-500: #66856b;
+  --color-slate-950: #101010;
+  --color-slate-900: #1c1c1c;
+  --color-slate-800: #282828;
+  --color-slate-700: #3a3a3a;
+  --color-slate-600: #525252;
+  --color-slate-500: #737373;
   --color-brand-yellow: hsl(var(--brand-yellow));
   --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
   --color-brand-yellow-light: hsl(var(--brand-yellow-light));
@@ -24,27 +24,27 @@
     --top-nav-h: 68px;
     
     /* Semantic theme tokens - Dark theme by default */
-    --background: 128 100% 6%; /* slate-900 */
+    --background: 0 0% 8%; /* slate-900 */
     --foreground: 210 40% 98%; /* slate-50 */
-    --card: 128 100% 6%; /* slate-900 */
+    --card: 0 0% 11%; /* slate-900 */
     --card-foreground: 210 40% 98%;
-    --popover: 128 100% 6%;
+    --popover: 0 0% 14%;
     --popover-foreground: 210 40% 98%;
     
     /* Primary - Forest Farm leaf-green accent */
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 6%;
+    --primary-foreground: 0 0% 8%;
     
     /* Secondary - slate-800 */
-    --secondary: 129 52% 13%;
+    --secondary: 0 0% 16%;
     --secondary-foreground: 210 40% 98%;
     
     /* Muted - slate-800 */
-    --muted: 129 52% 13%;
+    --muted: 0 0% 16%;
     --muted-foreground: 215 20% 65%; /* slate-400 */
     
     /* Accent - slate-800 */
-    --accent: 129 52% 13%;
+    --accent: 0 0% 16%;
     --accent-foreground: 210 40% 98%;
     
     /* Status colors */
@@ -116,8 +116,8 @@
     --admin-dark: 260 60% 35%;
     
     /* UI Elements */
-    --border: 129 52% 13%; /* slate-800 */
-    --input: 129 52% 13%;
+    --border: 0 0% 24%; /* slate-800 */
+    --input: 0 0% 24%;
     --ring: 90 51% 62%;
     --radius: 0.625rem;
     
@@ -129,24 +129,24 @@
 
   .dark {
     /* Dark mode (same as root for single-theme approach) */
-    --background: 128 100% 6%;
+    --background: 0 0% 8%;
     --foreground: 210 40% 98%;
-    --card: 128 100% 6%;
+    --card: 0 0% 11%;
     --card-foreground: 210 40% 98%;
-    --popover: 128 100% 6%;
+    --popover: 0 0% 14%;
     --popover-foreground: 210 40% 98%;
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 6%;
-    --secondary: 129 52% 13%;
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 16%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 129 52% 13%;
+    --muted: 0 0% 16%;
     --muted-foreground: 215 20% 65%;
-    --accent: 129 52% 13%;
+    --accent: 0 0% 16%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 129 52% 13%;
-    --input: 129 52% 13%;
+    --border: 0 0% 24%;
+    --input: 0 0% 24%;
     --ring: 90 51% 62%;
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
@@ -228,7 +228,7 @@
 
   [data-accent="scheduling"] {
     --primary: var(--scheduling-primary);
-    --primary-foreground: 128 100% 6%;
+    --primary-foreground: 0 0% 8%;
     --ring: var(--scheduling-primary);
   }
 
@@ -241,7 +241,7 @@
   /* Brand (leaf green) remains the default for non-module pages */
   [data-accent="brand"] {
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 6%; /* dark text for the light green accent */
+    --primary-foreground: 0 0% 8%; /* dark text for the light green accent */
     --ring: 90 51% 62%;
   }
 }
@@ -257,7 +257,7 @@
   
   body {
     background-color: hsl(var(--background));
-    background-image: linear-gradient(135deg, var(--color-slate-900) 0%, var(--color-slate-800) 50%, var(--color-slate-700) 100%);
+    background-image: none;
     background-attachment: fixed;
     color: hsl(var(--foreground));
     font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;

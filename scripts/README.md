@@ -24,7 +24,7 @@ Run `npm run theme:revert` from a clean checkout on `codex/meeting-2026-10-28-pr
 
 Then run `npm run finalise`, review the result, and publish to the same preview with `git push origin HEAD:refs/heads/codex/meeting-2026-10-28-preview`. Do not use `finalise:push`, which targets production.
 
-`npm run theme:revert -- --check` verifies applicability without changing files. The patch reverses only the green-theme changes through `b57242ad`, against the pre-theme baseline `5afb1534`. If later edits overlap, Git fails before applying; resolve the specific conflict rather than replacing entire files. There are no credentials, database operations or generated reports.
+`npm run theme:revert -- --check` verifies applicability without changing files. The patch reverses only the green-theme changes, including the neutral-surface refinement, against the pre-theme baseline `5afb1534`. If later edits overlap, Git fails before applying; resolve the specific conflict rather than replacing entire files. There are no credentials, database operations or generated reports.
 
 To undo a just-staged rollback before committing it, use `git apply --reverse --index scripts/theme/legacy-theme.patch`. After committing a rollback, revert that rollback commit to return to green. The helper refuses other branches and a dirty checkout.
 

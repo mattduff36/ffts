@@ -1,7 +1,7 @@
-diff --git a/app/(auth)/change-password/page.tsx b/app/(auth)/change-password/page.tsx
+diff --git b/app/(auth)/change-password/page.tsx a/app/(auth)/change-password/page.tsx
 index d10b9954..102f852f 100644
---- a/app/(auth)/change-password/page.tsx
-+++ b/app/(auth)/change-password/page.tsx
+--- b/app/(auth)/change-password/page.tsx
++++ a/app/(auth)/change-password/page.tsx
 @@ -192,7 +192,7 @@ export default function ChangePasswordPage() {
              )}
  
@@ -20,10 +20,10 @@ index d10b9954..102f852f 100644
              >
                {submitting ? (
                  <>
-diff --git a/app/(auth)/login/page.tsx b/app/(auth)/login/page.tsx
+diff --git b/app/(auth)/login/page.tsx a/app/(auth)/login/page.tsx
 index 2f4d5fe9..1b3e17d5 100644
---- a/app/(auth)/login/page.tsx
-+++ b/app/(auth)/login/page.tsx
+--- b/app/(auth)/login/page.tsx
++++ a/app/(auth)/login/page.tsx
 @@ -197,7 +197,7 @@ export default function LoginPage() {
      <div className="h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center px-4 pb-4 pt-0 sm:pt-16 md:pt-24 relative overflow-y-auto overflow-x-hidden bg-slate-950">
        {/* Fixed background starts at the viewport edge so iOS can render it under the native status bar. */}
@@ -33,10 +33,10 @@ index 2f4d5fe9..1b3e17d5 100644
        </div>
  
        <div className="w-full max-w-lg relative z-10 translate-y-[clamp(1.5rem,10svh,5rem)] sm:translate-y-0">
-diff --git a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
+diff --git b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
 index 93460408..9983f9f1 100644
---- a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
-+++ b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
+--- b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
++++ a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
 @@ -12,7 +12,7 @@ interface AbsenceAboutHelperProps {
  
  export function AbsenceAboutHelper({ variant }: AbsenceAboutHelperProps) {
@@ -46,10 +46,10 @@ index 93460408..9983f9f1 100644
        <CardContent className="pt-6">
          <div className="flex items-start gap-3">
            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-diff --git a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
+diff --git b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
 index 0c896d1f..183c5f0b 100644
---- a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
-+++ b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
+--- b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
++++ a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
 @@ -1258,7 +1258,7 @@ export function AbsenceCalendarAdmin() {
                                  variant="outline"
                                  className={
@@ -59,10 +59,10 @@ index 0c896d1f..183c5f0b 100644
                                      : event.status === 'rejected'
                                      ? 'border-red-500/30 text-red-400 bg-red-500/10'
                                      : 'border-slate-600 text-muted-foreground'
-diff --git a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
+diff --git b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
 index f13e00fa..c152df41 100644
---- a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
-+++ b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
+--- b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
++++ a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
 @@ -53,10 +53,10 @@ interface DirectoryEntry {
  const GROUP_COLOR_CLASS: Record<AbsenceSecondaryPermissionHeaderGroup['id'], string> = {
    bookings: 'bg-yellow-300/90 text-slate-900',
@@ -86,10 +86,10 @@ index f13e00fa..c152df41 100644
                                    state === 'edit' && 'border-green-500/45 bg-green-500/20 text-green-100 hover:bg-green-500/30',
                                    differsFromDefault && 'border-red-400 ring-1 ring-red-400/70',
                                    isSaving && 'opacity-70 cursor-wait'
-diff --git a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
+diff --git b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
 index a4dd5747..fd90134f 100644
---- a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
-+++ b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
+--- b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
++++ a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
 @@ -395,7 +395,7 @@ export function AbsenceReasonsContent() {
                                    variant="outline"
                                    className={
@@ -108,10 +108,10 @@ index a4dd5747..fd90134f 100644
                                    : 'border-slate-600 text-muted-foreground'
                                }
                              >
-diff --git a/app/(dashboard)/absence/page.tsx b/app/(dashboard)/absence/page.tsx
+diff --git b/app/(dashboard)/absence/page.tsx a/app/(dashboard)/absence/page.tsx
 index 726ed8dc..282ce4cb 100644
---- a/app/(dashboard)/absence/page.tsx
-+++ b/app/(dashboard)/absence/page.tsx
+--- b/app/(dashboard)/absence/page.tsx
++++ a/app/(dashboard)/absence/page.tsx
 @@ -1635,7 +1635,7 @@ export default function AbsencePage() {
                                    absence.status === 'approved'
                                      ? 'border-green-500/30 text-green-400 bg-green-500/10'
@@ -139,10 +139,10 @@ index 726ed8dc..282ce4cb 100644
                                      : absence.status === 'pending'
                                      ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
                                      : 'border-slate-600 text-muted-foreground'
-diff --git a/app/(dashboard)/admin/faq/page.tsx b/app/(dashboard)/admin/faq/page.tsx
+diff --git b/app/(dashboard)/admin/faq/page.tsx a/app/(dashboard)/admin/faq/page.tsx
 index 6b0c03eb..7911fb1c 100644
---- a/app/(dashboard)/admin/faq/page.tsx
-+++ b/app/(dashboard)/admin/faq/page.tsx
+--- b/app/(dashboard)/admin/faq/page.tsx
++++ a/app/(dashboard)/admin/faq/page.tsx
 @@ -400,7 +400,7 @@ export default function FAQEditorPage() {
        {/* Header */}
        <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
@@ -152,10 +152,10 @@ index 6b0c03eb..7911fb1c 100644
              <HelpCircle className="h-6 w-6 text-blue-600" />
            </div>
            <div className="min-w-0">
-diff --git a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
+diff --git b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
 index 8e867eee..a37a75a3 100644
---- a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
-+++ b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
+--- b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
++++ a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
 @@ -278,7 +278,7 @@ export function TimesheetTypeExceptionsCard() {
                            {isUserChoice ? (
                              <Badge className="bg-amber-600/30 text-amber-100 border border-amber-500/40">Choice</Badge>
@@ -165,10 +165,10 @@ index 8e867eee..a37a75a3 100644
                            ) : (
                              <Badge variant="outline" className="border-slate-600 text-muted-foreground">Default</Badge>
                            )}
-diff --git a/app/(dashboard)/admin/users/page.tsx b/app/(dashboard)/admin/users/page.tsx
+diff --git b/app/(dashboard)/admin/users/page.tsx a/app/(dashboard)/admin/users/page.tsx
 index 030ae8e2..f94b167b 100644
---- a/app/(dashboard)/admin/users/page.tsx
-+++ b/app/(dashboard)/admin/users/page.tsx
+--- b/app/(dashboard)/admin/users/page.tsx
++++ a/app/(dashboard)/admin/users/page.tsx
 @@ -1695,7 +1695,7 @@ export default function UsersAdminPage() {
                                }
                                className={
@@ -214,10 +214,10 @@ index 030ae8e2..f94b167b 100644
                <p className="text-sm text-blue-400 font-medium mb-2">
                  📋 Important Information
                </p>
-diff --git a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
+diff --git b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
 index 03a337df..4b4715b6 100644
---- a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
-+++ b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
+--- b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
++++ a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
 @@ -111,7 +111,7 @@ export function AbsencesApprovalTable({
  
      if (status === 'processed') {
@@ -236,10 +236,10 @@ index 03a337df..4b4715b6 100644
                          Paid
                        </Badge>
                      ) : (
-diff --git a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
+diff --git b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
 index 466258bd..25fbaff0 100644
---- a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
-+++ b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
+--- b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
++++ a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
 @@ -155,7 +155,7 @@ export function TimesheetsApprovalTable({
          );
        case 'processed':
@@ -258,10 +258,10 @@ index 466258bd..25fbaff0 100644
                            >
                              <Edit2 className="h-3.5 w-3.5 mr-1" />
                              Adjust
-diff --git a/app/(dashboard)/approvals/page.tsx b/app/(dashboard)/approvals/page.tsx
+diff --git b/app/(dashboard)/approvals/page.tsx a/app/(dashboard)/approvals/page.tsx
 index 1332761c..9b7ddde4 100644
---- a/app/(dashboard)/approvals/page.tsx
-+++ b/app/(dashboard)/approvals/page.tsx
+--- b/app/(dashboard)/approvals/page.tsx
++++ a/app/(dashboard)/approvals/page.tsx
 @@ -867,7 +867,7 @@ function ApprovalsContent() {
          );
        case 'processed':
@@ -307,10 +307,10 @@ index 1332761c..9b7ddde4 100644
                      Paid
                    </Badge>
                  ) : (
-diff --git a/app/(dashboard)/dashboard/page.tsx b/app/(dashboard)/dashboard/page.tsx
+diff --git b/app/(dashboard)/dashboard/page.tsx a/app/(dashboard)/dashboard/page.tsx
 index b6e8d392..7e7a52aa 100644
---- a/app/(dashboard)/dashboard/page.tsx
-+++ b/app/(dashboard)/dashboard/page.tsx
+--- b/app/(dashboard)/dashboard/page.tsx
++++ a/app/(dashboard)/dashboard/page.tsx
 @@ -73,7 +73,7 @@ function applyAlphaToHSL(color: string): string {
  
    // Fallback: return semi-transparent slate if invalid format
@@ -329,10 +329,10 @@ index b6e8d392..7e7a52aa 100644
          href: '/approvals?tab=timesheets',
        },
        {
-diff --git a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
 index dfcfc977..9c4e7bd7 100644
---- a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
 @@ -66,7 +66,7 @@ function getAuditMetricClasses(tone: AuditTone): string {
      case 'danger':
        return 'border-red-500/30 bg-red-500/10 text-red-100';
@@ -351,10 +351,10 @@ index dfcfc977..9c4e7bd7 100644
      case 'submitted':
        return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
      case 'deleted':
-diff --git a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
 index 01a9e426..8ddc12cf 100644
---- a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
 @@ -46,7 +46,7 @@ function getDvlaMetricClasses(tone: DvlaSummaryTone): string {
      case 'danger':
        return 'border-red-500/30 bg-red-500/10 text-red-100';
@@ -364,10 +364,10 @@ index 01a9e426..8ddc12cf 100644
      default:
        return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
    }
-diff --git a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
 index 7d0a4677..336ced4b 100644
---- a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
 @@ -84,7 +84,7 @@ function getErrorSummaryClasses(tone: ErrorSummaryTone): string {
      case 'danger':
        return 'border-red-500/30 bg-red-500/10 text-red-100';
@@ -377,10 +377,10 @@ index 7d0a4677..336ced4b 100644
      default:
        return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
    }
-diff --git a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
 index 90b8835e..8fa3b64c 100644
---- a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
 @@ -615,7 +615,7 @@ export function LegacyJobCodesDebugPanel() {
                variant="outline"
                onClick={() => void requestCorrectionPreview('batch')}
@@ -408,10 +408,10 @@ index 90b8835e..8fa3b64c 100644
              >
                {individualLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                Preview Individual Change
-diff --git a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
 index da7a5148..25a5563f 100644
---- a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
 @@ -62,7 +62,7 @@ function getNotificationMetricClasses(tone: NotificationSummaryTone): string {
      case 'danger':
        return 'border-red-500/30 bg-red-500/10 text-red-100';
@@ -439,10 +439,10 @@ index da7a5148..25a5563f 100644
              <div className="flex items-center gap-2 text-sm font-medium text-foreground w-full mb-2">
                {selectedUsers.size} user(s) selected
                <Button size="sm" variant="ghost" onClick={selectAll}>Select All</Button>
-diff --git a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
+diff --git b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
 index 7259a4cb..c6d27979 100644
---- a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
-+++ b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
+--- b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
++++ a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
 @@ -70,7 +70,7 @@ function getInsightClasses(tone: UsageAnalyticsInsight['tone']): string {
      case 'danger':
        return 'border-red-500/30 bg-red-500/10 text-red-100';
@@ -479,10 +479,10 @@ index 7259a4cb..c6d27979 100644
      default:
        return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
    }
-diff --git a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
+diff --git b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
 index ecb46616..d4e9402c 100644
---- a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
-+++ b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
+--- b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
++++ a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
 @@ -242,7 +242,7 @@ export function FleetSettingsTab({
                            <CardContent className="p-4">
                              <div className="flex items-center justify-between">
@@ -492,10 +492,10 @@ index ecb46616..d4e9402c 100644
                                    <Truck className="h-5 w-5 text-blue-400" />
                                  </div>
                                  <div className="flex-1">
-diff --git a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
+diff --git b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
 index d9be9bb2..2be786a8 100644
---- a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
-+++ b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
+--- b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
++++ a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
 @@ -258,7 +258,7 @@ function DocumentsTabContent({ hgvId, workshopTasks }: { hgvId: string; workshop
                              className={
                                task.status === 'completed' 
@@ -550,10 +550,10 @@ index d9be9bb2..2be786a8 100644
                        <CardHeader>
                          <CardTitle className="text-lg text-blue-300 flex items-center gap-2">
                            <CheckCircle className="h-5 w-5" />
-diff --git a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
+diff --git b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
 index a81316ed..17e0b1d5 100644
---- a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
-+++ b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
+--- b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
++++ a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
 @@ -246,7 +246,7 @@ function DocumentsTabContent({ plantId, workshopTasks }: { plantId: string; work
                              className={
                                task.status === 'completed' 
@@ -572,10 +572,10 @@ index a81316ed..17e0b1d5 100644
                          <Paperclip className="h-3 w-3 mr-1" />
                          {taskAttachments.length}
                        </Badge>
-diff --git a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
+diff --git b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
 index 92d4b6e4..ad80c4ea 100644
---- a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
-+++ b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
+--- b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
++++ a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
 @@ -263,7 +263,7 @@ function DocumentsTabContent({ vanId, workshopTasks }: { vanId: string; workshop
                              className={
                                task.status === 'completed' 
@@ -630,10 +630,10 @@ index 92d4b6e4..ad80c4ea 100644
                        <CardHeader>
                          <CardTitle className="text-lg text-blue-300 flex items-center gap-2">
                            <CheckCircle className="h-5 w-5" />
-diff --git a/app/(dashboard)/help/page.tsx b/app/(dashboard)/help/page.tsx
+diff --git b/app/(dashboard)/help/page.tsx a/app/(dashboard)/help/page.tsx
 index 57ae0181..80c2abe2 100644
---- a/app/(dashboard)/help/page.tsx
-+++ b/app/(dashboard)/help/page.tsx
+--- b/app/(dashboard)/help/page.tsx
++++ a/app/(dashboard)/help/page.tsx
 @@ -96,9 +96,9 @@ const HELP_NAV_TILES: HelpTileConfig[] = [
      label: 'FAQ',
      helper: 'Find answers',
@@ -673,10 +673,10 @@ index 57ae0181..80c2abe2 100644
                  <p className="text-sm text-blue-900 dark:text-blue-300">
                    <strong>Tip:</strong> Include any error messages, codes, or screenshots you saw. The more detail you provide, the faster we can fix it!
                  </p>
-diff --git a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
+diff --git b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
 index 566cfb60..7a41c25e 100644
---- a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
-+++ b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
+--- b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
++++ a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
 @@ -44,7 +44,7 @@ function getUpdateKindLabel(entry: ReleaseHistoryEntry): string {
  function getUpdateKindClassName(entry: ReleaseHistoryEntry): string {
    return entry.updateKind === 'major'
@@ -686,10 +686,10 @@ index 566cfb60..7a41c25e 100644
  }
  
  function getDownloadFilename(response: Response): string {
-diff --git a/app/(dashboard)/hgv-inspections/new/page.tsx b/app/(dashboard)/hgv-inspections/new/page.tsx
+diff --git b/app/(dashboard)/hgv-inspections/new/page.tsx a/app/(dashboard)/hgv-inspections/new/page.tsx
 index 27366912..6c453e2f 100644
---- a/app/(dashboard)/hgv-inspections/new/page.tsx
-+++ b/app/(dashboard)/hgv-inspections/new/page.tsx
+--- b/app/(dashboard)/hgv-inspections/new/page.tsx
++++ a/app/(dashboard)/hgv-inspections/new/page.tsx
 @@ -1371,7 +1371,7 @@ function NewHgvInspectionContent() {
      if (!isSelected) return 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50';
      if (status === 'ok') return 'bg-green-500/20 border-green-500 shadow-lg shadow-green-500/20';
@@ -726,10 +726,10 @@ index 27366912..6c453e2f 100644
                          Artics only
                        </div>
                      )}
-diff --git a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
+diff --git b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
 index 162e0272..2ec9e5e0 100644
---- a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
-+++ b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
+--- b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
++++ a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
 @@ -225,7 +225,7 @@ export function InventoryEmployeeView({
              </div>
              {currentFleetAssignment ? (
@@ -748,10 +748,10 @@ index 162e0272..2ec9e5e0 100644
                        Secondary Location
                      </Badge>
                    </CardTitle>
-diff --git a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
+diff --git b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
 index d6546875..79ff5929 100644
---- a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
-+++ b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
+--- b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
++++ a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
 @@ -62,7 +62,7 @@ export function InventoryLocationsPanel({
                      </td>
                      <td className="px-4 py-3">
@@ -761,10 +761,10 @@ index d6546875..79ff5929 100644
                            <Link2 className="mr-1 h-3 w-3" />
                            {linkedAssetLabel}
                          </Badge>
-diff --git a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
+diff --git b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
 index 3ad5f9f5..72201b11 100644
---- a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
-+++ b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
+--- b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
++++ a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
 @@ -157,7 +157,7 @@ export function InventorySiteAssignmentsPanel({
                  <div>
                    <div className="font-medium text-white">{getUserLabel(assignment.user)}</div>
@@ -774,10 +774,10 @@ index 3ad5f9f5..72201b11 100644
                        {getSiteLabel(site)}
                      </Badge>
                    </div>
-diff --git a/app/(dashboard)/inventory/components/InventoryTable.tsx b/app/(dashboard)/inventory/components/InventoryTable.tsx
+diff --git b/app/(dashboard)/inventory/components/InventoryTable.tsx a/app/(dashboard)/inventory/components/InventoryTable.tsx
 index 186b3f3e..1f69d331 100644
---- a/app/(dashboard)/inventory/components/InventoryTable.tsx
-+++ b/app/(dashboard)/inventory/components/InventoryTable.tsx
+--- b/app/(dashboard)/inventory/components/InventoryTable.tsx
++++ a/app/(dashboard)/inventory/components/InventoryTable.tsx
 @@ -79,7 +79,7 @@ function getStatusBadgeClass(status: InventoryCheckStatus, item?: InventoryItem)
    if (item && shouldMuteInventoryCheckBadge(item)) return 'border-slate-600/30 bg-slate-700/20 text-slate-300';
    if (status === 'overdue') return 'border-red-500/30 bg-red-500/10 text-red-300';
@@ -787,10 +787,10 @@ index 186b3f3e..1f69d331 100644
    if (status === 'not_required') return 'border-slate-700 bg-slate-800/30 text-slate-500';
    return 'border-green-500/30 bg-green-500/10 text-green-300';
  }
-diff --git a/app/(dashboard)/inventory/items/[itemId]/page.tsx b/app/(dashboard)/inventory/items/[itemId]/page.tsx
+diff --git b/app/(dashboard)/inventory/items/[itemId]/page.tsx a/app/(dashboard)/inventory/items/[itemId]/page.tsx
 index f58603bc..089582b7 100644
---- a/app/(dashboard)/inventory/items/[itemId]/page.tsx
-+++ b/app/(dashboard)/inventory/items/[itemId]/page.tsx
+--- b/app/(dashboard)/inventory/items/[itemId]/page.tsx
++++ a/app/(dashboard)/inventory/items/[itemId]/page.tsx
 @@ -118,7 +118,7 @@ function getStatusBadgeClass(item: InventoryItem): string {
    if (shouldMuteInventoryCheckBadge(item)) return 'border-slate-600/30 bg-slate-700/20 text-slate-300';
    if (status === 'overdue') return 'border-red-500/30 bg-red-500/10 text-red-300';
@@ -800,10 +800,10 @@ index f58603bc..089582b7 100644
    if (status === 'not_required') return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
    return 'border-green-500/30 bg-green-500/10 text-green-300';
  }
-diff --git a/app/(dashboard)/inventory/page.tsx b/app/(dashboard)/inventory/page.tsx
+diff --git b/app/(dashboard)/inventory/page.tsx a/app/(dashboard)/inventory/page.tsx
 index 87ad7a64..e683ad07 100644
---- a/app/(dashboard)/inventory/page.tsx
-+++ b/app/(dashboard)/inventory/page.tsx
+--- b/app/(dashboard)/inventory/page.tsx
++++ a/app/(dashboard)/inventory/page.tsx
 @@ -1159,7 +1159,7 @@ function SummaryCard({ label, value, icon, tone = 'default', onClick }: SummaryC
      default: 'text-inventory bg-inventory-soft',
      danger: 'text-red-300 bg-red-500/10',
@@ -813,10 +813,10 @@ index 87ad7a64..e683ad07 100644
    }[tone];
  
    const card = (
-diff --git a/app/(dashboard)/maintenance/components/CategoryDialog.tsx b/app/(dashboard)/maintenance/components/CategoryDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/CategoryDialog.tsx a/app/(dashboard)/maintenance/components/CategoryDialog.tsx
 index 658a6103..6195aca5 100644
---- a/app/(dashboard)/maintenance/components/CategoryDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/CategoryDialog.tsx
+--- b/app/(dashboard)/maintenance/components/CategoryDialog.tsx
++++ a/app/(dashboard)/maintenance/components/CategoryDialog.tsx
 @@ -381,14 +381,14 @@ export function CategoryDialog({
                    mode === 'edit' 
                      ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
@@ -920,10 +920,10 @@ index 658a6103..6195aca5 100644
                      : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
                  }`}
                  onClick={() => setValue('reminder_email_enabled', !reminderEmail)}
-diff --git a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
 index 62596174..67196651 100644
---- a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
+--- b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
++++ a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
 @@ -354,7 +354,7 @@ export function CategoryRecipientsDialog({
                            profile.hasModuleAccess === false
                              ? 'opacity-60 border border-transparent'
@@ -942,10 +942,10 @@ index 62596174..67196651 100644
                            />
                            <div>
                              <p className="text-sm font-medium text-white">
-diff --git a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
 index a9a4a12d..9f20bbf6 100644
---- a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
+--- b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
++++ a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
 @@ -910,7 +910,7 @@ export function EditMaintenanceDialog({
            </div>
  
@@ -955,10 +955,10 @@ index a9a4a12d..9f20bbf6 100644
              <Label htmlFor="comment" className="text-white">
                Update Comment <span className="text-red-400">*</span>
              </Label>
-diff --git a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
 index 33b636ed..58be696f 100644
---- a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
+--- b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
++++ a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
 @@ -915,7 +915,7 @@ export function EditPlantRecordDialog({
            </div>
  
@@ -968,10 +968,10 @@ index 33b636ed..58be696f 100644
              <Label htmlFor="comment" className="text-white">
                Update Comment <span className="text-red-400">*</span>
              </Label>
-diff --git a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
 index 5256d18e..321959ab 100644
---- a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
+--- b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
++++ a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
 @@ -206,7 +206,7 @@ export function MaintenanceHistoryDialog({
                )}
                <Badge variant="outline" className={`text-xs ${
@@ -999,10 +999,10 @@ index 5256d18e..321959ab 100644
                  <div className="mb-3">
                    <h3 className="text-sm font-medium text-blue-300 uppercase tracking-wide flex items-center gap-2">
                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-diff --git a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
+diff --git b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
 index e3548104..ed399020 100644
---- a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
-+++ b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
+--- b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
++++ a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
 @@ -1287,7 +1287,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
                        relatedTask.status === 'pending' 
                          ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
@@ -1021,10 +1021,10 @@ index e3548104..ed399020 100644
          <CardContent className="pt-6">
            <div className="flex items-start gap-3">
              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-diff --git a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
+diff --git b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
 index ca65da70..18584f18 100644
---- a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
-+++ b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
+--- b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
++++ a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
 @@ -289,7 +289,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
        </Card>
        
@@ -1034,10 +1034,10 @@ index ca65da70..18584f18 100644
          <CardContent className="pt-6">
            <div className="flex items-start gap-3">
              <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-diff --git a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
+diff --git b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
 index 25e9affe..872fac7e 100644
---- a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
-+++ b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
+--- b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
++++ a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
 @@ -376,7 +376,7 @@ export function MaintenanceTable({
    return (
      <>
@@ -1056,10 +1056,10 @@ index 25e9affe..872fac7e 100644
                              >
                                <Archive className="h-5 w-5" />
                              </Button>
-diff --git a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
+diff --git b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
 index 26deaef5..2062303c 100644
---- a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
-+++ b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
+--- b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
++++ a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
 @@ -85,7 +85,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
        case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
        case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
@@ -1087,10 +1087,10 @@ index 26deaef5..2062303c 100644
                  <h3 className="text-base md:text-lg font-semibold text-blue-300 mb-3 flex items-center gap-2">
                    <CheckCircle className="h-4 w-4 md:h-5 md:w-5" />
                    Current MOT Status
-diff --git a/app/(dashboard)/maintenance/components/PlantTable.tsx b/app/(dashboard)/maintenance/components/PlantTable.tsx
+diff --git b/app/(dashboard)/maintenance/components/PlantTable.tsx a/app/(dashboard)/maintenance/components/PlantTable.tsx
 index 7ab44704..8da28594 100644
---- a/app/(dashboard)/maintenance/components/PlantTable.tsx
-+++ b/app/(dashboard)/maintenance/components/PlantTable.tsx
+--- b/app/(dashboard)/maintenance/components/PlantTable.tsx
++++ a/app/(dashboard)/maintenance/components/PlantTable.tsx
 @@ -489,7 +489,7 @@ export function PlantTable({
    return (
      <>
@@ -1100,10 +1100,10 @@ index 7ab44704..8da28594 100644
          <Monitor className="h-4 w-4 text-blue-400" />
          <AlertDescription className="text-blue-200 text-sm">
            Mobile view shows essential information only. Desktop recommended for complete data and advanced features.
-diff --git a/app/(dashboard)/notifications/page.tsx b/app/(dashboard)/notifications/page.tsx
+diff --git b/app/(dashboard)/notifications/page.tsx a/app/(dashboard)/notifications/page.tsx
 index 434a7dac..ea8ac3e2 100644
---- a/app/(dashboard)/notifications/page.tsx
-+++ b/app/(dashboard)/notifications/page.tsx
+--- b/app/(dashboard)/notifications/page.tsx
++++ a/app/(dashboard)/notifications/page.tsx
 @@ -213,7 +213,7 @@ function NotificationDetailPane({
      return (
        <Card className={`flex min-h-[42rem] flex-col border-border bg-white dark:bg-slate-900 ${className}`}>
@@ -1149,10 +1149,10 @@ index 434a7dac..ea8ac3e2 100644
                                  <Bell className="h-5 w-5 text-sky-300" />
                                </div>
                              )}
-diff --git a/app/(dashboard)/plant-inspections/new/page.tsx b/app/(dashboard)/plant-inspections/new/page.tsx
+diff --git b/app/(dashboard)/plant-inspections/new/page.tsx a/app/(dashboard)/plant-inspections/new/page.tsx
 index 703ef1d1..6c885aac 100644
---- a/app/(dashboard)/plant-inspections/new/page.tsx
-+++ b/app/(dashboard)/plant-inspections/new/page.tsx
+--- b/app/(dashboard)/plant-inspections/new/page.tsx
++++ a/app/(dashboard)/plant-inspections/new/page.tsx
 @@ -1859,7 +1859,7 @@ function NewPlantInspectionContent() {
            </div>
            
@@ -1162,10 +1162,10 @@ index 703ef1d1..6c885aac 100644
                <p className="text-sm text-blue-400">
                  <Info className="h-4 w-4 inline mr-2" />
                  Plant and date are locked once you start filling the checklist.
-diff --git a/app/(dashboard)/profile/page.tsx b/app/(dashboard)/profile/page.tsx
+diff --git b/app/(dashboard)/profile/page.tsx a/app/(dashboard)/profile/page.tsx
 index b8d6e0f4..6829c757 100644
---- a/app/(dashboard)/profile/page.tsx
-+++ b/app/(dashboard)/profile/page.tsx
+--- b/app/(dashboard)/profile/page.tsx
++++ a/app/(dashboard)/profile/page.tsx
 @@ -62,9 +62,9 @@ const SETTINGS_NAV_ITEMS: Array<{
      value: 'my-details',
      label: 'My details',
@@ -1179,10 +1179,10 @@ index b8d6e0f4..6829c757 100644
    },
    {
      value: 'notifications',
-diff --git a/app/(dashboard)/projects/manage/page.tsx b/app/(dashboard)/projects/manage/page.tsx
+diff --git b/app/(dashboard)/projects/manage/page.tsx a/app/(dashboard)/projects/manage/page.tsx
 index 489d9aa0..01954a35 100644
---- a/app/(dashboard)/projects/manage/page.tsx
-+++ b/app/(dashboard)/projects/manage/page.tsx
+--- b/app/(dashboard)/projects/manage/page.tsx
++++ a/app/(dashboard)/projects/manage/page.tsx
 @@ -323,7 +323,7 @@ export default function ProjectsManagePage() {
    return (
      <AppPageShell>
@@ -1192,10 +1192,10 @@ index 489d9aa0..01954a35 100644
          <Monitor className="h-4 w-4 text-blue-400" />
          <AlertDescription className="text-blue-200 text-sm">
            Tap a document card to expand details and actions.
-diff --git a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
+diff --git b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
 index e4759f93..96b09d58 100644
---- a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
-+++ b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
+--- b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
++++ a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
 @@ -154,7 +154,7 @@ function getTimelineEventMeta(eventType: string) {
      case 'quote_created':
        return {
@@ -1253,10 +1253,10 @@ index e4759f93..96b09d58 100644
                              )}
                            </div>
                            <p className="text-xs text-muted-foreground">
-diff --git a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
+diff --git b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
 index 1b8c0b79..19cb907c 100644
---- a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
-+++ b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
+--- b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
++++ a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
 @@ -1348,7 +1348,7 @@ export function QuoteFormDialog({
                </div>
  
@@ -1266,10 +1266,10 @@ index 1b8c0b79..19cb907c 100644
                    The client quote will refer to attached documents for pricing/details instead of showing line item prices.
                  </div>
                ) : (
-diff --git a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
+diff --git b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
 index ed03fd32..ca0cea21 100644
---- a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
-+++ b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
+--- b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
++++ a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
 @@ -47,7 +47,7 @@ function getStatusBadgeClass(item: QuoteOverviewItem): string {
    }
  
@@ -1288,10 +1288,10 @@ index ed03fd32..ca0cea21 100644
      slate: 'border-slate-700 bg-slate-900/70 text-slate-100',
    }[accent];
  
-diff --git a/app/(dashboard)/quotes/overview/[reference]/page.tsx b/app/(dashboard)/quotes/overview/[reference]/page.tsx
+diff --git b/app/(dashboard)/quotes/overview/[reference]/page.tsx a/app/(dashboard)/quotes/overview/[reference]/page.tsx
 index 9327eee2..2d623d6a 100644
---- a/app/(dashboard)/quotes/overview/[reference]/page.tsx
-+++ b/app/(dashboard)/quotes/overview/[reference]/page.tsx
+--- b/app/(dashboard)/quotes/overview/[reference]/page.tsx
++++ a/app/(dashboard)/quotes/overview/[reference]/page.tsx
 @@ -95,7 +95,7 @@ function SummaryCard({ label, value, helper, icon, accent = 'slate' }: SummaryCa
    const accentClass = {
      yellow: 'border-brand-yellow/30 bg-brand-yellow/10 text-brand-yellow',
@@ -1301,10 +1301,10 @@ index 9327eee2..2d623d6a 100644
      slate: 'border-slate-700 bg-slate-950 text-slate-200',
    }[accent];
  
-diff --git a/app/(dashboard)/quotes/types.ts b/app/(dashboard)/quotes/types.ts
+diff --git b/app/(dashboard)/quotes/types.ts a/app/(dashboard)/quotes/types.ts
 index a7d898b0..aea98710 100644
---- a/app/(dashboard)/quotes/types.ts
-+++ b/app/(dashboard)/quotes/types.ts
+--- b/app/(dashboard)/quotes/types.ts
++++ a/app/(dashboard)/quotes/types.ts
 @@ -403,12 +403,12 @@ export const QUOTE_STATUS_CONFIG: Record<QuoteStatus, { label: string; color: st
    pending_internal_approval: { label: 'Pending Confirmation', color: 'border-amber-500/30 text-amber-400 bg-amber-500/10' },
    approved: { label: 'Approved', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
@@ -1321,10 +1321,10 @@ index a7d898b0..aea98710 100644
    completed_part: { label: 'Completed In Part', color: 'border-yellow-500/30 text-yellow-400 bg-yellow-500/10' },
    completed_full: { label: 'Completed In Full', color: 'border-lime-500/30 text-lime-400 bg-lime-500/10' },
    partially_invoiced: { label: 'Partially Invoiced', color: 'border-fuchsia-500/30 text-fuchsia-400 bg-fuchsia-500/10' },
-diff --git a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
+diff --git b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
 index 90dfc0ab..5f239de9 100644
---- a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
-+++ b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
+--- b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
++++ a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
 @@ -6,7 +6,7 @@ import type { ScheduleAssignment, ScheduleDayTeamSlot, ScheduleDayTeams, Schedul
  
  // Slot colours are stable across dates; occupancy and conflict colours remain separate.
@@ -1352,10 +1352,10 @@ index 90dfc0ab..5f239de9 100644
  ] as const;
  
  export function scheduleTeamColour(slotIndex: number) {
-diff --git a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
+diff --git b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
 index 34cba21b..46dc610c 100644
---- a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
-+++ b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
+--- b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
++++ a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
 @@ -721,7 +721,7 @@ function AssignmentChip({
        className={cn(
          'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 text-[11px] font-medium',
@@ -1394,10 +1394,10 @@ index 34cba21b..46dc610c 100644
                    role="status"
                  >
                    {coldWeekState?.status === 'failed' ? (
-diff --git a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
-index 3bdf1c7f..49039177 100644
---- a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
-+++ b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
+diff --git b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
+index d4fa18a7..49039177 100644
+--- b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
++++ a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
 @@ -1,34 +1,34 @@
  export const schedulingControlStyles = {
    primary:
@@ -1422,7 +1422,7 @@ index 3bdf1c7f..49039177 100644
 -    'border-[#64748b] bg-slate-900 text-[#cbd5e1]',
 +    'border-[#64748b] bg-[#0f172a] text-[#cbd5e1]',
    resourceJob:
--    'border border-sky-700/60 bg-green-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-sky-700/60 bg-slate-900 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 +    'border border-sky-700/60 bg-sky-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-sky-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
    resourceEmployee:
 -    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
@@ -1430,12 +1430,12 @@ index 3bdf1c7f..49039177 100644
    dayTeamTints: [
 -    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-emerald-700/60 bg-emerald-950/35 text-emerald-50 shadow-sm hover:border-emerald-500/70 hover:bg-emerald-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
--    'border border-green-700/60 bg-green-950/35 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-green-700/60 bg-slate-900 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-lime-700/60 bg-lime-950/30 text-lime-50 shadow-sm hover:border-lime-500/70 hover:bg-lime-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
--    'border border-cyan-700/60 bg-green-950/30 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-green-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-cyan-700/60 bg-slate-900 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-teal-600/70 bg-teal-900/40 text-teal-50 shadow-sm hover:border-teal-400/70 hover:bg-teal-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-emerald-600/70 bg-emerald-900/40 text-emerald-50 shadow-sm hover:border-emerald-400/70 hover:bg-emerald-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
--    'border border-green-600/70 bg-green-900/40 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-green-600/70 bg-slate-800 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-lime-600/70 bg-lime-900/35 text-lime-50 shadow-sm hover:border-lime-400/70 hover:bg-lime-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 -    'border border-cyan-600/70 bg-green-900/35 text-cyan-50 shadow-sm hover:border-cyan-400/70 hover:bg-green-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 +    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
@@ -1453,10 +1453,10 @@ index 3bdf1c7f..49039177 100644
 -    'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
 +    'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
  } as const;
-diff --git a/app/(dashboard)/suggestions/manage/page.tsx b/app/(dashboard)/suggestions/manage/page.tsx
+diff --git b/app/(dashboard)/suggestions/manage/page.tsx a/app/(dashboard)/suggestions/manage/page.tsx
 index 2e9aee9b..8211855a 100644
---- a/app/(dashboard)/suggestions/manage/page.tsx
-+++ b/app/(dashboard)/suggestions/manage/page.tsx
+--- b/app/(dashboard)/suggestions/manage/page.tsx
++++ a/app/(dashboard)/suggestions/manage/page.tsx
 @@ -223,7 +223,7 @@ export default function SuggestionsManagePage() {
        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
          {[
@@ -1466,10 +1466,10 @@ index 2e9aee9b..8211855a 100644
            { key: 'under_review', label: 'Reviewing', color: 'bg-yellow-500' },
            { key: 'planned', label: 'Planned', color: 'bg-purple-500' },
            { key: 'completed', label: 'Done', color: 'bg-green-500' },
-diff --git a/app/(dashboard)/test-error-logging/page.tsx b/app/(dashboard)/test-error-logging/page.tsx
+diff --git b/app/(dashboard)/test-error-logging/page.tsx a/app/(dashboard)/test-error-logging/page.tsx
 index 7a81b58a..0bbbfc08 100644
---- a/app/(dashboard)/test-error-logging/page.tsx
-+++ b/app/(dashboard)/test-error-logging/page.tsx
+--- b/app/(dashboard)/test-error-logging/page.tsx
++++ a/app/(dashboard)/test-error-logging/page.tsx
 @@ -186,7 +186,7 @@ export default function TestErrorLoggingPage() {
  
    return (
@@ -1496,10 +1496,10 @@ index 7a81b58a..0bbbfc08 100644
              <li>Click the &quot;Error Log&quot; tab</li>
              <li>Verify that all test errors appear with full details</li>
              <li>Check that each error has clear descriptions and context</li>
-diff --git a/app/(dashboard)/timesheets/[id]/page.tsx b/app/(dashboard)/timesheets/[id]/page.tsx
+diff --git b/app/(dashboard)/timesheets/[id]/page.tsx a/app/(dashboard)/timesheets/[id]/page.tsx
 index 824c4886..ee5ac189 100644
---- a/app/(dashboard)/timesheets/[id]/page.tsx
-+++ b/app/(dashboard)/timesheets/[id]/page.tsx
+--- b/app/(dashboard)/timesheets/[id]/page.tsx
++++ a/app/(dashboard)/timesheets/[id]/page.tsx
 @@ -832,7 +832,7 @@ export default function ViewTimesheetPage() {
      
      // Apply blue styling for final states (processed and adjusted)
@@ -1527,10 +1527,10 @@ index 824c4886..ee5ac189 100644
                                : ''
                            }`}
                          />
-diff --git a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
+diff --git b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
 index 27a2b569..50fec9e4 100644
---- a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
-+++ b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
+--- b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
++++ a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
 @@ -115,7 +115,7 @@ export function ConfirmationModal({
  
          <div className="space-y-6">
@@ -1558,10 +1558,10 @@ index 27a2b569..50fec9e4 100644
                                Night Shift
                              </Badge>
                            )}
-diff --git a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
+diff --git b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
 index bd684586..5e0a21fc 100644
---- a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
-+++ b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
+--- b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
++++ a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
 @@ -55,7 +55,7 @@ function getStatusBadge(status: string) {
    };
  
@@ -1571,10 +1571,10 @@ index bd684586..5e0a21fc 100644
  
    return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
  }
-diff --git a/app/(dashboard)/timesheets/components/WeekSelector.tsx b/app/(dashboard)/timesheets/components/WeekSelector.tsx
+diff --git b/app/(dashboard)/timesheets/components/WeekSelector.tsx a/app/(dashboard)/timesheets/components/WeekSelector.tsx
 index 4155d602..3213bf89 100644
---- a/app/(dashboard)/timesheets/components/WeekSelector.tsx
-+++ b/app/(dashboard)/timesheets/components/WeekSelector.tsx
+--- b/app/(dashboard)/timesheets/components/WeekSelector.tsx
++++ a/app/(dashboard)/timesheets/components/WeekSelector.tsx
 @@ -340,7 +340,7 @@ export function WeekSelector({
  
            {/* Success Alert (editing existing) */}
@@ -1584,10 +1584,10 @@ index 4155d602..3213bf89 100644
                <CheckCircle2 className="h-4 w-4 text-blue-400" />
                <AlertDescription className="text-blue-400">
                  Found existing draft timesheet. Loading it for editing...
-diff --git a/app/(dashboard)/timesheets/page.tsx b/app/(dashboard)/timesheets/page.tsx
+diff --git b/app/(dashboard)/timesheets/page.tsx a/app/(dashboard)/timesheets/page.tsx
 index 4eefa64a..e4a4728b 100644
---- a/app/(dashboard)/timesheets/page.tsx
-+++ b/app/(dashboard)/timesheets/page.tsx
+--- b/app/(dashboard)/timesheets/page.tsx
++++ a/app/(dashboard)/timesheets/page.tsx
 @@ -457,7 +457,7 @@ export default function TimesheetsPage() {
      
      // Apply blue styling for final states (processed and adjusted)
@@ -1597,10 +1597,10 @@ index 4eefa64a..e4a4728b 100644
  
      return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
    };
-diff --git a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
+diff --git b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
 index fdc8a67e..c3064794 100644
---- a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
-+++ b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
+--- b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
++++ a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
 @@ -1629,7 +1629,7 @@ export function CivilsTimesheet({
        )}
  
@@ -1628,10 +1628,10 @@ index fdc8a67e..c3064794 100644
                                  : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
                              } disabled:opacity-30 disabled:cursor-not-allowed`}
                              title="Working in Yard"
-diff --git a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
+diff --git b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
 index 2fbe9c10..cba350c7 100644
---- a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
-+++ b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
+--- b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
++++ a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
 @@ -1834,7 +1834,7 @@ export function PlantTimesheetV2({
                              disabled={disableInputs || disableStatusForTraining}
                              className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 transition-all ${
@@ -1650,10 +1650,10 @@ index 2fbe9c10..cba350c7 100644
                                      : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
                                  } disabled:opacity-30 disabled:cursor-not-allowed`}
                                  title="Working in Yard"
-diff --git a/app/(dashboard)/van-inspections/new/page.tsx b/app/(dashboard)/van-inspections/new/page.tsx
+diff --git b/app/(dashboard)/van-inspections/new/page.tsx a/app/(dashboard)/van-inspections/new/page.tsx
 index 70dffae7..95413a46 100644
---- a/app/(dashboard)/van-inspections/new/page.tsx
-+++ b/app/(dashboard)/van-inspections/new/page.tsx
+--- b/app/(dashboard)/van-inspections/new/page.tsx
++++ a/app/(dashboard)/van-inspections/new/page.tsx
 @@ -2416,7 +2416,7 @@ function NewInspectionContent() {
            </div>
            
@@ -1663,10 +1663,10 @@ index 70dffae7..95413a46 100644
                <p className="text-sm text-blue-400">
                  <Info className="h-4 w-4 inline mr-2" />
                  Van and date are locked once you start filling the checklist. Leave the page to discard this draft.
-diff --git a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
+diff --git b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
 index 55416ee4..46ad55d6 100644
---- a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
-+++ b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
+--- b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
++++ a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
 @@ -143,7 +143,7 @@ export function WorkshopTaskStatusDialogs({
            </DialogHeader>
  
@@ -1685,10 +1685,10 @@ index 55416ee4..46ad55d6 100644
                <p className="text-sm text-blue-300">
                  This task will be moved back to &quot;In Progress&quot; and work can continue.
                </p>
-diff --git a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
+diff --git b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
 index bdd065e5..eb56f112 100644
---- a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
-+++ b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
+--- b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
++++ a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
 @@ -547,7 +547,7 @@ export function WorkshopTasksOverviewTab({
            label: 'In Progress',
            count: inProgressTaskCount,
@@ -1828,15 +1828,15 @@ index bdd065e5..eb56f112 100644
                                            {task.workshop_task_categories.name}
                                          </Badge>
                                        )}
-diff --git a/app/displayboard-workshop-tv/route.ts b/app/displayboard-workshop-tv/route.ts
-index a6173970..a84c3dc6 100644
---- a/app/displayboard-workshop-tv/route.ts
-+++ b/app/displayboard-workshop-tv/route.ts
+diff --git b/app/displayboard-workshop-tv/route.ts a/app/displayboard-workshop-tv/route.ts
+index 190eaa93..a84c3dc6 100644
+--- b/app/displayboard-workshop-tv/route.ts
++++ a/app/displayboard-workshop-tv/route.ts
 @@ -49,7 +49,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
      html.tv-text-step-4 { font-size: 150%; }
      html.tv-text-step-5 { font-size: 200%; }
      body {
--      background: #001102;
+-      background: #101010;
 +      background: #020617;
        color: #fff;
        font-family: Arial, Helvetica, sans-serif;
@@ -1845,7 +1845,7 @@ index a6173970..a84c3dc6 100644
        width: 1920px;
        height: 1080px;
        padding: 80px;
--      background: #001102;
+-      background: #101010;
 +      background: #020617;
        text-align: center;
        -webkit-transform-origin: 0 0;
@@ -1854,9 +1854,9 @@ index a6173970..a84c3dc6 100644
        width: 1920px;
        height: 1080px;
        padding: 24px;
--      background: #001102;
--      background: -webkit-linear-gradient(315deg, #001102, #001f04 48%, #0d2911);
--      background: linear-gradient(135deg, #001102, #001f04 48%, #0d2911);
+-      background: #101010;
+-      background: -webkit-linear-gradient(315deg, #101010, #1c1c1c 48%, #282828);
+-      background: linear-gradient(135deg, #101010, #1c1c1c 48%, #282828);
 +      background: #020617;
 +      background: -webkit-linear-gradient(315deg, #020617, #0f172a 48%, #111827);
 +      background: linear-gradient(135deg, #020617, #0f172a 48%, #111827);
@@ -1881,10 +1881,10 @@ index a6173970..a84c3dc6 100644
      .row-hold { border-color: rgba(168,85,247,0.34); background: rgba(168,85,247,0.11); }
      .row-main { float: left; width: 72%; }
      .row-title { font-size: 1.5625rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-diff --git a/app/displayboard-workshop/page.tsx b/app/displayboard-workshop/page.tsx
-index 5f099273..2610f0c8 100644
---- a/app/displayboard-workshop/page.tsx
-+++ b/app/displayboard-workshop/page.tsx
+diff --git b/app/displayboard-workshop/page.tsx a/app/displayboard-workshop/page.tsx
+index e7c79b7c..2610f0c8 100644
+--- b/app/displayboard-workshop/page.tsx
++++ a/app/displayboard-workshop/page.tsx
 @@ -96,7 +96,7 @@ function StatTile({
    const toneClass = {
      red: 'border-red-500/45 bg-red-500/15 text-red-200',
@@ -1916,27 +1916,27 @@ index 5f099273..2610f0c8 100644
    }
  
    return (
--    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#001102,#001f04_48%,#0d2911)] p-6 text-white">
+-    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#101010,#1c1c1c_48%,#282828)] p-6 text-white">
 +    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#020617,#0f172a_48%,#111827)] p-6 text-white">
        <div className="grid h-full grid-rows-[88px_auto_minmax(0,1fr)] gap-5">
          <header className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.06] px-7 shadow-2xl shadow-black/20">
            <div className="flex items-center gap-4">
-diff --git a/app/globals.css b/app/globals.css
-index c922afdd..3985a173 100644
---- a/app/globals.css
-+++ b/app/globals.css
+diff --git b/app/globals.css a/app/globals.css
+index 8fc6c906..3985a173 100644
+--- b/app/globals.css
++++ a/app/globals.css
 @@ -1,19 +1,5 @@
  @import "tailwindcss";
  
--/* FFTS leaf-outline surfaces. Legacy slate/brand-yellow names remain compatible
+-/* Neutral working surfaces with FFTS green accents. Legacy slate/brand-yellow names remain compatible
 -   with existing components; only the app palette changes. */
 -@theme inline {
--  --color-slate-950: #001102;
--  --color-slate-900: #001f04;
--  --color-slate-800: #0d2911;
--  --color-slate-700: #1f3d24;
--  --color-slate-600: #436e49;
--  --color-slate-500: #66856b;
+-  --color-slate-950: #101010;
+-  --color-slate-900: #1c1c1c;
+-  --color-slate-800: #282828;
+-  --color-slate-700: #3a3a3a;
+-  --color-slate-600: #525252;
+-  --color-slate-500: #737373;
 -  --color-brand-yellow: hsl(var(--brand-yellow));
 -  --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
 -  --color-brand-yellow-light: hsl(var(--brand-yellow-light));
@@ -1949,35 +1949,35 @@ index c922afdd..3985a173 100644
      --top-nav-h: 68px;
      
      /* Semantic theme tokens - Dark theme by default */
--    --background: 128 100% 6%; /* slate-900 */
+-    --background: 0 0% 8%; /* slate-900 */
 +    --background: 222 47% 11%; /* slate-900 */
      --foreground: 210 40% 98%; /* slate-50 */
--    --card: 128 100% 6%; /* slate-900 */
+-    --card: 0 0% 11%; /* slate-900 */
 +    --card: 222 47% 11%; /* slate-900 */
      --card-foreground: 210 40% 98%;
--    --popover: 128 100% 6%;
+-    --popover: 0 0% 14%;
 +    --popover: 222 47% 11%;
      --popover-foreground: 210 40% 98%;
      
 -    /* Primary - Forest Farm leaf-green accent */
 -    --primary: 90 51% 62%;
--    --primary-foreground: 128 100% 6%;
+-    --primary-foreground: 0 0% 8%;
 +    /* Primary - Forest Farm brand yellow */
 +    --primary: 48 87% 69%;
 +    --primary-foreground: 222 47% 11%;
      
      /* Secondary - slate-800 */
--    --secondary: 129 52% 13%;
+-    --secondary: 0 0% 16%;
 +    --secondary: 217 33% 17%;
      --secondary-foreground: 210 40% 98%;
      
      /* Muted - slate-800 */
--    --muted: 129 52% 13%;
+-    --muted: 0 0% 16%;
 +    --muted: 217 33% 17%;
      --muted-foreground: 215 20% 65%; /* slate-400 */
      
      /* Accent - slate-800 */
--    --accent: 129 52% 13%;
+-    --accent: 0 0% 16%;
 +    --accent: 217 33% 17%;
      --accent-foreground: 210 40% 98%;
      
@@ -1986,8 +1986,8 @@ index c922afdd..3985a173 100644
      --admin-dark: 260 60% 35%;
      
      /* UI Elements */
--    --border: 129 52% 13%; /* slate-800 */
--    --input: 129 52% 13%;
+-    --border: 0 0% 24%; /* slate-800 */
+-    --input: 0 0% 24%;
 -    --ring: 90 51% 62%;
 +    --border: 217 33% 17%; /* slate-800 */
 +    --input: 217 33% 17%;
@@ -2006,32 +2006,32 @@ index c922afdd..3985a173 100644
  
    .dark {
      /* Dark mode (same as root for single-theme approach) */
--    --background: 128 100% 6%;
+-    --background: 0 0% 8%;
 +    --background: 222 47% 11%;
      --foreground: 210 40% 98%;
--    --card: 128 100% 6%;
+-    --card: 0 0% 11%;
 +    --card: 222 47% 11%;
      --card-foreground: 210 40% 98%;
--    --popover: 128 100% 6%;
+-    --popover: 0 0% 14%;
 +    --popover: 222 47% 11%;
      --popover-foreground: 210 40% 98%;
 -    --primary: 90 51% 62%;
--    --primary-foreground: 128 100% 6%;
--    --secondary: 129 52% 13%;
+-    --primary-foreground: 0 0% 8%;
+-    --secondary: 0 0% 16%;
 +    --primary: 48 87% 69%;
 +    --primary-foreground: 222 47% 11%;
 +    --secondary: 217 33% 17%;
      --secondary-foreground: 210 40% 98%;
--    --muted: 129 52% 13%;
+-    --muted: 0 0% 16%;
 +    --muted: 217 33% 17%;
      --muted-foreground: 215 20% 65%;
--    --accent: 129 52% 13%;
+-    --accent: 0 0% 16%;
 +    --accent: 217 33% 17%;
      --accent-foreground: 210 40% 98%;
      --destructive: 0 62.8% 30.6%;
      --destructive-foreground: 210 40% 98%;
--    --border: 129 52% 13%;
--    --input: 129 52% 13%;
+-    --border: 0 0% 24%;
+-    --input: 0 0% 24%;
 -    --ring: 90 51% 62%;
 +    --border: 217 33% 17%;
 +    --input: 217 33% 17%;
@@ -2043,7 +2043,7 @@ index c922afdd..3985a173 100644
  
    [data-accent="scheduling"] {
      --primary: var(--scheduling-primary);
--    --primary-foreground: 128 100% 6%;
+-    --primary-foreground: 0 0% 8%;
 +    --primary-foreground: 222 47% 11%;
      --ring: var(--scheduling-primary);
    }
@@ -2056,7 +2056,7 @@ index c922afdd..3985a173 100644
 +  /* Brand (yellow) remains the default for non-module pages */
    [data-accent="brand"] {
 -    --primary: 90 51% 62%;
--    --primary-foreground: 128 100% 6%; /* dark text for the light green accent */
+-    --primary-foreground: 0 0% 8%; /* dark text for the light green accent */
 -    --ring: 90 51% 62%;
 +    --primary: 48 87% 69%;
 +    --primary-foreground: 222 47% 11%; /* dark text for yellow */
@@ -2074,7 +2074,7 @@ index c922afdd..3985a173 100644
    
    body {
 -    background-color: hsl(var(--background));
--    background-image: linear-gradient(135deg, var(--color-slate-900) 0%, var(--color-slate-800) 50%, var(--color-slate-700) 100%);
+-    background-image: none;
 +    background-color: #0f172a;
 +    background-image: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
      background-attachment: fixed;
@@ -2140,38 +2140,38 @@ index c922afdd..3985a173 100644
  }
  
  [role="tablist"] [role="tab"]:first-child {
-diff --git a/app/layout.tsx b/app/layout.tsx
-index dac0f215..49080309 100644
---- a/app/layout.tsx
-+++ b/app/layout.tsx
+diff --git b/app/layout.tsx a/app/layout.tsx
+index 1aeba853..49080309 100644
+--- b/app/layout.tsx
++++ a/app/layout.tsx
 @@ -30,7 +30,7 @@ export const viewport: Viewport = {
    maximumScale: 1,
    userScalable: false,
    viewportFit: "cover",
--  themeColor: "#001f04",
+-  themeColor: "#141414",
 +  themeColor: "#0f172a",
  };
  
  export default function RootLayout({
-diff --git a/app/manifest.json/route.ts b/app/manifest.json/route.ts
-index 70fe32ca..e3c18393 100644
---- a/app/manifest.json/route.ts
-+++ b/app/manifest.json/route.ts
+diff --git b/app/manifest.json/route.ts a/app/manifest.json/route.ts
+index 51f09b8f..e3c18393 100644
+--- b/app/manifest.json/route.ts
++++ a/app/manifest.json/route.ts
 @@ -11,8 +11,8 @@ export async function GET(): Promise<Response> {
      scope: '/',
      display: 'standalone',
      display_override: ['standalone'],
--    background_color: '#001f04',
--    theme_color: '#001f04',
+-    background_color: '#141414',
+-    theme_color: '#141414',
 +    background_color: templateConfig.branding.backgroundColor,
 +    theme_color: templateConfig.branding.brandColor,
      icons: [
        {
          src: templateConfig.branding.faviconPath,
-diff --git a/components/admin/JobRolesTab.tsx b/components/admin/JobRolesTab.tsx
+diff --git b/components/admin/JobRolesTab.tsx a/components/admin/JobRolesTab.tsx
 index 8fb32064..52faf101 100644
---- a/components/admin/JobRolesTab.tsx
-+++ b/components/admin/JobRolesTab.tsx
+--- b/components/admin/JobRolesTab.tsx
++++ a/components/admin/JobRolesTab.tsx
 @@ -342,7 +342,7 @@ export function JobRolesTab() {
                            ) : isAdminRole(role) ? (
                              <Badge variant="destructive">Admin</Badge>
@@ -2181,10 +2181,10 @@ index 8fb32064..52faf101 100644
                            ) : role.name === 'contractor' ? (
                              <Badge variant="outline" className="text-orange-300 border-orange-500/50 bg-orange-500/10">Contractor</Badge>
                            ) : role.is_manager_admin ? (
-diff --git a/components/admin/RoleManagement.tsx b/components/admin/RoleManagement.tsx
+diff --git b/components/admin/RoleManagement.tsx a/components/admin/RoleManagement.tsx
 index ffe6bf01..f1f4b5d1 100644
---- a/components/admin/RoleManagement.tsx
-+++ b/components/admin/RoleManagement.tsx
+--- b/components/admin/RoleManagement.tsx
++++ a/components/admin/RoleManagement.tsx
 @@ -135,7 +135,7 @@ function getPermissionKeyRoleBadge(level: PermissionAccessLevel): {
      return {
        label: 'Supervisor',
@@ -2203,10 +2203,10 @@ index ffe6bf01..f1f4b5d1 100644
      };
    }
  
-diff --git a/components/fleet/AssetHistoryTable.tsx b/components/fleet/AssetHistoryTable.tsx
+diff --git b/components/fleet/AssetHistoryTable.tsx a/components/fleet/AssetHistoryTable.tsx
 index ae2cebe0..8723f269 100644
---- a/components/fleet/AssetHistoryTable.tsx
-+++ b/components/fleet/AssetHistoryTable.tsx
+--- b/components/fleet/AssetHistoryTable.tsx
++++ a/components/fleet/AssetHistoryTable.tsx
 @@ -118,11 +118,11 @@ function getWorkshopStatusBadge(row: Extract<AssetHistoryRow, { type: 'workshop'
      },
      in_progress: {
@@ -2248,10 +2248,10 @@ index ae2cebe0..8723f269 100644
  }
  
  function getRowIcon(row: AssetHistoryRow) {
-diff --git a/components/fleet/AssetLocationMapModal.tsx b/components/fleet/AssetLocationMapModal.tsx
+diff --git b/components/fleet/AssetLocationMapModal.tsx a/components/fleet/AssetLocationMapModal.tsx
 index be4c86af..c8a29e9f 100644
---- a/components/fleet/AssetLocationMapModal.tsx
-+++ b/components/fleet/AssetLocationMapModal.tsx
+--- b/components/fleet/AssetLocationMapModal.tsx
++++ a/components/fleet/AssetLocationMapModal.tsx
 @@ -223,7 +223,7 @@ export function AssetLocationMapModal({
                Current asset
              </span>
@@ -2261,10 +2261,10 @@ index be4c86af..c8a29e9f 100644
                Other vans / plant
              </span>
            </div>
-diff --git a/components/fleet/ExpandingVehicleCard.tsx b/components/fleet/ExpandingVehicleCard.tsx
+diff --git b/components/fleet/ExpandingVehicleCard.tsx a/components/fleet/ExpandingVehicleCard.tsx
 index 51b611a1..f30f552e 100644
---- a/components/fleet/ExpandingVehicleCard.tsx
-+++ b/components/fleet/ExpandingVehicleCard.tsx
+--- b/components/fleet/ExpandingVehicleCard.tsx
++++ a/components/fleet/ExpandingVehicleCard.tsx
 @@ -266,7 +266,7 @@ export function ExpandingVehicleCard({ vehicle, categories, onUpdate, fromTab =
            onClick={handleExpand}
          >
@@ -2283,10 +2283,10 @@ index 51b611a1..f30f552e 100644
                  >
                    Edit Details
                  </Button>
-diff --git a/components/messages/CreateReminderForm.tsx b/components/messages/CreateReminderForm.tsx
+diff --git b/components/messages/CreateReminderForm.tsx a/components/messages/CreateReminderForm.tsx
 index 4a5d6212..9b3898e9 100644
---- a/components/messages/CreateReminderForm.tsx
-+++ b/components/messages/CreateReminderForm.tsx
+--- b/components/messages/CreateReminderForm.tsx
++++ a/components/messages/CreateReminderForm.tsx
 @@ -198,7 +198,7 @@ export function CreateReminderForm({ onSuccess }: CreateReminderFormProps) {
                onClick={() => setMode('notification')}
                className={`rounded-lg border p-4 text-left transition-all ${
@@ -2296,10 +2296,10 @@ index 4a5d6212..9b3898e9 100644
                    : 'border-border bg-white hover:bg-muted/30 dark:bg-slate-900'
                }`}
              >
-diff --git a/components/messages/CreateToolboxTalkForm.tsx b/components/messages/CreateToolboxTalkForm.tsx
+diff --git b/components/messages/CreateToolboxTalkForm.tsx a/components/messages/CreateToolboxTalkForm.tsx
 index 17be55ba..833b933d 100644
---- a/components/messages/CreateToolboxTalkForm.tsx
-+++ b/components/messages/CreateToolboxTalkForm.tsx
+--- b/components/messages/CreateToolboxTalkForm.tsx
++++ a/components/messages/CreateToolboxTalkForm.tsx
 @@ -146,7 +146,7 @@ export function CreateToolboxTalkForm({ onSuccess }: CreateToolboxTalkFormProps)
                  value: 'LOW',
                  title: 'Level 1 - Medium Priority',
@@ -2309,10 +2309,10 @@ index 17be55ba..833b933d 100644
                },
                {
                  value: 'HIGH',
-diff --git a/components/messages/ReminderModal.tsx b/components/messages/ReminderModal.tsx
+diff --git b/components/messages/ReminderModal.tsx a/components/messages/ReminderModal.tsx
 index 40c69aeb..f95c477f 100644
---- a/components/messages/ReminderModal.tsx
-+++ b/components/messages/ReminderModal.tsx
+--- b/components/messages/ReminderModal.tsx
++++ a/components/messages/ReminderModal.tsx
 @@ -238,7 +238,7 @@ export function ReminderModal({
        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-hidden">
          <DialogHeader>
@@ -2331,10 +2331,10 @@ index 40c69aeb..f95c477f 100644
                                : 'bg-slate-50 border-border dark:bg-slate-800'
                            }`}
                          >
-diff --git a/components/notifications/NotificationPreferencesCard.tsx b/components/notifications/NotificationPreferencesCard.tsx
+diff --git b/components/notifications/NotificationPreferencesCard.tsx a/components/notifications/NotificationPreferencesCard.tsx
 index 2c7aa09f..8ae9d4e3 100644
---- a/components/notifications/NotificationPreferencesCard.tsx
-+++ b/components/notifications/NotificationPreferencesCard.tsx
+--- b/components/notifications/NotificationPreferencesCard.tsx
++++ a/components/notifications/NotificationPreferencesCard.tsx
 @@ -45,7 +45,7 @@ function channelButtonClassName(isEnabled: boolean, channel: 'in-app' | 'email')
      return 'border-green-400/70 bg-green-500/20 text-green-100 shadow-lg shadow-green-500/10';
    }
@@ -2353,10 +2353,10 @@ index 2c7aa09f..8ae9d4e3 100644
                      }`}>
                        {preference.notify_email ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
                        {preference.notify_email ? 'ON' : 'OFF'}
-diff --git a/components/profile/ProfileBiometricsCard.tsx b/components/profile/ProfileBiometricsCard.tsx
+diff --git b/components/profile/ProfileBiometricsCard.tsx a/components/profile/ProfileBiometricsCard.tsx
 index 5087f23d..fa6f1ee7 100644
---- a/components/profile/ProfileBiometricsCard.tsx
-+++ b/components/profile/ProfileBiometricsCard.tsx
+--- b/components/profile/ProfileBiometricsCard.tsx
++++ a/components/profile/ProfileBiometricsCard.tsx
 @@ -221,7 +221,7 @@ export function ProfileBiometricsCard() {
              type="button"
              onClick={() => void handleEnableBiometrics()}
@@ -2366,10 +2366,10 @@ index 5087f23d..fa6f1ee7 100644
            >
              {working && !isConfigured ? 'Setting up...' : isConfigured ? 'Enabled' : 'Enable biometrics'}
            </Button>
-diff --git a/components/profile/ProfileModuleSummaries.tsx b/components/profile/ProfileModuleSummaries.tsx
+diff --git b/components/profile/ProfileModuleSummaries.tsx a/components/profile/ProfileModuleSummaries.tsx
 index 68acb920..716ccf6a 100644
---- a/components/profile/ProfileModuleSummaries.tsx
-+++ b/components/profile/ProfileModuleSummaries.tsx
+--- b/components/profile/ProfileModuleSummaries.tsx
++++ a/components/profile/ProfileModuleSummaries.tsx
 @@ -31,7 +31,7 @@ function getTimesheetStatusBadgeClass(status: string): string {
    if (normalized === 'approved') return 'border-green-500/40 bg-green-500/15 text-green-300';
    if (normalized === 'rejected') return 'border-red-500/40 bg-red-500/15 text-red-300';
@@ -2388,10 +2388,10 @@ index 68acb920..716ccf6a 100644
    if (normalized === 'pending') return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
    if (normalized === 'rejected' || normalized === 'cancelled') {
      return 'border-red-500/40 bg-red-500/15 text-red-300';
-diff --git a/components/profile/ProfileMyDetailsTab.tsx b/components/profile/ProfileMyDetailsTab.tsx
+diff --git b/components/profile/ProfileMyDetailsTab.tsx a/components/profile/ProfileMyDetailsTab.tsx
 index 967a9f09..c671b8b1 100644
---- a/components/profile/ProfileMyDetailsTab.tsx
-+++ b/components/profile/ProfileMyDetailsTab.tsx
+--- b/components/profile/ProfileMyDetailsTab.tsx
++++ a/components/profile/ProfileMyDetailsTab.tsx
 @@ -171,7 +171,7 @@ export function ProfileMyDetailsTab({
            type="button"
            onClick={onSave}
@@ -2401,10 +2401,10 @@ index 967a9f09..c671b8b1 100644
          >
            {isSaving ? (
              <>
-diff --git a/components/profile/ProfileOverviewTab.tsx b/components/profile/ProfileOverviewTab.tsx
+diff --git b/components/profile/ProfileOverviewTab.tsx a/components/profile/ProfileOverviewTab.tsx
 index 7729d5f8..81f99b63 100644
---- a/components/profile/ProfileOverviewTab.tsx
-+++ b/components/profile/ProfileOverviewTab.tsx
+--- b/components/profile/ProfileOverviewTab.tsx
++++ a/components/profile/ProfileOverviewTab.tsx
 @@ -48,7 +48,7 @@ function getRoleBadgeProps(profile: ProfileIdentityPayload): {
    }
    if (roleLabel.includes('supervisor')) {
@@ -2414,10 +2414,10 @@ index 7729d5f8..81f99b63 100644
      };
    }
    if (profile.role?.role_class === 'manager' || roleLabel.includes('manager')) {
-diff --git a/components/profile/ProfilePermissionsTab.tsx b/components/profile/ProfilePermissionsTab.tsx
+diff --git b/components/profile/ProfilePermissionsTab.tsx a/components/profile/ProfilePermissionsTab.tsx
 index 10b5f787..a0d5e967 100644
---- a/components/profile/ProfilePermissionsTab.tsx
-+++ b/components/profile/ProfilePermissionsTab.tsx
+--- b/components/profile/ProfilePermissionsTab.tsx
++++ a/components/profile/ProfilePermissionsTab.tsx
 @@ -13,7 +13,7 @@ interface ProfilePermissionsTabProps {
  function getAccessBadgeClass(accessLevel: number): string {
    if (accessLevel >= 5) return 'border-red-500/40 bg-red-500/15 text-red-300';
@@ -2427,15 +2427,15 @@ index 10b5f787..a0d5e967 100644
    if (accessLevel >= 2) return 'border-green-500/40 bg-green-500/15 text-green-300';
    return 'border-slate-500/40 bg-slate-500/15 text-slate-200';
  }
-diff --git a/components/profile/ProfileSensitivePinCard.tsx b/components/profile/ProfileSensitivePinCard.tsx
-index efb24564..230d8ee0 100644
---- a/components/profile/ProfileSensitivePinCard.tsx
-+++ b/components/profile/ProfileSensitivePinCard.tsx
+diff --git b/components/profile/ProfileSensitivePinCard.tsx a/components/profile/ProfileSensitivePinCard.tsx
+index 7d424e20..230d8ee0 100644
+--- b/components/profile/ProfileSensitivePinCard.tsx
++++ a/components/profile/ProfileSensitivePinCard.tsx
 @@ -82,7 +82,7 @@ export function ProfileSensitivePinCard() {
  
    return (
      <Card className="relative overflow-hidden border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/30">
--      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.1),_rgba(0,17,2,0.85))]" />
+-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.04),_transparent_36%),linear-gradient(145deg,_rgba(28,28,28,0.1),_rgba(16,16,16,0.85))]" />
 +      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(241,214,74,0.16),_transparent_36%),linear-gradient(145deg,_rgba(15,23,42,0.1),_rgba(2,6,23,0.85))]" />
        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
        <CardHeader className="relative">
@@ -2449,10 +2449,10 @@ index efb24564..230d8ee0 100644
                    >
                      {working ? <Loader2 className="mr-2 h-5 w-5 animate-spin sm:h-4 sm:w-4" /> : <KeyRound className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />}
                      Set sensitive PIN
-diff --git a/components/projects/manage/ProjectsManageStats.tsx b/components/projects/manage/ProjectsManageStats.tsx
+diff --git b/components/projects/manage/ProjectsManageStats.tsx a/components/projects/manage/ProjectsManageStats.tsx
 index 355c84a5..0910427a 100644
---- a/components/projects/manage/ProjectsManageStats.tsx
-+++ b/components/projects/manage/ProjectsManageStats.tsx
+--- b/components/projects/manage/ProjectsManageStats.tsx
++++ a/components/projects/manage/ProjectsManageStats.tsx
 @@ -14,7 +14,7 @@ interface ProjectsManageStatsProps {
  const STAT_CARDS: { key: FilterKey; label: string; color: string }[] = [
    { key: 'all', label: 'All Documents', color: 'bg-slate-500' },
@@ -2462,10 +2462,10 @@ index 355c84a5..0910427a 100644
    { key: 'recently_uploaded', label: 'Last 7 Days', color: 'bg-green-500' },
  ];
  
-diff --git a/components/rams/SignRAMSModal.tsx b/components/rams/SignRAMSModal.tsx
+diff --git b/components/rams/SignRAMSModal.tsx a/components/rams/SignRAMSModal.tsx
 index 6c37e8ff..0f6d2898 100644
---- a/components/rams/SignRAMSModal.tsx
-+++ b/components/rams/SignRAMSModal.tsx
+--- b/components/rams/SignRAMSModal.tsx
++++ a/components/rams/SignRAMSModal.tsx
 @@ -101,7 +101,7 @@ export function SignRAMSModal({
  
          <div className="grid gap-6 py-4">
@@ -2475,10 +2475,10 @@ index 6c37e8ff..0f6d2898 100644
              <div className="text-sm text-blue-100 space-y-1">
                <p>By signing, you confirm that you have:</p>
                <ul className="list-disc ml-5 mt-2 space-y-1">
-diff --git a/components/rams/UploadRAMSModal.tsx b/components/rams/UploadRAMSModal.tsx
+diff --git b/components/rams/UploadRAMSModal.tsx a/components/rams/UploadRAMSModal.tsx
 index ad386bc0..7b3da307 100644
---- a/components/rams/UploadRAMSModal.tsx
-+++ b/components/rams/UploadRAMSModal.tsx
+--- b/components/rams/UploadRAMSModal.tsx
++++ a/components/rams/UploadRAMSModal.tsx
 @@ -271,7 +271,7 @@ export function UploadRAMSModal({ open, onClose, onSubmit, prefillTitle, prefill
                )}
              </div>
@@ -2488,10 +2488,10 @@ index ad386bc0..7b3da307 100644
                <p className="text-sm text-blue-100">
                  After uploading, you can assign this document to specific employees
                </p>
-diff --git a/components/security/SensitiveModuleGate.tsx b/components/security/SensitiveModuleGate.tsx
-index 77b1f9da..35e4788e 100644
---- a/components/security/SensitiveModuleGate.tsx
-+++ b/components/security/SensitiveModuleGate.tsx
+diff --git b/components/security/SensitiveModuleGate.tsx a/components/security/SensitiveModuleGate.tsx
+index a0a63121..35e4788e 100644
+--- b/components/security/SensitiveModuleGate.tsx
++++ a/components/security/SensitiveModuleGate.tsx
 @@ -299,7 +299,7 @@ export function SensitiveModuleSessionManager({
                void confirmStillActive();
              }}
@@ -2505,15 +2505,15 @@ index 77b1f9da..35e4788e 100644
        }`}
      >
        <Card className="relative flex w-full max-w-[580px] overflow-hidden rounded-3xl border border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/40 sm:rounded-[2rem]">
--        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.2),_rgba(0,17,2,0.9))]" />
+-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.04),_transparent_36%),linear-gradient(145deg,_rgba(28,28,28,0.2),_rgba(16,16,16,0.9))]" />
 +        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(241,214,74,0.16),_transparent_36%),linear-gradient(145deg,_rgba(15,23,42,0.2),_rgba(2,6,23,0.9))]" />
          <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
          <div className="flex w-full flex-col justify-center">
            <CardHeader className="relative px-4 pb-3 pt-5 text-center sm:px-10 sm:pb-4 sm:pt-8">
-diff --git a/components/timesheets/DidNotWorkReasonDialog.tsx b/components/timesheets/DidNotWorkReasonDialog.tsx
+diff --git b/components/timesheets/DidNotWorkReasonDialog.tsx a/components/timesheets/DidNotWorkReasonDialog.tsx
 index b5163a51..50a76bb8 100644
---- a/components/timesheets/DidNotWorkReasonDialog.tsx
-+++ b/components/timesheets/DidNotWorkReasonDialog.tsx
+--- b/components/timesheets/DidNotWorkReasonDialog.tsx
++++ a/components/timesheets/DidNotWorkReasonDialog.tsx
 @@ -32,7 +32,7 @@ const CHOICE_BUTTON_BASE_CLASSNAME =
    'flex h-auto min-h-24 aspect-square w-full items-center justify-center rounded-lg border-2 px-2 py-0 text-xl font-bold text-white shadow-lg transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-30';
  const SICK_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-red-600 bg-red-600/25 shadow-red-600/15 hover:bg-red-600/35`;
@@ -2523,10 +2523,10 @@ index b5163a51..50a76bb8 100644
  const LARGE_ACTION_BUTTON_CLASSNAME =
    'flex h-20 w-full items-center justify-center rounded-lg border-2 border-slate-700 bg-slate-800/30 px-4 py-5 text-xl font-semibold text-foreground shadow-sm transition-all hover:bg-slate-800/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
  const LARGE_PRIMARY_BUTTON_CLASSNAME =
-diff --git a/components/timesheets/TimesheetAdjustmentModal.tsx b/components/timesheets/TimesheetAdjustmentModal.tsx
+diff --git b/components/timesheets/TimesheetAdjustmentModal.tsx a/components/timesheets/TimesheetAdjustmentModal.tsx
 index f6f80bc9..10d3caa8 100644
---- a/components/timesheets/TimesheetAdjustmentModal.tsx
-+++ b/components/timesheets/TimesheetAdjustmentModal.tsx
+--- b/components/timesheets/TimesheetAdjustmentModal.tsx
++++ a/components/timesheets/TimesheetAdjustmentModal.tsx
 @@ -269,7 +269,7 @@ export function TimesheetAdjustmentModal({
                          key={manager.id}
                          className={`flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent/50 ${
@@ -2536,10 +2536,10 @@ index f6f80bc9..10d3caa8 100644
                              : ''
                          }`}
                        >
-diff --git a/components/ui/error-details-modal.tsx b/components/ui/error-details-modal.tsx
+diff --git b/components/ui/error-details-modal.tsx a/components/ui/error-details-modal.tsx
 index 435892ab..e9a2efbb 100644
---- a/components/ui/error-details-modal.tsx
-+++ b/components/ui/error-details-modal.tsx
+--- b/components/ui/error-details-modal.tsx
++++ a/components/ui/error-details-modal.tsx
 @@ -72,7 +72,7 @@ export function ErrorDetailsModal({
  
              {/* Resolution guide */}
@@ -2549,35 +2549,35 @@ index 435892ab..e9a2efbb 100644
                  <h4 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-2">
                    💡 How to Resolve
                  </h4>
-diff --git a/components/ui/page-loading-screen.module.css b/components/ui/page-loading-screen.module.css
-index 63c4901e..145afcbf 100644
---- a/components/ui/page-loading-screen.module.css
-+++ b/components/ui/page-loading-screen.module.css
+diff --git b/components/ui/page-loading-screen.module.css a/components/ui/page-loading-screen.module.css
+index c0d4ced5..145afcbf 100644
+--- b/components/ui/page-loading-screen.module.css
++++ a/components/ui/page-loading-screen.module.css
 @@ -1,4 +1,3 @@
 -/* Shared fullscreen and compact loading states use the FFTS green palette. */
  .screen {
    --loader-accent: var(--brand-yellow);
  
-@@ -9,8 +8,8 @@
+@@ -8,7 +7,9 @@
+   display: grid;
    place-items: center;
    overflow: hidden;
-   background:
--    radial-gradient(circle at 50% 35%, hsl(var(--brand-yellow-hover) / 0.12), transparent 34rem),
--    linear-gradient(135deg, var(--color-slate-800), hsl(var(--background)) 48%, var(--color-slate-950));
+-  background: hsl(var(--background));
++  background:
 +    radial-gradient(circle at 50% 35%, hsl(var(--loader-accent) / 0.12), transparent 34rem),
 +    linear-gradient(135deg, hsl(217 33% 17%), hsl(222 47% 11%) 48%, hsl(222 47% 7%));
  }
  
  .compact {
-@@ -43,18 +42,18 @@
+@@ -41,18 +42,18 @@
    overflow: hidden;
    border-radius: 999px;
    border: 1px solid hsl(210 40% 98% / 0.16);
--  background: hsl(128 100% 6% / 0.72);
+-  background: hsl(0 0% 8% / 0.72);
 +  background: hsl(222 47% 7% / 0.72);
    box-shadow:
--    0 0 0 1px hsl(128 100% 6% / 0.45),
--    0 1rem 3rem hsl(128 100% 3% / 0.5);
+-    0 0 0 1px hsl(0 0% 8% / 0.45),
+-    0 1rem 3rem hsl(0 0% 3% / 0.5);
 +    0 0 0 1px hsl(222 47% 7% / 0.45),
 +    0 1rem 3rem hsl(222 47% 4% / 0.5);
  }
@@ -2586,14 +2586,14 @@ index 63c4901e..145afcbf 100644
    width: min(10rem, calc(100vw - 4rem));
    height: 0.5rem;
    box-shadow:
--    0 0 0 1px hsl(128 100% 6% / 0.35),
--    0 0.75rem 2rem hsl(128 100% 3% / 0.3);
+-    0 0 0 1px hsl(0 0% 8% / 0.35),
+-    0 0.75rem 2rem hsl(0 0% 3% / 0.3);
 +    0 0 0 1px hsl(222 47% 7% / 0.35),
 +    0 0.75rem 2rem hsl(222 47% 4% / 0.3);
  }
  
  .progressBar {
-@@ -63,14 +62,14 @@
+@@ -61,14 +62,14 @@
    background-image:
      linear-gradient(
        90deg,
@@ -2616,7 +2616,7 @@ index 63c4901e..145afcbf 100644
      ),
      repeating-linear-gradient(
        -45deg,
-@@ -87,13 +86,13 @@
+@@ -85,13 +86,13 @@
      linear-gradient(
        90deg,
        hsl(var(--brand-yellow)) 0 12.5%,
@@ -2634,19 +2634,19 @@ index 63c4901e..145afcbf 100644
      ),
      repeating-linear-gradient(
        -45deg,
-@@ -107,7 +106,7 @@
+@@ -105,7 +106,7 @@
    font-size: 0.95rem;
    font-weight: 600;
    letter-spacing: 0.02em;
--  text-shadow: 0 0.125rem 1rem hsl(128 100% 3% / 0.75);
+-  text-shadow: 0 0.125rem 1rem hsl(0 0% 3% / 0.75);
 +  text-shadow: 0 0.125rem 1rem hsl(222 47% 4% / 0.75);
  }
  
  .compact .label {
-diff --git a/components/workshop-tasks/MarkTaskCompleteDialog.tsx b/components/workshop-tasks/MarkTaskCompleteDialog.tsx
+diff --git b/components/workshop-tasks/MarkTaskCompleteDialog.tsx a/components/workshop-tasks/MarkTaskCompleteDialog.tsx
 index be3276ac..9e2cdc9a 100644
---- a/components/workshop-tasks/MarkTaskCompleteDialog.tsx
-+++ b/components/workshop-tasks/MarkTaskCompleteDialog.tsx
+--- b/components/workshop-tasks/MarkTaskCompleteDialog.tsx
++++ a/components/workshop-tasks/MarkTaskCompleteDialog.tsx
 @@ -373,7 +373,7 @@ export function MarkTaskCompleteDialog({
          <div className="space-y-4">
            {/* Info Banner */}
@@ -2656,10 +2656,10 @@ index be3276ac..9e2cdc9a 100644
                <div className="flex items-start gap-2">
                  <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
                  <p className="text-sm text-blue-300">
-diff --git a/components/workshop-tasks/TaskCommentsDrawer.tsx b/components/workshop-tasks/TaskCommentsDrawer.tsx
+diff --git b/components/workshop-tasks/TaskCommentsDrawer.tsx a/components/workshop-tasks/TaskCommentsDrawer.tsx
 index 4cde4fd0..3eb3bc19 100644
---- a/components/workshop-tasks/TaskCommentsDrawer.tsx
-+++ b/components/workshop-tasks/TaskCommentsDrawer.tsx
+--- b/components/workshop-tasks/TaskCommentsDrawer.tsx
++++ a/components/workshop-tasks/TaskCommentsDrawer.tsx
 @@ -256,7 +256,7 @@ export function TaskCommentsDrawer({
  
        const statusBadgeClass =
@@ -2669,10 +2669,10 @@ index 4cde4fd0..3eb3bc19 100644
            : item.meta?.status === 'on_hold'
            ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
            : item.meta?.status === 'undo'
-diff --git a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
+diff --git b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
 index eaf13f9f..4caaa206 100644
---- a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
-+++ b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
+--- b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
++++ a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
 @@ -78,8 +78,8 @@ interface WorkshopTaskHistoryCardProps {
  const getStatusBadge = (status: string) => {
    const statusMap: Record<string, { label: string; className: string }> = {
@@ -2684,10 +2684,10 @@ index eaf13f9f..4caaa206 100644
      on_hold: { label: 'On Hold', className: 'bg-purple-500/10 text-purple-300 border-purple-500/30' },
      completed: { label: 'Completed', className: 'bg-green-500/10 text-green-300 border-green-500/30' },
    };
-diff --git a/components/workshop-tasks/WorkshopTaskModal.tsx b/components/workshop-tasks/WorkshopTaskModal.tsx
+diff --git b/components/workshop-tasks/WorkshopTaskModal.tsx a/components/workshop-tasks/WorkshopTaskModal.tsx
 index 1a00edae..5c5958db 100644
---- a/components/workshop-tasks/WorkshopTaskModal.tsx
-+++ b/components/workshop-tasks/WorkshopTaskModal.tsx
+--- b/components/workshop-tasks/WorkshopTaskModal.tsx
++++ a/components/workshop-tasks/WorkshopTaskModal.tsx
 @@ -239,7 +239,7 @@ export function WorkshopTaskModal({
        },
        logged: {
@@ -2724,10 +2724,10 @@ index 1a00edae..5c5958db 100644
                      >
                        <Clock className="h-4 w-4 mr-2" />
                        Resume
-diff --git a/components/workshop-tasks/WorkshopTaskTimeline.tsx b/components/workshop-tasks/WorkshopTaskTimeline.tsx
+diff --git b/components/workshop-tasks/WorkshopTaskTimeline.tsx a/components/workshop-tasks/WorkshopTaskTimeline.tsx
 index b208fe58..ad1d9698 100644
---- a/components/workshop-tasks/WorkshopTaskTimeline.tsx
-+++ b/components/workshop-tasks/WorkshopTaskTimeline.tsx
+--- b/components/workshop-tasks/WorkshopTaskTimeline.tsx
++++ a/components/workshop-tasks/WorkshopTaskTimeline.tsx
 @@ -21,7 +21,7 @@ const getStatusConfig = (status: StatusHistoryEvent['status']) => {
      case 'logged':
        return {
@@ -2746,10 +2746,10 @@ index b208fe58..ad1d9698 100644
          label: 'resumed task',
        };
      case 'completed':
-diff --git a/lib/utils/status-badges.tsx b/lib/utils/status-badges.tsx
+diff --git b/lib/utils/status-badges.tsx a/lib/utils/status-badges.tsx
 index a6620d07..31d05b05 100644
---- a/lib/utils/status-badges.tsx
-+++ b/lib/utils/status-badges.tsx
+--- b/lib/utils/status-badges.tsx
++++ a/lib/utils/status-badges.tsx
 @@ -94,7 +94,7 @@ export function getTimesheetStatusBadge(status: string) {
    // Apply blue styling for final states (processed and adjusted)
    const isFinalState = status === 'processed' || status === 'adjusted';
@@ -2759,15 +2759,15 @@ index a6620d07..31d05b05 100644
      : '';
  
    return (
-diff --git a/tests/ui/components/SchedulingManagerBoard.test.tsx b/tests/ui/components/SchedulingManagerBoard.test.tsx
-index 43de045f..40fd4e86 100644
---- a/tests/ui/components/SchedulingManagerBoard.test.tsx
-+++ b/tests/ui/components/SchedulingManagerBoard.test.tsx
+diff --git b/tests/ui/components/SchedulingManagerBoard.test.tsx a/tests/ui/components/SchedulingManagerBoard.test.tsx
+index 951ea206..40fd4e86 100644
+--- b/tests/ui/components/SchedulingManagerBoard.test.tsx
++++ a/tests/ui/components/SchedulingManagerBoard.test.tsx
 @@ -1419,7 +1419,7 @@ describe('SchedulingManagerBoard', () => {
        name: 'Q-100: select job or drag to a calendar date',
      });
      expect(quoteCard).toHaveAttribute('data-testid', expect.stringContaining('schedule-quote-'));
--    expect(quoteCard).toHaveClass('bg-green-950/35');
+-    expect(quoteCard).toHaveClass('bg-slate-900');
 +    expect(quoteCard).toHaveClass('bg-sky-950/35');
      expect(
        within(quoteCard).getByTestId(
@@ -2819,10 +2819,10 @@ index 43de045f..40fd4e86 100644
      expect(selectedTagButton.querySelector('.lucide-check')).not.toBeNull();
      expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
      expect(screen.queryByText('Crew offer')).not.toBeInTheDocument();
-diff --git a/tests/ui/components/SchedulingPage.test.tsx b/tests/ui/components/SchedulingPage.test.tsx
+diff --git b/tests/ui/components/SchedulingPage.test.tsx a/tests/ui/components/SchedulingPage.test.tsx
 index 5d6d7422..28f72c3d 100644
---- a/tests/ui/components/SchedulingPage.test.tsx
-+++ b/tests/ui/components/SchedulingPage.test.tsx
+--- b/tests/ui/components/SchedulingPage.test.tsx
++++ a/tests/ui/components/SchedulingPage.test.tsx
 @@ -189,9 +189,9 @@ describe('SchedulingPage access states', () => {
        await screen.findByText('Scheduling access could not be checked')
      ).toBeInTheDocument();
@@ -2835,10 +2835,10 @@ index 5d6d7422..28f72c3d 100644
        'hover:text-[#ffffff]'
      );
    });
-diff --git a/tests/ui/components/scheduling-control-styles.test.tsx b/tests/ui/components/scheduling-control-styles.test.tsx
+diff --git b/tests/ui/components/scheduling-control-styles.test.tsx a/tests/ui/components/scheduling-control-styles.test.tsx
 index fde8e95f..9f71055f 100644
---- a/tests/ui/components/scheduling-control-styles.test.tsx
-+++ b/tests/ui/components/scheduling-control-styles.test.tsx
+--- b/tests/ui/components/scheduling-control-styles.test.tsx
++++ a/tests/ui/components/scheduling-control-styles.test.tsx
 @@ -4,13 +4,13 @@ import { schedulingControlStyles } from '@/app/(dashboard)/scheduling/components
  describe('schedulingControlStyles', () => {
    it('pairs every control state with emitted surface, foreground, border and focus classes', () => {

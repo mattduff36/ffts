@@ -8,9 +8,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 35%, hsl(var(--brand-yellow-hover) / 0.12), transparent 34rem),
-    linear-gradient(135deg, var(--color-slate-800), hsl(var(--background)) 48%, var(--color-slate-950));
+  background: hsl(var(--background));
 }
 
 .compact {
@@ -43,18 +41,18 @@
   overflow: hidden;
   border-radius: 999px;
   border: 1px solid hsl(210 40% 98% / 0.16);
-  background: hsl(128 100% 6% / 0.72);
+  background: hsl(0 0% 8% / 0.72);
   box-shadow:
-    0 0 0 1px hsl(128 100% 6% / 0.45),
-    0 1rem 3rem hsl(128 100% 3% / 0.5);
+    0 0 0 1px hsl(0 0% 8% / 0.45),
+    0 1rem 3rem hsl(0 0% 3% / 0.5);
 }
 
 .compact .progressTrack {
   width: min(10rem, calc(100vw - 4rem));
   height: 0.5rem;
   box-shadow:
-    0 0 0 1px hsl(128 100% 6% / 0.35),
-    0 0.75rem 2rem hsl(128 100% 3% / 0.3);
+    0 0 0 1px hsl(0 0% 8% / 0.35),
+    0 0.75rem 2rem hsl(0 0% 3% / 0.3);
 }
 
 .progressBar {
@@ -107,7 +105,7 @@
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  text-shadow: 0 0.125rem 1rem hsl(128 100% 3% / 0.75);
+  text-shadow: 0 0.125rem 1rem hsl(0 0% 3% / 0.75);
 }
 
 .compact .label {

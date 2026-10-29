@@ -82,7 +82,7 @@ export function ProfileSensitivePinCard() {
 
   return (
     <Card className="relative overflow-hidden border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/30">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.1),_rgba(0,17,2,0.85))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.04),_transparent_36%),linear-gradient(145deg,_rgba(28,28,28,0.1),_rgba(16,16,16,0.85))]" />
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
       <CardHeader className="relative">
         <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:text-left">

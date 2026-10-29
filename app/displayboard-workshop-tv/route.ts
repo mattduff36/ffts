@@ -49,7 +49,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
     html.tv-text-step-4 { font-size: 150%; }
     html.tv-text-step-5 { font-size: 200%; }
     body {
-      background: #001102;
+      background: #101010;
       color: #fff;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 1.25rem;
@@ -61,7 +61,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
       width: 1920px;
       height: 1080px;
       padding: 80px;
-      background: #001102;
+      background: #101010;
       text-align: center;
       -webkit-transform-origin: 0 0;
       -ms-transform-origin: 0 0;
@@ -96,9 +96,9 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
       width: 1920px;
       height: 1080px;
       padding: 24px;
-      background: #001102;
-      background: -webkit-linear-gradient(315deg, #001102, #001f04 48%, #0d2911);
-      background: linear-gradient(135deg, #001102, #001f04 48%, #0d2911);
+      background: #101010;
+      background: -webkit-linear-gradient(315deg, #101010, #1c1c1c 48%, #282828);
+      background: linear-gradient(135deg, #101010, #1c1c1c 48%, #282828);
       -webkit-transform-origin: 0 0;
       -ms-transform-origin: 0 0;
       transform-origin: 0 0;

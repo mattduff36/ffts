@@ -1419,7 +1419,7 @@ describe('SchedulingManagerBoard', () => {
       name: 'Q-100: select job or drag to a calendar date',
     });
     expect(quoteCard).toHaveAttribute('data-testid', expect.stringContaining('schedule-quote-'));
-    expect(quoteCard).toHaveClass('bg-green-950/35');
+    expect(quoteCard).toHaveClass('bg-slate-900');
     expect(
       within(quoteCard).getByTestId(
         'schedule-quote-drag-handle-quote-33333333-3333-4333-8333-333333333333'

@@ -844,7 +844,7 @@ export function SensitiveModuleGate({
       }`}
     >
       <Card className="relative flex w-full max-w-[580px] overflow-hidden rounded-3xl border border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/40 sm:rounded-[2rem]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.2),_rgba(0,17,2,0.9))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.04),_transparent_36%),linear-gradient(145deg,_rgba(28,28,28,0.2),_rgba(16,16,16,0.9))]" />
         <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
         <div className="flex w-full flex-col justify-center">
           <CardHeader className="relative px-4 pb-3 pt-5 text-center sm:px-10 sm:pb-4 sm:pt-8">

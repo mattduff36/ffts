@@ -2421,8 +2421,8 @@ describe('SchedulingManagerBoard', () => {
     await waitFor(() => expect(fitButton).toHaveAttribute('aria-pressed', 'true'));
     expect(fitButton).toHaveAttribute('title', 'Shrink to fit width');
     expect(fitButton).toBeEnabled();
-    expect(fitButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
-    expect(fitButton).toHaveClass('hover:text-[#020617]');
+    expect(fitButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
+    expect(fitButton).toHaveClass('hover:text-slate-950');
     expect(scrollButton).toHaveAttribute('aria-pressed', 'false');
     expect(scrollButton).toHaveAttribute('title', 'Scroll');
     expect(scrollButton).toHaveClass(
@@ -2552,7 +2552,7 @@ describe('SchedulingManagerBoard', () => {
     fireEvent.click(scrollButton);
 
     expect(scrollButton).toHaveAttribute('aria-pressed', 'true');
-    expect(scrollButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
+    expect(scrollButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
     expect(screen.getByRole('button', { name: 'Shrink to fit width' })).toHaveClass(
       'text-[#e2e8f0]',
       'hover:text-[#ffffff]'
@@ -3603,7 +3603,7 @@ describe('SchedulingManagerBoard', () => {
     expect(within(jobCell).getByText('Estimated 4 hours')).toBeInTheDocument();
     expect(within(footer).getByText('Project')).toHaveClass(
       'border-[#64748b]',
-      'bg-[#0f172a]',
+      'bg-slate-900',
       'text-[#cbd5e1]'
     );
     expect(footer).toHaveClass('mt-auto');
@@ -3693,7 +3693,7 @@ describe('SchedulingManagerBoard', () => {
       'aria-pressed',
       'true'
     );
-    expect(selectedTagButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
+    expect(selectedTagButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
     expect(selectedTagButton.querySelector('.lucide-check')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
     expect(screen.queryByText('Crew offer')).not.toBeInTheDocument();

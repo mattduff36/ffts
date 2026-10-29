@@ -13,3 +13,5 @@ Retained for future reference/use; this low-resolution source does not replace t
 The dark leaf outline in this antialiased source is approximately #003307. The app uses that dark green, derived green surface shades, and a lighter leaf-green accent (HSL 90 51% 62%). Shared definitions live in app/globals.css. Legacy slate and brand-yellow class/token names are retained for compatibility; module/status colours keep their existing meanings. Browser/PWA chrome uses the same dark green. Email/PDF branding configuration is unchanged.
 
 Verification evidence: testsuite/reports/green-brand/ (ignored local screenshots and test logs). Headed desktop checks cover Dashboard, Scheduling, Quotes, Customers, Timesheets and Fleet; mobile checks cover Dashboard and Scheduling, with a quote-dialog check. Read-only checks use existing test accounts and do not create or edit business records.
+
+Fullscreen and compact loading backgrounds, tracks and progress bars use the same green brand palette. Explicit held-loading-state checks cover Dashboard, Timesheets and Scheduling; evidence is in loader-results.json and loader-*.png alongside the page screenshots.

@@ -189,9 +189,9 @@ describe('SchedulingPage access states', () => {
       await screen.findByText('Scheduling access could not be checked')
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass(
-      'bg-[#0f172a]',
+      'bg-slate-900',
       'text-[#f1f5f9]',
-      'hover:bg-[#334155]',
+      'hover:bg-slate-700',
       'hover:text-[#ffffff]'
     );
   });

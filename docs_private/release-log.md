@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.5.1
+
+**GIT COMMIT MESSAGE**
+`test: close meeting preview verification gaps`
+
+**PUSHED AT**
+2026-10-29T09:55:19.572Z
+
+**WHAT CHANGED**
+Update navigation. Record verified meeting preview. Close meeting preview verification gaps.
+
+**VERSION HISTORY DETAILS**
+- Updated navigation across 2 changed files.
+- Updated quotes, with changes to automated tests.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `fix(layout): update navigation`
+- `docs: record verified meeting preview`
+- `test: close meeting preview verification gaps`
+
 ## 1026.5.0
 
 **GIT COMMIT MESSAGE**

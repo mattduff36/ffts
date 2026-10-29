@@ -18,6 +18,16 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 
 ## Directory Structure
 
+### Revert the green preview theme
+
+Run `npm run theme:revert` from a clean checkout on `codex/meeting-2026-10-28-preview` to restore the previous blue/yellow appearance, including tables, loaders and badges. This stages only the reviewed theme reversal; it preserves the meeting features, original downloaded logo, release history and database. It never pushes or deploys automatically.
+
+Then run `npm run finalise`, review the result, and publish to the same preview with `git push origin HEAD:refs/heads/codex/meeting-2026-10-28-preview`. Do not use `finalise:push`, which targets production.
+
+`npm run theme:revert -- --check` verifies applicability without changing files. The patch reverses only the green-theme changes through `b57242ad`, against the pre-theme baseline `5afb1534`. If later edits overlap, Git fails before applying; resolve the specific conflict rather than replacing entire files. There are no credentials, database operations or generated reports.
+
+To undo a just-staged rollback before committing it, use `git apply --reverse --index scripts/theme/legacy-theme.patch`. After committing a rollback, revert that rollback commit to return to green. The helper refuses other branches and a dirty checkout.
+
 - `production/` — Forest Farm bootstrap entry points.
 - `migrations/` — `pg`-based migration runners, schema inventory, and parity-state checks.
 - `maintenance/` — explicit operational repair, backup, and storage tasks.

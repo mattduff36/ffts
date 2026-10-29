@@ -1,0 +1,2858 @@
+diff --git a/app/(auth)/change-password/page.tsx b/app/(auth)/change-password/page.tsx
+index d10b9954..102f852f 100644
+--- a/app/(auth)/change-password/page.tsx
++++ b/app/(auth)/change-password/page.tsx
+@@ -192,7 +192,7 @@ export default function ChangePasswordPage() {
+             )}
+ 
+             {/* Password Requirements */}
+-            <div className="bg-green-500/10 border border-blue-500/50 rounded p-3 space-y-2">
++            <div className="bg-blue-500/10 border border-blue-500/50 rounded p-3 space-y-2">
+               <p className="text-sm font-medium text-blue-400">Password Requirements:</p>
+               <ul className="text-xs text-blue-400 space-y-1">
+                 {getPasswordRequirements().map((req, index) => (
+@@ -299,7 +299,7 @@ export default function ChangePasswordPage() {
+             <Button
+               type="submit"
+               disabled={submitting}
+-              className="w-full bg-brand-yellow text-slate-950 hover:bg-brand-yellow/90 font-semibold"
++              className="w-full bg-[#F1D64A] text-slate-950 hover:bg-[#F1D64A]/90 font-semibold"
+             >
+               {submitting ? (
+                 <>
+diff --git a/app/(auth)/login/page.tsx b/app/(auth)/login/page.tsx
+index 2f4d5fe9..1b3e17d5 100644
+--- a/app/(auth)/login/page.tsx
++++ b/app/(auth)/login/page.tsx
+@@ -197,7 +197,7 @@ export default function LoginPage() {
+     <div className="h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center px-4 pb-4 pt-0 sm:pt-16 md:pt-24 relative overflow-y-auto overflow-x-hidden bg-slate-950">
+       {/* Fixed background starts at the viewport edge so iOS can render it under the native status bar. */}
+       <div className="fixed inset-0 z-0 pointer-events-none bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
+-        <div className="absolute inset-0 bg-[linear-gradient(rgba(160,208,109,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(160,208,109,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
++        <div className="absolute inset-0 bg-[linear-gradient(rgba(241,214,74,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(241,214,74,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
+       </div>
+ 
+       <div className="w-full max-w-lg relative z-10 translate-y-[clamp(1.5rem,10svh,5rem)] sm:translate-y-0">
+diff --git a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
+index 93460408..9983f9f1 100644
+--- a/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
++++ b/app/(dashboard)/absence/components/AbsenceAboutHelper.tsx
+@@ -12,7 +12,7 @@ interface AbsenceAboutHelperProps {
+ 
+ export function AbsenceAboutHelper({ variant }: AbsenceAboutHelperProps) {
+   return (
+-    <Card className="bg-green-50 dark:bg-green-900/20 border-blue-200 dark:border-blue-800">
++    <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+       <CardContent className="pt-6">
+         <div className="flex items-start gap-3">
+           <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+diff --git a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
+index 0c896d1f..183c5f0b 100644
+--- a/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
++++ b/app/(dashboard)/absence/manage/components/AbsenceCalendarAdmin.tsx
+@@ -1258,7 +1258,7 @@ export function AbsenceCalendarAdmin() {
+                                 variant="outline"
+                                 className={
+                                   event.status === 'processed'
+-                                    ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
++                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                     : event.status === 'rejected'
+                                     ? 'border-red-500/30 text-red-400 bg-red-500/10'
+                                     : 'border-slate-600 text-muted-foreground'
+diff --git a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
+index f13e00fa..c152df41 100644
+--- a/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
++++ b/app/(dashboard)/absence/manage/components/AbsencePermissionExceptionsDialog.tsx
+@@ -53,10 +53,10 @@ interface DirectoryEntry {
+ const GROUP_COLOR_CLASS: Record<AbsenceSecondaryPermissionHeaderGroup['id'], string> = {
+   bookings: 'bg-yellow-300/90 text-slate-900',
+   allowances: 'bg-green-300/90 text-slate-900',
+-  'records-admin': 'bg-green-300/90 text-slate-900',
++  'records-admin': 'bg-indigo-300/90 text-slate-900',
+   reasons: 'bg-purple-300/90 text-slate-900',
+-  'work-shifts': 'bg-green-300/90 text-slate-900',
+-  'authorise-bookings': 'bg-green-300/90 text-slate-900',
++  'work-shifts': 'bg-cyan-300/90 text-slate-900',
++  'authorise-bookings': 'bg-sky-300/90 text-slate-900',
+ };
+ 
+ const SUBHEADER_CLASS = 'bg-slate-800/80 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
+@@ -401,7 +401,7 @@ export function AbsencePermissionExceptionsDialog({ open, onOpenChange }: Absenc
+                                 className={cn(
+                                   'h-6 w-10 rounded border text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                                   state === 'none' && 'border-slate-600 bg-slate-900 text-slate-300 hover:bg-slate-800',
+-                                  state === 'view' && 'border-cyan-500/45 bg-green-500/20 text-cyan-100 hover:bg-green-500/30',
++                                  state === 'view' && 'border-cyan-500/45 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30',
+                                   state === 'edit' && 'border-green-500/45 bg-green-500/20 text-green-100 hover:bg-green-500/30',
+                                   differsFromDefault && 'border-red-400 ring-1 ring-red-400/70',
+                                   isSaving && 'opacity-70 cursor-wait'
+diff --git a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
+index a4dd5747..fd90134f 100644
+--- a/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
++++ b/app/(dashboard)/absence/manage/components/AbsenceReasonsContent.tsx
+@@ -395,7 +395,7 @@ export function AbsenceReasonsContent() {
+                                   variant="outline"
+                                   className={
+                                     reason.is_paid
+-                                      ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
++                                      ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                       : 'border-slate-600 text-muted-foreground'
+                                   }
+                                 >
+@@ -487,7 +487,7 @@ export function AbsenceReasonsContent() {
+                               variant="outline"
+                               className={
+                                 reason.is_paid
+-                                  ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
++                                  ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                   : 'border-slate-600 text-muted-foreground'
+                               }
+                             >
+diff --git a/app/(dashboard)/absence/page.tsx b/app/(dashboard)/absence/page.tsx
+index 726ed8dc..282ce4cb 100644
+--- a/app/(dashboard)/absence/page.tsx
++++ b/app/(dashboard)/absence/page.tsx
+@@ -1635,7 +1635,7 @@ export default function AbsencePage() {
+                                   absence.status === 'approved'
+                                     ? 'border-green-500/30 text-green-400 bg-green-500/10'
+                                     : absence.status === 'processed'
+-                                    ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
++                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                     : absence.status === 'pending'
+                                     ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
+                                     : absence.status === 'rejected'
+@@ -1646,7 +1646,7 @@ export default function AbsencePage() {
+                                 {absence.status}
+                               </Badge>
+                               {absence.absence_reasons.is_paid ? (
+-                                <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10">
++                                <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10">
+                                   Paid
+                                 </Badge>
+                               ) : (
+@@ -1780,7 +1780,7 @@ export default function AbsencePage() {
+                                   absence.status === 'approved'
+                                     ? 'border-green-500/30 text-green-400 bg-green-500/10'
+                                     : absence.status === 'processed'
+-                                    ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
++                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                     : absence.status === 'pending'
+                                     ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
+                                     : 'border-slate-600 text-muted-foreground'
+diff --git a/app/(dashboard)/admin/faq/page.tsx b/app/(dashboard)/admin/faq/page.tsx
+index 6b0c03eb..7911fb1c 100644
+--- a/app/(dashboard)/admin/faq/page.tsx
++++ b/app/(dashboard)/admin/faq/page.tsx
+@@ -400,7 +400,7 @@ export default function FAQEditorPage() {
+       {/* Header */}
+       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
+         <div className="flex items-start gap-3">
+-          <div className="shrink-0 p-3 bg-green-100 dark:bg-green-950 rounded-lg">
++          <div className="shrink-0 p-3 bg-blue-100 dark:bg-blue-950 rounded-lg">
+             <HelpCircle className="h-6 w-6 text-blue-600" />
+           </div>
+           <div className="min-w-0">
+diff --git a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
+index 8e867eee..a37a75a3 100644
+--- a/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
++++ b/app/(dashboard)/admin/settings/components/TimesheetTypeExceptionsCard.tsx
+@@ -278,7 +278,7 @@ export function TimesheetTypeExceptionsCard() {
+                           {isUserChoice ? (
+                             <Badge className="bg-amber-600/30 text-amber-100 border border-amber-500/40">Choice</Badge>
+                           ) : row.override_timesheet_type ? (
+-                            <Badge className="bg-green-600/30 text-sky-200 border border-sky-500/40">Override</Badge>
++                            <Badge className="bg-sky-600/30 text-sky-200 border border-sky-500/40">Override</Badge>
+                           ) : (
+                             <Badge variant="outline" className="border-slate-600 text-muted-foreground">Default</Badge>
+                           )}
+diff --git a/app/(dashboard)/admin/users/page.tsx b/app/(dashboard)/admin/users/page.tsx
+index 030ae8e2..f94b167b 100644
+--- a/app/(dashboard)/admin/users/page.tsx
++++ b/app/(dashboard)/admin/users/page.tsx
+@@ -1695,7 +1695,7 @@ export default function UsersAdminPage() {
+                               }
+                               className={
+                                 isSupervisorRole(user.role)
+-                                  ? 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30'
++                                  ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
+                                   : undefined
+                               }
+                             >
+@@ -1718,7 +1718,7 @@ export default function UsersAdminPage() {
+                         </TableCell>
+                         <TableCell className="text-muted-foreground">
+                           {user.current_fleet_assignment ? (
+-                            <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
++                            <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                               {formatAdminFleetAssignment(user.current_fleet_assignment)}
+                             </Badge>
+                           ) : (
+@@ -1891,7 +1891,7 @@ export default function UsersAdminPage() {
+                 {formError}
+               </div>
+             )}
+-            <div className="bg-green-500/10 border border-blue-500/50 rounded-lg p-3 text-sm text-blue-300">
++            <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 text-sm text-blue-300">
+               <strong>Note:</strong> A secure temporary password will be automatically generated and sent to the user&apos;s email address.
+             </div>
+             <div className="rounded-lg border border-[hsl(var(--absence-primary)/0.25)] bg-[hsl(var(--absence-primary)/0.06)] p-4 md:p-5">
+@@ -2335,7 +2335,7 @@ export default function UsersAdminPage() {
+                       isSuperAdminUser(selectedUser) || selectedUser.role?.role_class === 'admin'
+                         ? undefined
+                         : isSupervisorRole(selectedUser.role)
+-                          ? 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30'
++                          ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
+                           : 'bg-slate-700 border-slate-500 text-slate-100 hover:bg-slate-600'
+                     }
+                   >
+@@ -2631,7 +2631,7 @@ export default function UsersAdminPage() {
+             </div>
+ 
+             {/* Important Notice */}
+-            <div className="bg-green-500/10 border border-blue-500/50 rounded p-4">
++            <div className="bg-blue-500/10 border border-blue-500/50 rounded p-4">
+               <p className="text-sm text-blue-400 font-medium mb-2">
+                 📋 Important Information
+               </p>
+diff --git a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
+index 03a337df..4b4715b6 100644
+--- a/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
++++ b/app/(dashboard)/approvals/components/AbsencesApprovalTable.tsx
+@@ -111,7 +111,7 @@ export function AbsencesApprovalTable({
+ 
+     if (status === 'processed') {
+       return (
+-        <Badge variant="default" className="bg-green-500/10 text-blue-400 border-blue-500/20">
++        <Badge variant="default" className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+           <Package className="h-3 w-3 mr-1" />
+           Processed
+         </Badge>
+@@ -269,7 +269,7 @@ export function AbsencesApprovalTable({
+                 {columnVisibility.paidStatus && (
+                   <TableCell>
+                     {absence.absence_reasons?.is_paid ? (
+-                      <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10 text-[10px]">
++                      <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-[10px]">
+                         Paid
+                       </Badge>
+                     ) : (
+diff --git a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
+index 466258bd..25fbaff0 100644
+--- a/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
++++ b/app/(dashboard)/approvals/components/TimesheetsApprovalTable.tsx
+@@ -155,7 +155,7 @@ export function TimesheetsApprovalTable({
+         );
+       case 'processed':
+         return (
+-          <Badge variant="default" className="bg-green-500/10 text-blue-300 border-blue-500/20 hover:bg-green-500/20">
++          <Badge variant="default" className="bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20">
+             Manager Approved
+           </Badge>
+         );
+@@ -347,7 +347,7 @@ export function TimesheetsApprovalTable({
+                             variant="outline"
+                             size="sm"
+                             onClick={(e) => { e.stopPropagation(); router.push(`/timesheets/${ts.id}`); }}
+-                            className="border-blue-300 text-blue-500 hover:bg-green-500 hover:text-white hover:border-blue-500 active:bg-green-600 active:scale-95 transition-all h-8 px-2"
++                            className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all h-8 px-2"
+                           >
+                             <Edit2 className="h-3.5 w-3.5 mr-1" />
+                             Adjust
+diff --git a/app/(dashboard)/approvals/page.tsx b/app/(dashboard)/approvals/page.tsx
+index 1332761c..9b7ddde4 100644
+--- a/app/(dashboard)/approvals/page.tsx
++++ b/app/(dashboard)/approvals/page.tsx
+@@ -867,7 +867,7 @@ function ApprovalsContent() {
+         );
+       case 'processed':
+         return (
+-          <Badge variant="default" className="bg-green-500/10 text-blue-300 border-blue-500/20 hover:bg-green-500/20">
++          <Badge variant="default" className="bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20">
+             Manager Approved
+           </Badge>
+         );
+@@ -913,7 +913,7 @@ function ApprovalsContent() {
+             }
+             className={`w-fit text-lg px-4 py-2 ${
+               statusFilter === 'approved' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+-              statusFilter === 'processed' ? 'bg-green-500/10 text-blue-400 border-blue-500/20' :
++              statusFilter === 'processed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+               statusFilter === 'adjusted' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+               ''
+             }`}
+@@ -1214,7 +1214,7 @@ function ApprovalsContent() {
+                                     e.stopPropagation();
+                                     router.push(`/timesheets/${timesheet.id}`);
+                                   }}
+-                                  className="border-blue-300 text-blue-500 hover:bg-green-500 hover:text-white hover:border-blue-500 active:bg-green-600 active:scale-95 transition-all"
++                                  className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all"
+                                 >
+                                   <Edit2 className="h-4 w-4 mr-1" />
+                                   Adjust
+@@ -1490,7 +1490,7 @@ function AbsenceApprovalCard({
+ 
+     if (absence.status === 'processed') {
+       return (
+-        <Badge variant="default" className="bg-green-500/10 text-blue-400 border-blue-500/20">
++        <Badge variant="default" className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+           <Package className="h-3 w-3 mr-1" />
+           Processed
+         </Badge>
+@@ -1529,7 +1529,7 @@ function AbsenceApprovalCard({
+                 <span>·</span>
+                 <span>{absence.duration_days} {absence.duration_days === 1 ? 'day' : 'days'}</span>
+                 {absence.absence_reasons.is_paid ? (
+-                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10 text-[10px] px-1.5 py-0">
++                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-[10px] px-1.5 py-0">
+                     Paid
+                   </Badge>
+                 ) : (
+diff --git a/app/(dashboard)/dashboard/page.tsx b/app/(dashboard)/dashboard/page.tsx
+index b6e8d392..7e7a52aa 100644
+--- a/app/(dashboard)/dashboard/page.tsx
++++ b/app/(dashboard)/dashboard/page.tsx
+@@ -73,7 +73,7 @@ function applyAlphaToHSL(color: string): string {
+ 
+   // Fallback: return semi-transparent slate if invalid format
+   console.warn(`Invalid HSL color format: "${color}". Using fallback color.`);
+-  return 'hsl(128 24% 35% / 0.15)'; // slate-600 with 15% opacity
++  return 'hsl(215 16% 47% / 0.15)'; // slate-600 with 15% opacity
+ }
+ 
+ function getInitials(fullName: string | null | undefined): string {
+@@ -162,7 +162,7 @@ export default function DashboardPage() {
+         label: 'Timesheets',
+         count: timesheetsCount,
+         icon: FileText,
+-        color: 'hsl(var(--timesheet-primary))',
++        color: 'hsl(210 90% 50%)',
+         href: '/approvals?tab=timesheets',
+       },
+       {
+diff --git a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
+index dfcfc977..9c4e7bd7 100644
+--- a/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/AuditLogDebugPanel.tsx
+@@ -66,7 +66,7 @@ function getAuditMetricClasses(tone: AuditTone): string {
+     case 'danger':
+       return 'border-red-500/30 bg-red-500/10 text-red-100';
+     case 'info':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+   }
+@@ -80,7 +80,7 @@ function getActionBadgeClass(action: string): string {
+       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+     case 'updated':
+     case 'update':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+     case 'submitted':
+       return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+     case 'deleted':
+diff --git a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
+index 01a9e426..8ddc12cf 100644
+--- a/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/DVLASyncDebugPanel.tsx
+@@ -46,7 +46,7 @@ function getDvlaMetricClasses(tone: DvlaSummaryTone): string {
+     case 'danger':
+       return 'border-red-500/30 bg-red-500/10 text-red-100';
+     case 'info':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+   }
+diff --git a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
+index 7d0a4677..336ced4b 100644
+--- a/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/ErrorLogsDebugPanel.tsx
+@@ -84,7 +84,7 @@ function getErrorSummaryClasses(tone: ErrorSummaryTone): string {
+     case 'danger':
+       return 'border-red-500/30 bg-red-500/10 text-red-100';
+     case 'info':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+   }
+diff --git a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
+index 90b8835e..8fa3b64c 100644
+--- a/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/LegacyJobCodesDebugPanel.tsx
+@@ -615,7 +615,7 @@ export function LegacyJobCodesDebugPanel() {
+               variant="outline"
+               onClick={() => void requestCorrectionPreview('batch')}
+               disabled={batchLoading}
+-              className="border-blue-500/40 bg-green-500/10 text-blue-100 hover:bg-green-500/20 hover:text-blue-50"
++              className="border-blue-500/40 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-blue-50"
+             >
+               {batchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+               Preview Batch Change
+@@ -787,7 +787,7 @@ export function LegacyJobCodesDebugPanel() {
+           </div>
+ 
+           {selectedTimesheets.length > 0 ? (
+-            <div className="rounded-xl border border-blue-500/30 bg-green-500/10 p-4 text-sm text-blue-100">
++            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-100">
+               <p className="font-semibold">Selected weekly timesheets</p>
+               <p className="mt-1 text-blue-100/85">
+                 {selectedTimesheets.map((timesheet) => `${timesheet.employeeName} (${formatWeekEnding(timesheet.weekEnding)})`).join(', ')}
+@@ -801,7 +801,7 @@ export function LegacyJobCodesDebugPanel() {
+               variant="outline"
+               onClick={() => void requestCorrectionPreview('individual')}
+               disabled={individualLoading || selectedTimesheetIds.length === 0}
+-              className="border-blue-500/40 bg-green-500/10 text-blue-100 hover:bg-green-500/20 hover:text-blue-50"
++              className="border-blue-500/40 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-blue-50"
+             >
+               {individualLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+               Preview Individual Change
+diff --git a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
+index da7a5148..25a5563f 100644
+--- a/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/NotificationSettingsDebugPanel.tsx
+@@ -62,7 +62,7 @@ function getNotificationMetricClasses(tone: NotificationSummaryTone): string {
+     case 'danger':
+       return 'border-red-500/30 bg-red-500/10 text-red-100';
+     case 'info':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+   }
+@@ -357,7 +357,7 @@ export function NotificationSettingsDebugPanel() {
+     if (isSupervisorRole(user)) {
+       return {
+         variant: 'outline',
+-        className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
++        className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+         label: user.role_display_name || 'Supervisor',
+       };
+     }
+@@ -460,7 +460,7 @@ export function NotificationSettingsDebugPanel() {
+         </div>
+ 
+         {batchMode && (
+-          <div className="flex flex-wrap gap-2 rounded-xl border border-blue-500/30 bg-green-500/10 p-4">
++          <div className="flex flex-wrap gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+             <div className="flex items-center gap-2 text-sm font-medium text-foreground w-full mb-2">
+               {selectedUsers.size} user(s) selected
+               <Button size="sm" variant="ghost" onClick={selectAll}>Select All</Button>
+diff --git a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
+index 7259a4cb..c6d27979 100644
+--- a/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
++++ b/app/(dashboard)/debug/components/UserAnalyticsDebugPanel.tsx
+@@ -70,7 +70,7 @@ function getInsightClasses(tone: UsageAnalyticsInsight['tone']): string {
+     case 'danger':
+       return 'border-red-500/30 bg-red-500/10 text-red-100';
+     case 'info':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
+   }
+@@ -84,7 +84,7 @@ function getRoleBadgeMeta(roleName: string | null): { variant: BadgeVariant; cla
+   if (normalized.includes('supervisor')) {
+     return {
+       variant: 'outline',
+-      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
++      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+       label,
+     };
+   }
+@@ -94,7 +94,7 @@ function getRoleBadgeMeta(roleName: string | null): { variant: BadgeVariant; cla
+ function getEventBadgeClass(eventCategory: string): string {
+   switch (eventCategory) {
+     case 'navigation':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+     case 'auth':
+       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+     case 'error':
+@@ -113,7 +113,7 @@ function getDeviceBadgeClass(deviceType: string | null): string {
+     case 'tablet':
+       return 'border-purple-500/30 bg-purple-500/10 text-purple-300';
+     case 'desktop':
+-      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
++      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+     default:
+       return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+   }
+diff --git a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
+index ecb46616..d4e9402c 100644
+--- a/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
++++ b/app/(dashboard)/fleet/components/FleetSettingsTab.tsx
+@@ -242,7 +242,7 @@ export function FleetSettingsTab({
+                           <CardContent className="p-4">
+                             <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-4 flex-1">
+-                                <div className="bg-green-500/10 p-3 rounded-lg">
++                                <div className="bg-blue-500/10 p-3 rounded-lg">
+                                   <Truck className="h-5 w-5 text-blue-400" />
+                                 </div>
+                                 <div className="flex-1">
+diff --git a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
+index d9be9bb2..2be786a8 100644
+--- a/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
++++ b/app/(dashboard)/fleet/hgvs/[hgvId]/history/page.tsx
+@@ -258,7 +258,7 @@ function DocumentsTabContent({ hgvId, workshopTasks }: { hgvId: string; workshop
+                             className={
+                               task.status === 'completed' 
+                                 ? 'bg-green-500/10 text-green-300 border-green-500/30'
+-                                : 'bg-green-500/10 text-blue-300 border-blue-500/30'
++                                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                             }
+                           >
+                             {task.status === 'completed' ? 'Completed' : 'In Progress'}
+@@ -270,7 +270,7 @@ function DocumentsTabContent({ hgvId, workshopTasks }: { hgvId: string; workshop
+                           </p>
+                         )}
+                       </div>
+-                      <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                      <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                         <Paperclip className="h-3 w-3 mr-1" />
+                         {taskAttachments.length}
+                       </Badge>
+@@ -674,7 +674,7 @@ export default function HgvHistoryPage({
+       case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
+       case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+       case 'MINOR': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+-      case 'ADVISORY': return 'text-blue-400 bg-green-500/10 border-blue-500/30';
++      case 'ADVISORY': return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+       case 'FAIL': return 'text-red-600 bg-red-600/10 border-red-600/30';
+       default: return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
+     }
+@@ -767,7 +767,7 @@ export default function HgvHistoryPage({
+ 
+       {/* HGV Data Section (VES/MOT) */}
+       {vehicleData && (vehicleData.ves_make || vehicleData.mot_make) ? (
+-          <Card className="bg-gradient-to-r from-green-900/20 to-green-800/10 border-blue-700/30">
++          <Card className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border-blue-700/30">
+             <CardContent className="pt-6">
+               <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[fit-content(calc(50%_-_0.75rem))_minmax(calc(50%_-_0.75rem),_1fr)]' : 'grid-cols-1'}`}>
+                 <div className={hasMapMatch ? 'min-w-0 space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
+@@ -1033,7 +1033,7 @@ export default function HgvHistoryPage({
+                     This HGV may not yet have had its first annual test
+                   </p>
+                   {vehicleData?.mot_due_date && (
+-                    <div className="bg-green-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
++                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
+                       <p className="text-sm text-blue-300">
+                         First annual test due: <span className="text-white font-medium">{formatDate(vehicleData.mot_due_date)}</span>
+                       </p>
+@@ -1044,7 +1044,7 @@ export default function HgvHistoryPage({
+                 <div className="space-y-4">
+                   {/* Current MOT Status Card */}
+                   {motData.currentStatus && motData.currentStatus.status !== 'No MOT History' && motData.currentStatus.status !== 'Not Yet Due' && (
+-                    <Card className="bg-gradient-to-r from-green-900/30 to-green-800/20 border-blue-700/50">
++                    <Card className="bg-gradient-to-r from-blue-900/30 to-blue-800/20 border-blue-700/50">
+                       <CardHeader>
+                         <CardTitle className="text-lg text-blue-300 flex items-center gap-2">
+                           <CheckCircle className="h-5 w-5" />
+diff --git a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
+index a81316ed..17e0b1d5 100644
+--- a/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
++++ b/app/(dashboard)/fleet/plant/[plantId]/history/page.tsx
+@@ -246,7 +246,7 @@ function DocumentsTabContent({ plantId, workshopTasks }: { plantId: string; work
+                             className={
+                               task.status === 'completed' 
+                                 ? 'bg-green-500/10 text-green-300 border-green-500/30'
+-                                : 'bg-green-500/10 text-blue-300 border-blue-500/30'
++                                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                             }
+                           >
+                             {task.status === 'completed' ? 'Completed' : 'In Progress'}
+@@ -258,7 +258,7 @@ function DocumentsTabContent({ plantId, workshopTasks }: { plantId: string; work
+                           </p>
+                         )}
+                       </div>
+-                      <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                      <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                         <Paperclip className="h-3 w-3 mr-1" />
+                         {taskAttachments.length}
+                       </Badge>
+diff --git a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
+index 92d4b6e4..ad80c4ea 100644
+--- a/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
++++ b/app/(dashboard)/fleet/vans/[vanId]/history/page.tsx
+@@ -263,7 +263,7 @@ function DocumentsTabContent({ vanId, workshopTasks }: { vanId: string; workshop
+                             className={
+                               task.status === 'completed' 
+                                 ? 'bg-green-500/10 text-green-300 border-green-500/30'
+-                                : 'bg-green-500/10 text-blue-300 border-blue-500/30'
++                                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                             }
+                           >
+                             {task.status === 'completed' ? 'Completed' : 'In Progress'}
+@@ -275,7 +275,7 @@ function DocumentsTabContent({ vanId, workshopTasks }: { vanId: string; workshop
+                           </p>
+                         )}
+                       </div>
+-                      <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                      <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                         <Paperclip className="h-3 w-3 mr-1" />
+                         {taskAttachments.length}
+                       </Badge>
+@@ -677,7 +677,7 @@ export default function VanHistoryPage({
+       case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
+       case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+       case 'MINOR': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+-      case 'ADVISORY': return 'text-blue-400 bg-green-500/10 border-blue-500/30';
++      case 'ADVISORY': return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+       case 'FAIL': return 'text-red-600 bg-red-600/10 border-red-600/30';
+       default: return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
+     }
+@@ -833,7 +833,7 @@ export default function VanHistoryPage({
+       ) : (
+         /* Vehicle Data Card (VES/MOT) */
+         vehicleData && (vehicleData.ves_make || vehicleData.mot_make) ? (
+-          <Card className="bg-gradient-to-r from-green-900/20 to-green-800/10 border-blue-700/30">
++          <Card className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border-blue-700/30">
+             <CardContent className="pt-6">
+               <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[fit-content(calc(50%_-_0.75rem))_minmax(calc(50%_-_0.75rem),_1fr)]' : 'grid-cols-1'}`}>
+                 <div className={hasMapMatch ? 'min-w-0 space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
+@@ -1163,7 +1163,7 @@ export default function VanHistoryPage({
+                     This vehicle may be too new or exempt from MOT testing
+                   </p>
+                   {vehicleData?.mot_due_date && (
+-                    <div className="bg-green-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
++                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
+                       <p className="text-sm text-blue-300">
+                         First MOT due: <span className="text-white font-medium">{formatDate(vehicleData.mot_due_date)}</span>
+                       </p>
+@@ -1174,7 +1174,7 @@ export default function VanHistoryPage({
+                 <div className="space-y-4">
+                   {/* Current MOT Status Card */}
+                   {motData.currentStatus && motData.currentStatus.status !== 'No MOT History' && motData.currentStatus.status !== 'Not Yet Due' && (
+-                    <Card className="bg-gradient-to-r from-green-900/30 to-green-800/20 border-blue-700/50">
++                    <Card className="bg-gradient-to-r from-blue-900/30 to-blue-800/20 border-blue-700/50">
+                       <CardHeader>
+                         <CardTitle className="text-lg text-blue-300 flex items-center gap-2">
+                           <CheckCircle className="h-5 w-5" />
+diff --git a/app/(dashboard)/help/page.tsx b/app/(dashboard)/help/page.tsx
+index 57ae0181..80c2abe2 100644
+--- a/app/(dashboard)/help/page.tsx
++++ b/app/(dashboard)/help/page.tsx
+@@ -96,9 +96,9 @@ const HELP_NAV_TILES: HelpTileConfig[] = [
+     label: 'FAQ',
+     helper: 'Find answers',
+     icon: BookOpen,
+-    tileClassName: 'border-blue-200 bg-green-50 hover:bg-green-100 dark:border-blue-500/30 dark:bg-green-950/30 dark:hover:bg-green-950/50',
++    tileClassName: 'border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-950/30 dark:hover:bg-blue-950/50',
+     activeClassName: 'border-blue-500 ring-blue-500/30 dark:border-blue-400',
+-    iconClassName: 'bg-green-100 text-blue-700 dark:bg-green-500/20 dark:text-blue-300',
++    iconClassName: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+   },
+   {
+     value: 'install',
+@@ -549,7 +549,7 @@ export default function HelpPage() {
+ 
+   const getStatusColor = (status: string) => {
+     switch (status) {
+-      case 'new': return 'bg-green-500';
++      case 'new': return 'bg-blue-500';
+       case 'under_review': return 'bg-yellow-500';
+       case 'planned': return 'bg-purple-500';
+       case 'completed': return 'bg-green-500';
+@@ -824,7 +824,7 @@ export default function HelpPage() {
+                   Guided Cache-Clear Steps
+                 </Button>
+               </div>
+-              <div className="bg-green-50 dark:bg-green-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
++              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+                 <p className="text-sm text-blue-900 dark:text-blue-300">
+                   <strong>Support tip:</strong> If the install prompt does not appear, use the manual browser steps below and then refresh this page.
+                 </p>
+@@ -1062,7 +1062,7 @@ export default function HelpPage() {
+                 )}
+               </div>
+ 
+-              <div className="bg-green-50 dark:bg-green-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
++              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+                 <p className="text-sm text-blue-900 dark:text-blue-300">
+                   <strong>Tip:</strong> Include any error messages, codes, or screenshots you saw. The more detail you provide, the faster we can fix it!
+                 </p>
+diff --git a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
+index 566cfb60..7a41c25e 100644
+--- a/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
++++ b/app/(dashboard)/help/version-history/components/VersionHistoryTabs.tsx
+@@ -44,7 +44,7 @@ function getUpdateKindLabel(entry: ReleaseHistoryEntry): string {
+ function getUpdateKindClassName(entry: ReleaseHistoryEntry): string {
+   return entry.updateKind === 'major'
+     ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200'
+-    : 'border-blue-500/40 bg-green-500/10 text-blue-700 dark:text-blue-200';
++    : 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-200';
+ }
+ 
+ function getDownloadFilename(response: Response): string {
+diff --git a/app/(dashboard)/hgv-inspections/new/page.tsx b/app/(dashboard)/hgv-inspections/new/page.tsx
+index 27366912..6c453e2f 100644
+--- a/app/(dashboard)/hgv-inspections/new/page.tsx
++++ b/app/(dashboard)/hgv-inspections/new/page.tsx
+@@ -1371,7 +1371,7 @@ function NewHgvInspectionContent() {
+     if (!isSelected) return 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50';
+     if (status === 'ok') return 'bg-green-500/20 border-green-500 shadow-lg shadow-green-500/20';
+     if (status === 'attention') return 'bg-red-500/20 border-red-500 shadow-lg shadow-red-500/20';
+-    if (status === 'na') return 'bg-green-500/20 border-blue-400 shadow-lg shadow-blue-500/20';
++    if (status === 'na') return 'bg-blue-500/20 border-blue-400 shadow-lg shadow-blue-500/20';
+     return 'bg-slate-500/20 border-slate-400 shadow-lg shadow-slate-500/20';
+   };
+ 
+@@ -1612,7 +1612,7 @@ function NewHgvInspectionContent() {
+                 Start Daily Check
+               </Button>
+             ) : (
+-              <div className="p-3 bg-green-500/10 border border-blue-500/30 rounded-lg">
++              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                 <p className="text-sm text-blue-400">
+                   <Info className="h-4 w-4 inline mr-2" />
+                   Daily check started. The submit button unlocks after 10 minutes.
+@@ -1652,7 +1652,7 @@ function NewHgvInspectionContent() {
+                     return (
+                       <Fragment key={itemNumber}>
+                         {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
+-                          <tr className="bg-green-500/10 border-y border-blue-400/40">
++                          <tr className="bg-blue-500/10 border-y border-blue-400/40">
+                             <td colSpan={4} className="p-2 text-center text-xs font-semibold tracking-wide text-blue-200 uppercase">
+                               Artics only
+                             </td>
+@@ -1735,7 +1735,7 @@ function NewHgvInspectionContent() {
+                 return (
+                   <Fragment key={itemNumber}>
+                     {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
+-                      <div className="rounded-md border border-blue-400/50 bg-green-500/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-blue-200">
++                      <div className="rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-blue-200">
+                         Artics only
+                       </div>
+                     )}
+diff --git a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
+index 162e0272..2ec9e5e0 100644
+--- a/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
++++ b/app/(dashboard)/inventory/components/InventoryEmployeeView.tsx
+@@ -225,7 +225,7 @@ export function InventoryEmployeeView({
+             </div>
+             {currentFleetAssignment ? (
+               <div className="mt-2">
+-                <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
++                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                   <Truck className="mr-1 h-3 w-3" />
+                   Linked {currentFleetAssignment.asset_type.toUpperCase()}: {[
+                     currentFleetAssignment.asset_label,
+@@ -280,7 +280,7 @@ export function InventoryEmployeeView({
+                   <CardTitle className="flex flex-wrap items-center gap-2 text-white">
+                     <MapPin className="h-5 w-5 text-inventory" />
+                     Site: {site.name}
+-                    <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
++                    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                       Secondary Location
+                     </Badge>
+                   </CardTitle>
+diff --git a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
+index d6546875..79ff5929 100644
+--- a/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
++++ b/app/(dashboard)/inventory/components/InventoryLocationsPanel.tsx
+@@ -62,7 +62,7 @@ export function InventoryLocationsPanel({
+                     </td>
+                     <td className="px-4 py-3">
+                       {linkedAssetLabel ? (
+-                        <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
++                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                           <Link2 className="mr-1 h-3 w-3" />
+                           {linkedAssetLabel}
+                         </Badge>
+diff --git a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
+index 3ad5f9f5..72201b11 100644
+--- a/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
++++ b/app/(dashboard)/inventory/components/InventorySiteAssignmentsPanel.tsx
+@@ -157,7 +157,7 @@ export function InventorySiteAssignmentsPanel({
+                 <div>
+                   <div className="font-medium text-white">{getUserLabel(assignment.user)}</div>
+                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+-                    <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
++                    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                       {getSiteLabel(site)}
+                     </Badge>
+                   </div>
+diff --git a/app/(dashboard)/inventory/components/InventoryTable.tsx b/app/(dashboard)/inventory/components/InventoryTable.tsx
+index 186b3f3e..1f69d331 100644
+--- a/app/(dashboard)/inventory/components/InventoryTable.tsx
++++ b/app/(dashboard)/inventory/components/InventoryTable.tsx
+@@ -79,7 +79,7 @@ function getStatusBadgeClass(status: InventoryCheckStatus, item?: InventoryItem)
+   if (item && shouldMuteInventoryCheckBadge(item)) return 'border-slate-600/30 bg-slate-700/20 text-slate-300';
+   if (status === 'overdue') return 'border-red-500/30 bg-red-500/10 text-red-300';
+   if (status === 'due_soon') return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+-  if (status === 'needs_check') return 'border-blue-500/30 bg-green-500/10 text-blue-300';
++  if (status === 'needs_check') return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+   if (status === 'not_required') return 'border-slate-700 bg-slate-800/30 text-slate-500';
+   return 'border-green-500/30 bg-green-500/10 text-green-300';
+ }
+diff --git a/app/(dashboard)/inventory/items/[itemId]/page.tsx b/app/(dashboard)/inventory/items/[itemId]/page.tsx
+index f58603bc..089582b7 100644
+--- a/app/(dashboard)/inventory/items/[itemId]/page.tsx
++++ b/app/(dashboard)/inventory/items/[itemId]/page.tsx
+@@ -118,7 +118,7 @@ function getStatusBadgeClass(item: InventoryItem): string {
+   if (shouldMuteInventoryCheckBadge(item)) return 'border-slate-600/30 bg-slate-700/20 text-slate-300';
+   if (status === 'overdue') return 'border-red-500/30 bg-red-500/10 text-red-300';
+   if (status === 'due_soon') return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+-  if (status === 'needs_check') return 'border-blue-500/30 bg-green-500/10 text-blue-300';
++  if (status === 'needs_check') return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+   if (status === 'not_required') return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+   return 'border-green-500/30 bg-green-500/10 text-green-300';
+ }
+diff --git a/app/(dashboard)/inventory/page.tsx b/app/(dashboard)/inventory/page.tsx
+index 87ad7a64..e683ad07 100644
+--- a/app/(dashboard)/inventory/page.tsx
++++ b/app/(dashboard)/inventory/page.tsx
+@@ -1159,7 +1159,7 @@ function SummaryCard({ label, value, icon, tone = 'default', onClick }: SummaryC
+     default: 'text-inventory bg-inventory-soft',
+     danger: 'text-red-300 bg-red-500/10',
+     warning: 'text-amber-300 bg-amber-500/10',
+-    info: 'text-blue-300 bg-green-500/10',
++    info: 'text-blue-300 bg-blue-500/10',
+   }[tone];
+ 
+   const card = (
+diff --git a/app/(dashboard)/maintenance/components/CategoryDialog.tsx b/app/(dashboard)/maintenance/components/CategoryDialog.tsx
+index 658a6103..6195aca5 100644
+--- a/app/(dashboard)/maintenance/components/CategoryDialog.tsx
++++ b/app/(dashboard)/maintenance/components/CategoryDialog.tsx
+@@ -381,14 +381,14 @@ export function CategoryDialog({
+                   mode === 'edit' 
+                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
+                     : selectedType === 'date'
+-                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
++                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                 }`}
+               >
+                 <div className="flex items-center gap-3">
+                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                     selectedType === 'date' 
+-                      ? 'border-blue-500 bg-green-500'
++                      ? 'border-blue-500 bg-blue-500' 
+                       : 'border-slate-500'
+                   }`}>
+                     {selectedType === 'date' && (
+@@ -409,14 +409,14 @@ export function CategoryDialog({
+                   mode === 'edit' 
+                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
+                     : selectedType === 'mileage'
+-                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
++                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                 }`}
+               >
+                 <div className="flex items-center gap-3">
+                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                     selectedType === 'mileage' 
+-                      ? 'border-blue-500 bg-green-500'
++                      ? 'border-blue-500 bg-blue-500' 
+                       : 'border-slate-500'
+                   }`}>
+                     {selectedType === 'mileage' && (
+@@ -437,14 +437,14 @@ export function CategoryDialog({
+                   mode === 'edit' 
+                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
+                     : selectedType === 'hours'
+-                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
++                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                 }`}
+               >
+                 <div className="flex items-center gap-3">
+                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                     selectedType === 'hours' 
+-                      ? 'border-blue-500 bg-green-500'
++                      ? 'border-blue-500 bg-blue-500' 
+                       : 'border-slate-500'
+                   }`}>
+                     {selectedType === 'hours' && (
+@@ -541,7 +541,7 @@ export function CategoryDialog({
+                         onClick={() => setValue('period_unit', unit)}
+                         className={`rounded-lg border-2 px-4 py-3 text-left transition-all ${
+                           isSelected
+-                            ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
++                            ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                             : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                         }`}
+                       >
+@@ -744,7 +744,7 @@ export function CategoryDialog({
+           <div 
+             className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${
+               showOnOverview 
+-                ? 'border-green-500/50 bg-green-500/10'
++                ? 'border-green-500/50 bg-green-500/10' 
+                 : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+             }`}
+             onClick={() => setValue('show_on_overview', !showOnOverview)}
+@@ -783,14 +783,14 @@ export function CategoryDialog({
+               <div 
+                 className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                   reminderInApp 
+-                    ? 'border-blue-500/50 bg-green-500/10'
++                    ? 'border-blue-500/50 bg-blue-500/10' 
+                     : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
+                 }`}
+                 onClick={() => setValue('reminder_in_app_enabled', !reminderInApp)}
+               >
+                 <div className="flex items-center gap-3">
+                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+-                    reminderInApp ? 'bg-green-500' : 'bg-slate-700'
++                    reminderInApp ? 'bg-blue-500' : 'bg-slate-700'
+                   }`}>
+                     <Bell className={`h-4 w-4 ${reminderInApp ? 'text-white' : 'text-blue-400'}`} />
+                   </div>
+@@ -807,14 +807,14 @@ export function CategoryDialog({
+                   id="reminder_in_app"
+                   checked={reminderInApp}
+                   onCheckedChange={(checked) => setValue('reminder_in_app_enabled', checked)}
+-                  className="data-[state=checked]:bg-green-500"
++                  className="data-[state=checked]:bg-blue-500"
+                 />
+               </div>
+               
+               <div 
+                 className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                   reminderEmail 
+-                    ? 'border-green-500/50 bg-green-500/10'
++                    ? 'border-green-500/50 bg-green-500/10' 
+                     : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
+                 }`}
+                 onClick={() => setValue('reminder_email_enabled', !reminderEmail)}
+diff --git a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
+index 62596174..67196651 100644
+--- a/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
++++ b/app/(dashboard)/maintenance/components/CategoryRecipientsDialog.tsx
+@@ -354,7 +354,7 @@ export function CategoryRecipientsDialog({
+                           profile.hasModuleAccess === false
+                             ? 'opacity-60 border border-transparent'
+                             : isSelected 
+-                              ? 'bg-green-600/20 border border-blue-500/30'
++                              ? 'bg-blue-600/20 border border-blue-500/30' 
+                               : 'hover:bg-slate-800 border border-transparent'
+                         }`}
+                         onClick={() => profile.hasModuleAccess !== false && handleToggleUser(profile.id)}
+@@ -364,7 +364,7 @@ export function CategoryRecipientsDialog({
+                             checked={isSelected}
+                             onCheckedChange={() => handleToggleUser(profile.id)}
+                             disabled={profile.hasModuleAccess === false}
+-                            className="data-[state=checked]:bg-green-600 data-[state=checked]:border-blue-600"
++                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                           />
+                           <div>
+                             <p className="text-sm font-medium text-white">
+diff --git a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
+index a9a4a12d..9f20bbf6 100644
+--- a/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
++++ b/app/(dashboard)/maintenance/components/EditMaintenanceDialog.tsx
+@@ -910,7 +910,7 @@ export function EditMaintenanceDialog({
+           </div>
+ 
+           {/* Mandatory Comment */}
+-          <div className="space-y-2 bg-green-900/20 border border-blue-800/50 rounded-lg p-4">
++          <div className="space-y-2 bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
+             <Label htmlFor="comment" className="text-white">
+               Update Comment <span className="text-red-400">*</span>
+             </Label>
+diff --git a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
+index 33b636ed..58be696f 100644
+--- a/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
++++ b/app/(dashboard)/maintenance/components/EditPlantRecordDialog.tsx
+@@ -915,7 +915,7 @@ export function EditPlantRecordDialog({
+           </div>
+ 
+           {/* Mandatory Comment */}
+-          <div className="space-y-2 bg-green-900/20 border border-blue-800/50 rounded-lg p-4">
++          <div className="space-y-2 bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
+             <Label htmlFor="comment" className="text-white">
+               Update Comment <span className="text-red-400">*</span>
+             </Label>
+diff --git a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
+index 5256d18e..321959ab 100644
+--- a/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
++++ b/app/(dashboard)/maintenance/components/MaintenanceHistoryDialog.tsx
+@@ -206,7 +206,7 @@ export function MaintenanceHistoryDialog({
+               )}
+               <Badge variant="outline" className={`text-xs ${
+                 task.status === 'completed' ? 'bg-green-500/20 border-green-500/40 text-green-400' :
+-                task.status === 'logged' ? 'bg-green-500/20 border-blue-500/40 text-blue-400' :
++                task.status === 'logged' ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' :
+                 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+               }`}>
+                 {task.status === 'completed' ? 'Completed' :
+@@ -241,7 +241,7 @@ export function MaintenanceHistoryDialog({
+                 </div>
+               )}
+               {task.logged_comment && (
+-                <div className="bg-green-500/10 border border-blue-500/30 rounded p-2 mt-2">
++                <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2 mt-2">
+                   <p className="text-xs text-blue-400 font-medium mb-1">Progress Note:</p>
+                   <p className="text-blue-300 text-sm">{task.logged_comment}</p>
+                 </div>
+@@ -356,7 +356,7 @@ export function MaintenanceHistoryDialog({
+           <div className="space-y-4">
+             {/* VES Vehicle Data Section - Show even if no history */}
+             {vesData && (vesData.ves_make || vesData.ves_colour || vesData.ves_fuel_type) && (
+-              <div className="bg-gradient-to-r from-green-900/20 to-green-800/10 border border-blue-700/30 rounded-lg p-4">
++              <div className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border border-blue-700/30 rounded-lg p-4">
+                 <div className="mb-3">
+                   <h3 className="text-sm font-medium text-blue-300 uppercase tracking-wide flex items-center gap-2">
+                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+diff --git a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
+index e3548104..ed399020 100644
+--- a/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
++++ b/app/(dashboard)/maintenance/components/MaintenanceOverview.tsx
+@@ -1287,7 +1287,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
+                       relatedTask.status === 'pending' 
+                         ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
+                         : relatedTask.status === 'logged' || relatedTask.status === 'in_progress'
+-                        ? 'bg-green-500/10 text-blue-300 border-blue-500/30'
++                        ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                         : 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+                     }`}
+                   >
+@@ -1710,7 +1710,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
+       )}
+ 
+       {/* About Section */}
+-      <Card className="bg-green-50 dark:bg-green-900/20 border-blue-200 dark:border-blue-800">
++      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+         <CardContent className="pt-6">
+           <div className="flex items-start gap-3">
+             <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+diff --git a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
+index ca65da70..18584f18 100644
+--- a/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
++++ b/app/(dashboard)/maintenance/components/MaintenanceSettings.tsx
+@@ -289,7 +289,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
+       </Card>
+       
+       {/* Info Card */}
+-      <Card className="bg-green-50 dark:bg-green-900/20 border-blue-200 dark:border-blue-800">
++      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+         <CardContent className="pt-6">
+           <div className="flex items-start gap-3">
+             <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+diff --git a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
+index 25e9affe..872fac7e 100644
+--- a/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
++++ b/app/(dashboard)/maintenance/components/MaintenanceTable.tsx
+@@ -376,7 +376,7 @@ export function MaintenanceTable({
+   return (
+     <>
+       {/* Mobile Info Banner */}
+-      <Alert className="md:hidden bg-green-900/20 border-blue-700/50 mb-4">
++      <Alert className="md:hidden bg-blue-900/20 border-blue-700/50 mb-4">
+         <Monitor className="h-4 w-4 text-blue-400" />
+         <AlertDescription className="text-blue-200 text-sm">
+           Mobile view shows essential information only. Desktop recommended for complete data and advanced features.
+@@ -732,7 +732,7 @@ export function MaintenanceTable({
+                                 setSelectedVehicle(vehicle);
+                                 setDeleteDialogOpen(true);
+                               }}
+-                              className={cn('text-blue-400 hover:text-blue-300 hover:bg-green-900/20 ml-auto p-0', tabletModeEnabled ? 'h-11 w-11' : 'h-10 w-10')}
++                              className={cn('text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 ml-auto p-0', tabletModeEnabled ? 'h-11 w-11' : 'h-10 w-10')}
+                             >
+                               <Archive className="h-5 w-5" />
+                             </Button>
+diff --git a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
+index 26deaef5..2062303c 100644
+--- a/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
++++ b/app/(dashboard)/maintenance/components/MotHistoryDialog.tsx
+@@ -85,7 +85,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
+       case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
+       case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+       case 'MINOR': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+-      case 'ADVISORY': return 'text-blue-400 bg-green-500/10 border-blue-500/30';
++      case 'ADVISORY': return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+       case 'FAIL': return 'text-red-600 bg-red-600/10 border-red-600/30';
+       default: return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
+     }
+@@ -161,7 +161,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
+                 <p className="text-lg font-medium text-white mb-2">No MOT History Yet</p>
+                 <p className="text-sm mb-4">{error}</p>
+                 {existingMotDueDate && !vehicleNotFound && (
+-                  <div className="bg-green-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
++                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
+                     <p className="text-sm text-blue-300">
+                       This van is likely less than 3 years old and hasn&apos;t required an MOT yet.
+                     </p>
+@@ -259,7 +259,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
+               </div>
+             ) : (
+               // Normal card for vans with MOT history
+-              <div className="bg-gradient-to-r from-green-900/30 to-green-800/20 border border-blue-700/50 rounded-lg p-3 md:p-4">
++              <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/20 border border-blue-700/50 rounded-lg p-3 md:p-4">
+                 <h3 className="text-base md:text-lg font-semibold text-blue-300 mb-3 flex items-center gap-2">
+                   <CheckCircle className="h-4 w-4 md:h-5 md:w-5" />
+                   Current MOT Status
+diff --git a/app/(dashboard)/maintenance/components/PlantTable.tsx b/app/(dashboard)/maintenance/components/PlantTable.tsx
+index 7ab44704..8da28594 100644
+--- a/app/(dashboard)/maintenance/components/PlantTable.tsx
++++ b/app/(dashboard)/maintenance/components/PlantTable.tsx
+@@ -489,7 +489,7 @@ export function PlantTable({
+   return (
+     <>
+       {/* Mobile Info Banner */}
+-      <Alert className="md:hidden bg-green-900/20 border-blue-700/50 mb-4">
++      <Alert className="md:hidden bg-blue-900/20 border-blue-700/50 mb-4">
+         <Monitor className="h-4 w-4 text-blue-400" />
+         <AlertDescription className="text-blue-200 text-sm">
+           Mobile view shows essential information only. Desktop recommended for complete data and advanced features.
+diff --git a/app/(dashboard)/notifications/page.tsx b/app/(dashboard)/notifications/page.tsx
+index 434a7dac..ea8ac3e2 100644
+--- a/app/(dashboard)/notifications/page.tsx
++++ b/app/(dashboard)/notifications/page.tsx
+@@ -213,7 +213,7 @@ function NotificationDetailPane({
+     return (
+       <Card className={`flex min-h-[42rem] flex-col border-border bg-white dark:bg-slate-900 ${className}`}>
+         <CardContent className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+-          <div className="mb-4 rounded-full bg-green-100 p-4 dark:bg-green-950">
++          <div className="mb-4 rounded-full bg-blue-100 p-4 dark:bg-blue-950">
+             <Bell className="h-8 w-8 text-blue-600" />
+           </div>
+           <h3 className="mb-2 text-lg font-semibold text-foreground">
+@@ -253,7 +253,7 @@ function NotificationDetailPane({
+         <div className="flex items-start justify-between gap-4">
+           <div className="min-w-0 space-y-2">
+             <div className="flex items-center gap-2">
+-              <div className={notification.priority === 'HIGH' || notification.priority === 'URGENT' ? 'rounded bg-red-100 p-2 dark:bg-red-950' : 'rounded bg-green-100 p-2 dark:bg-green-950'}>
++              <div className={notification.priority === 'HIGH' || notification.priority === 'URGENT' ? 'rounded bg-red-100 p-2 dark:bg-red-950' : 'rounded bg-blue-100 p-2 dark:bg-blue-950'}>
+                 {notification.priority === 'HIGH' || notification.priority === 'URGENT' ? (
+                   <AlertTriangle className="h-5 w-5 text-red-600" />
+                 ) : (
+@@ -776,7 +776,7 @@ function NotificationsContent() {
+       {/* Header */}
+       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
+         <div className="flex items-start gap-3">
+-          <div className="shrink-0 p-3 bg-green-100 dark:bg-green-950 rounded-lg">
++          <div className="shrink-0 p-3 bg-blue-100 dark:bg-blue-950 rounded-lg">
+             <Bell className="h-6 w-6 text-blue-600" />
+           </div>
+           <div className="min-w-0">
+@@ -878,7 +878,7 @@ function NotificationsContent() {
+                                     <AlertTriangle className="h-4 w-4 text-red-600" />
+                                   </div>
+                                 ) : (
+-                                  <div className="rounded bg-green-100 p-2 dark:bg-green-950">
++                                  <div className="rounded bg-blue-100 p-2 dark:bg-blue-950">
+                                     <Bell className="h-4 w-4 text-blue-600" />
+                                   </div>
+                                 )}
+@@ -1022,7 +1022,7 @@ function NotificationsContent() {
+                                 <AlertTriangle className="h-5 w-5 text-red-300" />
+                               </div>
+                             ) : (
+-                              <div className="rounded-lg border border-sky-500/30 bg-green-500/15 p-2">
++                              <div className="rounded-lg border border-sky-500/30 bg-sky-500/15 p-2">
+                                 <Bell className="h-5 w-5 text-sky-300" />
+                               </div>
+                             )}
+diff --git a/app/(dashboard)/plant-inspections/new/page.tsx b/app/(dashboard)/plant-inspections/new/page.tsx
+index 703ef1d1..6c885aac 100644
+--- a/app/(dashboard)/plant-inspections/new/page.tsx
++++ b/app/(dashboard)/plant-inspections/new/page.tsx
+@@ -1859,7 +1859,7 @@ function NewPlantInspectionContent() {
+           </div>
+           
+           {checklistStarted && (
+-            <div className="mt-4 p-3 bg-green-500/10 border border-blue-500/30 rounded-lg">
++            <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+               <p className="text-sm text-blue-400">
+                 <Info className="h-4 w-4 inline mr-2" />
+                 Plant and date are locked once you start filling the checklist.
+diff --git a/app/(dashboard)/profile/page.tsx b/app/(dashboard)/profile/page.tsx
+index b8d6e0f4..6829c757 100644
+--- a/app/(dashboard)/profile/page.tsx
++++ b/app/(dashboard)/profile/page.tsx
+@@ -62,9 +62,9 @@ const SETTINGS_NAV_ITEMS: Array<{
+     value: 'my-details',
+     label: 'My details',
+     icon: UserRound,
+-    tileClassName: 'bg-green-500/[0.06] hover:bg-green-500/[0.12]',
+-    activeClassName: 'bg-green-500/30',
+-    iconClassName: 'bg-green-500/15 text-sky-300',
++    tileClassName: 'bg-sky-500/[0.06] hover:bg-sky-500/[0.12]',
++    activeClassName: 'bg-sky-500/30',
++    iconClassName: 'bg-sky-500/15 text-sky-300',
+   },
+   {
+     value: 'notifications',
+diff --git a/app/(dashboard)/projects/manage/page.tsx b/app/(dashboard)/projects/manage/page.tsx
+index 489d9aa0..01954a35 100644
+--- a/app/(dashboard)/projects/manage/page.tsx
++++ b/app/(dashboard)/projects/manage/page.tsx
+@@ -323,7 +323,7 @@ export default function ProjectsManagePage() {
+   return (
+     <AppPageShell>
+       {/* Mobile info banner */}
+-      <Alert className="md:hidden bg-green-900/20 border-blue-700/50">
++      <Alert className="md:hidden bg-blue-900/20 border-blue-700/50">
+         <Monitor className="h-4 w-4 text-blue-400" />
+         <AlertDescription className="text-blue-200 text-sm">
+           Tap a document card to expand details and actions.
+diff --git a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
+index e4759f93..96b09d58 100644
+--- a/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
++++ b/app/(dashboard)/quotes/components/QuoteDetailsModal.tsx
+@@ -154,7 +154,7 @@ function getTimelineEventMeta(eventType: string) {
+     case 'quote_created':
+       return {
+         icon: FileEdit,
+-        iconClassName: 'text-sky-300 bg-green-500/10 border-sky-500/20',
++        iconClassName: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+       };
+     case 'quote_updated':
+       return {
+@@ -171,7 +171,7 @@ function getTimelineEventMeta(eventType: string) {
+     case 'marked_as_sent':
+       return {
+         icon: Mail,
+-        iconClassName: 'text-blue-300 bg-green-500/10 border-blue-500/20',
++        iconClassName: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
+       };
+     case 'returned_for_changes':
+       return {
+@@ -191,17 +191,17 @@ function getTimelineEventMeta(eventType: string) {
+     case 'quote_accepted':
+       return {
+         icon: CheckCircle2,
+-        iconClassName: 'text-sky-300 bg-green-500/10 border-sky-500/20',
++        iconClassName: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+       };
+     case 'rams_triggered':
+       return {
+         icon: FolderKanban,
+-        iconClassName: 'text-cyan-300 bg-green-500/10 border-cyan-500/20',
++        iconClassName: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20',
+       };
+     case 'schedule_updated':
+       return {
+         icon: CalendarClock,
+-        iconClassName: 'text-indigo-300 bg-green-500/10 border-indigo-500/20',
++        iconClassName: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/20',
+       };
+     case 'marked_complete':
+       return {
+@@ -1324,7 +1324,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
+                   <div>
+                     <h4 className="text-sm font-semibold text-muted-foreground mb-2">Line Items</h4>
+                     {quote.pricing_mode === 'attachments_only' ? (
+-                      <div className="rounded-lg border border-blue-500/30 bg-green-500/10 p-3 text-sm text-blue-100">
++                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+                         Pricing/details are supplied in the client-visible attachments for this quote.
+                       </div>
+                     ) : quote.line_items && quote.line_items.length > 0 ? (
+@@ -2063,7 +2063,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
+                           <div className="flex flex-wrap items-center gap-2">
+                             <p className="text-sm font-medium text-white">{attachment.file_name}</p>
+                             {attachment.is_client_visible && (
+-                              <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-200">Client</Badge>
++                              <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-200">Client</Badge>
+                             )}
+                           </div>
+                           <p className="text-xs text-muted-foreground">
+diff --git a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
+index 1b8c0b79..19cb907c 100644
+--- a/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
++++ b/app/(dashboard)/quotes/components/QuoteFormDialog.tsx
+@@ -1348,7 +1348,7 @@ export function QuoteFormDialog({
+               </div>
+ 
+               {form.pricing_mode === 'attachments_only' ? (
+-                <div className="rounded-lg border border-blue-500/30 bg-green-500/10 p-3 text-sm text-blue-100">
++                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+                   The client quote will refer to attached documents for pricing/details instead of showing line item prices.
+                 </div>
+               ) : (
+diff --git a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
+index ed03fd32..ca0cea21 100644
+--- a/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
++++ b/app/(dashboard)/quotes/components/QuotesOverviewTab.tsx
+@@ -47,7 +47,7 @@ function getStatusBadgeClass(item: QuoteOverviewItem): string {
+   }
+ 
+   if (item.kind === 'project') {
+-    return 'border-blue-500/30 bg-green-500/10 text-blue-200';
++    return 'border-blue-500/30 bg-blue-500/10 text-blue-200';
+   }
+ 
+   if (item.status === 'invoiced' || item.status === 'partially_invoiced') {
+@@ -78,7 +78,7 @@ function SummaryTile({ label, value, helper, icon, accent = 'slate' }: SummaryTi
+   const accentClass = {
+     yellow: 'border-brand-yellow/25 bg-brand-yellow/10 text-brand-yellow',
+     green: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+-    blue: 'border-blue-500/25 bg-green-500/10 text-blue-200',
++    blue: 'border-blue-500/25 bg-blue-500/10 text-blue-200',
+     slate: 'border-slate-700 bg-slate-900/70 text-slate-100',
+   }[accent];
+ 
+diff --git a/app/(dashboard)/quotes/overview/[reference]/page.tsx b/app/(dashboard)/quotes/overview/[reference]/page.tsx
+index 9327eee2..2d623d6a 100644
+--- a/app/(dashboard)/quotes/overview/[reference]/page.tsx
++++ b/app/(dashboard)/quotes/overview/[reference]/page.tsx
+@@ -95,7 +95,7 @@ function SummaryCard({ label, value, helper, icon, accent = 'slate' }: SummaryCa
+   const accentClass = {
+     yellow: 'border-brand-yellow/30 bg-brand-yellow/10 text-brand-yellow',
+     green: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+-    blue: 'border-blue-500/30 bg-green-500/10 text-blue-200',
++    blue: 'border-blue-500/30 bg-blue-500/10 text-blue-200',
+     slate: 'border-slate-700 bg-slate-950 text-slate-200',
+   }[accent];
+ 
+diff --git a/app/(dashboard)/quotes/types.ts b/app/(dashboard)/quotes/types.ts
+index a7d898b0..aea98710 100644
+--- a/app/(dashboard)/quotes/types.ts
++++ b/app/(dashboard)/quotes/types.ts
+@@ -403,12 +403,12 @@ export const QUOTE_STATUS_CONFIG: Record<QuoteStatus, { label: string; color: st
+   pending_internal_approval: { label: 'Pending Confirmation', color: 'border-amber-500/30 text-amber-400 bg-amber-500/10' },
+   approved: { label: 'Approved', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
+   changes_requested: { label: 'Changes Requested', color: 'border-orange-500/30 text-orange-400 bg-orange-500/10' },
+-  sent: { label: 'Confirmed', color: 'border-blue-500/30 text-blue-400 bg-green-500/10' },
++  sent: { label: 'Confirmed', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
+   won: { label: 'Won', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
+   lost: { label: 'Lost', color: 'border-rose-500/30 text-rose-400 bg-rose-500/10' },
+   ready_to_invoice: { label: 'Ready To Invoice', color: 'border-violet-500/30 text-violet-400 bg-violet-500/10' },
+-  po_received: { label: 'Accepted', color: 'border-sky-500/30 text-sky-400 bg-green-500/10' },
+-  in_progress: { label: 'In Progress', color: 'border-cyan-500/30 text-cyan-400 bg-green-500/10' },
++  po_received: { label: 'Accepted', color: 'border-sky-500/30 text-sky-400 bg-sky-500/10' },
++  in_progress: { label: 'In Progress', color: 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' },
+   completed_part: { label: 'Completed In Part', color: 'border-yellow-500/30 text-yellow-400 bg-yellow-500/10' },
+   completed_full: { label: 'Completed In Full', color: 'border-lime-500/30 text-lime-400 bg-lime-500/10' },
+   partially_invoiced: { label: 'Partially Invoiced', color: 'border-fuchsia-500/30 text-fuchsia-400 bg-fuchsia-500/10' },
+diff --git a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
+index 90dfc0ab..5f239de9 100644
+--- a/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
++++ b/app/(dashboard)/scheduling/components/ScheduleTeamColours.tsx
+@@ -6,7 +6,7 @@ import type { ScheduleAssignment, ScheduleDayTeamSlot, ScheduleDayTeams, Schedul
+ 
+ // Slot colours are stable across dates; occupancy and conflict colours remain separate.
+ export const SCHEDULE_TEAM_COLOURS = [
+-  { accent: '#86efac', tint: 'border border-blue-400/70 bg-green-950/60 text-blue-50' },
++  { accent: '#60a5fa', tint: 'border border-blue-400/70 bg-blue-950/60 text-blue-50' },
+   { accent: '#fb923c', tint: 'border border-orange-400/70 bg-orange-950/60 text-orange-50' },
+   { accent: '#a78bfa', tint: 'border border-violet-400/70 bg-violet-950/60 text-violet-50' },
+   { accent: '#f472b6', tint: 'border border-pink-400/70 bg-pink-950/60 text-pink-50' },
+@@ -14,14 +14,14 @@ export const SCHEDULE_TEAM_COLOURS = [
+   { accent: '#2dd4bf', tint: 'border border-teal-400/70 bg-teal-950/60 text-teal-50' },
+   { accent: '#a3e635', tint: 'border border-lime-400/70 bg-lime-950/60 text-lime-50' },
+   { accent: '#f87171', tint: 'border border-red-400/70 bg-red-950/60 text-red-50' },
+-  { accent: '#bef264', tint: 'border border-cyan-400/70 bg-green-950/60 text-cyan-50' },
++  { accent: '#22d3ee', tint: 'border border-cyan-400/70 bg-cyan-950/60 text-cyan-50' },
+   { accent: '#cbd5e1', tint: 'border border-slate-400/70 bg-slate-800/60 text-slate-50' },
+   { accent: '#34d399', tint: 'border border-emerald-400/70 bg-emerald-950/60 text-emerald-50' },
+-  { accent: '#a3b85f', tint: 'border border-indigo-400/70 bg-green-950/60 text-indigo-50' },
++  { accent: '#818cf8', tint: 'border border-indigo-400/70 bg-indigo-950/60 text-indigo-50' },
+   { accent: '#e879f9', tint: 'border border-fuchsia-400/70 bg-fuchsia-950/60 text-fuchsia-50' },
+   { accent: '#fb7185', tint: 'border border-rose-400/70 bg-rose-950/60 text-rose-50' },
+   { accent: '#fbbf24', tint: 'border border-amber-400/70 bg-amber-950/60 text-amber-50' },
+-  { accent: '#c0d6a0', tint: 'border border-sky-400/70 bg-green-950/60 text-sky-50' },
++  { accent: '#38bdf8', tint: 'border border-sky-400/70 bg-sky-950/60 text-sky-50' },
+ ] as const;
+ 
+ export function scheduleTeamColour(slotIndex: number) {
+diff --git a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
+index 34cba21b..46dc610c 100644
+--- a/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
++++ b/app/(dashboard)/scheduling/components/SchedulingManagerBoard.tsx
+@@ -721,7 +721,7 @@ function AssignmentChip({
+       className={cn(
+         'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 text-[11px] font-medium',
+         assignment.resource_type === 'employee'
+-          ? 'border-sky-500/35 bg-green-500/10 text-sky-100'
++          ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
+           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
+         hasConflict && 'border-amber-400/70 bg-amber-500/10',
+         isDragging && 'opacity-40'
+@@ -1070,6 +1070,9 @@ const DAILY_JOB_ROW_MIN_HEIGHT = 144;
+ const DAILY_TIMELINE_EDGE_PADDING = 8;
+ const DAILY_TIMELINE_LANE_GAP = 8;
+ const DAILY_TIMELINE_LEGACY_HEIGHT = 48;
++const DAILY_TIMELINE_VISIT_STYLE = {
++  backgroundColor: '#334155',
++} satisfies CSSProperties;
+ 
+ function dailyTimelineHourGridStyle(hourWidth: number): CSSProperties {
+   return {
+@@ -1619,7 +1622,8 @@ function ResizableDailyVisit({
+         job={job}
+         visit={displayedVisit}
+         assignments={assignments}
+-        className="h-full cursor-default overflow-hidden border-slate-500 bg-slate-700 shadow-lg shadow-black/40"
++        className="h-full cursor-default overflow-hidden border-slate-500 shadow-lg shadow-black/40"
++        style={DAILY_TIMELINE_VISIT_STYLE}
+         isDropEnabled
+         isActiveTarget={isActiveTarget}
+         onActivate={onActivate}
+@@ -7356,7 +7360,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps)
+ 
+               {isTentativeWeek ? (
+                 <div
+-                  className="rounded-lg border border-sky-400/30 bg-green-500/10 px-3 py-2 text-sm text-sky-100"
++                  className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
+                   role="status"
+                 >
+                   {coldWeekState?.status === 'failed' ? (
+diff --git a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
+index 3bdf1c7f..49039177 100644
+--- a/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
++++ b/app/(dashboard)/scheduling/components/scheduling-control-styles.ts
+@@ -1,34 +1,34 @@
+ export const schedulingControlStyles = {
+   primary:
+-    'border border-[#34d399] bg-[#34d399] text-slate-950 shadow-sm hover:border-[#6ee7b7] hover:bg-[#6ee7b7] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:border-[#64748b] disabled:bg-slate-700 disabled:text-[#cbd5e1] disabled:opacity-100',
++    'border border-[#34d399] bg-[#34d399] text-[#020617] shadow-sm hover:border-[#6ee7b7] hover:bg-[#6ee7b7] hover:text-[#020617] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617] disabled:border-[#64748b] disabled:bg-[#334155] disabled:text-[#cbd5e1] disabled:opacity-100',
+   outline:
+-    'border border-[#64748b] bg-slate-900 text-[#f1f5f9] shadow-sm hover:border-[#cbd5e1] hover:bg-slate-700 hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:border-[#475569] disabled:bg-slate-800 disabled:text-[#94a3b8] disabled:opacity-100',
++    'border border-[#64748b] bg-[#0f172a] text-[#f1f5f9] shadow-sm hover:border-[#cbd5e1] hover:bg-[#334155] hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617] disabled:border-[#475569] disabled:bg-[#1e293b] disabled:text-[#94a3b8] disabled:opacity-100',
+   ghost:
+-    'border border-transparent bg-transparent text-[#e2e8f0] hover:border-[#475569] hover:bg-slate-700 hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 disabled:border-transparent disabled:bg-transparent disabled:text-[#64748b] disabled:opacity-100',
++    'border border-transparent bg-transparent text-[#e2e8f0] hover:border-[#475569] hover:bg-[#334155] hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-1 focus-visible:ring-offset-[#020617] disabled:border-transparent disabled:bg-transparent disabled:text-[#64748b] disabled:opacity-100',
+   danger:
+-    'border border-[#dc2626] bg-[#b91c1c] text-[#ffffff] shadow-sm hover:border-[#ef4444] hover:bg-[#dc2626] hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f87171] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:border-[#7f1d1d] disabled:bg-[#450a0a] disabled:text-[#fca5a5] disabled:opacity-100',
++    'border border-[#dc2626] bg-[#b91c1c] text-[#ffffff] shadow-sm hover:border-[#ef4444] hover:bg-[#dc2626] hover:text-[#ffffff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f87171] focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617] disabled:border-[#7f1d1d] disabled:bg-[#450a0a] disabled:text-[#fca5a5] disabled:opacity-100',
+   warning:
+-    'border border-[#fcd34d] bg-[#fbbf24] text-[#451a03] shadow-sm hover:border-[#fde68a] hover:bg-[#fcd34d] hover:text-[#451a03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fcd34d] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:border-[#92400e] disabled:bg-[#78350f] disabled:text-[#fde68a] disabled:opacity-100',
++    'border border-[#fcd34d] bg-[#fbbf24] text-[#451a03] shadow-sm hover:border-[#fde68a] hover:bg-[#fcd34d] hover:text-[#451a03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fcd34d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617] disabled:border-[#92400e] disabled:bg-[#78350f] disabled:text-[#fde68a] disabled:opacity-100',
+   checkbox:
+-    'border-[#64748b] bg-slate-950 text-slate-950 data-[state=checked]:border-[#34d399] data-[state=checked]:bg-[#34d399] data-[state=checked]:text-slate-950 focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-slate-950 disabled:border-[#475569] disabled:bg-slate-800 disabled:text-[#64748b] disabled:opacity-100',
++    'border-[#64748b] bg-[#020617] text-[#020617] data-[state=checked]:border-[#34d399] data-[state=checked]:bg-[#34d399] data-[state=checked]:text-[#020617] focus-visible:ring-[#6ee7b7] focus-visible:ring-offset-[#020617] disabled:border-[#475569] disabled:bg-[#1e293b] disabled:text-[#64748b] disabled:opacity-100',
+   sourceBadge:
+-    'border-[#64748b] bg-slate-900 text-[#cbd5e1]',
++    'border-[#64748b] bg-[#0f172a] text-[#cbd5e1]',
+   resourceJob:
+-    'border border-sky-700/60 bg-green-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
++    'border border-sky-700/60 bg-sky-950/35 text-sky-50 shadow-sm hover:border-sky-500/70 hover:bg-sky-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+   resourceEmployee:
+-    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
++    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+   dayTeamTints: [
+-    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-emerald-700/60 bg-emerald-950/35 text-emerald-50 shadow-sm hover:border-emerald-500/70 hover:bg-emerald-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-green-700/60 bg-green-950/35 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-lime-700/60 bg-lime-950/30 text-lime-50 shadow-sm hover:border-lime-500/70 hover:bg-lime-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-cyan-700/60 bg-green-950/30 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-green-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-teal-600/70 bg-teal-900/40 text-teal-50 shadow-sm hover:border-teal-400/70 hover:bg-teal-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-emerald-600/70 bg-emerald-900/40 text-emerald-50 shadow-sm hover:border-emerald-400/70 hover:bg-emerald-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-green-600/70 bg-green-900/40 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-lime-600/70 bg-lime-900/35 text-lime-50 shadow-sm hover:border-lime-400/70 hover:bg-lime-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+-    'border border-cyan-600/70 bg-green-900/35 text-cyan-50 shadow-sm hover:border-cyan-400/70 hover:bg-green-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
++    'border border-teal-700/60 bg-teal-950/35 text-teal-50 shadow-sm hover:border-teal-500/70 hover:bg-teal-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-emerald-700/60 bg-emerald-950/35 text-emerald-50 shadow-sm hover:border-emerald-500/70 hover:bg-emerald-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-green-700/60 bg-green-950/35 text-green-50 shadow-sm hover:border-green-500/70 hover:bg-green-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-lime-700/60 bg-lime-950/30 text-lime-50 shadow-sm hover:border-lime-500/70 hover:bg-lime-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-cyan-700/60 bg-cyan-950/30 text-cyan-50 shadow-sm hover:border-cyan-500/70 hover:bg-cyan-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-teal-600/70 bg-teal-900/40 text-teal-50 shadow-sm hover:border-teal-400/70 hover:bg-teal-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-emerald-600/70 bg-emerald-900/40 text-emerald-50 shadow-sm hover:border-emerald-400/70 hover:bg-emerald-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-green-600/70 bg-green-900/40 text-green-50 shadow-sm hover:border-green-400/70 hover:bg-green-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-lime-600/70 bg-lime-900/35 text-lime-50 shadow-sm hover:border-lime-400/70 hover:bg-lime-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
++    'border border-cyan-600/70 bg-cyan-900/35 text-cyan-50 shadow-sm hover:border-cyan-400/70 hover:bg-cyan-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+   ] as const,
+   resourcePlant:
+-    'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
++    'border border-amber-700/60 bg-amber-950/30 text-amber-50 shadow-sm hover:border-amber-500/70 hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020617]',
+ } as const;
+diff --git a/app/(dashboard)/suggestions/manage/page.tsx b/app/(dashboard)/suggestions/manage/page.tsx
+index 2e9aee9b..8211855a 100644
+--- a/app/(dashboard)/suggestions/manage/page.tsx
++++ b/app/(dashboard)/suggestions/manage/page.tsx
+@@ -223,7 +223,7 @@ export default function SuggestionsManagePage() {
+       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+         {[
+           { key: 'all', label: 'All', color: 'bg-slate-500' },
+-          { key: 'new', label: 'New', color: 'bg-green-500' },
++          { key: 'new', label: 'New', color: 'bg-blue-500' },
+           { key: 'under_review', label: 'Reviewing', color: 'bg-yellow-500' },
+           { key: 'planned', label: 'Planned', color: 'bg-purple-500' },
+           { key: 'completed', label: 'Done', color: 'bg-green-500' },
+diff --git a/app/(dashboard)/test-error-logging/page.tsx b/app/(dashboard)/test-error-logging/page.tsx
+index 7a81b58a..0bbbfc08 100644
+--- a/app/(dashboard)/test-error-logging/page.tsx
++++ b/app/(dashboard)/test-error-logging/page.tsx
+@@ -186,7 +186,7 @@ export default function TestErrorLoggingPage() {
+ 
+   return (
+     <div className="space-y-6 max-w-4xl">
+-      <div className="bg-gradient-to-r from-green-500 to-purple-500 rounded-lg p-6 text-white">
++      <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-6 text-white">
+         <div className="flex items-center gap-3">
+           <Bug className="h-8 w-8" />
+           <div>
+@@ -280,14 +280,14 @@ export default function TestErrorLoggingPage() {
+         </CardContent>
+       </Card>
+ 
+-      <Card className="bg-green-50 dark:bg-green-950 border-blue-200 dark:border-blue-900">
++      <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-900">
+         <CardHeader>
+           <CardTitle className="text-blue-900 dark:text-blue-100">Next Steps</CardTitle>
+         </CardHeader>
+         <CardContent className="text-blue-800 dark:text-blue-200">
+           <ol className="list-decimal list-inside space-y-2">
+             <li>Run the tests above</li>
+-            <li>Navigate to <code className="bg-green-100 dark:bg-green-900 px-2 py-1 rounded">/debug</code> page</li>
++            <li>Navigate to <code className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">/debug</code> page</li>
+             <li>Click the &quot;Error Log&quot; tab</li>
+             <li>Verify that all test errors appear with full details</li>
+             <li>Check that each error has clear descriptions and context</li>
+diff --git a/app/(dashboard)/timesheets/[id]/page.tsx b/app/(dashboard)/timesheets/[id]/page.tsx
+index 824c4886..ee5ac189 100644
+--- a/app/(dashboard)/timesheets/[id]/page.tsx
++++ b/app/(dashboard)/timesheets/[id]/page.tsx
+@@ -832,7 +832,7 @@ export default function ViewTimesheetPage() {
+     
+     // Apply blue styling for final states (processed and adjusted)
+     const isFinalState = status === 'processed' || status === 'adjusted';
+-    const blueClasses = isFinalState ? 'bg-green-500/10 text-blue-600 border-blue-500/20' : '';
++    const blueClasses = isFinalState ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : '';
+     
+     return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
+   };
+@@ -1136,7 +1136,7 @@ export default function ViewTimesheetPage() {
+                           disabled={entry.did_not_work}
+                           className={`w-24 text-right font-semibold ${
+                             manuallyEditedDays.has(index) 
+-                              ? 'bg-green-50 dark:bg-green-950/30 border-blue-300 dark:border-blue-700'
++                              ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700' 
+                               : ''
+                           }`}
+                         />
+@@ -1325,7 +1325,7 @@ export default function ViewTimesheetPage() {
+                           disabled={entry.did_not_work}
+                           className={`w-24 text-right text-lg font-bold ${
+                             manuallyEditedDays.has(index) 
+-                              ? 'bg-green-50 dark:bg-green-950/30 border-blue-300 dark:border-blue-700'
++                              ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700' 
+                               : ''
+                           }`}
+                         />
+diff --git a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
+index 27a2b569..50fec9e4 100644
+--- a/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
++++ b/app/(dashboard)/timesheets/components/ConfirmationModal.tsx
+@@ -115,7 +115,7 @@ export function ConfirmationModal({
+ 
+         <div className="space-y-6">
+           {/* Date Confirmation (Q9 requirement) */}
+-          <Alert className="bg-green-500/10 border-blue-500/50">
++          <Alert className="bg-blue-500/10 border-blue-500/50">
+             <Calendar className="h-4 w-4 text-blue-400" />
+             <AlertDescription className="text-blue-600 dark:text-blue-400">
+               <span className="font-semibold">Week Ending:</span> {formatDate(weekEnding)}
+@@ -229,7 +229,7 @@ export function ConfirmationModal({
+                           {getEntryJobNumbers(entry).map((jobNumber) => (
+                             <span
+                               key={`${entry.day_of_week}-${jobNumber}`}
+-                              className="text-xs bg-green-100 dark:bg-green-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded"
++                              className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded"
+                             >
+                               Job: {jobNumber}
+                             </span>
+@@ -252,7 +252,7 @@ export function ConfirmationModal({
+                             </Badge>
+                           )}
+                           {entry.night_shift && (
+-                            <Badge className="text-xs bg-green-100 dark:bg-green-900/30 text-indigo-700 dark:text-indigo-400">
++                            <Badge className="text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                               Night Shift
+                             </Badge>
+                           )}
+diff --git a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
+index bd684586..5e0a21fc 100644
+--- a/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
++++ b/app/(dashboard)/timesheets/components/TimesheetsListTable.tsx
+@@ -55,7 +55,7 @@ function getStatusBadge(status: string) {
+   };
+ 
+   const config = variants[status as keyof typeof variants] || variants.draft;
+-  const blueClasses = status === 'processed' || status === 'adjusted' ? 'bg-green-500/10 text-blue-600 border-blue-500/20' : '';
++  const blueClasses = status === 'processed' || status === 'adjusted' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : '';
+ 
+   return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
+ }
+diff --git a/app/(dashboard)/timesheets/components/WeekSelector.tsx b/app/(dashboard)/timesheets/components/WeekSelector.tsx
+index 4155d602..3213bf89 100644
+--- a/app/(dashboard)/timesheets/components/WeekSelector.tsx
++++ b/app/(dashboard)/timesheets/components/WeekSelector.tsx
+@@ -340,7 +340,7 @@ export function WeekSelector({
+ 
+           {/* Success Alert (editing existing) */}
+           {showSuccess && existingTimesheet && (
+-            <Alert className="bg-green-500/10 border-blue-500/50">
++            <Alert className="bg-blue-500/10 border-blue-500/50">
+               <CheckCircle2 className="h-4 w-4 text-blue-400" />
+               <AlertDescription className="text-blue-400">
+                 Found existing draft timesheet. Loading it for editing...
+diff --git a/app/(dashboard)/timesheets/page.tsx b/app/(dashboard)/timesheets/page.tsx
+index 4eefa64a..e4a4728b 100644
+--- a/app/(dashboard)/timesheets/page.tsx
++++ b/app/(dashboard)/timesheets/page.tsx
+@@ -457,7 +457,7 @@ export default function TimesheetsPage() {
+     
+     // Apply blue styling for final states (processed and adjusted)
+     const isFinalState = status === 'processed' || status === 'adjusted';
+-    const blueClasses = isFinalState ? 'bg-green-500/10 text-blue-600 border-blue-500/20' : '';
++    const blueClasses = isFinalState ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : '';
+ 
+     return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
+   };
+diff --git a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
+index fdc8a67e..c3064794 100644
+--- a/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
++++ b/app/(dashboard)/timesheets/types/civils/CivilsTimesheet.tsx
+@@ -1629,7 +1629,7 @@ export function CivilsTimesheet({
+       )}
+ 
+       {timesheetType === 'plant' && (
+-        <Card className="border-blue-400/40 bg-green-500/10">
++        <Card className="border-blue-400/40 bg-blue-500/10">
+           <CardContent className="pt-4">
+             <p className="text-sm text-blue-100">
+               Plant timesheet routing is active for this team. This entry will be saved as a plant timesheet.
+@@ -1873,7 +1873,7 @@ export function CivilsTimesheet({
+                           disabled={disableWorkingInputs || disableStatusForTraining}
+                           className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 transition-all ${
+                             entry.working_in_yard
+-                              ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
++                              ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                               : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                           } disabled:opacity-30 disabled:cursor-not-allowed`}
+                         >
+@@ -2080,7 +2080,7 @@ export function CivilsTimesheet({
+                             disabled={disableWorkingInputs || disableStatusForTraining}
+                             className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
+                               entry.working_in_yard
+-                                ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
++                                ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                                 : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                             } disabled:opacity-30 disabled:cursor-not-allowed`}
+                             title="Working in Yard"
+diff --git a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
+index 2fbe9c10..cba350c7 100644
+--- a/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
++++ b/app/(dashboard)/timesheets/types/plant/PlantTimesheetV2Aligned.tsx
+@@ -1834,7 +1834,7 @@ export function PlantTimesheetV2({
+                             disabled={disableInputs || disableStatusForTraining}
+                             className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 transition-all ${
+                               entry.working_in_yard
+-                                ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
++                                ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                                 : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                             } disabled:opacity-30 disabled:cursor-not-allowed`}
+                           >
+@@ -2154,7 +2154,7 @@ export function PlantTimesheetV2({
+                                 disabled={disableInputs || disableStatusForTraining}
+                                 className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
+                                   entry.working_in_yard
+-                                    ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
++                                    ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                                     : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
+                                 } disabled:opacity-30 disabled:cursor-not-allowed`}
+                                 title="Working in Yard"
+diff --git a/app/(dashboard)/van-inspections/new/page.tsx b/app/(dashboard)/van-inspections/new/page.tsx
+index 70dffae7..95413a46 100644
+--- a/app/(dashboard)/van-inspections/new/page.tsx
++++ b/app/(dashboard)/van-inspections/new/page.tsx
+@@ -2416,7 +2416,7 @@ function NewInspectionContent() {
+           </div>
+           
+           {checklistStarted && (
+-            <div className="mt-4 p-3 bg-green-500/10 border border-blue-500/30 rounded-lg">
++            <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+               <p className="text-sm text-blue-400">
+                 <Info className="h-4 w-4 inline mr-2" />
+                 Van and date are locked once you start filling the checklist. Leave the page to discard this draft.
+diff --git a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
+index 55416ee4..46ad55d6 100644
+--- a/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
++++ b/app/(dashboard)/workshop-tasks/components/WorkshopTaskStatusDialogs.tsx
+@@ -143,7 +143,7 @@ export function WorkshopTaskStatusDialogs({
+           </DialogHeader>
+ 
+           <div className="space-y-4">
+-            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
++            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+               <p className="text-sm text-blue-300">
+                 This task will be marked as &quot;In Progress&quot; and visible in the workshop queue.
+               </p>
+@@ -320,7 +320,7 @@ export function WorkshopTaskStatusDialogs({
+           </DialogHeader>
+ 
+           <div className="space-y-4">
+-            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
++            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+               <p className="text-sm text-blue-300">
+                 This task will be moved back to &quot;In Progress&quot; and work can continue.
+               </p>
+diff --git a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
+index bdd065e5..eb56f112 100644
+--- a/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
++++ b/app/(dashboard)/workshop-tasks/components/WorkshopTasksOverviewTab.tsx
+@@ -547,7 +547,7 @@ export function WorkshopTasksOverviewTab({
+           label: 'In Progress',
+           count: inProgressTaskCount,
+           countClassName: 'text-blue-600 dark:text-blue-400',
+-          activeClassName: 'border-blue-500/70 bg-green-500/15 ring-1 ring-blue-500/40',
++          activeClassName: 'border-blue-500/70 bg-blue-500/15 ring-1 ring-blue-500/40',
+           ariaLabel: 'Show in progress workshop tasks',
+         })}
+         {renderStatusTile({
+@@ -639,7 +639,7 @@ export function WorkshopTasksOverviewTab({
+                                 </h3>
+                                 {renderSourceBadge(task)}
+                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                     <Paperclip className="h-3 w-3 mr-1" />
+                                     {taskAttachmentCounts.get(task.id)}
+                                   </Badge>
+@@ -648,7 +648,7 @@ export function WorkshopTasksOverviewTab({
+                               </div>
+                               <div className="flex flex-wrap gap-2 mb-2">
+                                 {task.workshop_task_subcategories?.workshop_task_categories && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                     {task.workshop_task_subcategories.workshop_task_categories.name}
+                                   </Badge>
+                                 )}
+@@ -686,7 +686,7 @@ export function WorkshopTasksOverviewTab({
+                                 }}
+                                 disabled={isUpdating}
+                                 size="sm"
+-                                className={`${taskActionButtonClass} bg-green-600/80 hover:bg-green-600 text-white border-0`}
++                                className={`${taskActionButtonClass} bg-blue-600/80 hover:bg-blue-600 text-white border-0`}
+                               >
+                                 <Clock className="h-3.5 w-3.5 mr-1.5" />
+                                 In Progress
+@@ -758,10 +758,10 @@ export function WorkshopTasksOverviewTab({
+           )}
+ 
+           {inProgressTasks.length > 0 && (
+-            <div className="border-2 border-blue-500/30 rounded-lg overflow-hidden bg-green-500/5">
++            <div className="border-2 border-blue-500/30 rounded-lg overflow-hidden bg-blue-500/5">
+               <button
+                 onClick={() => onShowInProgressChange(!showInProgress)}
+-                className="w-full flex items-center justify-between p-4 bg-green-500/10 hover:bg-green-500/20 transition-colors border-b-2 border-blue-500/30"
++                className="w-full flex items-center justify-between p-4 bg-blue-500/10 hover:bg-blue-500/20 transition-colors border-b-2 border-blue-500/30"
+               >
+                 <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                   <Clock className="h-5 w-5 text-blue-400" />
+@@ -792,7 +792,7 @@ export function WorkshopTasksOverviewTab({
+                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
+                                 {renderSourceBadge(task)}
+                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                     <Paperclip className="h-3 w-3 mr-1" />
+                                     {taskAttachmentCounts.get(task.id)}
+                                   </Badge>
+@@ -801,7 +801,7 @@ export function WorkshopTasksOverviewTab({
+                               </div>
+                               <div className="flex flex-wrap gap-2 mb-2">
+                                 {task.workshop_task_subcategories?.workshop_task_categories && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                     {task.workshop_task_subcategories.workshop_task_categories.name}
+                                   </Badge>
+                                 )}
+@@ -813,7 +813,7 @@ export function WorkshopTasksOverviewTab({
+                               </div>
+                               {renderInspectionDescription(task)}
+                               {task.logged_comment && (
+-                                <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
++                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
+                                   <p className="text-sm text-blue-300">
+                                     <strong>Progress Note:</strong> {task.logged_comment}
+                                   </p>
+@@ -841,7 +841,7 @@ export function WorkshopTasksOverviewTab({
+                                 </Button>
+                               )}
+                               {task.status === 'on_hold' && (
+-                                <Button onClick={(e) => { e.stopPropagation(); onResumeTask(task); }} disabled={isUpdating} size="sm" className={`${taskActionButtonClass} bg-green-600/80 hover:bg-green-600 text-white border-0`}>
++                                <Button onClick={(e) => { e.stopPropagation(); onResumeTask(task); }} disabled={isUpdating} size="sm" className={`${taskActionButtonClass} bg-blue-600/80 hover:bg-blue-600 text-white border-0`}>
+                                   <Clock className="h-3.5 w-3.5 mr-1.5" />
+                                   Resume
+                                 </Button>
+@@ -911,7 +911,7 @@ export function WorkshopTasksOverviewTab({
+                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
+                                 {renderSourceBadge(task)}
+                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                     <Paperclip className="h-3 w-3 mr-1" />
+                                     {taskAttachmentCounts.get(task.id)}
+                                   </Badge>
+@@ -920,7 +920,7 @@ export function WorkshopTasksOverviewTab({
+                               </div>
+                               <div className="flex flex-wrap gap-2 mb-2">
+                                 {task.workshop_task_subcategories?.workshop_task_categories && (
+-                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                     {task.workshop_task_subcategories.workshop_task_categories.name}
+                                   </Badge>
+                                 )}
+@@ -1177,7 +1177,7 @@ export function WorkshopTasksOverviewTab({
+                                 <div className="flex items-center gap-2">
+                                   <span className="font-medium text-foreground">{row.asset}</span>
+                                   {taskAttachmentCounts.get(row.task.id) && taskAttachmentCounts.get(row.task.id)! > 0 && (
+-                                    <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
++                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                       <Paperclip className="h-3 w-3 mr-1" />
+                                       {taskAttachmentCounts.get(row.task.id)}
+                                     </Badge>
+@@ -1271,7 +1271,7 @@ export function WorkshopTasksOverviewTab({
+                                       <h3 className="font-semibold text-lg text-foreground">{assetLabel}</h3>
+                                       {renderSourceBadge(task, sourceLabel)}
+                                       {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
+-                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
++                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                           <Paperclip className="h-3 w-3 mr-1" />
+                                           {taskAttachmentCounts.get(task.id)}
+                                         </Badge>
+@@ -1280,7 +1280,7 @@ export function WorkshopTasksOverviewTab({
+                                     </div>
+                                     <div className="flex flex-wrap gap-2 mb-1">
+                                       {task.workshop_task_subcategories?.workshop_task_categories && (
+-                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                           {task.workshop_task_subcategories.workshop_task_categories.name}
+                                         </Badge>
+                                       )}
+@@ -1290,7 +1290,7 @@ export function WorkshopTasksOverviewTab({
+                                         </Badge>
+                                       )}
+                                       {!task.workshop_task_subcategories && task.workshop_task_categories && (
+-                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
++                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                           {task.workshop_task_categories.name}
+                                         </Badge>
+                                       )}
+diff --git a/app/displayboard-workshop-tv/route.ts b/app/displayboard-workshop-tv/route.ts
+index a6173970..a84c3dc6 100644
+--- a/app/displayboard-workshop-tv/route.ts
++++ b/app/displayboard-workshop-tv/route.ts
+@@ -49,7 +49,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
+     html.tv-text-step-4 { font-size: 150%; }
+     html.tv-text-step-5 { font-size: 200%; }
+     body {
+-      background: #001102;
++      background: #020617;
+       color: #fff;
+       font-family: Arial, Helvetica, sans-serif;
+       font-size: 1.25rem;
+@@ -61,7 +61,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
+       width: 1920px;
+       height: 1080px;
+       padding: 80px;
+-      background: #001102;
++      background: #020617;
+       text-align: center;
+       -webkit-transform-origin: 0 0;
+       -ms-transform-origin: 0 0;
+@@ -96,9 +96,9 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
+       width: 1920px;
+       height: 1080px;
+       padding: 24px;
+-      background: #001102;
+-      background: -webkit-linear-gradient(315deg, #001102, #001f04 48%, #0d2911);
+-      background: linear-gradient(135deg, #001102, #001f04 48%, #0d2911);
++      background: #020617;
++      background: -webkit-linear-gradient(315deg, #020617, #0f172a 48%, #111827);
++      background: linear-gradient(135deg, #020617, #0f172a 48%, #111827);
+       -webkit-transform-origin: 0 0;
+       -ms-transform-origin: 0 0;
+       transform-origin: 0 0;
+@@ -179,7 +179,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
+     .tile-value { margin-top: 10px; font-size: 3.375rem; line-height: 1; font-weight: 900; }
+     .tone-red { border-color: rgba(239,68,68,0.46); background: rgba(239,68,68,0.15); }
+     .tone-amber { border-color: rgba(245,158,11,0.46); background: rgba(245,158,11,0.15); }
+-    .tone-blue { border-color: rgba(59,130,246,0.46); background: rgba(34,197,94,0.15); }
++    .tone-blue { border-color: rgba(59,130,246,0.46); background: rgba(59,130,246,0.15); }
+     .tone-purple { border-color: rgba(168,85,247,0.46); background: rgba(168,85,247,0.15); }
+     .panel {
+       position: absolute;
+@@ -255,7 +255,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
+     .row-overdue { border-color: rgba(239,68,68,0.38); background: rgba(239,68,68,0.12); }
+     .row-due { border-color: rgba(245,158,11,0.38); background: rgba(245,158,11,0.12); }
+     .row-high-priority { border-color: rgba(239,68,68,0.42); background: rgba(239,68,68,0.14); }
+-    .row-progress { border-color: rgba(59,130,246,0.34); background: rgba(34,197,94,0.11); }
++    .row-progress { border-color: rgba(59,130,246,0.34); background: rgba(59,130,246,0.11); }
+     .row-hold { border-color: rgba(168,85,247,0.34); background: rgba(168,85,247,0.11); }
+     .row-main { float: left; width: 72%; }
+     .row-title { font-size: 1.5625rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+diff --git a/app/displayboard-workshop/page.tsx b/app/displayboard-workshop/page.tsx
+index 5f099273..2610f0c8 100644
+--- a/app/displayboard-workshop/page.tsx
++++ b/app/displayboard-workshop/page.tsx
+@@ -96,7 +96,7 @@ function StatTile({
+   const toneClass = {
+     red: 'border-red-500/45 bg-red-500/15 text-red-200',
+     amber: 'border-amber-500/45 bg-amber-500/15 text-amber-200',
+-    blue: 'border-blue-500/45 bg-green-500/15 text-blue-200',
++    blue: 'border-blue-500/45 bg-blue-500/15 text-blue-200',
+     purple: 'border-purple-500/45 bg-purple-500/15 text-purple-200',
+     green: 'border-green-500/45 bg-green-500/15 text-green-200',
+     slate: 'border-slate-500/45 bg-slate-500/15 text-slate-100',
+@@ -133,7 +133,7 @@ function TaskRow({ task }: { task: DisplayBoardWorkshopTask }) {
+       ? 'border-red-500/35 bg-red-500/10'
+       : 'border-amber-500/35 bg-amber-500/10'
+     : task.status === 'logged'
+-      ? 'border-blue-500/35 bg-green-500/10'
++      ? 'border-blue-500/35 bg-blue-500/10'
+       : 'border-purple-500/35 bg-purple-500/10';
+ 
+   return (
+@@ -191,7 +191,7 @@ function getStatValue(definition: WorkshopDisplayBoardStatDefinition, payload: D
+ function getTaskPanelClasses(panel: WorkshopDisplayBoardTaskPanelDefinition): string {
+   const panelClasses = {
+     amber: 'border-amber-500/20 bg-amber-500/[0.07]',
+-    blue: 'border-blue-500/20 bg-green-500/[0.07]',
++    blue: 'border-blue-500/20 bg-blue-500/[0.07]',
+     purple: 'border-purple-500/20 bg-purple-500/[0.07]',
+   };
+ 
+@@ -613,7 +613,7 @@ export default function WorkshopDisplayBoardPage() {
+   }
+ 
+   return (
+-    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#001102,#001f04_48%,#0d2911)] p-6 text-white">
++    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#020617,#0f172a_48%,#111827)] p-6 text-white">
+       <div className="grid h-full grid-rows-[88px_auto_minmax(0,1fr)] gap-5">
+         <header className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.06] px-7 shadow-2xl shadow-black/20">
+           <div className="flex items-center gap-4">
+diff --git a/app/globals.css b/app/globals.css
+index c922afdd..3985a173 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -1,19 +1,5 @@
+ @import "tailwindcss";
+ 
+-/* FFTS leaf-outline surfaces. Legacy slate/brand-yellow names remain compatible
+-   with existing components; only the app palette changes. */
+-@theme inline {
+-  --color-slate-950: #001102;
+-  --color-slate-900: #001f04;
+-  --color-slate-800: #0d2911;
+-  --color-slate-700: #1f3d24;
+-  --color-slate-600: #436e49;
+-  --color-slate-500: #66856b;
+-  --color-brand-yellow: hsl(var(--brand-yellow));
+-  --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
+-  --color-brand-yellow-light: hsl(var(--brand-yellow-light));
+-}
+-
+ /* Tailwind v4: enable class-based dark variant */
+ @custom-variant dark (&:where(.dark, .dark *));
+ 
+@@ -24,27 +10,27 @@
+     --top-nav-h: 68px;
+     
+     /* Semantic theme tokens - Dark theme by default */
+-    --background: 128 100% 6%; /* slate-900 */
++    --background: 222 47% 11%; /* slate-900 */
+     --foreground: 210 40% 98%; /* slate-50 */
+-    --card: 128 100% 6%; /* slate-900 */
++    --card: 222 47% 11%; /* slate-900 */
+     --card-foreground: 210 40% 98%;
+-    --popover: 128 100% 6%;
++    --popover: 222 47% 11%;
+     --popover-foreground: 210 40% 98%;
+     
+-    /* Primary - Forest Farm leaf-green accent */
+-    --primary: 90 51% 62%;
+-    --primary-foreground: 128 100% 6%;
++    /* Primary - Forest Farm brand yellow */
++    --primary: 48 87% 69%;
++    --primary-foreground: 222 47% 11%;
+     
+     /* Secondary - slate-800 */
+-    --secondary: 129 52% 13%;
++    --secondary: 217 33% 17%;
+     --secondary-foreground: 210 40% 98%;
+     
+     /* Muted - slate-800 */
+-    --muted: 129 52% 13%;
++    --muted: 217 33% 17%;
+     --muted-foreground: 215 20% 65%; /* slate-400 */
+     
+     /* Accent - slate-800 */
+-    --accent: 129 52% 13%;
++    --accent: 217 33% 17%;
+     --accent-foreground: 210 40% 98%;
+     
+     /* Status colors */
+@@ -116,38 +102,38 @@
+     --admin-dark: 260 60% 35%;
+     
+     /* UI Elements */
+-    --border: 129 52% 13%; /* slate-800 */
+-    --input: 129 52% 13%;
+-    --ring: 90 51% 62%;
++    --border: 217 33% 17%; /* slate-800 */
++    --input: 217 33% 17%;
++    --ring: 48 87% 69%;
+     --radius: 0.625rem;
+     
+-    /* Legacy brand-yellow aliases for the FFTS green accent */
+-    --brand-yellow: 90 51% 62%;
+-    --brand-yellow-hover: 90 45% 52%;
+-    --brand-yellow-light: 90 55% 94%;
++    /* brand yellow variants */
++    --brand-yellow: 48 87% 69%;
++    --brand-yellow-hover: 48 73% 56%;
++    --brand-yellow-light: 48 100% 94%;
+   }
+ 
+   .dark {
+     /* Dark mode (same as root for single-theme approach) */
+-    --background: 128 100% 6%;
++    --background: 222 47% 11%;
+     --foreground: 210 40% 98%;
+-    --card: 128 100% 6%;
++    --card: 222 47% 11%;
+     --card-foreground: 210 40% 98%;
+-    --popover: 128 100% 6%;
++    --popover: 222 47% 11%;
+     --popover-foreground: 210 40% 98%;
+-    --primary: 90 51% 62%;
+-    --primary-foreground: 128 100% 6%;
+-    --secondary: 129 52% 13%;
++    --primary: 48 87% 69%;
++    --primary-foreground: 222 47% 11%;
++    --secondary: 217 33% 17%;
+     --secondary-foreground: 210 40% 98%;
+-    --muted: 129 52% 13%;
++    --muted: 217 33% 17%;
+     --muted-foreground: 215 20% 65%;
+-    --accent: 129 52% 13%;
++    --accent: 217 33% 17%;
+     --accent-foreground: 210 40% 98%;
+     --destructive: 0 62.8% 30.6%;
+     --destructive-foreground: 210 40% 98%;
+-    --border: 129 52% 13%;
+-    --input: 129 52% 13%;
+-    --ring: 90 51% 62%;
++    --border: 217 33% 17%;
++    --input: 217 33% 17%;
++    --ring: 48 87% 69%;
+     --success: 142 71% 45%;
+     --warning: 38 92% 50%;
+     --error: 0 84% 60%;
+@@ -228,7 +214,7 @@
+ 
+   [data-accent="scheduling"] {
+     --primary: var(--scheduling-primary);
+-    --primary-foreground: 128 100% 6%;
++    --primary-foreground: 222 47% 11%;
+     --ring: var(--scheduling-primary);
+   }
+ 
+@@ -238,11 +224,11 @@
+     --ring: var(--report-primary);
+   }
+ 
+-  /* Brand (leaf green) remains the default for non-module pages */
++  /* Brand (yellow) remains the default for non-module pages */
+   [data-accent="brand"] {
+-    --primary: 90 51% 62%;
+-    --primary-foreground: 128 100% 6%; /* dark text for the light green accent */
+-    --ring: 90 51% 62%;
++    --primary: 48 87% 69%;
++    --primary-foreground: 222 47% 11%; /* dark text for yellow */
++    --ring: 48 87% 69%;
+   }
+ }
+ 
+@@ -252,12 +238,12 @@
+   }
+ 
+   html {
+-    background-color: hsl(var(--background));
++    background-color: #0f172a;
+   }
+   
+   body {
+-    background-color: hsl(var(--background));
+-    background-image: linear-gradient(135deg, var(--color-slate-900) 0%, var(--color-slate-800) 50%, var(--color-slate-700) 100%);
++    background-color: #0f172a;
++    background-image: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
+     background-attachment: fixed;
+     color: hsl(var(--foreground));
+     font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
+@@ -334,7 +320,7 @@
+   }
+ 
+   .app-top-navbar {
+-    background-color: hsl(var(--background) / 0.5) !important;
++    background-color: rgba(15, 23, 42, 0.5) !important;
+     -webkit-backdrop-filter: blur(24px);
+     backdrop-filter: blur(24px);
+     box-sizing: border-box;
+@@ -433,19 +419,19 @@ html[data-display-board-text-size="5"] {
+ /* Module-specific color utilities */
+ @layer utilities {
+   .bg-brand-yellow {
+-    background-color: hsl(var(--brand-yellow));
++    background-color: #F1D64A;
+   }
+   
+   .bg-brand-yellow-hover:hover {
+-    background-color: hsl(var(--brand-yellow-hover));
++    background-color: #d1b82f;
+   }
+   
+   .text-brand-yellow {
+-    color: hsl(var(--brand-yellow));
++    color: #F1D64A;
+   }
+   
+   .border-brand-yellow {
+-    border-color: hsl(var(--brand-yellow));
++    border-color: #F1D64A;
+   }
+ 
+   /* Timesheet */
+@@ -847,7 +833,7 @@ input[type="date"]::-webkit-datetime-edit-year-field {
+ }
+ 
+ .selectable-card-selected.selectable-card-timesheet {
+-  background-color: hsl(var(--timesheet-primary) / 0.15) !important;
++  background-color: rgba(59, 130, 246, 0.15) !important;
+   border-color: rgb(59 130 246) !important;
+ }
+ 
+@@ -862,7 +848,7 @@ input[type="date"]::-webkit-datetime-edit-year-field {
+ }
+ 
+ .selectable-card-selected.selectable-card-default {
+-  background-color: hsl(var(--brand-yellow) / 0.15) !important;
++  background-color: rgba(241, 214, 74, 0.15) !important;
+   border-color: rgb(241 214 74) !important;
+ }
+ 
+@@ -939,7 +925,7 @@ button.bg-primary * {
+ 
+ /* Inactive tabs - consistent visible background across all pages */
+ [role="tablist"] [role="tab"]:not([data-state="active"]) {
+-  background-color: color-mix(in srgb, var(--color-slate-700) 50%, transparent) !important;
++  background-color: rgba(51, 65, 85, 0.5) !important; /* slate-700 at 50% */
+ }
+ 
+ [role="tablist"] [role="tab"]:first-child {
+diff --git a/app/layout.tsx b/app/layout.tsx
+index dac0f215..49080309 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -30,7 +30,7 @@ export const viewport: Viewport = {
+   maximumScale: 1,
+   userScalable: false,
+   viewportFit: "cover",
+-  themeColor: "#001f04",
++  themeColor: "#0f172a",
+ };
+ 
+ export default function RootLayout({
+diff --git a/app/manifest.json/route.ts b/app/manifest.json/route.ts
+index 70fe32ca..e3c18393 100644
+--- a/app/manifest.json/route.ts
++++ b/app/manifest.json/route.ts
+@@ -11,8 +11,8 @@ export async function GET(): Promise<Response> {
+     scope: '/',
+     display: 'standalone',
+     display_override: ['standalone'],
+-    background_color: '#001f04',
+-    theme_color: '#001f04',
++    background_color: templateConfig.branding.backgroundColor,
++    theme_color: templateConfig.branding.brandColor,
+     icons: [
+       {
+         src: templateConfig.branding.faviconPath,
+diff --git a/components/admin/JobRolesTab.tsx b/components/admin/JobRolesTab.tsx
+index 8fb32064..52faf101 100644
+--- a/components/admin/JobRolesTab.tsx
++++ b/components/admin/JobRolesTab.tsx
+@@ -342,7 +342,7 @@ export function JobRolesTab() {
+                           ) : isAdminRole(role) ? (
+                             <Badge variant="destructive">Admin</Badge>
+                           ) : role.name === 'supervisor' ? (
+-                            <Badge variant="outline" className="text-cyan-300 border-cyan-500/50 bg-green-500/10">Supervisor</Badge>
++                            <Badge variant="outline" className="text-cyan-300 border-cyan-500/50 bg-cyan-500/10">Supervisor</Badge>
+                           ) : role.name === 'contractor' ? (
+                             <Badge variant="outline" className="text-orange-300 border-orange-500/50 bg-orange-500/10">Contractor</Badge>
+                           ) : role.is_manager_admin ? (
+diff --git a/components/admin/RoleManagement.tsx b/components/admin/RoleManagement.tsx
+index ffe6bf01..f1f4b5d1 100644
+--- a/components/admin/RoleManagement.tsx
++++ b/components/admin/RoleManagement.tsx
+@@ -135,7 +135,7 @@ function getPermissionKeyRoleBadge(level: PermissionAccessLevel): {
+     return {
+       label: 'Supervisor',
+       variant: 'outline',
+-      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
++      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+     };
+   }
+   if (level === 4) return { label: 'Manager', variant: 'warning' };
+@@ -201,7 +201,7 @@ function getUserPermissionRoleBadge(user: UserPermissionMatrixRow): {
+     return {
+       label: user.role_display_name || 'Supervisor',
+       variant: 'outline',
+-      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
++      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+     };
+   }
+ 
+diff --git a/components/fleet/AssetHistoryTable.tsx b/components/fleet/AssetHistoryTable.tsx
+index ae2cebe0..8723f269 100644
+--- a/components/fleet/AssetHistoryTable.tsx
++++ b/components/fleet/AssetHistoryTable.tsx
+@@ -118,11 +118,11 @@ function getWorkshopStatusBadge(row: Extract<AssetHistoryRow, { type: 'workshop'
+     },
+     in_progress: {
+       label: 'In Progress',
+-      className: 'bg-green-500/10 text-blue-300 border-blue-500/30',
++      className: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+     },
+     logged: {
+       label: 'In Progress',
+-      className: 'bg-green-500/10 text-blue-300 border-blue-500/30',
++      className: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+     },
+     on_hold: {
+       label: 'On Hold',
+@@ -156,7 +156,7 @@ function getStatusBadge(row: AssetHistoryRow, assetType: AssetHistoryAssetType)
+         : row.statusLabel === 'completed' || row.statusLabel === 'submitted'
+           ? 'bg-green-500/10 text-green-300 border-green-500/30'
+           : row.statusLabel === 'logged' || row.statusLabel === 'in_progress'
+-            ? 'bg-green-500/10 text-blue-300 border-blue-500/30'
++            ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+             : row.statusLabel === 'on_hold'
+               ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+               : 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30';
+@@ -185,7 +185,7 @@ function getRowClassName(row: AssetHistoryRow, assetType: AssetHistoryAssetType)
+     return cn(baseClassName, DAILY_TASK_ROW_CLASS_NAMES[assetType]);
+   }
+ 
+-  return cn(baseClassName, 'bg-green-500/5 hover:bg-green-500/10');
++  return cn(baseClassName, 'bg-blue-500/5 hover:bg-blue-500/10');
+ }
+ 
+ function getAccentCellClassName(row: AssetHistoryRow, assetType: AssetHistoryAssetType) {
+@@ -194,7 +194,7 @@ function getAccentCellClassName(row: AssetHistoryRow, assetType: AssetHistoryAss
+   if (row.type === 'workshop') return cn(baseClassName, 'before:bg-[hsl(var(--workshop-primary))]');
+   if (row.type === 'dailyTask') return cn(baseClassName, DAILY_TASK_ACCENT_CLASS_NAMES[assetType]);
+ 
+-  return cn(baseClassName, 'before:bg-green-500');
++  return cn(baseClassName, 'before:bg-blue-500');
+ }
+ 
+ function getRowIcon(row: AssetHistoryRow) {
+diff --git a/components/fleet/AssetLocationMapModal.tsx b/components/fleet/AssetLocationMapModal.tsx
+index be4c86af..c8a29e9f 100644
+--- a/components/fleet/AssetLocationMapModal.tsx
++++ b/components/fleet/AssetLocationMapModal.tsx
+@@ -223,7 +223,7 @@ export function AssetLocationMapModal({
+               Current asset
+             </span>
+             <span className="flex items-center gap-1.5">
+-              <span className="inline-block h-3 w-3 rounded-full bg-green-500 border border-blue-400" />
++              <span className="inline-block h-3 w-3 rounded-full bg-blue-500 border border-blue-400" />
+               Other vans / plant
+             </span>
+           </div>
+diff --git a/components/fleet/ExpandingVehicleCard.tsx b/components/fleet/ExpandingVehicleCard.tsx
+index 51b611a1..f30f552e 100644
+--- a/components/fleet/ExpandingVehicleCard.tsx
++++ b/components/fleet/ExpandingVehicleCard.tsx
+@@ -266,7 +266,7 @@ export function ExpandingVehicleCard({ vehicle, categories, onUpdate, fromTab =
+           onClick={handleExpand}
+         >
+           <div className="flex items-center gap-4 flex-1">
+-            <div className="bg-green-500/10 p-3 rounded-lg">
++            <div className="bg-blue-500/10 p-3 rounded-lg">
+               <Truck className="h-5 w-5 text-blue-400" />
+             </div>
+             <div className="flex-1">
+@@ -320,7 +320,7 @@ export function ExpandingVehicleCard({ vehicle, categories, onUpdate, fromTab =
+                   variant="outline"
+                   size="sm"
+                   onClick={handleEditToggle}
+-                  className="border-blue-600 text-blue-400 hover:bg-green-600 hover:text-white"
++                  className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
+                 >
+                   Edit Details
+                 </Button>
+diff --git a/components/messages/CreateReminderForm.tsx b/components/messages/CreateReminderForm.tsx
+index 4a5d6212..9b3898e9 100644
+--- a/components/messages/CreateReminderForm.tsx
++++ b/components/messages/CreateReminderForm.tsx
+@@ -198,7 +198,7 @@ export function CreateReminderForm({ onSuccess }: CreateReminderFormProps) {
+               onClick={() => setMode('notification')}
+               className={`rounded-lg border p-4 text-left transition-all ${
+                 mode === 'notification'
+-                  ? 'border-blue-500/40 bg-green-500/10 ring-2 ring-brand-yellow'
++                  ? 'border-blue-500/40 bg-blue-500/10 ring-2 ring-brand-yellow'
+                   : 'border-border bg-white hover:bg-muted/30 dark:bg-slate-900'
+               }`}
+             >
+diff --git a/components/messages/CreateToolboxTalkForm.tsx b/components/messages/CreateToolboxTalkForm.tsx
+index 17be55ba..833b933d 100644
+--- a/components/messages/CreateToolboxTalkForm.tsx
++++ b/components/messages/CreateToolboxTalkForm.tsx
+@@ -146,7 +146,7 @@ export function CreateToolboxTalkForm({ onSuccess }: CreateToolboxTalkFormProps)
+                 value: 'LOW',
+                 title: 'Level 1 - Medium Priority',
+                 description: 'Can be dismissed and signed later from Notifications.',
+-                className: 'border-blue-500/40 bg-green-500/10',
++                className: 'border-blue-500/40 bg-blue-500/10',
+               },
+               {
+                 value: 'HIGH',
+diff --git a/components/messages/ReminderModal.tsx b/components/messages/ReminderModal.tsx
+index 40c69aeb..f95c477f 100644
+--- a/components/messages/ReminderModal.tsx
++++ b/components/messages/ReminderModal.tsx
+@@ -238,7 +238,7 @@ export function ReminderModal({
+       <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-hidden">
+         <DialogHeader>
+           <div className="flex items-center gap-2">
+-            <div className="p-2 bg-green-100 dark:bg-green-950 rounded">
++            <div className="p-2 bg-blue-100 dark:bg-blue-950 rounded">
+               <Bell className="h-5 w-5 text-blue-600" />
+             </div>
+             <div className="flex-1">
+@@ -312,7 +312,7 @@ export function ReminderModal({
+                           key={update.id}
+                           className={`rounded-md border p-3 ${
+                             isUserReply
+-                              ? 'bg-green-50 border-blue-200 dark:bg-green-950/20 dark:border-blue-900'
++                              ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900'
+                               : 'bg-slate-50 border-border dark:bg-slate-800'
+                           }`}
+                         >
+diff --git a/components/notifications/NotificationPreferencesCard.tsx b/components/notifications/NotificationPreferencesCard.tsx
+index 2c7aa09f..8ae9d4e3 100644
+--- a/components/notifications/NotificationPreferencesCard.tsx
++++ b/components/notifications/NotificationPreferencesCard.tsx
+@@ -45,7 +45,7 @@ function channelButtonClassName(isEnabled: boolean, channel: 'in-app' | 'email')
+     return 'border-green-400/70 bg-green-500/20 text-green-100 shadow-lg shadow-green-500/10';
+   }
+ 
+-  return 'border-sky-400/70 bg-green-500/20 text-sky-100 shadow-lg shadow-sky-500/10';
++  return 'border-sky-400/70 bg-sky-500/20 text-sky-100 shadow-lg shadow-sky-500/10';
+ }
+ 
+ export function NotificationPreferencesCard({
+@@ -118,7 +118,7 @@ export function NotificationPreferencesCard({
+                     <Mail className={`h-6 w-6 ${preference.notify_email ? 'text-sky-300' : 'text-slate-400'}`} />
+                     <span className="text-base font-semibold leading-tight">Email</span>
+                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+-                      preference.notify_email ? 'bg-green-500/25 text-sky-100' : 'bg-slate-800 text-slate-300'
++                      preference.notify_email ? 'bg-sky-500/25 text-sky-100' : 'bg-slate-800 text-slate-300'
+                     }`}>
+                       {preference.notify_email ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                       {preference.notify_email ? 'ON' : 'OFF'}
+diff --git a/components/profile/ProfileBiometricsCard.tsx b/components/profile/ProfileBiometricsCard.tsx
+index 5087f23d..fa6f1ee7 100644
+--- a/components/profile/ProfileBiometricsCard.tsx
++++ b/components/profile/ProfileBiometricsCard.tsx
+@@ -221,7 +221,7 @@ export function ProfileBiometricsCard() {
+             type="button"
+             onClick={() => void handleEnableBiometrics()}
+             disabled={!canEnable || working}
+-            className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:text-sm"
++            className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:text-sm"
+           >
+             {working && !isConfigured ? 'Setting up...' : isConfigured ? 'Enabled' : 'Enable biometrics'}
+           </Button>
+diff --git a/components/profile/ProfileModuleSummaries.tsx b/components/profile/ProfileModuleSummaries.tsx
+index 68acb920..716ccf6a 100644
+--- a/components/profile/ProfileModuleSummaries.tsx
++++ b/components/profile/ProfileModuleSummaries.tsx
+@@ -31,7 +31,7 @@ function getTimesheetStatusBadgeClass(status: string): string {
+   if (normalized === 'approved') return 'border-green-500/40 bg-green-500/15 text-green-300';
+   if (normalized === 'rejected') return 'border-red-500/40 bg-red-500/15 text-red-300';
+   if (normalized === 'processed' || normalized === 'adjusted') {
+-    return 'border-blue-500/40 bg-green-500/15 text-blue-300';
++    return 'border-blue-500/40 bg-blue-500/15 text-blue-300';
+   }
+   return 'border-slate-500/40 bg-slate-500/15 text-slate-200';
+ }
+@@ -48,7 +48,7 @@ function getInspectionStatusBadgeClass(inspection: ProfileInspectionSummaryItem)
+ function getAbsenceStatusBadgeClass(status: string): string {
+   const normalized = status.toLowerCase();
+   if (normalized === 'approved') return 'border-green-500/40 bg-green-500/15 text-green-300';
+-  if (normalized === 'processed') return 'border-blue-500/40 bg-green-500/15 text-blue-300';
++  if (normalized === 'processed') return 'border-blue-500/40 bg-blue-500/15 text-blue-300';
+   if (normalized === 'pending') return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
+   if (normalized === 'rejected' || normalized === 'cancelled') {
+     return 'border-red-500/40 bg-red-500/15 text-red-300';
+diff --git a/components/profile/ProfileMyDetailsTab.tsx b/components/profile/ProfileMyDetailsTab.tsx
+index 967a9f09..c671b8b1 100644
+--- a/components/profile/ProfileMyDetailsTab.tsx
++++ b/components/profile/ProfileMyDetailsTab.tsx
+@@ -171,7 +171,7 @@ export function ProfileMyDetailsTab({
+           type="button"
+           onClick={onSave}
+           disabled={!hasChanges || isSaving}
+-          className="h-14 w-full bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:w-auto sm:text-sm"
++          className="h-14 w-full bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:w-auto sm:text-sm"
+         >
+           {isSaving ? (
+             <>
+diff --git a/components/profile/ProfileOverviewTab.tsx b/components/profile/ProfileOverviewTab.tsx
+index 7729d5f8..81f99b63 100644
+--- a/components/profile/ProfileOverviewTab.tsx
++++ b/components/profile/ProfileOverviewTab.tsx
+@@ -48,7 +48,7 @@ function getRoleBadgeProps(profile: ProfileIdentityPayload): {
+   }
+   if (roleLabel.includes('supervisor')) {
+     return {
+-      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
++      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+     };
+   }
+   if (profile.role?.role_class === 'manager' || roleLabel.includes('manager')) {
+diff --git a/components/profile/ProfilePermissionsTab.tsx b/components/profile/ProfilePermissionsTab.tsx
+index 10b5f787..a0d5e967 100644
+--- a/components/profile/ProfilePermissionsTab.tsx
++++ b/components/profile/ProfilePermissionsTab.tsx
+@@ -13,7 +13,7 @@ interface ProfilePermissionsTabProps {
+ function getAccessBadgeClass(accessLevel: number): string {
+   if (accessLevel >= 5) return 'border-red-500/40 bg-red-500/15 text-red-300';
+   if (accessLevel >= 4) return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
+-  if (accessLevel >= 3) return 'border-sky-500/40 bg-green-500/15 text-sky-300';
++  if (accessLevel >= 3) return 'border-sky-500/40 bg-sky-500/15 text-sky-300';
+   if (accessLevel >= 2) return 'border-green-500/40 bg-green-500/15 text-green-300';
+   return 'border-slate-500/40 bg-slate-500/15 text-slate-200';
+ }
+diff --git a/components/profile/ProfileSensitivePinCard.tsx b/components/profile/ProfileSensitivePinCard.tsx
+index efb24564..230d8ee0 100644
+--- a/components/profile/ProfileSensitivePinCard.tsx
++++ b/components/profile/ProfileSensitivePinCard.tsx
+@@ -82,7 +82,7 @@ export function ProfileSensitivePinCard() {
+ 
+   return (
+     <Card className="relative overflow-hidden border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/30">
+-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.1),_rgba(0,17,2,0.85))]" />
++      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(241,214,74,0.16),_transparent_36%),linear-gradient(145deg,_rgba(15,23,42,0.1),_rgba(2,6,23,0.85))]" />
+       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
+       <CardHeader className="relative">
+         <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:text-left">
+@@ -159,7 +159,7 @@ export function ProfileSensitivePinCard() {
+                     type="button"
+                     onClick={() => void setSensitivePin()}
+                     disabled={working || !pin || !confirmPin}
+-                    className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:text-sm"
++                    className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:text-sm"
+                   >
+                     {working ? <Loader2 className="mr-2 h-5 w-5 animate-spin sm:h-4 sm:w-4" /> : <KeyRound className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />}
+                     Set sensitive PIN
+diff --git a/components/projects/manage/ProjectsManageStats.tsx b/components/projects/manage/ProjectsManageStats.tsx
+index 355c84a5..0910427a 100644
+--- a/components/projects/manage/ProjectsManageStats.tsx
++++ b/components/projects/manage/ProjectsManageStats.tsx
+@@ -14,7 +14,7 @@ interface ProjectsManageStatsProps {
+ const STAT_CARDS: { key: FilterKey; label: string; color: string }[] = [
+   { key: 'all', label: 'All Documents', color: 'bg-slate-500' },
+   { key: 'needs_signature', label: 'Needs Signature', color: 'bg-amber-500' },
+-  { key: 'read_only', label: 'Read Only', color: 'bg-green-500' },
++  { key: 'read_only', label: 'Read Only', color: 'bg-blue-500' },
+   { key: 'recently_uploaded', label: 'Last 7 Days', color: 'bg-green-500' },
+ ];
+ 
+diff --git a/components/rams/SignRAMSModal.tsx b/components/rams/SignRAMSModal.tsx
+index 6c37e8ff..0f6d2898 100644
+--- a/components/rams/SignRAMSModal.tsx
++++ b/components/rams/SignRAMSModal.tsx
+@@ -101,7 +101,7 @@ export function SignRAMSModal({
+ 
+         <div className="grid gap-6 py-4">
+           {/* Confirmation Text */}
+-          <div className="rounded-md bg-green-900/20 border border-blue-800/30 p-4">
++          <div className="rounded-md bg-blue-900/20 border border-blue-800/30 p-4">
+             <div className="text-sm text-blue-100 space-y-1">
+               <p>By signing, you confirm that you have:</p>
+               <ul className="list-disc ml-5 mt-2 space-y-1">
+diff --git a/components/rams/UploadRAMSModal.tsx b/components/rams/UploadRAMSModal.tsx
+index ad386bc0..7b3da307 100644
+--- a/components/rams/UploadRAMSModal.tsx
++++ b/components/rams/UploadRAMSModal.tsx
+@@ -271,7 +271,7 @@ export function UploadRAMSModal({ open, onClose, onSubmit, prefillTitle, prefill
+               )}
+             </div>
+ 
+-            <div className="rounded-md bg-green-900/20 border border-blue-800/30 p-3">
++            <div className="rounded-md bg-blue-900/20 border border-blue-800/30 p-3">
+               <p className="text-sm text-blue-100">
+                 After uploading, you can assign this document to specific employees
+               </p>
+diff --git a/components/security/SensitiveModuleGate.tsx b/components/security/SensitiveModuleGate.tsx
+index 77b1f9da..35e4788e 100644
+--- a/components/security/SensitiveModuleGate.tsx
++++ b/components/security/SensitiveModuleGate.tsx
+@@ -299,7 +299,7 @@ export function SensitiveModuleSessionManager({
+               void confirmStillActive();
+             }}
+             disabled={confirming}
+-            className="bg-brand-yellow text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60"
++            className="bg-brand-yellow text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60"
+           >
+             {confirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+             Yes, I&apos;m still here
+@@ -844,7 +844,7 @@ export function SensitiveModuleGate({
+       }`}
+     >
+       <Card className="relative flex w-full max-w-[580px] overflow-hidden rounded-3xl border border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/40 sm:rounded-[2rem]">
+-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.2),_rgba(0,17,2,0.9))]" />
++        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(241,214,74,0.16),_transparent_36%),linear-gradient(145deg,_rgba(15,23,42,0.2),_rgba(2,6,23,0.9))]" />
+         <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
+         <div className="flex w-full flex-col justify-center">
+           <CardHeader className="relative px-4 pb-3 pt-5 text-center sm:px-10 sm:pb-4 sm:pt-8">
+diff --git a/components/timesheets/DidNotWorkReasonDialog.tsx b/components/timesheets/DidNotWorkReasonDialog.tsx
+index b5163a51..50a76bb8 100644
+--- a/components/timesheets/DidNotWorkReasonDialog.tsx
++++ b/components/timesheets/DidNotWorkReasonDialog.tsx
+@@ -32,7 +32,7 @@ const CHOICE_BUTTON_BASE_CLASSNAME =
+   'flex h-auto min-h-24 aspect-square w-full items-center justify-center rounded-lg border-2 px-2 py-0 text-xl font-bold text-white shadow-lg transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-30';
+ const SICK_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-red-600 bg-red-600/25 shadow-red-600/15 hover:bg-red-600/35`;
+ const TRAINING_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-emerald-500 bg-emerald-500/25 shadow-emerald-500/15 hover:bg-emerald-500/35`;
+-const OTHER_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-indigo-500 bg-green-500/25 shadow-indigo-500/15 hover:bg-green-500/35`;
++const OTHER_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-indigo-500 bg-indigo-500/25 shadow-indigo-500/15 hover:bg-indigo-500/35`;
+ const LARGE_ACTION_BUTTON_CLASSNAME =
+   'flex h-20 w-full items-center justify-center rounded-lg border-2 border-slate-700 bg-slate-800/30 px-4 py-5 text-xl font-semibold text-foreground shadow-sm transition-all hover:bg-slate-800/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
+ const LARGE_PRIMARY_BUTTON_CLASSNAME =
+diff --git a/components/timesheets/TimesheetAdjustmentModal.tsx b/components/timesheets/TimesheetAdjustmentModal.tsx
+index f6f80bc9..10d3caa8 100644
+--- a/components/timesheets/TimesheetAdjustmentModal.tsx
++++ b/components/timesheets/TimesheetAdjustmentModal.tsx
+@@ -269,7 +269,7 @@ export function TimesheetAdjustmentModal({
+                         key={manager.id}
+                         className={`flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent/50 ${
+                           index === 0 && isPriorityManager(manager)
+-                            ? 'border-blue-300 bg-green-50/50 dark:bg-green-950/20'
++                            ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20'
+                             : ''
+                         }`}
+                       >
+diff --git a/components/ui/error-details-modal.tsx b/components/ui/error-details-modal.tsx
+index 435892ab..e9a2efbb 100644
+--- a/components/ui/error-details-modal.tsx
++++ b/components/ui/error-details-modal.tsx
+@@ -72,7 +72,7 @@ export function ErrorDetailsModal({
+ 
+             {/* Resolution guide */}
+             {data.resolutionGuide && data.resolutionGuide.length > 0 && (
+-              <div className="mt-6 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
++              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                 <h4 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-2">
+                   💡 How to Resolve
+                 </h4>
+diff --git a/components/ui/page-loading-screen.module.css b/components/ui/page-loading-screen.module.css
+index 63c4901e..145afcbf 100644
+--- a/components/ui/page-loading-screen.module.css
++++ b/components/ui/page-loading-screen.module.css
+@@ -1,4 +1,3 @@
+-/* Shared fullscreen and compact loading states use the FFTS green palette. */
+ .screen {
+   --loader-accent: var(--brand-yellow);
+ 
+@@ -9,8 +8,8 @@
+   place-items: center;
+   overflow: hidden;
+   background:
+-    radial-gradient(circle at 50% 35%, hsl(var(--brand-yellow-hover) / 0.12), transparent 34rem),
+-    linear-gradient(135deg, var(--color-slate-800), hsl(var(--background)) 48%, var(--color-slate-950));
++    radial-gradient(circle at 50% 35%, hsl(var(--loader-accent) / 0.12), transparent 34rem),
++    linear-gradient(135deg, hsl(217 33% 17%), hsl(222 47% 11%) 48%, hsl(222 47% 7%));
+ }
+ 
+ .compact {
+@@ -43,18 +42,18 @@
+   overflow: hidden;
+   border-radius: 999px;
+   border: 1px solid hsl(210 40% 98% / 0.16);
+-  background: hsl(128 100% 6% / 0.72);
++  background: hsl(222 47% 7% / 0.72);
+   box-shadow:
+-    0 0 0 1px hsl(128 100% 6% / 0.45),
+-    0 1rem 3rem hsl(128 100% 3% / 0.5);
++    0 0 0 1px hsl(222 47% 7% / 0.45),
++    0 1rem 3rem hsl(222 47% 4% / 0.5);
+ }
+ 
+ .compact .progressTrack {
+   width: min(10rem, calc(100vw - 4rem));
+   height: 0.5rem;
+   box-shadow:
+-    0 0 0 1px hsl(128 100% 6% / 0.35),
+-    0 0.75rem 2rem hsl(128 100% 3% / 0.3);
++    0 0 0 1px hsl(222 47% 7% / 0.35),
++    0 0.75rem 2rem hsl(222 47% 4% / 0.3);
+ }
+ 
+ .progressBar {
+@@ -63,14 +62,14 @@
+   background-image:
+     linear-gradient(
+       90deg,
+-      hsl(var(--brand-yellow)) 0 12.5%,
+-      hsl(var(--brand-yellow-hover)) 12.5% 25%,
+-      hsl(var(--brand-yellow)) 25% 37.5%,
+-      hsl(var(--brand-yellow-hover)) 37.5% 50%,
+-      hsl(var(--brand-yellow)) 50% 62.5%,
+-      hsl(var(--brand-yellow-hover)) 62.5% 75%,
+-      hsl(var(--brand-yellow)) 75% 87.5%,
+-      hsl(var(--brand-yellow)) 87.5% 100%
++      #3b82f6 0 12.5%,
++      #22c55e 12.5% 25%,
++      #facc15 25% 37.5%,
++      #f97316 37.5% 50%,
++      #ef4444 50% 62.5%,
++      #a855f7 62.5% 75%,
++      #06b6d4 75% 87.5%,
++      #3b82f6 87.5% 100%
+     ),
+     repeating-linear-gradient(
+       -45deg,
+@@ -87,13 +86,13 @@
+     linear-gradient(
+       90deg,
+       hsl(var(--brand-yellow)) 0 12.5%,
+-      hsl(var(--brand-yellow-hover)) 12.5% 25%,
++      hsl(var(--loader-accent)) 12.5% 25%,
+       hsl(var(--brand-yellow)) 25% 37.5%,
+-      hsl(var(--brand-yellow-hover)) 37.5% 50%,
++      hsl(var(--loader-accent)) 37.5% 50%,
+       hsl(var(--brand-yellow)) 50% 62.5%,
+-      hsl(var(--brand-yellow-hover)) 62.5% 75%,
++      hsl(var(--loader-accent)) 62.5% 75%,
+       hsl(var(--brand-yellow)) 75% 87.5%,
+-      hsl(var(--brand-yellow-hover)) 87.5% 100%
++      hsl(var(--loader-accent)) 87.5% 100%
+     ),
+     repeating-linear-gradient(
+       -45deg,
+@@ -107,7 +106,7 @@
+   font-size: 0.95rem;
+   font-weight: 600;
+   letter-spacing: 0.02em;
+-  text-shadow: 0 0.125rem 1rem hsl(128 100% 3% / 0.75);
++  text-shadow: 0 0.125rem 1rem hsl(222 47% 4% / 0.75);
+ }
+ 
+ .compact .label {
+diff --git a/components/workshop-tasks/MarkTaskCompleteDialog.tsx b/components/workshop-tasks/MarkTaskCompleteDialog.tsx
+index be3276ac..9e2cdc9a 100644
+--- a/components/workshop-tasks/MarkTaskCompleteDialog.tsx
++++ b/components/workshop-tasks/MarkTaskCompleteDialog.tsx
+@@ -373,7 +373,7 @@ export function MarkTaskCompleteDialog({
+         <div className="space-y-4">
+           {/* Info Banner */}
+           {requiresIntermediateStep ? (
+-            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
++            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+               <div className="flex items-start gap-2">
+                 <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                 <p className="text-sm text-blue-300">
+diff --git a/components/workshop-tasks/TaskCommentsDrawer.tsx b/components/workshop-tasks/TaskCommentsDrawer.tsx
+index 4cde4fd0..3eb3bc19 100644
+--- a/components/workshop-tasks/TaskCommentsDrawer.tsx
++++ b/components/workshop-tasks/TaskCommentsDrawer.tsx
+@@ -256,7 +256,7 @@ export function TaskCommentsDrawer({
+ 
+       const statusBadgeClass =
+         item.meta?.status === 'logged' || item.meta?.status === 'resumed'
+-          ? 'bg-green-500/10 text-blue-400 border-blue-500/30'
++          ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+           : item.meta?.status === 'on_hold'
+           ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+           : item.meta?.status === 'undo'
+diff --git a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
+index eaf13f9f..4caaa206 100644
+--- a/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
++++ b/components/workshop-tasks/WorkshopTaskHistoryCard.tsx
+@@ -78,8 +78,8 @@ interface WorkshopTaskHistoryCardProps {
+ const getStatusBadge = (status: string) => {
+   const statusMap: Record<string, { label: string; className: string }> = {
+     pending: { label: 'Pending', className: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30' },
+-    in_progress: { label: 'In Progress', className: 'bg-green-500/10 text-blue-300 border-blue-500/30' },
+-    logged: { label: 'In Progress', className: 'bg-green-500/10 text-blue-300 border-blue-500/30' },
++    in_progress: { label: 'In Progress', className: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
++    logged: { label: 'In Progress', className: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
+     on_hold: { label: 'On Hold', className: 'bg-purple-500/10 text-purple-300 border-purple-500/30' },
+     completed: { label: 'Completed', className: 'bg-green-500/10 text-green-300 border-green-500/30' },
+   };
+diff --git a/components/workshop-tasks/WorkshopTaskModal.tsx b/components/workshop-tasks/WorkshopTaskModal.tsx
+index 1a00edae..5c5958db 100644
+--- a/components/workshop-tasks/WorkshopTaskModal.tsx
++++ b/components/workshop-tasks/WorkshopTaskModal.tsx
+@@ -239,7 +239,7 @@ export function WorkshopTaskModal({
+       },
+       logged: {
+         label: 'In Progress',
+-        className: 'bg-green-500/10 text-blue-400 border-blue-500/30',
++        className: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+       },
+       on_hold: {
+         label: 'On Hold',
+@@ -269,7 +269,7 @@ export function WorkshopTaskModal({
+   const getTaskTypeBadge = () => {
+     if (task.action_type === 'inspection_defect') {
+       return (
+-        <Badge variant="outline" className="bg-green-500/10 text-blue-400 border-blue-500/30">
++        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+           Inspection Defect
+         </Badge>
+       );
+@@ -376,7 +376,7 @@ export function WorkshopTaskModal({
+                     onClick={() => onMarkInProgress(task)}
+                     disabled={isUpdating}
+                     size="sm"
+-                    className={`bg-green-600/80 hover:bg-green-600 text-white border-0 ${taskActionButtonClass}`}
++                    className={`bg-blue-600/80 hover:bg-blue-600 text-white border-0 ${taskActionButtonClass}`}
+                   >
+                     <Clock className="h-4 w-4 mr-2" />
+                     Mark In Progress
+@@ -419,7 +419,7 @@ export function WorkshopTaskModal({
+                       onClick={() => onResume(task)}
+                       disabled={isUpdating}
+                       size="sm"
+-                      className={`bg-green-600/80 hover:bg-green-600 text-white border-0 ${taskActionButtonClass}`}
++                      className={`bg-blue-600/80 hover:bg-blue-600 text-white border-0 ${taskActionButtonClass}`}
+                     >
+                       <Clock className="h-4 w-4 mr-2" />
+                       Resume
+diff --git a/components/workshop-tasks/WorkshopTaskTimeline.tsx b/components/workshop-tasks/WorkshopTaskTimeline.tsx
+index b208fe58..ad1d9698 100644
+--- a/components/workshop-tasks/WorkshopTaskTimeline.tsx
++++ b/components/workshop-tasks/WorkshopTaskTimeline.tsx
+@@ -21,7 +21,7 @@ const getStatusConfig = (status: StatusHistoryEvent['status']) => {
+     case 'logged':
+       return {
+         icon: <Clock className="h-4 w-4 text-blue-400 mt-0.5" />,
+-        dotClass: 'bg-green-500',
++        dotClass: 'bg-blue-500',
+         label: 'marked in progress',
+       };
+     case 'on_hold':
+@@ -33,7 +33,7 @@ const getStatusConfig = (status: StatusHistoryEvent['status']) => {
+     case 'resumed':
+       return {
+         icon: <Play className="h-4 w-4 text-blue-400 mt-0.5" />,
+-        dotClass: 'bg-green-500',
++        dotClass: 'bg-blue-500',
+         label: 'resumed task',
+       };
+     case 'completed':
+diff --git a/lib/utils/status-badges.tsx b/lib/utils/status-badges.tsx
+index a6620d07..31d05b05 100644
+--- a/lib/utils/status-badges.tsx
++++ b/lib/utils/status-badges.tsx
+@@ -94,7 +94,7 @@ export function getTimesheetStatusBadge(status: string) {
+   // Apply blue styling for final states (processed and adjusted)
+   const isFinalState = status === 'processed' || status === 'adjusted';
+   const blueClasses = isFinalState 
+-    ? 'bg-green-500/10 text-blue-600 border-blue-500/20'
++    ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' 
+     : '';
+ 
+   return (
+diff --git a/tests/ui/components/SchedulingManagerBoard.test.tsx b/tests/ui/components/SchedulingManagerBoard.test.tsx
+index 43de045f..40fd4e86 100644
+--- a/tests/ui/components/SchedulingManagerBoard.test.tsx
++++ b/tests/ui/components/SchedulingManagerBoard.test.tsx
+@@ -1419,7 +1419,7 @@ describe('SchedulingManagerBoard', () => {
+       name: 'Q-100: select job or drag to a calendar date',
+     });
+     expect(quoteCard).toHaveAttribute('data-testid', expect.stringContaining('schedule-quote-'));
+-    expect(quoteCard).toHaveClass('bg-green-950/35');
++    expect(quoteCard).toHaveClass('bg-sky-950/35');
+     expect(
+       within(quoteCard).getByTestId(
+         'schedule-quote-drag-handle-quote-33333333-3333-4333-8333-333333333333'
+@@ -2421,8 +2421,8 @@ describe('SchedulingManagerBoard', () => {
+     await waitFor(() => expect(fitButton).toHaveAttribute('aria-pressed', 'true'));
+     expect(fitButton).toHaveAttribute('title', 'Shrink to fit width');
+     expect(fitButton).toBeEnabled();
+-    expect(fitButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
+-    expect(fitButton).toHaveClass('hover:text-slate-950');
++    expect(fitButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
++    expect(fitButton).toHaveClass('hover:text-[#020617]');
+     expect(scrollButton).toHaveAttribute('aria-pressed', 'false');
+     expect(scrollButton).toHaveAttribute('title', 'Scroll');
+     expect(scrollButton).toHaveClass(
+@@ -2496,7 +2496,7 @@ describe('SchedulingManagerBoard', () => {
+       'overflow-hidden',
+       'border-slate-500'
+     );
+-    expect(timelineVisit).toHaveClass('bg-slate-700');
++    expect(timelineVisit).toHaveStyle({ backgroundColor: '#334155' });
+     expect(within(timelineVisit).getByText('JOB-101')).toHaveAttribute(
+       'title',
+       'JOB-101'
+@@ -2552,7 +2552,7 @@ describe('SchedulingManagerBoard', () => {
+     fireEvent.click(scrollButton);
+ 
+     expect(scrollButton).toHaveAttribute('aria-pressed', 'true');
+-    expect(scrollButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
++    expect(scrollButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
+     expect(screen.getByRole('button', { name: 'Shrink to fit width' })).toHaveClass(
+       'text-[#e2e8f0]',
+       'hover:text-[#ffffff]'
+@@ -3603,7 +3603,7 @@ describe('SchedulingManagerBoard', () => {
+     expect(within(jobCell).getByText('Estimated 4 hours')).toBeInTheDocument();
+     expect(within(footer).getByText('Project')).toHaveClass(
+       'border-[#64748b]',
+-      'bg-slate-900',
++      'bg-[#0f172a]',
+       'text-[#cbd5e1]'
+     );
+     expect(footer).toHaveClass('mt-auto');
+@@ -3693,7 +3693,7 @@ describe('SchedulingManagerBoard', () => {
+       'aria-pressed',
+       'true'
+     );
+-    expect(selectedTagButton).toHaveClass('bg-[#34d399]', 'text-slate-950');
++    expect(selectedTagButton).toHaveClass('bg-[#34d399]', 'text-[#020617]');
+     expect(selectedTagButton.querySelector('.lucide-check')).not.toBeNull();
+     expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
+     expect(screen.queryByText('Crew offer')).not.toBeInTheDocument();
+diff --git a/tests/ui/components/SchedulingPage.test.tsx b/tests/ui/components/SchedulingPage.test.tsx
+index 5d6d7422..28f72c3d 100644
+--- a/tests/ui/components/SchedulingPage.test.tsx
++++ b/tests/ui/components/SchedulingPage.test.tsx
+@@ -189,9 +189,9 @@ describe('SchedulingPage access states', () => {
+       await screen.findByText('Scheduling access could not be checked')
+     ).toBeInTheDocument();
+     expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass(
+-      'bg-slate-900',
++      'bg-[#0f172a]',
+       'text-[#f1f5f9]',
+-      'hover:bg-slate-700',
++      'hover:bg-[#334155]',
+       'hover:text-[#ffffff]'
+     );
+   });
+diff --git a/tests/ui/components/scheduling-control-styles.test.tsx b/tests/ui/components/scheduling-control-styles.test.tsx
+index fde8e95f..9f71055f 100644
+--- a/tests/ui/components/scheduling-control-styles.test.tsx
++++ b/tests/ui/components/scheduling-control-styles.test.tsx
+@@ -4,13 +4,13 @@ import { schedulingControlStyles } from '@/app/(dashboard)/scheduling/components
+ describe('schedulingControlStyles', () => {
+   it('pairs every control state with emitted surface, foreground, border and focus classes', () => {
+     expect(schedulingControlStyles.primary).toContain('bg-[#34d399]');
+-    expect(schedulingControlStyles.primary).toContain('text-slate-950');
++    expect(schedulingControlStyles.primary).toContain('text-[#020617]');
+     expect(schedulingControlStyles.primary).toContain('border-[#34d399]');
+     expect(schedulingControlStyles.primary).toContain('disabled:opacity-100');
+ 
+-    expect(schedulingControlStyles.outline).toContain('bg-slate-900');
++    expect(schedulingControlStyles.outline).toContain('bg-[#0f172a]');
+     expect(schedulingControlStyles.outline).toContain('text-[#f1f5f9]');
+-    expect(schedulingControlStyles.ghost).toContain('hover:bg-slate-700');
++    expect(schedulingControlStyles.ghost).toContain('hover:bg-[#334155]');
+     expect(schedulingControlStyles.danger).toContain('bg-[#b91c1c]');
+     expect(schedulingControlStyles.warning).toContain('bg-[#fbbf24]');
+     expect(schedulingControlStyles.checkbox).toContain(

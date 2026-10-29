@@ -199,7 +199,8 @@ describe('ScheduleDayTeamBuckets', () => {
       />
     );
 
-    expect(screen.getByTestId('schedule-day-team-buckets-desktop')).toHaveClass('xl:grid-cols-8');
+    expect(screen.getByTestId('schedule-day-team-buckets-desktop')).toHaveClass('schedule-team-grid');
+    expect(screen.getByTestId('schedule-day-team-buckets-desktop')).toHaveStyle({ '--team-columns': '4', '--team-wide-columns': '8' });
     expect(screen.getByTestId('schedule-day-team-slot-desktop-8')).toBeInTheDocument();
     expect(screen.queryByTestId('schedule-day-team-slot-desktop-9')).not.toBeInTheDocument();
     expect(screen.getByTestId('schedule-day-team-plant-desktop-plant-1')).toBeInTheDocument();

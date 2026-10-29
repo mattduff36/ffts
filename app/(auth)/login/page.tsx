@@ -22,7 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Fingerprint, Lock, Monitor } from 'lucide-react';
+import { BrandLogo } from '@/components/branding/BrandLogo';
+import { Fingerprint, Monitor } from 'lucide-react';
 
 interface WebAuthnOptionsResponse {
   challenge?: string;
@@ -196,24 +197,15 @@ export default function LoginPage() {
   return (
     <div className="h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center px-4 pb-4 pt-0 sm:pt-16 md:pt-24 relative overflow-y-auto overflow-x-hidden bg-slate-950">
       {/* Fixed background starts at the viewport edge so iOS can render it under the native status bar. */}
-      <div className="fixed inset-0 z-0 pointer-events-none bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
+      <div className="fixed inset-0 z-0 pointer-events-none app-canvas">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(160,208,109,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(160,208,109,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
       </div>
 
       <div className="w-full max-w-lg relative z-10 translate-y-[clamp(1.5rem,10svh,5rem)] sm:translate-y-0">
-        {/* Forest Farm brand icon */}
-        <div className="flex justify-center mb-6">
-          <div className="bg-brand-yellow rounded-2xl p-5 shadow-lg shadow-brand-yellow/20">
-            <Lock className="h-10 w-10 text-slate-900" strokeWidth={2.5} />
-          </div>
+        <div className="flex justify-center mb-8 px-6">
+          <BrandLogo priority />
         </div>
-
-        {/* Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            {templateConfig.branding.shortAppName}
-          </h1>
-        </div>
+        <h1 className="sr-only">{templateConfig.branding.shortAppName} sign in</h1>
 
         {/* Glass-morphism Card */}
         <Card className="bg-card/40 backdrop-blur-xl border-border/50 shadow-2xl">

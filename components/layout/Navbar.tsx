@@ -1,5 +1,7 @@
 'use client';
 
+import { BrandLogo } from '@/components/branding/BrandLogo';
+
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -13,7 +15,6 @@ import {
 } from '@/components/ui/dialog';
 import { 
   Activity,
-  House,
   Menu, 
   X, 
   Bell,
@@ -591,7 +592,7 @@ export function Navbar() {
                 href="/dashboard"
                 className="flex items-center gap-2 group"
               >
-                <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
+                <BrandLogo compact />
                 <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
                   FFTSApp
                 </div>
@@ -611,7 +612,7 @@ export function Navbar() {
               className="md:hidden flex items-center gap-2 mr-4 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
+              <BrandLogo compact />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
                 FFTSApp
               </div>
@@ -622,7 +623,7 @@ export function Navbar() {
               href="/dashboard"
               className="hidden md:flex flex-shrink-0 items-center gap-2 mr-4 group"
             >
-              <House className="h-4 w-4 text-brand-yellow transition-colors group-hover:text-white" aria-hidden="true" />
+              <BrandLogo compact />
               <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
                 FFTSApp
               </div>

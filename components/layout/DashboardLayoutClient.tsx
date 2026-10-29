@@ -306,7 +306,7 @@ function DashboardLayoutShell({
 
   return (
     <div 
-      className="min-h-dvh bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative"
+      className="min-h-dvh app-canvas relative"
       data-accent={accent}
       data-tablet-mode={tabletModeEnabled ? 'on' : undefined}
     >

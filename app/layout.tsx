@@ -14,7 +14,7 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const appIcon = templateConfig.branding.logoPath;
+const socialImage = new URL("/branding/social-card.png", templateConfig.branding.publicUrl).toString();
 const appTitle = templateConfig.branding.appName;
 const appDescription = `${templateConfig.branding.companyName} digital field operations system`;
 const appleTouchIcon = "/apple-touch-icon.png";
@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#141414",
+  themeColor: "#131614",
 };
 
 export default function RootLayout({
@@ -58,8 +58,20 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content={templateConfig.branding.shortAppName} />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href={templateConfig.branding.faviconPath} type="image/svg+xml" />
-        <link rel="icon" href={appIcon} type="image/svg+xml" />
+        <link rel="icon" href="/favicon.svg?v=ffts-leaf" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico?v=ffts-leaf" sizes="16x16 32x32 48x48" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={appTitle} />
+        <meta property="og:title" content={appTitle} />
+        <meta property="og:description" content={appDescription} />
+        <meta property="og:image" content={socialImage} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="Forest Farm Tree Services" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={appTitle} />
+        <meta name="twitter:description" content={appDescription} />
+        <meta name="twitter:image" content={socialImage} />
         <link rel="apple-touch-icon" href={appleTouchIcon} sizes="180x180" type="image/png" />
         <link rel="apple-touch-icon" href={appleTouchIcon180} sizes="180x180" type="image/png" />
         <link rel="apple-touch-icon" href={appleTouchIcon152} sizes="152x152" type="image/png" />

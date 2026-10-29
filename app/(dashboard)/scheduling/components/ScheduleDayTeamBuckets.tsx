@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { X } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/react';
 import { Button } from '@/components/ui/button';
@@ -253,7 +254,8 @@ export function ScheduleDayTeamBuckets({
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8"
+        className="schedule-team-grid w-full gap-2"
+        style={{ "--team-columns": Math.ceil(resolvedSlots.length / 2), "--team-wide-columns": resolvedSlots.length } as CSSProperties}
         data-testid={`schedule-day-team-buckets-${dndScope}`}
         aria-label="Day team buckets"
       >

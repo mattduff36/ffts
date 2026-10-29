@@ -24,7 +24,7 @@
     --top-nav-h: 68px;
     
     /* Semantic theme tokens - Dark theme by default */
-    --background: 0 0% 8%; /* slate-900 */
+    --background: 140 7% 8%; /* slate-900 */
     --foreground: 210 40% 98%; /* slate-50 */
     --card: 0 0% 11%; /* slate-900 */
     --card-foreground: 210 40% 98%;
@@ -129,7 +129,7 @@
 
   .dark {
     /* Dark mode (same as root for single-theme approach) */
-    --background: 0 0% 8%;
+    --background: 140 7% 8%;
     --foreground: 210 40% 98%;
     --card: 0 0% 11%;
     --card-foreground: 210 40% 98%;
@@ -1060,4 +1060,14 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+/* A faint green cast belongs to the canvas; cards and tables stay neutral. */
+.app-canvas { background-image: linear-gradient(135deg, #262926, #1b1e1c, #111412); }
+.schedule-team-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) {
+  .schedule-team-grid { grid-template-columns: repeat(var(--team-columns), minmax(0, 1fr)); }
+}
+@media (min-width: 2560px) {
+  .schedule-team-grid { grid-template-columns: repeat(var(--team-wide-columns), minmax(0, 1fr)); }
 }

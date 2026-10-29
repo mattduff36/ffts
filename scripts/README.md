@@ -20,7 +20,7 @@ See `README-SETUP-FFTS.md` and `docs/guides/HOW_TO_RUN_MIGRATIONS.md` before run
 
 ### Revert the green preview theme
 
-Run `npm run theme:revert` from a clean checkout on `codex/meeting-2026-10-28-preview` to restore the previous blue/yellow appearance, including tables, loaders and badges. This stages only the reviewed theme reversal; it preserves the meeting features, original downloaded logo, release history and database. It never pushes or deploys automatically.
+Run `npm run theme:revert` from a clean checkout on `codex/meeting-2026-10-28-preview` to restore the previous blue/yellow appearance, including tables, loaders and badges. This stages only the reviewed theme reversal; it preserves the meeting features, complete leaf logo pack, two-row scheduling layout, release history and database. It never pushes or deploys automatically.
 
 Then run `npm run finalise`, review the result, and publish to the same preview with `git push origin HEAD:refs/heads/codex/meeting-2026-10-28-preview`. Do not use `finalise:push`, which targets production.
 
@@ -154,3 +154,7 @@ FFTS source and the command rerun; do not copy release records, transcripts, cre
 generated auth state from another repository.
 
 DIRECT/TEE-LIGHT is a workflow preference, not a bypass of FFTS mechanical release gates. This runtime supports explicit owner-authorised same-checkout successor generations; if another continuation mode lacks a supported transition, report the limitation and preserve the blocker.
+
+## FFTS logo pack
+
+Run `node scripts/branding/build-logo-pack.mjs` to regenerate `public/branding/` variants, `app/favicon.ico`, root SVG favicon/Apple/PWA assets and legacy `/images/forest-farm/` compatibility assets from the untouched source PNG. This is a local asset-only operation; it does not deploy or change data. SVGs embed raster artwork; see `public/branding/README.md` for usage and resolution limits. After changes, recreate the downloadable ZIP from the branding files (excluding the ZIP itself) plus `app/favicon.ico`, root SVG favicon and Apple/PWA icons.

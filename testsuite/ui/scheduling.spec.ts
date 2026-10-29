@@ -741,6 +741,10 @@ test.describe('@scheduling Scheduling', () => {
       end_date: formatDate(
         new Date(new Date(`${fixture.week.start}T12:00:00.000Z`).getTime() + 86_400_000)
       ),
+      initial_visit: {
+        starts_at: `${fixture.week.start}T08:00:00.000Z`,
+        ends_at: `${fixture.week.start}T10:00:00.000Z`,
+      },
     }]);
     await expect(source).toHaveCount(0);
     await expect(page.getByText('TEST-QUOTE-101').first()).toBeVisible();

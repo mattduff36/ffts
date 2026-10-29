@@ -103,16 +103,31 @@ function visitIntervalMs(visit: ScheduleVisit): { startMs: number; endMs: number
   return { startMs, endMs };
 }
 
+// Date boundaries are identical for every row/visit. The London conversion
+// deliberately scans across DST transitions, so do it once per displayed date.
+const londonDayBounds = new Map<string, { startMs: number; endMs: number }>();
+
+function getLondonDayBounds(date: string) {
+  const cached = londonDayBounds.get(date);
+  if (cached) return cached;
+  const nextDate = format(addDays(parseISO(date), 1), 'yyyy-MM-dd');
+  const bounds = {
+    startMs: Date.parse(toScheduleLondonDateTimeIso(date, '00:00')),
+    endMs: Date.parse(toScheduleLondonDateTimeIso(nextDate, '00:00')),
+  };
+  if (londonDayBounds.size >= 64) londonDayBounds.delete(londonDayBounds.keys().next().value!);
+  londonDayBounds.set(date, bounds);
+  return bounds;
+}
+
 export function scheduleVisitOverlapsLondonDate(
   visit: ScheduleVisit,
   date: string
 ): boolean {
   const interval = visitIntervalMs(visit);
   if (!interval) return false;
-  const nextDate = format(addDays(parseISO(date), 1), 'yyyy-MM-dd');
-  const dayStartMs = Date.parse(toScheduleLondonDateTimeIso(date, '00:00'));
-  const dayEndMs = Date.parse(toScheduleLondonDateTimeIso(nextDate, '00:00'));
-  return interval.startMs < dayEndMs && interval.endMs > dayStartMs;
+  const bounds = getLondonDayBounds(date);
+  return interval.startMs < bounds.endMs && interval.endMs > bounds.startMs;
 }
 
 function placeVisitOnOverlappingDates(

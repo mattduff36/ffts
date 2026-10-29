@@ -1,4 +1,4 @@
-# Client meeting implementation â€” 28 October 2026
+# Client meeting implementation — 28 October 2026
 
 ## Approved scope and release boundary
 
@@ -33,7 +33,7 @@ Work on `codex/meeting-2026-10-28-preview`, based on production commit `fc84b4c2
    - Test slot eight/sixteen, duplicate leaders, name fallback, settings round-trip, occupied-slot removal, employee/plant bucket copy and combined visit assignment.
 5. **Scheduling views and card interaction**
    - Replace the Employees board view with bucket-based Teams rows; verify Jobs and Plant views still work.
-   - Standardize Customer â†’ Site â†’ Title presentation with consistent missing-value fallbacks.
+   - Standardize Customer → Site → Title presentation with consistent missing-value fallbacks.
    - Remove Offer if crew free controls and their active filtering behavior; avoid destructive history deletion.
    - Implement full-card horizontal movement separately from edge resizing and resource-to-board dragging. Preserve duration, snapping, bounds and optimistic rollback on failures.
 6. **Resource queue and visit-only visibility**
@@ -48,20 +48,20 @@ Work on `codex/meeting-2026-10-28-preview`, based on production commit `fc84b4c2
 
 - [x] Requirements clarified and preview branch created.
 - [x] Database target resolved: owner authorises shared production database containing only sample/test data.
-- [ ] Input and quote cleanup.
-- [ ] Customer/site workflow and lookup research.
-- [ ] Exclusive days/hours estimates.
-- [ ] Eight-to-sixteen teams, names, leaders and plant buckets.
-- [ ] Teams view, card labels, offer removal and move/resize interaction.
-- [ ] Resources reconciliation and visit-only board visibility.
+- [x] Input and quote cleanup.
+- [x] Customer/site workflow and lookup research.
+- [x] Exclusive days/hours estimates.
+- [x] Eight-to-sixteen teams, names, leaders and plant buckets.
+- [x] Teams view, card labels, offer removal and move/resize interaction.
+- [x] Resources reconciliation and visit-only board visibility.
 - [ ] Combined tests and preview deployment.
 
 ## Evidence and continuation
 
 Starting checkout was clean. Prior same-day recorder/soft-refresh deployment remains the baseline. The earlier local team-settings safe-delete migration must be incorporated and verified on the approved shared sample database; its presence in Git is not proof it was applied.
 
-28 October 22:37 checkpoint: input/banner cleanup passed 27 UI tests and scoped lint; retired assist endpoint removed. Team settings core/API/new migration reviewed; UI names and 8..16 integration added, focused checks pending. No meeting migrations applied or preview deployed yet. Hours will reuse existing estimated_duration_minutes storage.
+29 October verification checkpoint: all implementation areas are complete. Two inspected meeting migrations were applied to the owner-approved shared sample database and db:validate passed. Initial release build passed and created local commit f840e70f. Live browser testing found and repaired a Radix site-selection reset and repeated timezone-boundary calculations that stalled Teams switching. The site regression passes 22 form tests; scheduling closure passes 104 tests. Scoped lint has zero errors and one existing hook-dependency warning.
 
-28 October 22:37 checkpoint: input/banner cleanup passed 27 UI tests and scoped lint; retired assist endpoint removed. Team settings core/API/new migration reviewed; UI names and 8..16 integration added, focused checks pending. No meeting migrations applied or preview deployed yet. Hours will reuse existing estimated_duration_minutes storage.
+Browser evidence: 23 of 24 scheduling/customer/quote checks passed initially; the sole stale assertion was updated to include the atomic initial timed visit and passed on rerun. Live saved-data checks passed inline customer/site selection, quote draft retention, numeric wheel protection, exclusive 90-minute storage, duration transitions and rejection, reload and independent reads. Eight-to-sixteen team settings, names, leader, Teams/Plant/Jobs switching and independent reload checks passed; original team settings were restored. Exact generated customer/site/quote fixtures were deleted. Earlier transactional migration tests covered combined people/plant membership and assignment, copy, bounds, uniqueness and occupied-slot removal, with rollback.
 
-28 October 23:38 checkpoint: team settings and plant storage/assignment/UI implemented and reviewed; two migrations passed rollback-only pg verification but are not applied persistently. Visit-only board and dated-quote Resources filtering passed focused checks. Site creation API and customer/main-quote UX implemented; 41 focused API/UI/helper checks pass including failed draft retention and duplicate-submit prevention. Retired offer controls removed and compact Done acknowledgements integrated, preserving errors/Undo/partial details. Full scheduling component rerun and typecheck in progress. Remaining: exclusive duration, scheduling inline customer/site, Teams view, consistent labels, browser verification and preview release.
+Evidence is under ignored testsuite/reports/meeting/: browser.log, browser-rerun.log, board-closure.json, site-regression.log, settings-live.log, lint.log and database/release logs under docs_private/automation/runs/. Full Vitest and final release closure are pending. Preview deployment remains pending; no application production deployment or merge is authorised.

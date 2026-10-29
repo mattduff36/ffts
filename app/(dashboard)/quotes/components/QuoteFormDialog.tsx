@@ -612,6 +612,9 @@ export function QuoteFormDialog({
   }
 
   function handleSiteChange(customerSiteId: string) {
+    // Radix's hidden form select can emit an empty value when its options change.
+    // Keep the explicit selection made by inline site creation in that case.
+    if (!customerSiteId) return;
     if (customerSiteId === QUOTE_NEW_SITE_VALUE) {
       if (form.customer_id && onSiteCreated) setSiteDialogOpen(true);
       return;
@@ -1252,7 +1255,7 @@ export function QuoteFormDialog({
                     className={getFieldClassName('start_date')}
                   />
                   <p className="text-xs text-slate-400">
-                    If set, this quote appears on the scheduling board for that date and is removed from the unscheduled Draft queue. Leave blank to keep it selectable under Scheduling → Jobs → Draft.
+                    Sets the planned start date. A timed visit is required to appear on the scheduling board. Leave blank to keep this quote in the unscheduled Draft queue.
                   </p>
                   {renderFieldError('start_date')}
                 </div>

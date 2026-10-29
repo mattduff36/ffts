@@ -82,6 +82,20 @@ describe('QuoteFormDialog', () => {
     expect(hours).toHaveValue(2.25);
   });
 
+  it('retains the saved site when the native select emits an empty value during an options refresh', () => {
+    mockUseAuth.mockReturnValue({ profile: { id: 'manager-1' } });
+    const site = { id: 'site-1', customer_id: 'customer-1', site_name: 'Woodland', is_active: true };
+    render(<QuoteFormDialog {...baseProps}
+      customers={[{ ...baseProps.customers[0], sites: [site] } as never]}
+      quote={{ id: 'q-site', customer_id: 'customer-1', customer_site_id: 'site-1',
+        validity_days: 30, line_items: [] } as unknown as Quote} />);
+    const nativeSelect = Array.from(document.querySelectorAll('select'))
+      .find(select => Array.from(select.options).some(option => option.value === 'site-1'))!;
+    expect(nativeSelect).toBeTruthy();
+    fireEvent.change(nativeSelect, { target: { value: '' } });
+    expect(screen.getByRole('combobox', { name: 'Saved site' })).toHaveTextContent('Woodland');
+  });
+
   it('preserves in-progress form values when auth state refreshes while open', () => {
     mockUseAuth.mockReturnValue({
       profile: {

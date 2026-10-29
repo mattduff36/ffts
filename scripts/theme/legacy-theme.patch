@@ -1946,7 +1946,7 @@ index 3fde836a..b67d87da 100644
  @custom-variant dark (&:where(.dark, .dark *));
  
 @@ -24,27 +10,27 @@
-     --top-nav-h: 68px;
+     --top-nav-h: 64px;
      
      /* Semantic theme tokens - Dark theme by default */
 -    --background: 140 7% 8%; /* slate-900 */

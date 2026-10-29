@@ -583,8 +583,6 @@ export function Navbar() {
       <nav 
         className="bg-slate-900/50 backdrop-blur-xl border-b border-border/50 top-0 z-50 app-top-navbar"
       >
-        {/* brand yellow accent strip */}
-        <div className="h-1 bg-gradient-to-r from-brand-yellow via-brand-yellow to-brand-yellow-hover"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {tabletModeEnabled ? (
             <div className="flex items-center h-16">

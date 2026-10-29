@@ -21,7 +21,7 @@
 @layer base {
   :root {
     color-scheme: dark;
-    --top-nav-h: 68px;
+    --top-nav-h: 64px;
     
     /* Semantic theme tokens - Dark theme by default */
     --background: 140 7% 8%; /* slate-900 */
@@ -299,12 +299,12 @@
 @supports (padding-top: env(safe-area-inset-top, 0px)) {
   @media (display-mode: standalone), (display-mode: fullscreen) {
     :root {
-      --top-nav-h: calc(68px + env(safe-area-inset-top, 0px));
+      --top-nav-h: calc(64px + env(safe-area-inset-top, 0px));
     }
   }
 
   :root[data-standalone-pwa="true"] {
-    --top-nav-h: calc(68px + env(safe-area-inset-top, 0px));
+    --top-nav-h: calc(64px + env(safe-area-inset-top, 0px));
   }
 
   @media (display-mode: standalone), (display-mode: fullscreen) {

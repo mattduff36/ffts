@@ -3,10 +3,10 @@
 /* FFTS leaf-outline surfaces. Legacy slate/brand-yellow names remain compatible
    with existing components; only the app palette changes. */
 @theme inline {
-  --color-slate-950: #001c04;
-  --color-slate-900: #003307;
-  --color-slate-800: #16451d;
-  --color-slate-700: #2c5733;
+  --color-slate-950: #001102;
+  --color-slate-900: #001f04;
+  --color-slate-800: #0d2911;
+  --color-slate-700: #1f3d24;
   --color-slate-600: #436e49;
   --color-brand-yellow: hsl(var(--brand-yellow));
   --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
@@ -23,27 +23,27 @@
     --top-nav-h: 68px;
     
     /* Semantic theme tokens - Dark theme by default */
-    --background: 128 100% 10%; /* slate-900 */
+    --background: 128 100% 6%; /* slate-900 */
     --foreground: 210 40% 98%; /* slate-50 */
-    --card: 128 100% 10%; /* slate-900 */
+    --card: 128 100% 6%; /* slate-900 */
     --card-foreground: 210 40% 98%;
-    --popover: 128 100% 10%;
+    --popover: 128 100% 6%;
     --popover-foreground: 210 40% 98%;
     
     /* Primary - Forest Farm leaf-green accent */
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 10%;
+    --primary-foreground: 128 100% 6%;
     
     /* Secondary - slate-800 */
-    --secondary: 129 52% 18%;
+    --secondary: 129 52% 13%;
     --secondary-foreground: 210 40% 98%;
     
     /* Muted - slate-800 */
-    --muted: 129 52% 18%;
+    --muted: 129 52% 13%;
     --muted-foreground: 215 20% 65%; /* slate-400 */
     
     /* Accent - slate-800 */
-    --accent: 129 52% 18%;
+    --accent: 129 52% 13%;
     --accent-foreground: 210 40% 98%;
     
     /* Status colors */
@@ -115,8 +115,8 @@
     --admin-dark: 260 60% 35%;
     
     /* UI Elements */
-    --border: 129 52% 18%; /* slate-800 */
-    --input: 129 52% 18%;
+    --border: 129 52% 13%; /* slate-800 */
+    --input: 129 52% 13%;
     --ring: 90 51% 62%;
     --radius: 0.625rem;
     
@@ -128,24 +128,24 @@
 
   .dark {
     /* Dark mode (same as root for single-theme approach) */
-    --background: 128 100% 10%;
+    --background: 128 100% 6%;
     --foreground: 210 40% 98%;
-    --card: 128 100% 10%;
+    --card: 128 100% 6%;
     --card-foreground: 210 40% 98%;
-    --popover: 128 100% 10%;
+    --popover: 128 100% 6%;
     --popover-foreground: 210 40% 98%;
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 10%;
-    --secondary: 129 52% 18%;
+    --primary-foreground: 128 100% 6%;
+    --secondary: 129 52% 13%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 129 52% 18%;
+    --muted: 129 52% 13%;
     --muted-foreground: 215 20% 65%;
-    --accent: 129 52% 18%;
+    --accent: 129 52% 13%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 129 52% 18%;
-    --input: 129 52% 18%;
+    --border: 129 52% 13%;
+    --input: 129 52% 13%;
     --ring: 90 51% 62%;
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
@@ -227,7 +227,7 @@
 
   [data-accent="scheduling"] {
     --primary: var(--scheduling-primary);
-    --primary-foreground: 128 100% 10%;
+    --primary-foreground: 128 100% 6%;
     --ring: var(--scheduling-primary);
   }
 
@@ -240,7 +240,7 @@
   /* Brand (leaf green) remains the default for non-module pages */
   [data-accent="brand"] {
     --primary: 90 51% 62%;
-    --primary-foreground: 128 100% 10%; /* dark text for the light green accent */
+    --primary-foreground: 128 100% 6%; /* dark text for the light green accent */
     --ring: 90 51% 62%;
   }
 }

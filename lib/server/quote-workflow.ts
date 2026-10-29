@@ -1,6 +1,4 @@
 import pg from 'pg';
-import { renderToStream } from '@react-pdf/renderer';
-import { QuotePDF } from '@/lib/pdf/quote-pdf';
 import { loadTemplateLogoDataUrl } from '@/lib/pdf/template-logo';
 import { templateConfig } from '@/lib/config/template-config';
 import { getTemplateEmailConfig } from '@/lib/config/template-server-config';
@@ -632,6 +630,10 @@ export async function renderQuotePdfAttachment(
   bundle: QuoteBundle,
   managerEmailOverride?: string | null
 ): Promise<EmailAttachment> {
+  const [{ renderToStream }, { QuotePDF }] = await Promise.all([
+    import('@react-pdf/renderer'),
+    import('@/lib/pdf/quote-pdf'),
+  ]);
   const logoSrc = await loadTemplateLogoDataUrl();
   const managerEmail = normalizeEmailAddress(managerEmailOverride) || bundle.quote.manager_email || '';
 

@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* FFTS leaf-outline surfaces. Legacy slate/brand-yellow names remain compatible
+   with existing components; only the app palette changes. */
+@theme inline {
+  --color-slate-950: #001c04;
+  --color-slate-900: #003307;
+  --color-slate-800: #16451d;
+  --color-slate-700: #2c5733;
+  --color-slate-600: #436e49;
+  --color-brand-yellow: hsl(var(--brand-yellow));
+  --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
+  --color-brand-yellow-light: hsl(var(--brand-yellow-light));
+}
+
 /* Tailwind v4: enable class-based dark variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -10,27 +23,27 @@
     --top-nav-h: 68px;
     
     /* Semantic theme tokens - Dark theme by default */
-    --background: 222 47% 11%; /* slate-900 */
+    --background: 128 100% 10%; /* slate-900 */
     --foreground: 210 40% 98%; /* slate-50 */
-    --card: 222 47% 11%; /* slate-900 */
+    --card: 128 100% 10%; /* slate-900 */
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
+    --popover: 128 100% 10%;
     --popover-foreground: 210 40% 98%;
     
-    /* Primary - Forest Farm brand yellow */
-    --primary: 48 87% 69%;
-    --primary-foreground: 222 47% 11%;
+    /* Primary - Forest Farm leaf-green accent */
+    --primary: 90 51% 62%;
+    --primary-foreground: 128 100% 10%;
     
     /* Secondary - slate-800 */
-    --secondary: 217 33% 17%;
+    --secondary: 129 52% 18%;
     --secondary-foreground: 210 40% 98%;
     
     /* Muted - slate-800 */
-    --muted: 217 33% 17%;
+    --muted: 129 52% 18%;
     --muted-foreground: 215 20% 65%; /* slate-400 */
     
     /* Accent - slate-800 */
-    --accent: 217 33% 17%;
+    --accent: 129 52% 18%;
     --accent-foreground: 210 40% 98%;
     
     /* Status colors */
@@ -102,38 +115,38 @@
     --admin-dark: 260 60% 35%;
     
     /* UI Elements */
-    --border: 217 33% 17%; /* slate-800 */
-    --input: 217 33% 17%;
-    --ring: 48 87% 69%;
+    --border: 129 52% 18%; /* slate-800 */
+    --input: 129 52% 18%;
+    --ring: 90 51% 62%;
     --radius: 0.625rem;
     
-    /* brand yellow variants */
-    --brand-yellow: 48 87% 69%;
-    --brand-yellow-hover: 48 73% 56%;
-    --brand-yellow-light: 48 100% 94%;
+    /* Legacy brand-yellow aliases for the FFTS green accent */
+    --brand-yellow: 90 51% 62%;
+    --brand-yellow-hover: 90 45% 52%;
+    --brand-yellow-light: 90 55% 94%;
   }
 
   .dark {
     /* Dark mode (same as root for single-theme approach) */
-    --background: 222 47% 11%;
+    --background: 128 100% 10%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 11%;
+    --card: 128 100% 10%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
+    --popover: 128 100% 10%;
     --popover-foreground: 210 40% 98%;
-    --primary: 48 87% 69%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
+    --primary: 90 51% 62%;
+    --primary-foreground: 128 100% 10%;
+    --secondary: 129 52% 18%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
+    --muted: 129 52% 18%;
     --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
+    --accent: 129 52% 18%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 48 87% 69%;
+    --border: 129 52% 18%;
+    --input: 129 52% 18%;
+    --ring: 90 51% 62%;
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
     --error: 0 84% 60%;
@@ -214,7 +227,7 @@
 
   [data-accent="scheduling"] {
     --primary: var(--scheduling-primary);
-    --primary-foreground: 222 47% 11%;
+    --primary-foreground: 128 100% 10%;
     --ring: var(--scheduling-primary);
   }
 
@@ -224,11 +237,11 @@
     --ring: var(--report-primary);
   }
 
-  /* Brand (yellow) remains the default for non-module pages */
+  /* Brand (leaf green) remains the default for non-module pages */
   [data-accent="brand"] {
-    --primary: 48 87% 69%;
-    --primary-foreground: 222 47% 11%; /* dark text for yellow */
-    --ring: 48 87% 69%;
+    --primary: 90 51% 62%;
+    --primary-foreground: 128 100% 10%; /* dark text for the light green accent */
+    --ring: 90 51% 62%;
   }
 }
 
@@ -238,12 +251,12 @@
   }
 
   html {
-    background-color: #0f172a;
+    background-color: hsl(var(--background));
   }
   
   body {
-    background-color: #0f172a;
-    background-image: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(51 65 85) 100%);
+    background-color: hsl(var(--background));
+    background-image: linear-gradient(135deg, var(--color-slate-900) 0%, var(--color-slate-800) 50%, var(--color-slate-700) 100%);
     background-attachment: fixed;
     color: hsl(var(--foreground));
     font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
@@ -320,7 +333,7 @@
   }
 
   .app-top-navbar {
-    background-color: rgba(15, 23, 42, 0.5) !important;
+    background-color: hsl(var(--background) / 0.5) !important;
     -webkit-backdrop-filter: blur(24px);
     backdrop-filter: blur(24px);
     box-sizing: border-box;
@@ -419,19 +432,19 @@ html[data-display-board-text-size="5"] {
 /* Module-specific color utilities */
 @layer utilities {
   .bg-brand-yellow {
-    background-color: #F1D64A;
+    background-color: hsl(var(--brand-yellow));
   }
   
   .bg-brand-yellow-hover:hover {
-    background-color: #d1b82f;
+    background-color: hsl(var(--brand-yellow-hover));
   }
   
   .text-brand-yellow {
-    color: #F1D64A;
+    color: hsl(var(--brand-yellow));
   }
   
   .border-brand-yellow {
-    border-color: #F1D64A;
+    border-color: hsl(var(--brand-yellow));
   }
 
   /* Timesheet */

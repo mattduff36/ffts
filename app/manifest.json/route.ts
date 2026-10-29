@@ -11,8 +11,8 @@ export async function GET(): Promise<Response> {
     scope: '/',
     display: 'standalone',
     display_override: ['standalone'],
-    background_color: templateConfig.branding.backgroundColor,
-    theme_color: templateConfig.branding.brandColor,
+    background_color: '#003307',
+    theme_color: '#003307',
     icons: [
       {
         src: templateConfig.branding.faviconPath,

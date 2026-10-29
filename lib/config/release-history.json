@@ -1,5 +1,20 @@
 [
   {
+    "version": "1026.7.1",
+    "updateKind": "minor",
+    "title": "Repo maintenance update",
+    "description": "Updated general app maintenance.",
+    "summary": "Updated general app maintenance.",
+    "details": [
+      "Updated general app maintenance."
+    ],
+    "areas": [
+      "General app maintenance"
+    ],
+    "areaKeys": [],
+    "pushedAt": "2026-10-29T10:51:23.102Z"
+  },
+  {
     "version": "1026.7.0",
     "updateKind": "major",
     "title": "Timesheets update",

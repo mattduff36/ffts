@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Archive, Download, Edit, GraduationCap, Loader2, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { LoadMorePagination } from '@/components/ui/load-more-pagination';
 import { fetchAllPaginatedItems } from '@/lib/client/paginated-fetch';
 import { useLoadMorePagination } from '@/lib/hooks/useLoadMorePagination';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
 import {
@@ -40,7 +41,62 @@ import { TrainingPersonDialog } from './components/TrainingPersonDialog';
 import { TrainingQualificationDialog } from './components/TrainingQualificationDialog';
 
 type TrainingTab = 'overview' | 'records' | 'people' | 'qualifications' | 'notes';
+type TrainingSlice = 'summary' | 'records' | 'people' | 'qualifications' | 'notes';
 type RecordFilter = 'all' | 'expired' | 'expiring' | 'no_expiry' | 'needs_nvq' | 'awaiting_card' | 'training_booked' | 'manual_review' | 'subcontractors' | 'unlinked' | 'archived';
+
+const TRAINING_SLICES: readonly TrainingSlice[] = ['summary', 'records', 'people', 'qualifications', 'notes'];
+
+const TAB_SLICES: Record<TrainingTab, readonly TrainingSlice[]> = {
+  overview: ['summary', 'records'],
+  records: ['summary', 'records'],
+  people: ['summary', 'people'],
+  qualifications: ['summary', 'qualifications'],
+  notes: ['summary', 'notes'],
+};
+
+interface TrainingAccessKeyInput {
+  userId: string | null;
+  profileRoleName: string;
+  profileTeamId: string;
+  profileTeamName: string;
+  isViewingAs: boolean;
+  effectiveRoleName: string;
+  effectiveTeamId: string;
+  effectiveTeamName: string;
+  hasPermission: boolean;
+  permissionLoading: boolean;
+}
+
+function buildTrainingAccessKey(input: TrainingAccessKeyInput): string {
+  if (input.permissionLoading || !input.hasPermission || !input.userId) return '';
+  return JSON.stringify([
+    input.userId,
+    input.profileRoleName,
+    input.profileTeamId,
+    input.profileTeamName,
+    input.isViewingAs,
+    input.effectiveRoleName,
+    input.effectiveTeamId,
+    input.effectiveTeamName,
+  ]);
+}
+
+interface TrainingOperationToken {
+  generation: number;
+  contextKey: string;
+}
+
+interface SliceStatus {
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+interface SliceFlight {
+  generation: number;
+  contextKey: string;
+  promise: Promise<void>;
+}
 
 interface TrainingPersonWithProfile extends TrainingPerson {
   profile?: {
@@ -56,6 +112,44 @@ interface TrainingDataState {
   people: TrainingPersonWithProfile[];
   qualifications: TrainingQualification[];
   notes: TrainingWorkbookNote[];
+}
+
+const EMPTY_TRAINING_DATA: TrainingDataState = {
+  summary: null,
+  records: [],
+  people: [],
+  qualifications: [],
+  notes: [],
+};
+
+function createSliceStatus(): Record<TrainingSlice, SliceStatus> {
+  return {
+    summary: { loaded: false, loading: false, error: null },
+    records: { loaded: false, loading: false, error: null },
+    people: { loaded: false, loading: false, error: null },
+    qualifications: { loaded: false, loading: false, error: null },
+    notes: { loaded: false, loading: false, error: null },
+  };
+}
+
+function createLoadedFlags(): Record<TrainingSlice, boolean> {
+  return {
+    summary: false,
+    records: false,
+    people: false,
+    qualifications: false,
+    notes: false,
+  };
+}
+
+function createSliceGeneration(): Record<TrainingSlice, number> {
+  return {
+    summary: 0,
+    records: 0,
+    people: 0,
+    qualifications: 0,
+    notes: 0,
+  };
 }
 
 const RECORD_FILTERS: Array<{ value: RecordFilter; label: string }> = [
@@ -125,6 +219,43 @@ async function parseJsonResponse(response: Response, fallbackMessage: string) {
   return payload;
 }
 
+function applySliceValue(current: TrainingDataState, slice: TrainingSlice, value: unknown): TrainingDataState {
+  switch (slice) {
+    case 'summary':
+      return { ...current, summary: value as TrainingSummary };
+    case 'records':
+      return { ...current, records: value as TrainingRecordWithRelations[] };
+    case 'people':
+      return { ...current, people: value as TrainingPersonWithProfile[] };
+    case 'qualifications':
+      return { ...current, qualifications: value as TrainingQualification[] };
+    case 'notes':
+      return { ...current, notes: value as TrainingWorkbookNote[] };
+    default:
+      return current;
+  }
+}
+
+async function fetchTrainingSlice(slice: TrainingSlice): Promise<unknown> {
+  switch (slice) {
+    case 'summary': {
+      const response = await fetch('/api/training/summary', { cache: 'no-store' });
+      const payload = await parseJsonResponse(response, 'Failed to fetch training summary') as { summary: TrainingSummary };
+      return payload.summary;
+    }
+    case 'records':
+      return (await fetchAllPaginatedItems<TrainingRecordWithRelations>('/api/training/records', 'records', { limit: 500, errorMessage: 'Failed to fetch training records' })).items;
+    case 'people':
+      return (await fetchAllPaginatedItems<TrainingPersonWithProfile>('/api/training/people', 'people', { limit: 500, errorMessage: 'Failed to fetch training people' })).items;
+    case 'qualifications':
+      return (await fetchAllPaginatedItems<TrainingQualification>('/api/training/qualifications', 'qualifications', { limit: 500, errorMessage: 'Failed to fetch training qualifications' })).items;
+    case 'notes':
+      return (await fetchAllPaginatedItems<TrainingWorkbookNote>('/api/training/notes', 'notes', { limit: 500, errorMessage: 'Failed to fetch training notes' })).items;
+    default:
+      return null;
+  }
+}
+
 function SummaryCard({ label, value, description }: { label: string; value: number; description: string }) {
   return (
     <Card className="border-border bg-white dark:bg-slate-900">
@@ -155,18 +286,19 @@ function TrainingDevelopmentBanner() {
   );
 }
 
-function TrainingContent() {
+function TrainingContent({
+  contextKey,
+  hasPermission,
+  permissionLoading,
+}: {
+  contextKey: string;
+  hasPermission: boolean;
+  permissionLoading: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasPermission, loading: permissionLoading } = usePermissionCheck('training', false);
-  const [data, setData] = useState<TrainingDataState>({
-    summary: null,
-    records: [],
-    people: [],
-    qualifications: [],
-    notes: [],
-  });
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<TrainingDataState>(EMPTY_TRAINING_DATA);
+  const [sliceStatus, setSliceStatus] = useState<Record<TrainingSlice, SliceStatus>>(createSliceStatus);
   const [refreshing, setRefreshing] = useState(false);
   const [recordSearch, setRecordSearch] = useState('');
   const [recordFilter, setRecordFilter] = useState<RecordFilter>('all');
@@ -180,47 +312,173 @@ function TrainingContent() {
   const [editingPerson, setEditingPerson] = useState<TrainingPersonWithProfile | null>(null);
   const [editingQualification, setEditingQualification] = useState<TrainingQualification | null>(null);
   const [archivingRecordId, setArchivingRecordId] = useState<string | null>(null);
+  const loadedRef = useRef<Record<TrainingSlice, boolean>>(createLoadedFlags());
+  const sliceGeneration = useRef<Record<TrainingSlice, number>>(createSliceGeneration());
+  const sliceFlights = useRef<Partial<Record<TrainingSlice, SliceFlight>>>({});
+  const contextKeyRef = useRef(contextKey);
+  const liveGeneration = useRef(0);
+  const appliedContextKey = useRef<string | null>(null);
+  const refreshDepth = useRef(0);
+  const ensureTabRef = useRef<(tab: TrainingTab) => Promise<void>>(async () => undefined);
+
+  if (contextKeyRef.current !== contextKey) {
+    contextKeyRef.current = contextKey;
+  }
+
+  function captureOperation(): TrainingOperationToken {
+    return { generation: liveGeneration.current, contextKey: contextKeyRef.current };
+  }
+
+  function operationIsCurrent(token: TrainingOperationToken): boolean {
+    return token.contextKey !== ''
+      && liveGeneration.current === token.generation
+      && contextKeyRef.current === token.contextKey;
+  }
+
+  function sliceResultIsCurrent(slice: TrainingSlice, generation: number, requestContextKey: string, operationGeneration: number): boolean {
+    return sliceGeneration.current[slice] === generation
+      && requestContextKey !== ''
+      && contextKeyRef.current === requestContextKey
+      && liveGeneration.current === operationGeneration;
+  }
 
   const activeTab = (['overview', 'records', 'people', 'qualifications', 'notes'].includes(searchParams.get('tab') || '')
     ? searchParams.get('tab')
     : 'overview') as TrainingTab;
+  const activeSliceErrors = TAB_SLICES[activeTab].filter((slice) => sliceStatus[slice].error);
+  const activeTabLoading = TAB_SLICES[activeTab].some((slice) => !sliceStatus[slice].loaded && !sliceStatus[slice].error);
 
-  const loadTrainingData = useCallback(async (showRefreshing = false, background = false) => {
-    if (showRefreshing) setRefreshing(true);
-    try {
-      const [summaryResponse, recordsResult, peopleResult, qualificationResult, notesResult] = await Promise.all([
-        fetch('/api/training/summary', { cache: 'no-store' }),
-        fetchAllPaginatedItems<TrainingRecordWithRelations>('/api/training/records', 'records', { limit: 500, errorMessage: 'Failed to fetch training records' }),
-        fetchAllPaginatedItems<TrainingPersonWithProfile>('/api/training/people', 'people', { limit: 500, errorMessage: 'Failed to fetch training people' }),
-        fetchAllPaginatedItems<TrainingQualification>('/api/training/qualifications', 'qualifications', { limit: 500, errorMessage: 'Failed to fetch training qualifications' }),
-        fetchAllPaginatedItems<TrainingWorkbookNote>('/api/training/notes', 'notes', { limit: 500, errorMessage: 'Failed to fetch training notes' }),
-      ]);
-
-      const summaryPayload = await parseJsonResponse(summaryResponse, 'Failed to fetch training summary') as { summary: TrainingSummary };
-      setData({
-        summary: summaryPayload.summary,
-        records: recordsResult.items,
-        people: peopleResult.items,
-        qualifications: qualificationResult.items,
-        notes: notesResult.items,
-      });
-    } catch (error) {
-      if (!background) toast.error(error instanceof Error ? error.message : 'Failed to load training data');
-    } finally {
-      if (!background) setLoading(false);
-      if (showRefreshing) setRefreshing(false);
+  function clearTrainingSlices() {
+    loadedRef.current = createLoadedFlags();
+    for (const slice of TRAINING_SLICES) {
+      sliceGeneration.current[slice] += 1;
     }
-  }, []);
+    sliceFlights.current = {};
+    refreshDepth.current = 0;
+    setData(EMPTY_TRAINING_DATA);
+    setSliceStatus(createSliceStatus());
+    setRefreshing(false);
+    setExporting(false);
+    setEditingRecord(null);
+    setCreatingRecord(false);
+    setEditingPerson(null);
+    setEditingQualification(null);
+    setArchivingRecordId(null);
+  }
+
+  function requestSlice(slice: TrainingSlice, options: { join: boolean; background: boolean }): Promise<void> {
+    const requestContextKey = contextKeyRef.current;
+    if (!requestContextKey) return Promise.resolve();
+    const existing = sliceFlights.current[slice];
+    if (options.join && existing && existing.contextKey === requestContextKey) {
+      return existing.promise;
+    }
+
+    const generation = sliceGeneration.current[slice] + 1;
+    const operationGeneration = liveGeneration.current;
+    sliceGeneration.current[slice] = generation;
+    const promise = (async () => {
+      if (!sliceResultIsCurrent(slice, generation, requestContextKey, operationGeneration)) return;
+      setSliceStatus((current) => ({
+        ...current,
+        [slice]: { ...current[slice], loading: true, error: null },
+      }));
+      try {
+        const value = await fetchTrainingSlice(slice);
+        if (!sliceResultIsCurrent(slice, generation, requestContextKey, operationGeneration)) return;
+        loadedRef.current[slice] = true;
+        setData((current) => applySliceValue(current, slice, value));
+        setSliceStatus((current) => ({
+          ...current,
+          [slice]: { loaded: true, loading: false, error: null },
+        }));
+      } catch (error) {
+        if (!sliceResultIsCurrent(slice, generation, requestContextKey, operationGeneration)) return;
+        const message = error instanceof Error ? error.message : 'Failed to load training data';
+        setSliceStatus((current) => ({
+          ...current,
+          [slice]: { loaded: current[slice].loaded, loading: false, error: message },
+        }));
+        if (!options.background) toast.error(message);
+      } finally {
+        const flight = sliceFlights.current[slice];
+        if (flight && flight.generation === generation && flight.contextKey === requestContextKey) {
+          delete sliceFlights.current[slice];
+        }
+      }
+    })();
+
+    sliceFlights.current[slice] = { generation, contextKey: requestContextKey, promise };
+    return promise;
+  }
+
+  async function refreshSlices(slices: readonly TrainingSlice[], options: { background: boolean; showRefreshing: boolean }) {
+    const token = captureOperation();
+    if (!operationIsCurrent(token)) return;
+    if (options.showRefreshing) {
+      refreshDepth.current += 1;
+      setRefreshing(true);
+    }
+    try {
+      await Promise.all(slices.map((slice) => requestSlice(slice, { join: false, background: options.background })));
+    } finally {
+      if (options.showRefreshing && operationIsCurrent(token)) {
+        refreshDepth.current = Math.max(0, refreshDepth.current - 1);
+        if (refreshDepth.current === 0) setRefreshing(false);
+      }
+    }
+  }
+
+  function refreshAll() {
+    return refreshSlices(TRAINING_SLICES, { background: false, showRefreshing: true });
+  }
+
+  function slicesForMutation(always: readonly TrainingSlice[], ifLoaded: readonly TrainingSlice[]) {
+    const slices: TrainingSlice[] = [];
+    for (const slice of [...always, ...ifLoaded]) {
+      if (slices.includes(slice)) continue;
+      if (always.includes(slice) || loadedRef.current[slice]) slices.push(slice);
+    }
+    return slices;
+  }
+
+  ensureTabRef.current = (tab) => {
+    const missing = TAB_SLICES[tab].filter((slice) => !loadedRef.current[slice]);
+    return Promise.all(missing.map((slice) => requestSlice(slice, { join: true, background: false }))).then(() => undefined);
+  };
 
   useEffect(() => {
-    if (permissionLoading) return;
-    if (!hasPermission) {
-      toast.error('Access denied', { id: 'training-access-denied' });
-      router.push('/dashboard');
-      return;
+    if (permissionLoading || hasPermission) return;
+    toast.error('Access denied', { id: 'training-access-denied' });
+    router.push('/dashboard');
+  }, [hasPermission, permissionLoading, router]);
+
+  useEffect(() => {
+    const generations = sliceGeneration.current;
+    contextKeyRef.current = contextKey;
+    return () => {
+      liveGeneration.current += 1;
+      contextKeyRef.current = '';
+      for (const slice of TRAINING_SLICES) {
+        generations[slice] += 1;
+      }
+      sliceFlights.current = {};
+    };
+  }, [contextKey]);
+
+  useEffect(() => {
+    const previousKey = appliedContextKey.current;
+    if (previousKey !== contextKey) {
+      appliedContextKey.current = contextKey;
+      contextKeyRef.current = contextKey;
+      if (previousKey) {
+        liveGeneration.current += 1;
+        clearTrainingSlices();
+      }
     }
-    loadTrainingData();
-  }, [hasPermission, loadTrainingData, permissionLoading, router]);
+    if (!contextKey) return;
+    void ensureTabRef.current(activeTab);
+  }, [activeTab, contextKey]);
 
   const trainingDraftOpen = Boolean(editingRecord)
     || creatingRecord
@@ -229,8 +487,11 @@ function TrainingContent() {
     || Boolean(archivingRecordId);
 
   useSoftRefresh(
-    () => loadTrainingData(false, true),
-    hasPermission && !permissionLoading && !loading && !refreshing && !exporting && !trainingDraftOpen
+    () => refreshSlices(
+      TRAINING_SLICES.filter((slice) => slice === 'summary' || loadedRef.current[slice]),
+      { background: true, showRefreshing: false }
+    ),
+    Boolean(contextKey) && hasPermission && !permissionLoading && !activeTabLoading && !refreshing && !exporting && !trainingDraftOpen
   );
 
   function setTab(tab: TrainingTab) {
@@ -310,76 +571,115 @@ function TrainingContent() {
   const notesPagination = useLoadMorePagination(filteredNotes, { resetKey: `${notesSearch}:${filteredNotes.length}` });
 
   async function saveRecord(form: TrainingRecordFormData) {
-    const target = editingRecord;
-    const response = await fetch(target ? `/api/training/records/${target.id}` : '/api/training/records', {
-      method: target ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    await parseJsonResponse(response, target ? 'Failed to update training record' : 'Failed to create training record');
-    toast.success(target ? 'Training record updated' : 'Training record created');
-    setEditingRecord(null);
-    setCreatingRecord(false);
-    await loadTrainingData(true);
+    const token = captureOperation();
+    try {
+      const target = editingRecord;
+      const response = await fetch(target ? `/api/training/records/${target.id}` : '/api/training/records', {
+        method: target ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      await parseJsonResponse(response, target ? 'Failed to update training record' : 'Failed to create training record');
+      if (!operationIsCurrent(token)) return;
+      toast.success(target ? 'Training record updated' : 'Training record created');
+      setEditingRecord(null);
+      setCreatingRecord(false);
+      await refreshSlices(
+        slicesForMutation(['summary', 'records'], ['people', 'qualifications']),
+        { background: false, showRefreshing: true }
+      );
+    } catch (error) {
+      if (operationIsCurrent(token)) throw error;
+    }
   }
 
   async function archiveRecord(record: TrainingRecordWithRelations) {
+    const token = captureOperation();
     if (!confirm(`Archive training record for ${record.employee_name_raw || 'this person'}?`)) return;
     setArchivingRecordId(record.id);
     try {
       const response = await fetch(`/api/training/records/${record.id}`, { method: 'DELETE' });
       await parseJsonResponse(response, 'Failed to archive training record');
+      if (!operationIsCurrent(token)) return;
       toast.success('Training record archived');
-      await loadTrainingData(true);
+      await refreshSlices(
+        slicesForMutation(['summary', 'records'], ['people', 'qualifications']),
+        { background: false, showRefreshing: true }
+      );
+    } catch (error) {
+      if (operationIsCurrent(token)) toast.error(error instanceof Error ? error.message : 'Failed to archive training record');
     } finally {
-      setArchivingRecordId(null);
+      if (operationIsCurrent(token)) setArchivingRecordId(null);
     }
   }
 
   async function savePerson(form: TrainingPersonFormData) {
-    if (!editingPerson) return;
-    const response = await fetch(`/api/training/people/${editingPerson.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    await parseJsonResponse(response, 'Failed to update training person');
-    toast.success('Training person updated');
-    setEditingPerson(null);
-    await loadTrainingData(true);
+    const token = captureOperation();
+    try {
+      if (!editingPerson) return;
+      const response = await fetch(`/api/training/people/${editingPerson.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      await parseJsonResponse(response, 'Failed to update training person');
+      if (!operationIsCurrent(token)) return;
+      toast.success('Training person updated');
+      setEditingPerson(null);
+      await refreshSlices(
+        slicesForMutation(['summary'], ['people', 'records']),
+        { background: false, showRefreshing: true }
+      );
+    } catch (error) {
+      if (operationIsCurrent(token)) throw error;
+    }
   }
 
   async function saveQualification(form: TrainingQualificationFormData) {
-    if (!editingQualification) return;
-    const response = await fetch(`/api/training/qualifications/${editingQualification.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    await parseJsonResponse(response, 'Failed to update training qualification');
-    toast.success('Training qualification updated');
-    setEditingQualification(null);
-    await loadTrainingData(true);
+    const token = captureOperation();
+    try {
+      if (!editingQualification) return;
+      const response = await fetch(`/api/training/qualifications/${editingQualification.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      await parseJsonResponse(response, 'Failed to update training qualification');
+      if (!operationIsCurrent(token)) return;
+      toast.success('Training qualification updated');
+      setEditingQualification(null);
+      await refreshSlices(
+        slicesForMutation(['summary'], ['qualifications', 'records']),
+        { background: false, showRefreshing: true }
+      );
+    } catch (error) {
+      if (operationIsCurrent(token)) throw error;
+    }
   }
 
   async function exportRecords() {
+    const token = captureOperation();
+    if (!operationIsCurrent(token)) return;
     setExporting(true);
     try {
       const response = await fetch('/api/reports/training/export?status=active', { cache: 'no-store' });
+      if (!operationIsCurrent(token)) return;
       if (!response.ok) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(payload.error || 'Failed to export training records');
       }
       const blob = await response.blob();
+      if (!operationIsCurrent(token)) return;
       downloadBlob(blob, `Training_Records_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch (error) {
+      if (!operationIsCurrent(token)) return;
       toast.error(error instanceof Error ? error.message : 'Failed to export training records');
     } finally {
-      setExporting(false);
+      if (operationIsCurrent(token)) setExporting(false);
     }
   }
 
-  if (permissionLoading || loading) {
+  if (permissionLoading || !hasPermission || !contextKey) {
     return <PageLoader message="Loading training..." />;
   }
 
@@ -399,7 +699,7 @@ function TrainingContent() {
                 Refreshing
               </div>
             ) : null}
-            <Button variant="outline" onClick={() => loadTrainingData(true)} disabled={refreshing}>
+            <Button variant="outline" onClick={() => { void refreshAll(); }} disabled={refreshing}>
               Refresh
             </Button>
             <Button variant="outline" onClick={exportRecords} disabled={exporting}>
@@ -425,6 +725,23 @@ function TrainingContent() {
         </div>
       ) : null}
 
+      {activeSliceErrors.length > 0 ? (
+        <div role="alert" className="flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+          {activeSliceErrors.map((slice) => (
+            <p key={slice}>{sliceStatus[slice].error}</p>
+          ))}
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { void refreshSlices(activeSliceErrors, { background: false, showRefreshing: true }); }}
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Tabs value={activeTab} onValueChange={(value) => setTab(value as TrainingTab)}>
         <TabsList className="h-auto flex-wrap p-1.5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -434,6 +751,7 @@ function TrainingContent() {
           <TabsTrigger value="notes">Workbook Notes</TabsTrigger>
         </TabsList>
 
+        {activeTabLoading ? <PageLoader message="Loading training..." /> : <>
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
@@ -714,6 +1032,7 @@ function TrainingContent() {
             </CardContent>
           </Card>
         </TabsContent>
+        </>}
       </Tabs>
 
       <TrainingRecordDialog
@@ -738,10 +1057,36 @@ function TrainingContent() {
   );
 }
 
+function TrainingPageContent() {
+  const { user, profile, isViewingAs, effectiveRole } = useAuth();
+  const { hasPermission, loading: permissionLoading } = usePermissionCheck('training', false);
+  const contextKey = buildTrainingAccessKey({
+    userId: user?.id ?? null,
+    profileRoleName: profile?.role?.name ?? '',
+    profileTeamId: profile?.team?.id ?? profile?.team_id ?? '',
+    profileTeamName: profile?.team?.name ?? '',
+    isViewingAs: Boolean(isViewingAs),
+    effectiveRoleName: effectiveRole?.name ?? '',
+    effectiveTeamId: effectiveRole?.team_id ?? '',
+    effectiveTeamName: effectiveRole?.team_name ?? '',
+    hasPermission,
+    permissionLoading,
+  });
+
+  return (
+    <TrainingContent
+      key={contextKey || 'no-training-context'}
+      contextKey={contextKey}
+      hasPermission={hasPermission}
+      permissionLoading={permissionLoading}
+    />
+  );
+}
+
 export default function TrainingPage() {
   return (
     <Suspense fallback={<PageLoader message="Loading training..." />}>
-      <TrainingContent />
+      <TrainingPageContent />
     </Suspense>
   );
 }

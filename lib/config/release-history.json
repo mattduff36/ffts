@@ -1,5 +1,37 @@
 [
   {
+    "version": "1026.4.0",
+    "updateKind": "major",
+    "title": "Quotes update",
+    "description": "Updated Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions. Simplify quote entry and numeric inputs.",
+    "summary": "Updated Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions. Simplify quote entry and numeric inputs.",
+    "details": [
+      "Updated Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions, with changes to background routes, app screens, shared logic, and automated tests.",
+      "Updated customers, with changes to background routes, app screens, shared logic, and automated tests.",
+      "Updated data storage, with changes to data storage.",
+      "Updated navigation, with changes to interface components, shared logic, and automated tests.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated actions, with changes to shared logic."
+    ],
+    "areas": [
+      "Quotes",
+      "Customers",
+      "Navigation",
+      "Help",
+      "FAQ",
+      "Data storage",
+      "Actions. Simplify quote entry",
+      "Numeric inputs"
+    ],
+    "areaKeys": [
+      "quotes",
+      "customers",
+      "navigation",
+      "data-storage"
+    ],
+    "pushedAt": "2026-10-29T00:00:50.971Z"
+  },
+  {
     "version": "1026.3.0",
     "updateKind": "major",
     "title": "Quotes update",

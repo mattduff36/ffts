@@ -2,6 +2,29 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.4.0
+
+**GIT COMMIT MESSAGE**
+`feat(quotes): update Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions`
+
+**PUSHED AT**
+2026-10-29T00:00:50.971Z
+
+**WHAT CHANGED**
+Update Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions. Simplify quote entry and numeric inputs.
+
+**VERSION HISTORY DETAILS**
+- Updated Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions, with changes to background routes, app screens, shared logic, and automated tests.
+- Updated customers, with changes to background routes, app screens, shared logic, and automated tests.
+- Updated data storage, with changes to data storage.
+- Updated navigation, with changes to interface components, shared logic, and automated tests.
+- Updated help and FAQ, with changes to documentation.
+- Updated actions, with changes to shared logic.
+
+**COMMITS IN THIS RELEASE**
+- `feat(quotes): update Quotes, Customers, Navigation, Help and FAQ, Data storage, and Actions`
+- `fix: simplify quote entry and numeric inputs`
+
 ## 1026.3.0
 
 **GIT COMMIT MESSAGE**

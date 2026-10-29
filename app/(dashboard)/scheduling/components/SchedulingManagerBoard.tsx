@@ -721,7 +721,7 @@ function AssignmentChip({
       className={cn(
         'group inline-flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-full border px-1 py-0.5 text-[11px] font-medium',
         assignment.resource_type === 'employee'
-          ? 'border-sky-500/35 bg-sky-500/10 text-sky-100'
+          ? 'border-sky-500/35 bg-green-500/10 text-sky-100'
           : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
         hasConflict && 'border-amber-400/70 bg-amber-500/10',
         isDragging && 'opacity-40'
@@ -1070,9 +1070,6 @@ const DAILY_JOB_ROW_MIN_HEIGHT = 144;
 const DAILY_TIMELINE_EDGE_PADDING = 8;
 const DAILY_TIMELINE_LANE_GAP = 8;
 const DAILY_TIMELINE_LEGACY_HEIGHT = 48;
-const DAILY_TIMELINE_VISIT_STYLE = {
-  backgroundColor: '#334155',
-} satisfies CSSProperties;
 
 function dailyTimelineHourGridStyle(hourWidth: number): CSSProperties {
   return {
@@ -1622,8 +1619,7 @@ function ResizableDailyVisit({
         job={job}
         visit={displayedVisit}
         assignments={assignments}
-        className="h-full cursor-default overflow-hidden border-slate-500 shadow-lg shadow-black/40"
-        style={DAILY_TIMELINE_VISIT_STYLE}
+        className="h-full cursor-default overflow-hidden border-slate-500 bg-slate-700 shadow-lg shadow-black/40"
         isDropEnabled
         isActiveTarget={isActiveTarget}
         onActivate={onActivate}
@@ -7360,7 +7356,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
               {isTentativeWeek ? (
                 <div
-                  className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
+                  className="rounded-lg border border-sky-400/30 bg-green-500/10 px-3 py-2 text-sm text-sky-100"
                   role="status"
                 >
                   {coldWeekState?.status === 'failed' ? (

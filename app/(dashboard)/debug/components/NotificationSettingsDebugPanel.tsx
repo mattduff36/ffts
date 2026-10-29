@@ -62,7 +62,7 @@ function getNotificationMetricClasses(tone: NotificationSummaryTone): string {
     case 'danger':
       return 'border-red-500/30 bg-red-500/10 text-red-100';
     case 'info':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
     default:
       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
   }
@@ -357,7 +357,7 @@ export function NotificationSettingsDebugPanel() {
     if (isSupervisorRole(user)) {
       return {
         variant: 'outline',
-        className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+        className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
         label: user.role_display_name || 'Supervisor',
       };
     }
@@ -460,7 +460,7 @@ export function NotificationSettingsDebugPanel() {
         </div>
 
         {batchMode && (
-          <div className="flex flex-wrap gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+          <div className="flex flex-wrap gap-2 rounded-xl border border-blue-500/30 bg-green-500/10 p-4">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground w-full mb-2">
               {selectedUsers.size} user(s) selected
               <Button size="sm" variant="ghost" onClick={selectAll}>Select All</Button>

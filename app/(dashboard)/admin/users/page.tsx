@@ -1695,7 +1695,7 @@ export default function UsersAdminPage() {
                               }
                               className={
                                 isSupervisorRole(user.role)
-                                  ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
+                                  ? 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30'
                                   : undefined
                               }
                             >
@@ -1718,7 +1718,7 @@ export default function UsersAdminPage() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {user.current_fleet_assignment ? (
-                            <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                            <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
                               {formatAdminFleetAssignment(user.current_fleet_assignment)}
                             </Badge>
                           ) : (
@@ -1891,7 +1891,7 @@ export default function UsersAdminPage() {
                 {formError}
               </div>
             )}
-            <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 text-sm text-blue-300">
+            <div className="bg-green-500/10 border border-blue-500/50 rounded-lg p-3 text-sm text-blue-300">
               <strong>Note:</strong> A secure temporary password will be automatically generated and sent to the user&apos;s email address.
             </div>
             <div className="rounded-lg border border-[hsl(var(--absence-primary)/0.25)] bg-[hsl(var(--absence-primary)/0.06)] p-4 md:p-5">
@@ -2335,7 +2335,7 @@ export default function UsersAdminPage() {
                       isSuperAdminUser(selectedUser) || selectedUser.role?.role_class === 'admin'
                         ? undefined
                         : isSupervisorRole(selectedUser.role)
-                          ? 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
+                          ? 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30'
                           : 'bg-slate-700 border-slate-500 text-slate-100 hover:bg-slate-600'
                     }
                   >
@@ -2631,7 +2631,7 @@ export default function UsersAdminPage() {
             </div>
 
             {/* Important Notice */}
-            <div className="bg-blue-500/10 border border-blue-500/50 rounded p-4">
+            <div className="bg-green-500/10 border border-blue-500/50 rounded p-4">
               <p className="text-sm text-blue-400 font-medium mb-2">
                 📋 Important Information
               </p>

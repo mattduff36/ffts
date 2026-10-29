@@ -146,7 +146,7 @@ export function CreateToolboxTalkForm({ onSuccess }: CreateToolboxTalkFormProps)
                 value: 'LOW',
                 title: 'Level 1 - Medium Priority',
                 description: 'Can be dismissed and signed later from Notifications.',
-                className: 'border-blue-500/40 bg-blue-500/10',
+                className: 'border-blue-500/40 bg-green-500/10',
               },
               {
                 value: 'HIGH',

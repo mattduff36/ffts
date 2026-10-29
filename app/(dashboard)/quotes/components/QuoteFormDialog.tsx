@@ -1348,7 +1348,7 @@ export function QuoteFormDialog({
               </div>
 
               {form.pricing_mode === 'attachments_only' ? (
-                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+                <div className="rounded-lg border border-blue-500/30 bg-green-500/10 p-3 text-sm text-blue-100">
                   The client quote will refer to attached documents for pricing/details instead of showing line item prices.
                 </div>
               ) : (

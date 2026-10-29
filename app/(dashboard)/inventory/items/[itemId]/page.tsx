@@ -118,7 +118,7 @@ function getStatusBadgeClass(item: InventoryItem): string {
   if (shouldMuteInventoryCheckBadge(item)) return 'border-slate-600/30 bg-slate-700/20 text-slate-300';
   if (status === 'overdue') return 'border-red-500/30 bg-red-500/10 text-red-300';
   if (status === 'due_soon') return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
-  if (status === 'needs_check') return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+  if (status === 'needs_check') return 'border-blue-500/30 bg-green-500/10 text-blue-300';
   if (status === 'not_required') return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
   return 'border-green-500/30 bg-green-500/10 text-green-300';
 }

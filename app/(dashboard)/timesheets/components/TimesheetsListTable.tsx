@@ -55,7 +55,7 @@ function getStatusBadge(status: string) {
   };
 
   const config = variants[status as keyof typeof variants] || variants.draft;
-  const blueClasses = status === 'processed' || status === 'adjusted' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : '';
+  const blueClasses = status === 'processed' || status === 'adjusted' ? 'bg-green-500/10 text-blue-600 border-blue-500/20' : '';
 
   return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
 }

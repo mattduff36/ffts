@@ -289,7 +289,7 @@ export function MaintenanceSettings({ isAdmin, isManager }: MaintenanceSettingsP
       </Card>
       
       {/* Info Card */}
-      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+      <Card className="bg-green-50 dark:bg-green-900/20 border-blue-200 dark:border-blue-800">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />

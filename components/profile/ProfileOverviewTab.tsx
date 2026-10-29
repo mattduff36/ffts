@@ -48,7 +48,7 @@ function getRoleBadgeProps(profile: ProfileIdentityPayload): {
   }
   if (roleLabel.includes('supervisor')) {
     return {
-      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
     };
   }
   if (profile.role?.role_class === 'manager' || roleLabel.includes('manager')) {

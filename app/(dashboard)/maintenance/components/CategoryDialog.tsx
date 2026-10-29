@@ -381,14 +381,14 @@ export function CategoryDialog({
                   mode === 'edit' 
                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
                     : selectedType === 'date'
-                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     selectedType === 'date' 
-                      ? 'border-blue-500 bg-blue-500' 
+                      ? 'border-blue-500 bg-green-500'
                       : 'border-slate-500'
                   }`}>
                     {selectedType === 'date' && (
@@ -409,14 +409,14 @@ export function CategoryDialog({
                   mode === 'edit' 
                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
                     : selectedType === 'mileage'
-                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     selectedType === 'mileage' 
-                      ? 'border-blue-500 bg-blue-500' 
+                      ? 'border-blue-500 bg-green-500'
                       : 'border-slate-500'
                   }`}>
                     {selectedType === 'mileage' && (
@@ -437,14 +437,14 @@ export function CategoryDialog({
                   mode === 'edit' 
                     ? 'opacity-50 cursor-not-allowed border-slate-700 bg-slate-800/50' 
                     : selectedType === 'hours'
-                      ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                      ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
                       : 'border-slate-600 bg-slate-800 hover:border-slate-500'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     selectedType === 'hours' 
-                      ? 'border-blue-500 bg-blue-500' 
+                      ? 'border-blue-500 bg-green-500'
                       : 'border-slate-500'
                   }`}>
                     {selectedType === 'hours' && (
@@ -541,7 +541,7 @@ export function CategoryDialog({
                         onClick={() => setValue('period_unit', unit)}
                         className={`rounded-lg border-2 px-4 py-3 text-left transition-all ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30'
+                            ? 'border-blue-500 bg-green-500/20 ring-2 ring-blue-500/30'
                             : 'border-slate-600 bg-slate-800 hover:border-slate-500'
                         }`}
                       >
@@ -744,7 +744,7 @@ export function CategoryDialog({
           <div 
             className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${
               showOnOverview 
-                ? 'border-green-500/50 bg-green-500/10' 
+                ? 'border-green-500/50 bg-green-500/10'
                 : 'border-slate-600 bg-slate-800 hover:border-slate-500'
             }`}
             onClick={() => setValue('show_on_overview', !showOnOverview)}
@@ -783,14 +783,14 @@ export function CategoryDialog({
               <div 
                 className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
                   reminderInApp 
-                    ? 'border-blue-500/50 bg-blue-500/10' 
+                    ? 'border-blue-500/50 bg-green-500/10'
                     : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
                 }`}
                 onClick={() => setValue('reminder_in_app_enabled', !reminderInApp)}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    reminderInApp ? 'bg-blue-500' : 'bg-slate-700'
+                    reminderInApp ? 'bg-green-500' : 'bg-slate-700'
                   }`}>
                     <Bell className={`h-4 w-4 ${reminderInApp ? 'text-white' : 'text-blue-400'}`} />
                   </div>
@@ -807,14 +807,14 @@ export function CategoryDialog({
                   id="reminder_in_app"
                   checked={reminderInApp}
                   onCheckedChange={(checked) => setValue('reminder_in_app_enabled', checked)}
-                  className="data-[state=checked]:bg-blue-500"
+                  className="data-[state=checked]:bg-green-500"
                 />
               </div>
               
               <div 
                 className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
                   reminderEmail 
-                    ? 'border-green-500/50 bg-green-500/10' 
+                    ? 'border-green-500/50 bg-green-500/10'
                     : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
                 }`}
                 onClick={() => setValue('reminder_email_enabled', !reminderEmail)}

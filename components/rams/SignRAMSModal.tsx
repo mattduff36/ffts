@@ -101,7 +101,7 @@ export function SignRAMSModal({
 
         <div className="grid gap-6 py-4">
           {/* Confirmation Text */}
-          <div className="rounded-md bg-blue-900/20 border border-blue-800/30 p-4">
+          <div className="rounded-md bg-green-900/20 border border-blue-800/30 p-4">
             <div className="text-sm text-blue-100 space-y-1">
               <p>By signing, you confirm that you have:</p>
               <ul className="list-disc ml-5 mt-2 space-y-1">

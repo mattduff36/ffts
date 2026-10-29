@@ -373,7 +373,7 @@ export function MarkTaskCompleteDialog({
         <div className="space-y-4">
           {/* Info Banner */}
           {requiresIntermediateStep ? (
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
               <div className="flex items-start gap-2">
                 <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-300">

@@ -242,7 +242,7 @@ export function FleetSettingsTab({
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4 flex-1">
-                                <div className="bg-blue-500/10 p-3 rounded-lg">
+                                <div className="bg-green-500/10 p-3 rounded-lg">
                                   <Truck className="h-5 w-5 text-blue-400" />
                                 </div>
                                 <div className="flex-1">

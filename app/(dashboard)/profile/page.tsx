@@ -62,9 +62,9 @@ const SETTINGS_NAV_ITEMS: Array<{
     value: 'my-details',
     label: 'My details',
     icon: UserRound,
-    tileClassName: 'bg-sky-500/[0.06] hover:bg-sky-500/[0.12]',
-    activeClassName: 'bg-sky-500/30',
-    iconClassName: 'bg-sky-500/15 text-sky-300',
+    tileClassName: 'bg-green-500/[0.06] hover:bg-green-500/[0.12]',
+    activeClassName: 'bg-green-500/30',
+    iconClassName: 'bg-green-500/15 text-sky-300',
   },
   {
     value: 'notifications',

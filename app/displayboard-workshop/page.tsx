@@ -96,7 +96,7 @@ function StatTile({
   const toneClass = {
     red: 'border-red-500/45 bg-red-500/15 text-red-200',
     amber: 'border-amber-500/45 bg-amber-500/15 text-amber-200',
-    blue: 'border-blue-500/45 bg-blue-500/15 text-blue-200',
+    blue: 'border-blue-500/45 bg-green-500/15 text-blue-200',
     purple: 'border-purple-500/45 bg-purple-500/15 text-purple-200',
     green: 'border-green-500/45 bg-green-500/15 text-green-200',
     slate: 'border-slate-500/45 bg-slate-500/15 text-slate-100',
@@ -133,7 +133,7 @@ function TaskRow({ task }: { task: DisplayBoardWorkshopTask }) {
       ? 'border-red-500/35 bg-red-500/10'
       : 'border-amber-500/35 bg-amber-500/10'
     : task.status === 'logged'
-      ? 'border-blue-500/35 bg-blue-500/10'
+      ? 'border-blue-500/35 bg-green-500/10'
       : 'border-purple-500/35 bg-purple-500/10';
 
   return (
@@ -191,7 +191,7 @@ function getStatValue(definition: WorkshopDisplayBoardStatDefinition, payload: D
 function getTaskPanelClasses(panel: WorkshopDisplayBoardTaskPanelDefinition): string {
   const panelClasses = {
     amber: 'border-amber-500/20 bg-amber-500/[0.07]',
-    blue: 'border-blue-500/20 bg-blue-500/[0.07]',
+    blue: 'border-blue-500/20 bg-green-500/[0.07]',
     purple: 'border-purple-500/20 bg-purple-500/[0.07]',
   };
 
@@ -613,7 +613,7 @@ export default function WorkshopDisplayBoardPage() {
   }
 
   return (
-    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#020617,#0f172a_48%,#111827)] p-6 text-white">
+    <main className="h-dvh w-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(180,99,68,0.28),transparent_38%),linear-gradient(135deg,#001102,#001f04_48%,#0d2911)] p-6 text-white">
       <div className="grid h-full grid-rows-[88px_auto_minmax(0,1fr)] gap-5">
         <header className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.06] px-7 shadow-2xl shadow-black/20">
           <div className="flex items-center gap-4">

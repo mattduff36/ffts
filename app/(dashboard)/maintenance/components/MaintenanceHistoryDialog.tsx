@@ -206,7 +206,7 @@ export function MaintenanceHistoryDialog({
               )}
               <Badge variant="outline" className={`text-xs ${
                 task.status === 'completed' ? 'bg-green-500/20 border-green-500/40 text-green-400' :
-                task.status === 'logged' ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' :
+                task.status === 'logged' ? 'bg-green-500/20 border-blue-500/40 text-blue-400' :
                 'bg-amber-500/20 border-amber-500/40 text-amber-400'
               }`}>
                 {task.status === 'completed' ? 'Completed' :
@@ -241,7 +241,7 @@ export function MaintenanceHistoryDialog({
                 </div>
               )}
               {task.logged_comment && (
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2 mt-2">
+                <div className="bg-green-500/10 border border-blue-500/30 rounded p-2 mt-2">
                   <p className="text-xs text-blue-400 font-medium mb-1">Progress Note:</p>
                   <p className="text-blue-300 text-sm">{task.logged_comment}</p>
                 </div>
@@ -356,7 +356,7 @@ export function MaintenanceHistoryDialog({
           <div className="space-y-4">
             {/* VES Vehicle Data Section - Show even if no history */}
             {vesData && (vesData.ves_make || vesData.ves_colour || vesData.ves_fuel_type) && (
-              <div className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border border-blue-700/30 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-green-900/20 to-green-800/10 border border-blue-700/30 rounded-lg p-4">
                 <div className="mb-3">
                   <h3 className="text-sm font-medium text-blue-300 uppercase tracking-wide flex items-center gap-2">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

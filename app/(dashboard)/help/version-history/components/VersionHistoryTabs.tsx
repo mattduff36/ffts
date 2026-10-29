@@ -44,7 +44,7 @@ function getUpdateKindLabel(entry: ReleaseHistoryEntry): string {
 function getUpdateKindClassName(entry: ReleaseHistoryEntry): string {
   return entry.updateKind === 'major'
     ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200'
-    : 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-200';
+    : 'border-blue-500/40 bg-green-500/10 text-blue-700 dark:text-blue-200';
 }
 
 function getDownloadFilename(response: Response): string {

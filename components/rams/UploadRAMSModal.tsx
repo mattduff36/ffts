@@ -271,7 +271,7 @@ export function UploadRAMSModal({ open, onClose, onSubmit, prefillTitle, prefill
               )}
             </div>
 
-            <div className="rounded-md bg-blue-900/20 border border-blue-800/30 p-3">
+            <div className="rounded-md bg-green-900/20 border border-blue-800/30 p-3">
               <p className="text-sm text-blue-100">
                 After uploading, you can assign this document to specific employees
               </p>

@@ -340,7 +340,7 @@ export function WeekSelector({
 
           {/* Success Alert (editing existing) */}
           {showSuccess && existingTimesheet && (
-            <Alert className="bg-blue-500/10 border-blue-500/50">
+            <Alert className="bg-green-500/10 border-blue-500/50">
               <CheckCircle2 className="h-4 w-4 text-blue-400" />
               <AlertDescription className="text-blue-400">
                 Found existing draft timesheet. Loading it for editing...

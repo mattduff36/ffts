@@ -1159,7 +1159,7 @@ function SummaryCard({ label, value, icon, tone = 'default', onClick }: SummaryC
     default: 'text-inventory bg-inventory-soft',
     danger: 'text-red-300 bg-red-500/10',
     warning: 'text-amber-300 bg-amber-500/10',
-    info: 'text-blue-300 bg-blue-500/10',
+    info: 'text-blue-300 bg-green-500/10',
   }[tone];
 
   const card = (

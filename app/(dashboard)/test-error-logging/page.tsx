@@ -186,7 +186,7 @@ export default function TestErrorLoggingPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-6 text-white">
+      <div className="bg-gradient-to-r from-green-500 to-purple-500 rounded-lg p-6 text-white">
         <div className="flex items-center gap-3">
           <Bug className="h-8 w-8" />
           <div>
@@ -280,14 +280,14 @@ export default function TestErrorLoggingPage() {
         </CardContent>
       </Card>
 
-      <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-900">
+      <Card className="bg-green-50 dark:bg-green-950 border-blue-200 dark:border-blue-900">
         <CardHeader>
           <CardTitle className="text-blue-900 dark:text-blue-100">Next Steps</CardTitle>
         </CardHeader>
         <CardContent className="text-blue-800 dark:text-blue-200">
           <ol className="list-decimal list-inside space-y-2">
             <li>Run the tests above</li>
-            <li>Navigate to <code className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">/debug</code> page</li>
+            <li>Navigate to <code className="bg-green-100 dark:bg-green-900 px-2 py-1 rounded">/debug</code> page</li>
             <li>Click the &quot;Error Log&quot; tab</li>
             <li>Verify that all test errors appear with full details</li>
             <li>Check that each error has clear descriptions and context</li>

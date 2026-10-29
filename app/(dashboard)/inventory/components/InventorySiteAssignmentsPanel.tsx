@@ -157,7 +157,7 @@ export function InventorySiteAssignmentsPanel({
                 <div>
                   <div className="font-medium text-white">{getUserLabel(assignment.user)}</div>
                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                    <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
                       {getSiteLabel(site)}
                     </Badge>
                   </div>

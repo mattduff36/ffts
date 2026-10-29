@@ -225,7 +225,7 @@ export function InventoryEmployeeView({
             </div>
             {currentFleetAssignment ? (
               <div className="mt-2">
-                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
                   <Truck className="mr-1 h-3 w-3" />
                   Linked {currentFleetAssignment.asset_type.toUpperCase()}: {[
                     currentFleetAssignment.asset_label,
@@ -280,7 +280,7 @@ export function InventoryEmployeeView({
                   <CardTitle className="flex flex-wrap items-center gap-2 text-white">
                     <MapPin className="h-5 w-5 text-inventory" />
                     Site: {site.name}
-                    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                    <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
                       Secondary Location
                     </Badge>
                   </CardTitle>

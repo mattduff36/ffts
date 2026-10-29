@@ -1371,7 +1371,7 @@ function NewHgvInspectionContent() {
     if (!isSelected) return 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50';
     if (status === 'ok') return 'bg-green-500/20 border-green-500 shadow-lg shadow-green-500/20';
     if (status === 'attention') return 'bg-red-500/20 border-red-500 shadow-lg shadow-red-500/20';
-    if (status === 'na') return 'bg-blue-500/20 border-blue-400 shadow-lg shadow-blue-500/20';
+    if (status === 'na') return 'bg-green-500/20 border-blue-400 shadow-lg shadow-blue-500/20';
     return 'bg-slate-500/20 border-slate-400 shadow-lg shadow-slate-500/20';
   };
 
@@ -1612,7 +1612,7 @@ function NewHgvInspectionContent() {
                 Start Daily Check
               </Button>
             ) : (
-              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="p-3 bg-green-500/10 border border-blue-500/30 rounded-lg">
                 <p className="text-sm text-blue-400">
                   <Info className="h-4 w-4 inline mr-2" />
                   Daily check started. The submit button unlocks after 10 minutes.
@@ -1652,7 +1652,7 @@ function NewHgvInspectionContent() {
                     return (
                       <Fragment key={itemNumber}>
                         {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
-                          <tr className="bg-blue-500/10 border-y border-blue-400/40">
+                          <tr className="bg-green-500/10 border-y border-blue-400/40">
                             <td colSpan={4} className="p-2 text-center text-xs font-semibold tracking-wide text-blue-200 uppercase">
                               Artics only
                             </td>
@@ -1735,7 +1735,7 @@ function NewHgvInspectionContent() {
                 return (
                   <Fragment key={itemNumber}>
                     {itemNumber === HGV_ARTIC_ONLY_START_ITEM && (
-                      <div className="rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-blue-200">
+                      <div className="rounded-md border border-blue-400/50 bg-green-500/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-blue-200">
                         Artics only
                       </div>
                     )}

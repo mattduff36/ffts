@@ -82,7 +82,7 @@ export function ProfileSensitivePinCard() {
 
   return (
     <Card className="relative overflow-hidden border-slate-700/70 bg-slate-950/95 shadow-2xl shadow-black/30">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(241,214,74,0.16),_transparent_36%),linear-gradient(145deg,_rgba(15,23,42,0.1),_rgba(2,6,23,0.85))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(160,208,109,0.16),_transparent_36%),linear-gradient(145deg,_rgba(0,31,4,0.1),_rgba(0,17,2,0.85))]" />
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow/80 to-transparent" />
       <CardHeader className="relative">
         <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:text-left">
@@ -159,7 +159,7 @@ export function ProfileSensitivePinCard() {
                     type="button"
                     onClick={() => void setSensitivePin()}
                     disabled={working || !pin || !confirmPin}
-                    className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:text-sm"
+                    className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:text-sm"
                   >
                     {working ? <Loader2 className="mr-2 h-5 w-5 animate-spin sm:h-4 sm:w-4" /> : <KeyRound className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />}
                     Set sensitive PIN

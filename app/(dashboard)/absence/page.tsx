@@ -1635,7 +1635,7 @@ export default function AbsencePage() {
                                   absence.status === 'approved'
                                     ? 'border-green-500/30 text-green-400 bg-green-500/10'
                                     : absence.status === 'processed'
-                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                    ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
                                     : absence.status === 'pending'
                                     ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
                                     : absence.status === 'rejected'
@@ -1646,7 +1646,7 @@ export default function AbsencePage() {
                                 {absence.status}
                               </Badge>
                               {absence.absence_reasons.is_paid ? (
-                                <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10">
+                                <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10">
                                   Paid
                                 </Badge>
                               ) : (
@@ -1780,7 +1780,7 @@ export default function AbsencePage() {
                                   absence.status === 'approved'
                                     ? 'border-green-500/30 text-green-400 bg-green-500/10'
                                     : absence.status === 'processed'
-                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                    ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
                                     : absence.status === 'pending'
                                     ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
                                     : 'border-slate-600 text-muted-foreground'

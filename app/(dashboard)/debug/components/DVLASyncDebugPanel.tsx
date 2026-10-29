@@ -46,7 +46,7 @@ function getDvlaMetricClasses(tone: DvlaSummaryTone): string {
     case 'danger':
       return 'border-red-500/30 bg-red-500/10 text-red-100';
     case 'info':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
     default:
       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
   }

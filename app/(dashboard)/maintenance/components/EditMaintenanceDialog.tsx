@@ -910,7 +910,7 @@ export function EditMaintenanceDialog({
           </div>
 
           {/* Mandatory Comment */}
-          <div className="space-y-2 bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
+          <div className="space-y-2 bg-green-900/20 border border-blue-800/50 rounded-lg p-4">
             <Label htmlFor="comment" className="text-white">
               Update Comment <span className="text-red-400">*</span>
             </Label>

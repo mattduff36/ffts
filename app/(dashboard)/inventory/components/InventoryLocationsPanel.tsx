@@ -62,7 +62,7 @@ export function InventoryLocationsPanel({
                     </td>
                     <td className="px-4 py-3">
                       {linkedAssetLabel ? (
-                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                        <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-300">
                           <Link2 className="mr-1 h-3 w-3" />
                           {linkedAssetLabel}
                         </Badge>

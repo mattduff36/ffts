@@ -221,7 +221,7 @@ export function ProfileBiometricsCard() {
             type="button"
             onClick={() => void handleEnableBiometrics()}
             disabled={!canEnable || working}
-            className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:text-sm"
+            className="h-14 bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:text-sm"
           >
             {working && !isConfigured ? 'Setting up...' : isConfigured ? 'Enabled' : 'Enable biometrics'}
           </Button>

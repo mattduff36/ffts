@@ -21,7 +21,7 @@ const getStatusConfig = (status: StatusHistoryEvent['status']) => {
     case 'logged':
       return {
         icon: <Clock className="h-4 w-4 text-blue-400 mt-0.5" />,
-        dotClass: 'bg-blue-500',
+        dotClass: 'bg-green-500',
         label: 'marked in progress',
       };
     case 'on_hold':
@@ -33,7 +33,7 @@ const getStatusConfig = (status: StatusHistoryEvent['status']) => {
     case 'resumed':
       return {
         icon: <Play className="h-4 w-4 text-blue-400 mt-0.5" />,
-        dotClass: 'bg-blue-500',
+        dotClass: 'bg-green-500',
         label: 'resumed task',
       };
     case 'completed':

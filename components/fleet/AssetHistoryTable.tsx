@@ -118,11 +118,11 @@ function getWorkshopStatusBadge(row: Extract<AssetHistoryRow, { type: 'workshop'
     },
     in_progress: {
       label: 'In Progress',
-      className: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+      className: 'bg-green-500/10 text-blue-300 border-blue-500/30',
     },
     logged: {
       label: 'In Progress',
-      className: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+      className: 'bg-green-500/10 text-blue-300 border-blue-500/30',
     },
     on_hold: {
       label: 'On Hold',
@@ -156,7 +156,7 @@ function getStatusBadge(row: AssetHistoryRow, assetType: AssetHistoryAssetType) 
         : row.statusLabel === 'completed' || row.statusLabel === 'submitted'
           ? 'bg-green-500/10 text-green-300 border-green-500/30'
           : row.statusLabel === 'logged' || row.statusLabel === 'in_progress'
-            ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+            ? 'bg-green-500/10 text-blue-300 border-blue-500/30'
             : row.statusLabel === 'on_hold'
               ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
               : 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30';
@@ -185,7 +185,7 @@ function getRowClassName(row: AssetHistoryRow, assetType: AssetHistoryAssetType)
     return cn(baseClassName, DAILY_TASK_ROW_CLASS_NAMES[assetType]);
   }
 
-  return cn(baseClassName, 'bg-blue-500/5 hover:bg-blue-500/10');
+  return cn(baseClassName, 'bg-green-500/5 hover:bg-green-500/10');
 }
 
 function getAccentCellClassName(row: AssetHistoryRow, assetType: AssetHistoryAssetType) {
@@ -194,7 +194,7 @@ function getAccentCellClassName(row: AssetHistoryRow, assetType: AssetHistoryAss
   if (row.type === 'workshop') return cn(baseClassName, 'before:bg-[hsl(var(--workshop-primary))]');
   if (row.type === 'dailyTask') return cn(baseClassName, DAILY_TASK_ACCENT_CLASS_NAMES[assetType]);
 
-  return cn(baseClassName, 'before:bg-blue-500');
+  return cn(baseClassName, 'before:bg-green-500');
 }
 
 function getRowIcon(row: AssetHistoryRow) {

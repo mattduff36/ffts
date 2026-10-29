@@ -223,7 +223,7 @@ export default function SuggestionsManagePage() {
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         {[
           { key: 'all', label: 'All', color: 'bg-slate-500' },
-          { key: 'new', label: 'New', color: 'bg-blue-500' },
+          { key: 'new', label: 'New', color: 'bg-green-500' },
           { key: 'under_review', label: 'Reviewing', color: 'bg-yellow-500' },
           { key: 'planned', label: 'Planned', color: 'bg-purple-500' },
           { key: 'completed', label: 'Done', color: 'bg-green-500' },

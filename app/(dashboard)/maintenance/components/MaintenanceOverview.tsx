@@ -1287,7 +1287,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
                       relatedTask.status === 'pending' 
                         ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30'
                         : relatedTask.status === 'logged' || relatedTask.status === 'in_progress'
-                        ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                        ? 'bg-green-500/10 text-blue-300 border-blue-500/30'
                         : 'bg-purple-500/10 text-purple-300 border-purple-500/30'
                     }`}
                   >
@@ -1710,7 +1710,7 @@ export function MaintenanceOverview({ vehicles, summary, onVehicleClick }: Maint
       )}
 
       {/* About Section */}
-      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+      <Card className="bg-green-50 dark:bg-green-900/20 border-blue-200 dark:border-blue-800">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
             <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />

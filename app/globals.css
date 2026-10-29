@@ -8,6 +8,7 @@
   --color-slate-800: #0d2911;
   --color-slate-700: #1f3d24;
   --color-slate-600: #436e49;
+  --color-slate-500: #66856b;
   --color-brand-yellow: hsl(var(--brand-yellow));
   --color-brand-yellow-hover: hsl(var(--brand-yellow-hover));
   --color-brand-yellow-light: hsl(var(--brand-yellow-light));
@@ -846,7 +847,7 @@ input[type="date"]::-webkit-datetime-edit-year-field {
 }
 
 .selectable-card-selected.selectable-card-timesheet {
-  background-color: rgba(59, 130, 246, 0.15) !important;
+  background-color: hsl(var(--timesheet-primary) / 0.15) !important;
   border-color: rgb(59 130 246) !important;
 }
 
@@ -861,7 +862,7 @@ input[type="date"]::-webkit-datetime-edit-year-field {
 }
 
 .selectable-card-selected.selectable-card-default {
-  background-color: rgba(241, 214, 74, 0.15) !important;
+  background-color: hsl(var(--brand-yellow) / 0.15) !important;
   border-color: rgb(241 214 74) !important;
 }
 
@@ -938,7 +939,7 @@ button.bg-primary * {
 
 /* Inactive tabs - consistent visible background across all pages */
 [role="tablist"] [role="tab"]:not([data-state="active"]) {
-  background-color: rgba(51, 65, 85, 0.5) !important; /* slate-700 at 50% */
+  background-color: color-mix(in srgb, var(--color-slate-700) 50%, transparent) !important;
 }
 
 [role="tablist"] [role="tab"]:first-child {

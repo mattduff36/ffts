@@ -143,7 +143,7 @@ export function WorkshopTaskStatusDialogs({
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
               <p className="text-sm text-blue-300">
                 This task will be marked as &quot;In Progress&quot; and visible in the workshop queue.
               </p>
@@ -320,7 +320,7 @@ export function WorkshopTaskStatusDialogs({
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-4">
               <p className="text-sm text-blue-300">
                 This task will be moved back to &quot;In Progress&quot; and work can continue.
               </p>

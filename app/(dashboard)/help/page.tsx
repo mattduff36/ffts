@@ -96,9 +96,9 @@ const HELP_NAV_TILES: HelpTileConfig[] = [
     label: 'FAQ',
     helper: 'Find answers',
     icon: BookOpen,
-    tileClassName: 'border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-950/30 dark:hover:bg-blue-950/50',
+    tileClassName: 'border-blue-200 bg-green-50 hover:bg-green-100 dark:border-blue-500/30 dark:bg-green-950/30 dark:hover:bg-green-950/50',
     activeClassName: 'border-blue-500 ring-blue-500/30 dark:border-blue-400',
-    iconClassName: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+    iconClassName: 'bg-green-100 text-blue-700 dark:bg-green-500/20 dark:text-blue-300',
   },
   {
     value: 'install',
@@ -549,7 +549,7 @@ export default function HelpPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'new': return 'bg-blue-500';
+      case 'new': return 'bg-green-500';
       case 'under_review': return 'bg-yellow-500';
       case 'planned': return 'bg-purple-500';
       case 'completed': return 'bg-green-500';
@@ -824,7 +824,7 @@ export default function HelpPage() {
                   Guided Cache-Clear Steps
                 </Button>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+              <div className="bg-green-50 dark:bg-green-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
                 <p className="text-sm text-blue-900 dark:text-blue-300">
                   <strong>Support tip:</strong> If the install prompt does not appear, use the manual browser steps below and then refresh this page.
                 </p>
@@ -1062,7 +1062,7 @@ export default function HelpPage() {
                 )}
               </div>
 
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+              <div className="bg-green-50 dark:bg-green-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
                 <p className="text-sm text-blue-900 dark:text-blue-300">
                   <strong>Tip:</strong> Include any error messages, codes, or screenshots you saw. The more detail you provide, the faster we can fix it!
                 </p>

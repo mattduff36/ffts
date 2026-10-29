@@ -95,7 +95,7 @@ function SummaryCard({ label, value, helper, icon, accent = 'slate' }: SummaryCa
   const accentClass = {
     yellow: 'border-brand-yellow/30 bg-brand-yellow/10 text-brand-yellow',
     green: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-    blue: 'border-blue-500/30 bg-blue-500/10 text-blue-200',
+    blue: 'border-blue-500/30 bg-green-500/10 text-blue-200',
     slate: 'border-slate-700 bg-slate-950 text-slate-200',
   }[accent];
 

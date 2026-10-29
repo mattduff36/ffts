@@ -14,7 +14,7 @@ interface ProjectsManageStatsProps {
 const STAT_CARDS: { key: FilterKey; label: string; color: string }[] = [
   { key: 'all', label: 'All Documents', color: 'bg-slate-500' },
   { key: 'needs_signature', label: 'Needs Signature', color: 'bg-amber-500' },
-  { key: 'read_only', label: 'Read Only', color: 'bg-blue-500' },
+  { key: 'read_only', label: 'Read Only', color: 'bg-green-500' },
   { key: 'recently_uploaded', label: 'Last 7 Days', color: 'bg-green-500' },
 ];
 

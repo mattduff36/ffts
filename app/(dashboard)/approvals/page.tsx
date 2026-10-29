@@ -867,7 +867,7 @@ function ApprovalsContent() {
         );
       case 'processed':
         return (
-          <Badge variant="default" className="bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20">
+          <Badge variant="default" className="bg-green-500/10 text-blue-300 border-blue-500/20 hover:bg-green-500/20">
             Manager Approved
           </Badge>
         );
@@ -913,7 +913,7 @@ function ApprovalsContent() {
             }
             className={`w-fit text-lg px-4 py-2 ${
               statusFilter === 'approved' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
-              statusFilter === 'processed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+              statusFilter === 'processed' ? 'bg-green-500/10 text-blue-400 border-blue-500/20' :
               statusFilter === 'adjusted' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
               ''
             }`}
@@ -1214,7 +1214,7 @@ function ApprovalsContent() {
                                     e.stopPropagation();
                                     router.push(`/timesheets/${timesheet.id}`);
                                   }}
-                                  className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all"
+                                  className="border-blue-300 text-blue-500 hover:bg-green-500 hover:text-white hover:border-blue-500 active:bg-green-600 active:scale-95 transition-all"
                                 >
                                   <Edit2 className="h-4 w-4 mr-1" />
                                   Adjust
@@ -1490,7 +1490,7 @@ function AbsenceApprovalCard({
 
     if (absence.status === 'processed') {
       return (
-        <Badge variant="default" className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+        <Badge variant="default" className="bg-green-500/10 text-blue-400 border-blue-500/20">
           <Package className="h-3 w-3 mr-1" />
           Processed
         </Badge>
@@ -1529,7 +1529,7 @@ function AbsenceApprovalCard({
                 <span>·</span>
                 <span>{absence.duration_days} {absence.duration_days === 1 ? 'day' : 'days'}</span>
                 {absence.absence_reasons.is_paid ? (
-                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-[10px] px-1.5 py-0">
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10 text-[10px] px-1.5 py-0">
                     Paid
                   </Badge>
                 ) : (

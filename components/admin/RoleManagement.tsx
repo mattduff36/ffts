@@ -135,7 +135,7 @@ function getPermissionKeyRoleBadge(level: PermissionAccessLevel): {
     return {
       label: 'Supervisor',
       variant: 'outline',
-      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
     };
   }
   if (level === 4) return { label: 'Manager', variant: 'warning' };
@@ -201,7 +201,7 @@ function getUserPermissionRoleBadge(user: UserPermissionMatrixRow): {
     return {
       label: user.role_display_name || 'Supervisor',
       variant: 'outline',
-      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
     };
   }
 

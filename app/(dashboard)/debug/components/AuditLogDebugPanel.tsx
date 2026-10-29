@@ -66,7 +66,7 @@ function getAuditMetricClasses(tone: AuditTone): string {
     case 'danger':
       return 'border-red-500/30 bg-red-500/10 text-red-100';
     case 'info':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
     default:
       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
   }
@@ -80,7 +80,7 @@ function getActionBadgeClass(action: string): string {
       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
     case 'updated':
     case 'update':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
     case 'submitted':
       return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
     case 'deleted':

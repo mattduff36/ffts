@@ -72,7 +72,7 @@ export function ErrorDetailsModal({
 
             {/* Resolution guide */}
             {data.resolutionGuide && data.resolutionGuide.length > 0 && (
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="mt-6 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <h4 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-2">
                   💡 How to Resolve
                 </h4>

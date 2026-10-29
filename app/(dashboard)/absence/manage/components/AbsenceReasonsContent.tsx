@@ -395,7 +395,7 @@ export function AbsenceReasonsContent() {
                                   variant="outline"
                                   className={
                                     reason.is_paid
-                                      ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                      ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
                                       : 'border-slate-600 text-muted-foreground'
                                   }
                                 >
@@ -487,7 +487,7 @@ export function AbsenceReasonsContent() {
                               variant="outline"
                               className={
                                 reason.is_paid
-                                  ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                  ? 'border-blue-500/30 text-blue-400 bg-green-500/10'
                                   : 'border-slate-600 text-muted-foreground'
                               }
                             >

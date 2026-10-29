@@ -32,7 +32,7 @@ const CHOICE_BUTTON_BASE_CLASSNAME =
   'flex h-auto min-h-24 aspect-square w-full items-center justify-center rounded-lg border-2 px-2 py-0 text-xl font-bold text-white shadow-lg transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-30';
 const SICK_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-red-600 bg-red-600/25 shadow-red-600/15 hover:bg-red-600/35`;
 const TRAINING_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-emerald-500 bg-emerald-500/25 shadow-emerald-500/15 hover:bg-emerald-500/35`;
-const OTHER_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-indigo-500 bg-indigo-500/25 shadow-indigo-500/15 hover:bg-indigo-500/35`;
+const OTHER_CHOICE_BUTTON_CLASSNAME = `${CHOICE_BUTTON_BASE_CLASSNAME} border-indigo-500 bg-green-500/25 shadow-indigo-500/15 hover:bg-green-500/35`;
 const LARGE_ACTION_BUTTON_CLASSNAME =
   'flex h-20 w-full items-center justify-center rounded-lg border-2 border-slate-700 bg-slate-800/30 px-4 py-5 text-xl font-semibold text-foreground shadow-sm transition-all hover:bg-slate-800/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
 const LARGE_PRIMARY_BUTTON_CLASSNAME =

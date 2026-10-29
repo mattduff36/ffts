@@ -400,7 +400,7 @@ export default function FAQEditorPage() {
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
         <div className="flex items-start gap-3">
-          <div className="shrink-0 p-3 bg-blue-100 dark:bg-blue-950 rounded-lg">
+          <div className="shrink-0 p-3 bg-green-100 dark:bg-green-950 rounded-lg">
             <HelpCircle className="h-6 w-6 text-blue-600" />
           </div>
           <div className="min-w-0">

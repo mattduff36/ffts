@@ -47,7 +47,7 @@ function getStatusBadgeClass(item: QuoteOverviewItem): string {
   }
 
   if (item.kind === 'project') {
-    return 'border-blue-500/30 bg-blue-500/10 text-blue-200';
+    return 'border-blue-500/30 bg-green-500/10 text-blue-200';
   }
 
   if (item.status === 'invoiced' || item.status === 'partially_invoiced') {
@@ -78,7 +78,7 @@ function SummaryTile({ label, value, helper, icon, accent = 'slate' }: SummaryTi
   const accentClass = {
     yellow: 'border-brand-yellow/25 bg-brand-yellow/10 text-brand-yellow',
     green: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
-    blue: 'border-blue-500/25 bg-blue-500/10 text-blue-200',
+    blue: 'border-blue-500/25 bg-green-500/10 text-blue-200',
     slate: 'border-slate-700 bg-slate-900/70 text-slate-100',
   }[accent];
 

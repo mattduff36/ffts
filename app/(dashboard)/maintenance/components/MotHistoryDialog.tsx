@@ -85,7 +85,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
       case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
       case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
       case 'MINOR': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
-      case 'ADVISORY': return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+      case 'ADVISORY': return 'text-blue-400 bg-green-500/10 border-blue-500/30';
       case 'FAIL': return 'text-red-600 bg-red-600/10 border-red-600/30';
       default: return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
     }
@@ -161,7 +161,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
                 <p className="text-lg font-medium text-white mb-2">No MOT History Yet</p>
                 <p className="text-sm mb-4">{error}</p>
                 {existingMotDueDate && !vehicleNotFound && (
-                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
+                  <div className="bg-green-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
                     <p className="text-sm text-blue-300">
                       This van is likely less than 3 years old and hasn&apos;t required an MOT yet.
                     </p>
@@ -259,7 +259,7 @@ const [motData, setMotData] = useState<MotData | null>(null);
               </div>
             ) : (
               // Normal card for vans with MOT history
-              <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/20 border border-blue-700/50 rounded-lg p-3 md:p-4">
+              <div className="bg-gradient-to-r from-green-900/30 to-green-800/20 border border-blue-700/50 rounded-lg p-3 md:p-4">
                 <h3 className="text-base md:text-lg font-semibold text-blue-300 mb-3 flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 md:h-5 md:w-5" />
                   Current MOT Status

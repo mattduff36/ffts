@@ -489,7 +489,7 @@ export function PlantTable({
   return (
     <>
       {/* Mobile Info Banner */}
-      <Alert className="md:hidden bg-blue-900/20 border-blue-700/50 mb-4">
+      <Alert className="md:hidden bg-green-900/20 border-blue-700/50 mb-4">
         <Monitor className="h-4 w-4 text-blue-400" />
         <AlertDescription className="text-blue-200 text-sm">
           Mobile view shows essential information only. Desktop recommended for complete data and advanced features.

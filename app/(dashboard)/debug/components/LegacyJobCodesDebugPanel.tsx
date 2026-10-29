@@ -615,7 +615,7 @@ export function LegacyJobCodesDebugPanel() {
               variant="outline"
               onClick={() => void requestCorrectionPreview('batch')}
               disabled={batchLoading}
-              className="border-blue-500/40 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-blue-50"
+              className="border-blue-500/40 bg-green-500/10 text-blue-100 hover:bg-green-500/20 hover:text-blue-50"
             >
               {batchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Preview Batch Change
@@ -787,7 +787,7 @@ export function LegacyJobCodesDebugPanel() {
           </div>
 
           {selectedTimesheets.length > 0 ? (
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-100">
+            <div className="rounded-xl border border-blue-500/30 bg-green-500/10 p-4 text-sm text-blue-100">
               <p className="font-semibold">Selected weekly timesheets</p>
               <p className="mt-1 text-blue-100/85">
                 {selectedTimesheets.map((timesheet) => `${timesheet.employeeName} (${formatWeekEnding(timesheet.weekEnding)})`).join(', ')}
@@ -801,7 +801,7 @@ export function LegacyJobCodesDebugPanel() {
               variant="outline"
               onClick={() => void requestCorrectionPreview('individual')}
               disabled={individualLoading || selectedTimesheetIds.length === 0}
-              className="border-blue-500/40 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-blue-50"
+              className="border-blue-500/40 bg-green-500/10 text-blue-100 hover:bg-green-500/20 hover:text-blue-50"
             >
               {individualLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Preview Individual Change

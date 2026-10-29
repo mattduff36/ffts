@@ -354,7 +354,7 @@ export function CategoryRecipientsDialog({
                           profile.hasModuleAccess === false
                             ? 'opacity-60 border border-transparent'
                             : isSelected 
-                              ? 'bg-blue-600/20 border border-blue-500/30' 
+                              ? 'bg-green-600/20 border border-blue-500/30'
                               : 'hover:bg-slate-800 border border-transparent'
                         }`}
                         onClick={() => profile.hasModuleAccess !== false && handleToggleUser(profile.id)}
@@ -364,7 +364,7 @@ export function CategoryRecipientsDialog({
                             checked={isSelected}
                             onCheckedChange={() => handleToggleUser(profile.id)}
                             disabled={profile.hasModuleAccess === false}
-                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                            className="data-[state=checked]:bg-green-600 data-[state=checked]:border-blue-600"
                           />
                           <div>
                             <p className="text-sm font-medium text-white">

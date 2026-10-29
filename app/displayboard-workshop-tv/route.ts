@@ -49,7 +49,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
     html.tv-text-step-4 { font-size: 150%; }
     html.tv-text-step-5 { font-size: 200%; }
     body {
-      background: #020617;
+      background: #001102;
       color: #fff;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 1.25rem;
@@ -61,7 +61,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
       width: 1920px;
       height: 1080px;
       padding: 80px;
-      background: #020617;
+      background: #001102;
       text-align: center;
       -webkit-transform-origin: 0 0;
       -ms-transform-origin: 0 0;
@@ -96,9 +96,9 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
       width: 1920px;
       height: 1080px;
       padding: 24px;
-      background: #020617;
-      background: -webkit-linear-gradient(315deg, #020617, #0f172a 48%, #111827);
-      background: linear-gradient(135deg, #020617, #0f172a 48%, #111827);
+      background: #001102;
+      background: -webkit-linear-gradient(315deg, #001102, #001f04 48%, #0d2911);
+      background: linear-gradient(135deg, #001102, #001f04 48%, #0d2911);
       -webkit-transform-origin: 0 0;
       -ms-transform-origin: 0 0;
       transform-origin: 0 0;
@@ -179,7 +179,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
     .tile-value { margin-top: 10px; font-size: 3.375rem; line-height: 1; font-weight: 900; }
     .tone-red { border-color: rgba(239,68,68,0.46); background: rgba(239,68,68,0.15); }
     .tone-amber { border-color: rgba(245,158,11,0.46); background: rgba(245,158,11,0.15); }
-    .tone-blue { border-color: rgba(59,130,246,0.46); background: rgba(59,130,246,0.15); }
+    .tone-blue { border-color: rgba(59,130,246,0.46); background: rgba(34,197,94,0.15); }
     .tone-purple { border-color: rgba(168,85,247,0.46); background: rgba(168,85,247,0.15); }
     .panel {
       position: absolute;
@@ -255,7 +255,7 @@ const legacyDisplayBoardHtml = String.raw`<!doctype html>
     .row-overdue { border-color: rgba(239,68,68,0.38); background: rgba(239,68,68,0.12); }
     .row-due { border-color: rgba(245,158,11,0.38); background: rgba(245,158,11,0.12); }
     .row-high-priority { border-color: rgba(239,68,68,0.42); background: rgba(239,68,68,0.14); }
-    .row-progress { border-color: rgba(59,130,246,0.34); background: rgba(59,130,246,0.11); }
+    .row-progress { border-color: rgba(59,130,246,0.34); background: rgba(34,197,94,0.11); }
     .row-hold { border-color: rgba(168,85,247,0.34); background: rgba(168,85,247,0.11); }
     .row-main { float: left; width: 72%; }
     .row-title { font-size: 1.5625rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

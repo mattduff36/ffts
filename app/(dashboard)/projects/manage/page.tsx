@@ -323,7 +323,7 @@ export default function ProjectsManagePage() {
   return (
     <AppPageShell>
       {/* Mobile info banner */}
-      <Alert className="md:hidden bg-blue-900/20 border-blue-700/50">
+      <Alert className="md:hidden bg-green-900/20 border-blue-700/50">
         <Monitor className="h-4 w-4 text-blue-400" />
         <AlertDescription className="text-blue-200 text-sm">
           Tap a document card to expand details and actions.

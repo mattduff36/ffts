@@ -53,10 +53,10 @@ interface DirectoryEntry {
 const GROUP_COLOR_CLASS: Record<AbsenceSecondaryPermissionHeaderGroup['id'], string> = {
   bookings: 'bg-yellow-300/90 text-slate-900',
   allowances: 'bg-green-300/90 text-slate-900',
-  'records-admin': 'bg-indigo-300/90 text-slate-900',
+  'records-admin': 'bg-green-300/90 text-slate-900',
   reasons: 'bg-purple-300/90 text-slate-900',
-  'work-shifts': 'bg-cyan-300/90 text-slate-900',
-  'authorise-bookings': 'bg-sky-300/90 text-slate-900',
+  'work-shifts': 'bg-green-300/90 text-slate-900',
+  'authorise-bookings': 'bg-green-300/90 text-slate-900',
 };
 
 const SUBHEADER_CLASS = 'bg-slate-800/80 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
@@ -401,7 +401,7 @@ export function AbsencePermissionExceptionsDialog({ open, onOpenChange }: Absenc
                                 className={cn(
                                   'h-6 w-10 rounded border text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                                   state === 'none' && 'border-slate-600 bg-slate-900 text-slate-300 hover:bg-slate-800',
-                                  state === 'view' && 'border-cyan-500/45 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30',
+                                  state === 'view' && 'border-cyan-500/45 bg-green-500/20 text-cyan-100 hover:bg-green-500/30',
                                   state === 'edit' && 'border-green-500/45 bg-green-500/20 text-green-100 hover:bg-green-500/30',
                                   differsFromDefault && 'border-red-400 ring-1 ring-red-400/70',
                                   isSaving && 'opacity-70 cursor-wait'

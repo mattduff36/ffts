@@ -197,7 +197,7 @@ export default function LoginPage() {
     <div className="h-dvh sm:h-auto sm:min-h-dvh flex items-start justify-center px-4 pb-4 pt-0 sm:pt-16 md:pt-24 relative overflow-y-auto overflow-x-hidden bg-slate-950">
       {/* Fixed background starts at the viewport edge so iOS can render it under the native status bar. */}
       <div className="fixed inset-0 z-0 pointer-events-none bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(241,214,74,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(241,214,74,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(160,208,109,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(160,208,109,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
       </div>
 
       <div className="w-full max-w-lg relative z-10 translate-y-[clamp(1.5rem,10svh,5rem)] sm:translate-y-0">

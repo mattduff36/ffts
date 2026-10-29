@@ -263,7 +263,7 @@ function DocumentsTabContent({ vanId, workshopTasks }: { vanId: string; workshop
                             className={
                               task.status === 'completed' 
                                 ? 'bg-green-500/10 text-green-300 border-green-500/30'
-                                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                                : 'bg-green-500/10 text-blue-300 border-blue-500/30'
                             }
                           >
                             {task.status === 'completed' ? 'Completed' : 'In Progress'}
@@ -275,7 +275,7 @@ function DocumentsTabContent({ vanId, workshopTasks }: { vanId: string; workshop
                           </p>
                         )}
                       </div>
-                      <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                      <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                         <Paperclip className="h-3 w-3 mr-1" />
                         {taskAttachments.length}
                       </Badge>
@@ -677,7 +677,7 @@ export default function VanHistoryPage({
       case 'DANGEROUS': return 'text-red-400 bg-red-500/10 border-red-500/30';
       case 'MAJOR': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
       case 'MINOR': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
-      case 'ADVISORY': return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+      case 'ADVISORY': return 'text-blue-400 bg-green-500/10 border-blue-500/30';
       case 'FAIL': return 'text-red-600 bg-red-600/10 border-red-600/30';
       default: return 'text-slate-400 bg-slate-500/10 border-slate-500/30';
     }
@@ -833,7 +833,7 @@ export default function VanHistoryPage({
       ) : (
         /* Vehicle Data Card (VES/MOT) */
         vehicleData && (vehicleData.ves_make || vehicleData.mot_make) ? (
-          <Card className="bg-gradient-to-r from-blue-900/20 to-blue-800/10 border-blue-700/30">
+          <Card className="bg-gradient-to-r from-green-900/20 to-green-800/10 border-blue-700/30">
             <CardContent className="pt-6">
               <div className={`grid gap-6 ${hasMapMatch ? 'grid-cols-1 md:grid-cols-[fit-content(calc(50%_-_0.75rem))_minmax(calc(50%_-_0.75rem),_1fr)]' : 'grid-cols-1'}`}>
                 <div className={hasMapMatch ? 'min-w-0 space-y-2.5 text-sm' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm'}>
@@ -1163,7 +1163,7 @@ export default function VanHistoryPage({
                     This vehicle may be too new or exempt from MOT testing
                   </p>
                   {vehicleData?.mot_due_date && (
-                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
+                    <div className="bg-green-900/20 border border-blue-700 rounded-lg p-4 max-w-md mx-auto">
                       <p className="text-sm text-blue-300">
                         First MOT due: <span className="text-white font-medium">{formatDate(vehicleData.mot_due_date)}</span>
                       </p>
@@ -1174,7 +1174,7 @@ export default function VanHistoryPage({
                 <div className="space-y-4">
                   {/* Current MOT Status Card */}
                   {motData.currentStatus && motData.currentStatus.status !== 'No MOT History' && motData.currentStatus.status !== 'Not Yet Due' && (
-                    <Card className="bg-gradient-to-r from-blue-900/30 to-blue-800/20 border-blue-700/50">
+                    <Card className="bg-gradient-to-r from-green-900/30 to-green-800/20 border-blue-700/50">
                       <CardHeader>
                         <CardTitle className="text-lg text-blue-300 flex items-center gap-2">
                           <CheckCircle className="h-5 w-5" />

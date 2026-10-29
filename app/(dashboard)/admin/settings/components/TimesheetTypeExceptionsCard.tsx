@@ -278,7 +278,7 @@ export function TimesheetTypeExceptionsCard() {
                           {isUserChoice ? (
                             <Badge className="bg-amber-600/30 text-amber-100 border border-amber-500/40">Choice</Badge>
                           ) : row.override_timesheet_type ? (
-                            <Badge className="bg-sky-600/30 text-sky-200 border border-sky-500/40">Override</Badge>
+                            <Badge className="bg-green-600/30 text-sky-200 border border-sky-500/40">Override</Badge>
                           ) : (
                             <Badge variant="outline" className="border-slate-600 text-muted-foreground">Default</Badge>
                           )}

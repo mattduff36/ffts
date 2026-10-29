@@ -155,7 +155,7 @@ export function TimesheetsApprovalTable({
         );
       case 'processed':
         return (
-          <Badge variant="default" className="bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20">
+          <Badge variant="default" className="bg-green-500/10 text-blue-300 border-blue-500/20 hover:bg-green-500/20">
             Manager Approved
           </Badge>
         );
@@ -347,7 +347,7 @@ export function TimesheetsApprovalTable({
                             variant="outline"
                             size="sm"
                             onClick={(e) => { e.stopPropagation(); router.push(`/timesheets/${ts.id}`); }}
-                            className="border-blue-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 active:bg-blue-600 active:scale-95 transition-all h-8 px-2"
+                            className="border-blue-300 text-blue-500 hover:bg-green-500 hover:text-white hover:border-blue-500 active:bg-green-600 active:scale-95 transition-all h-8 px-2"
                           >
                             <Edit2 className="h-3.5 w-3.5 mr-1" />
                             Adjust

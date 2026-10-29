@@ -342,7 +342,7 @@ export function JobRolesTab() {
                           ) : isAdminRole(role) ? (
                             <Badge variant="destructive">Admin</Badge>
                           ) : role.name === 'supervisor' ? (
-                            <Badge variant="outline" className="text-cyan-300 border-cyan-500/50 bg-cyan-500/10">Supervisor</Badge>
+                            <Badge variant="outline" className="text-cyan-300 border-cyan-500/50 bg-green-500/10">Supervisor</Badge>
                           ) : role.name === 'contractor' ? (
                             <Badge variant="outline" className="text-orange-300 border-orange-500/50 bg-orange-500/10">Contractor</Badge>
                           ) : role.is_manager_admin ? (

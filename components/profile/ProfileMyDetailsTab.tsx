@@ -171,7 +171,7 @@ export function ProfileMyDetailsTab({
           type="button"
           onClick={onSave}
           disabled={!hasChanges || isSaving}
-          className="h-14 w-full bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-[#d1b82f] disabled:opacity-60 sm:h-9 sm:w-auto sm:text-sm"
+          className="h-14 w-full bg-brand-yellow text-base font-semibold text-slate-900 hover:bg-brand-yellow-hover disabled:opacity-60 sm:h-9 sm:w-auto sm:text-sm"
         >
           {isSaving ? (
             <>

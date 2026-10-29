@@ -1859,7 +1859,7 @@ function NewPlantInspectionContent() {
           </div>
           
           {checklistStarted && (
-            <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className="mt-4 p-3 bg-green-500/10 border border-blue-500/30 rounded-lg">
               <p className="text-sm text-blue-400">
                 <Info className="h-4 w-4 inline mr-2" />
                 Plant and date are locked once you start filling the checklist.

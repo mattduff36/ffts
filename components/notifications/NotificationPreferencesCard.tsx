@@ -45,7 +45,7 @@ function channelButtonClassName(isEnabled: boolean, channel: 'in-app' | 'email')
     return 'border-green-400/70 bg-green-500/20 text-green-100 shadow-lg shadow-green-500/10';
   }
 
-  return 'border-sky-400/70 bg-sky-500/20 text-sky-100 shadow-lg shadow-sky-500/10';
+  return 'border-sky-400/70 bg-green-500/20 text-sky-100 shadow-lg shadow-sky-500/10';
 }
 
 export function NotificationPreferencesCard({
@@ -118,7 +118,7 @@ export function NotificationPreferencesCard({
                     <Mail className={`h-6 w-6 ${preference.notify_email ? 'text-sky-300' : 'text-slate-400'}`} />
                     <span className="text-base font-semibold leading-tight">Email</span>
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      preference.notify_email ? 'bg-sky-500/25 text-sky-100' : 'bg-slate-800 text-slate-300'
+                      preference.notify_email ? 'bg-green-500/25 text-sky-100' : 'bg-slate-800 text-slate-300'
                     }`}>
                       {preference.notify_email ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
                       {preference.notify_email ? 'ON' : 'OFF'}

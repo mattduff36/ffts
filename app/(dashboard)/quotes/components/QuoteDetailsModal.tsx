@@ -154,7 +154,7 @@ function getTimelineEventMeta(eventType: string) {
     case 'quote_created':
       return {
         icon: FileEdit,
-        iconClassName: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+        iconClassName: 'text-sky-300 bg-green-500/10 border-sky-500/20',
       };
     case 'quote_updated':
       return {
@@ -171,7 +171,7 @@ function getTimelineEventMeta(eventType: string) {
     case 'marked_as_sent':
       return {
         icon: Mail,
-        iconClassName: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
+        iconClassName: 'text-blue-300 bg-green-500/10 border-blue-500/20',
       };
     case 'returned_for_changes':
       return {
@@ -191,17 +191,17 @@ function getTimelineEventMeta(eventType: string) {
     case 'quote_accepted':
       return {
         icon: CheckCircle2,
-        iconClassName: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+        iconClassName: 'text-sky-300 bg-green-500/10 border-sky-500/20',
       };
     case 'rams_triggered':
       return {
         icon: FolderKanban,
-        iconClassName: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20',
+        iconClassName: 'text-cyan-300 bg-green-500/10 border-cyan-500/20',
       };
     case 'schedule_updated':
       return {
         icon: CalendarClock,
-        iconClassName: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/20',
+        iconClassName: 'text-indigo-300 bg-green-500/10 border-indigo-500/20',
       };
     case 'marked_complete':
       return {
@@ -1324,7 +1324,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                   <div>
                     <h4 className="text-sm font-semibold text-muted-foreground mb-2">Line Items</h4>
                     {quote.pricing_mode === 'attachments_only' ? (
-                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+                      <div className="rounded-lg border border-blue-500/30 bg-green-500/10 p-3 text-sm text-blue-100">
                         Pricing/details are supplied in the client-visible attachments for this quote.
                       </div>
                     ) : quote.line_items && quote.line_items.length > 0 ? (
@@ -2063,7 +2063,7 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-medium text-white">{attachment.file_name}</p>
                             {attachment.is_client_visible && (
-                              <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-200">Client</Badge>
+                              <Badge variant="outline" className="border-blue-500/30 bg-green-500/10 text-blue-200">Client</Badge>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">

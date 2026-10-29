@@ -246,7 +246,7 @@ function DocumentsTabContent({ plantId, workshopTasks }: { plantId: string; work
                             className={
                               task.status === 'completed' 
                                 ? 'bg-green-500/10 text-green-300 border-green-500/30'
-                                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                                : 'bg-green-500/10 text-blue-300 border-blue-500/30'
                             }
                           >
                             {task.status === 'completed' ? 'Completed' : 'In Progress'}
@@ -258,7 +258,7 @@ function DocumentsTabContent({ plantId, workshopTasks }: { plantId: string; work
                           </p>
                         )}
                       </div>
-                      <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                      <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                         <Paperclip className="h-3 w-3 mr-1" />
                         {taskAttachments.length}
                       </Badge>

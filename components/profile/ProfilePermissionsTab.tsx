@@ -13,7 +13,7 @@ interface ProfilePermissionsTabProps {
 function getAccessBadgeClass(accessLevel: number): string {
   if (accessLevel >= 5) return 'border-red-500/40 bg-red-500/15 text-red-300';
   if (accessLevel >= 4) return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
-  if (accessLevel >= 3) return 'border-sky-500/40 bg-sky-500/15 text-sky-300';
+  if (accessLevel >= 3) return 'border-sky-500/40 bg-green-500/15 text-sky-300';
   if (accessLevel >= 2) return 'border-green-500/40 bg-green-500/15 text-green-300';
   return 'border-slate-500/40 bg-slate-500/15 text-slate-200';
 }

@@ -269,7 +269,7 @@ export function TimesheetAdjustmentModal({
                         key={manager.id}
                         className={`flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent/50 ${
                           index === 0 && isPriorityManager(manager)
-                            ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20'
+                            ? 'border-blue-300 bg-green-50/50 dark:bg-green-950/20'
                             : ''
                         }`}
                       >

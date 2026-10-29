@@ -238,7 +238,7 @@ export function ReminderModal({
       <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl overflow-hidden">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-blue-100 dark:bg-blue-950 rounded">
+            <div className="p-2 bg-green-100 dark:bg-green-950 rounded">
               <Bell className="h-5 w-5 text-blue-600" />
             </div>
             <div className="flex-1">
@@ -312,7 +312,7 @@ export function ReminderModal({
                           key={update.id}
                           className={`rounded-md border p-3 ${
                             isUserReply
-                              ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900'
+                              ? 'bg-green-50 border-blue-200 dark:bg-green-950/20 dark:border-blue-900'
                               : 'bg-slate-50 border-border dark:bg-slate-800'
                           }`}
                         >

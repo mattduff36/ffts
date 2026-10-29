@@ -70,7 +70,7 @@ function getInsightClasses(tone: UsageAnalyticsInsight['tone']): string {
     case 'danger':
       return 'border-red-500/30 bg-red-500/10 text-red-100';
     case 'info':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-100';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-100';
     default:
       return 'border-slate-500/30 bg-slate-500/10 text-slate-100';
   }
@@ -84,7 +84,7 @@ function getRoleBadgeMeta(roleName: string | null): { variant: BadgeVariant; cla
   if (normalized.includes('supervisor')) {
     return {
       variant: 'outline',
-      className: 'border-sky-400/50 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30',
+      className: 'border-sky-400/50 bg-green-500/20 text-sky-200 hover:bg-green-500/30',
       label,
     };
   }
@@ -94,7 +94,7 @@ function getRoleBadgeMeta(roleName: string | null): { variant: BadgeVariant; cla
 function getEventBadgeClass(eventCategory: string): string {
   switch (eventCategory) {
     case 'navigation':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
     case 'auth':
       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
     case 'error':
@@ -113,7 +113,7 @@ function getDeviceBadgeClass(deviceType: string | null): string {
     case 'tablet':
       return 'border-purple-500/30 bg-purple-500/10 text-purple-300';
     case 'desktop':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+      return 'border-blue-500/30 bg-green-500/10 text-blue-300';
     default:
       return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
   }

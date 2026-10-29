@@ -239,7 +239,7 @@ export function WorkshopTaskModal({
       },
       logged: {
         label: 'In Progress',
-        className: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+        className: 'bg-green-500/10 text-blue-400 border-blue-500/30',
       },
       on_hold: {
         label: 'On Hold',
@@ -269,7 +269,7 @@ export function WorkshopTaskModal({
   const getTaskTypeBadge = () => {
     if (task.action_type === 'inspection_defect') {
       return (
-        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+        <Badge variant="outline" className="bg-green-500/10 text-blue-400 border-blue-500/30">
           Inspection Defect
         </Badge>
       );
@@ -376,7 +376,7 @@ export function WorkshopTaskModal({
                     onClick={() => onMarkInProgress(task)}
                     disabled={isUpdating}
                     size="sm"
-                    className={`bg-blue-600/80 hover:bg-blue-600 text-white border-0 ${taskActionButtonClass}`}
+                    className={`bg-green-600/80 hover:bg-green-600 text-white border-0 ${taskActionButtonClass}`}
                   >
                     <Clock className="h-4 w-4 mr-2" />
                     Mark In Progress
@@ -419,7 +419,7 @@ export function WorkshopTaskModal({
                       onClick={() => onResume(task)}
                       disabled={isUpdating}
                       size="sm"
-                      className={`bg-blue-600/80 hover:bg-blue-600 text-white border-0 ${taskActionButtonClass}`}
+                      className={`bg-green-600/80 hover:bg-green-600 text-white border-0 ${taskActionButtonClass}`}
                     >
                       <Clock className="h-4 w-4 mr-2" />
                       Resume

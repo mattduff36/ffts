@@ -213,7 +213,7 @@ function NotificationDetailPane({
     return (
       <Card className={`flex min-h-[42rem] flex-col border-border bg-white dark:bg-slate-900 ${className}`}>
         <CardContent className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-          <div className="mb-4 rounded-full bg-blue-100 p-4 dark:bg-blue-950">
+          <div className="mb-4 rounded-full bg-green-100 p-4 dark:bg-green-950">
             <Bell className="h-8 w-8 text-blue-600" />
           </div>
           <h3 className="mb-2 text-lg font-semibold text-foreground">
@@ -253,7 +253,7 @@ function NotificationDetailPane({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-2">
-              <div className={notification.priority === 'HIGH' || notification.priority === 'URGENT' ? 'rounded bg-red-100 p-2 dark:bg-red-950' : 'rounded bg-blue-100 p-2 dark:bg-blue-950'}>
+              <div className={notification.priority === 'HIGH' || notification.priority === 'URGENT' ? 'rounded bg-red-100 p-2 dark:bg-red-950' : 'rounded bg-green-100 p-2 dark:bg-green-950'}>
                 {notification.priority === 'HIGH' || notification.priority === 'URGENT' ? (
                   <AlertTriangle className="h-5 w-5 text-red-600" />
                 ) : (
@@ -776,7 +776,7 @@ function NotificationsContent() {
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-border">
         <div className="flex items-start gap-3">
-          <div className="shrink-0 p-3 bg-blue-100 dark:bg-blue-950 rounded-lg">
+          <div className="shrink-0 p-3 bg-green-100 dark:bg-green-950 rounded-lg">
             <Bell className="h-6 w-6 text-blue-600" />
           </div>
           <div className="min-w-0">
@@ -878,7 +878,7 @@ function NotificationsContent() {
                                     <AlertTriangle className="h-4 w-4 text-red-600" />
                                   </div>
                                 ) : (
-                                  <div className="rounded bg-blue-100 p-2 dark:bg-blue-950">
+                                  <div className="rounded bg-green-100 p-2 dark:bg-green-950">
                                     <Bell className="h-4 w-4 text-blue-600" />
                                   </div>
                                 )}
@@ -1022,7 +1022,7 @@ function NotificationsContent() {
                                 <AlertTriangle className="h-5 w-5 text-red-300" />
                               </div>
                             ) : (
-                              <div className="rounded-lg border border-sky-500/30 bg-sky-500/15 p-2">
+                              <div className="rounded-lg border border-sky-500/30 bg-green-500/15 p-2">
                                 <Bell className="h-5 w-5 text-sky-300" />
                               </div>
                             )}

@@ -547,7 +547,7 @@ export function WorkshopTasksOverviewTab({
           label: 'In Progress',
           count: inProgressTaskCount,
           countClassName: 'text-blue-600 dark:text-blue-400',
-          activeClassName: 'border-blue-500/70 bg-blue-500/15 ring-1 ring-blue-500/40',
+          activeClassName: 'border-blue-500/70 bg-green-500/15 ring-1 ring-blue-500/40',
           ariaLabel: 'Show in progress workshop tasks',
         })}
         {renderStatusTile({
@@ -639,7 +639,7 @@ export function WorkshopTasksOverviewTab({
                                 </h3>
                                 {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
                                     {taskAttachmentCounts.get(task.id)}
                                   </Badge>
@@ -648,7 +648,7 @@ export function WorkshopTasksOverviewTab({
                               </div>
                               <div className="flex flex-wrap gap-2 mb-2">
                                 {task.workshop_task_subcategories?.workshop_task_categories && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                                     {task.workshop_task_subcategories.workshop_task_categories.name}
                                   </Badge>
                                 )}
@@ -686,7 +686,7 @@ export function WorkshopTasksOverviewTab({
                                 }}
                                 disabled={isUpdating}
                                 size="sm"
-                                className={`${taskActionButtonClass} bg-blue-600/80 hover:bg-blue-600 text-white border-0`}
+                                className={`${taskActionButtonClass} bg-green-600/80 hover:bg-green-600 text-white border-0`}
                               >
                                 <Clock className="h-3.5 w-3.5 mr-1.5" />
                                 In Progress
@@ -758,10 +758,10 @@ export function WorkshopTasksOverviewTab({
           )}
 
           {inProgressTasks.length > 0 && (
-            <div className="border-2 border-blue-500/30 rounded-lg overflow-hidden bg-blue-500/5">
+            <div className="border-2 border-blue-500/30 rounded-lg overflow-hidden bg-green-500/5">
               <button
                 onClick={() => onShowInProgressChange(!showInProgress)}
-                className="w-full flex items-center justify-between p-4 bg-blue-500/10 hover:bg-blue-500/20 transition-colors border-b-2 border-blue-500/30"
+                className="w-full flex items-center justify-between p-4 bg-green-500/10 hover:bg-green-500/20 transition-colors border-b-2 border-blue-500/30"
               >
                 <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
                   <Clock className="h-5 w-5 text-blue-400" />
@@ -792,7 +792,7 @@ export function WorkshopTasksOverviewTab({
                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
                                 {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
                                     {taskAttachmentCounts.get(task.id)}
                                   </Badge>
@@ -801,7 +801,7 @@ export function WorkshopTasksOverviewTab({
                               </div>
                               <div className="flex flex-wrap gap-2 mb-2">
                                 {task.workshop_task_subcategories?.workshop_task_categories && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                                     {task.workshop_task_subcategories.workshop_task_categories.name}
                                   </Badge>
                                 )}
@@ -813,7 +813,7 @@ export function WorkshopTasksOverviewTab({
                               </div>
                               {renderInspectionDescription(task)}
                               {task.logged_comment && (
-                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
+                                <div className="bg-green-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
                                   <p className="text-sm text-blue-300">
                                     <strong>Progress Note:</strong> {task.logged_comment}
                                   </p>
@@ -841,7 +841,7 @@ export function WorkshopTasksOverviewTab({
                                 </Button>
                               )}
                               {task.status === 'on_hold' && (
-                                <Button onClick={(e) => { e.stopPropagation(); onResumeTask(task); }} disabled={isUpdating} size="sm" className={`${taskActionButtonClass} bg-blue-600/80 hover:bg-blue-600 text-white border-0`}>
+                                <Button onClick={(e) => { e.stopPropagation(); onResumeTask(task); }} disabled={isUpdating} size="sm" className={`${taskActionButtonClass} bg-green-600/80 hover:bg-green-600 text-white border-0`}>
                                   <Clock className="h-3.5 w-3.5 mr-1.5" />
                                   Resume
                                 </Button>
@@ -911,7 +911,7 @@ export function WorkshopTasksOverviewTab({
                                 <h3 className="font-semibold text-lg text-foreground">{getVehicleReg(task)}</h3>
                                 {renderSourceBadge(task)}
                                 {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
                                     <Paperclip className="h-3 w-3 mr-1" />
                                     {taskAttachmentCounts.get(task.id)}
                                   </Badge>
@@ -920,7 +920,7 @@ export function WorkshopTasksOverviewTab({
                               </div>
                               <div className="flex flex-wrap gap-2 mb-2">
                                 {task.workshop_task_subcategories?.workshop_task_categories && (
-                                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                  <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                                     {task.workshop_task_subcategories.workshop_task_categories.name}
                                   </Badge>
                                 )}
@@ -1177,7 +1177,7 @@ export function WorkshopTasksOverviewTab({
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-foreground">{row.asset}</span>
                                   {taskAttachmentCounts.get(row.task.id) && taskAttachmentCounts.get(row.task.id)! > 0 && (
-                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                    <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
                                       <Paperclip className="h-3 w-3 mr-1" />
                                       {taskAttachmentCounts.get(row.task.id)}
                                     </Badge>
@@ -1271,7 +1271,7 @@ export function WorkshopTasksOverviewTab({
                                       <h3 className="font-semibold text-lg text-foreground">{assetLabel}</h3>
                                       {renderSourceBadge(task, sourceLabel)}
                                       {taskAttachmentCounts.get(task.id) && taskAttachmentCounts.get(task.id)! > 0 && (
-                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-xs">
+                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30 text-xs">
                                           <Paperclip className="h-3 w-3 mr-1" />
                                           {taskAttachmentCounts.get(task.id)}
                                         </Badge>
@@ -1280,7 +1280,7 @@ export function WorkshopTasksOverviewTab({
                                     </div>
                                     <div className="flex flex-wrap gap-2 mb-1">
                                       {task.workshop_task_subcategories?.workshop_task_categories && (
-                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                                           {task.workshop_task_subcategories.workshop_task_categories.name}
                                         </Badge>
                                       )}
@@ -1290,7 +1290,7 @@ export function WorkshopTasksOverviewTab({
                                         </Badge>
                                       )}
                                       {!task.workshop_task_subcategories && task.workshop_task_categories && (
-                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30">
+                                        <Badge variant="outline" className="bg-green-500/10 text-blue-300 border-blue-500/30">
                                           {task.workshop_task_categories.name}
                                         </Badge>
                                       )}

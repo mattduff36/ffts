@@ -111,7 +111,7 @@ export function AbsencesApprovalTable({
 
     if (status === 'processed') {
       return (
-        <Badge variant="default" className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+        <Badge variant="default" className="bg-green-500/10 text-blue-400 border-blue-500/20">
           <Package className="h-3 w-3 mr-1" />
           Processed
         </Badge>
@@ -269,7 +269,7 @@ export function AbsencesApprovalTable({
                 {columnVisibility.paidStatus && (
                   <TableCell>
                     {absence.absence_reasons?.is_paid ? (
-                      <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-[10px]">
+                      <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-green-500/10 text-[10px]">
                         Paid
                       </Badge>
                     ) : (

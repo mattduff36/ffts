@@ -192,7 +192,7 @@ export default function ChangePasswordPage() {
             )}
 
             {/* Password Requirements */}
-            <div className="bg-blue-500/10 border border-blue-500/50 rounded p-3 space-y-2">
+            <div className="bg-green-500/10 border border-blue-500/50 rounded p-3 space-y-2">
               <p className="text-sm font-medium text-blue-400">Password Requirements:</p>
               <ul className="text-xs text-blue-400 space-y-1">
                 {getPasswordRequirements().map((req, index) => (
@@ -299,7 +299,7 @@ export default function ChangePasswordPage() {
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full bg-[#F1D64A] text-slate-950 hover:bg-[#F1D64A]/90 font-semibold"
+              className="w-full bg-brand-yellow text-slate-950 hover:bg-brand-yellow/90 font-semibold"
             >
               {submitting ? (
                 <>

@@ -78,8 +78,8 @@ interface WorkshopTaskHistoryCardProps {
 const getStatusBadge = (status: string) => {
   const statusMap: Record<string, { label: string; className: string }> = {
     pending: { label: 'Pending', className: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30' },
-    in_progress: { label: 'In Progress', className: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
-    logged: { label: 'In Progress', className: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
+    in_progress: { label: 'In Progress', className: 'bg-green-500/10 text-blue-300 border-blue-500/30' },
+    logged: { label: 'In Progress', className: 'bg-green-500/10 text-blue-300 border-blue-500/30' },
     on_hold: { label: 'On Hold', className: 'bg-purple-500/10 text-purple-300 border-purple-500/30' },
     completed: { label: 'Completed', className: 'bg-green-500/10 text-green-300 border-green-500/30' },
   };

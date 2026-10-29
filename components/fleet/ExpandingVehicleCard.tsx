@@ -266,7 +266,7 @@ export function ExpandingVehicleCard({ vehicle, categories, onUpdate, fromTab = 
           onClick={handleExpand}
         >
           <div className="flex items-center gap-4 flex-1">
-            <div className="bg-blue-500/10 p-3 rounded-lg">
+            <div className="bg-green-500/10 p-3 rounded-lg">
               <Truck className="h-5 w-5 text-blue-400" />
             </div>
             <div className="flex-1">
@@ -320,7 +320,7 @@ export function ExpandingVehicleCard({ vehicle, categories, onUpdate, fromTab = 
                   variant="outline"
                   size="sm"
                   onClick={handleEditToggle}
-                  className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
+                  className="border-blue-600 text-blue-400 hover:bg-green-600 hover:text-white"
                 >
                   Edit Details
                 </Button>

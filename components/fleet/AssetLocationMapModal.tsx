@@ -223,7 +223,7 @@ export function AssetLocationMapModal({
               Current asset
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-blue-500 border border-blue-400" />
+              <span className="inline-block h-3 w-3 rounded-full bg-green-500 border border-blue-400" />
               Other vans / plant
             </span>
           </div>

@@ -256,7 +256,7 @@ export function TaskCommentsDrawer({
 
       const statusBadgeClass =
         item.meta?.status === 'logged' || item.meta?.status === 'resumed'
-          ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+          ? 'bg-green-500/10 text-blue-400 border-blue-500/30'
           : item.meta?.status === 'on_hold'
           ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
           : item.meta?.status === 'undo'

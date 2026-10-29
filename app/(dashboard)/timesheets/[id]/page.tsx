@@ -832,7 +832,7 @@ export default function ViewTimesheetPage() {
     
     // Apply blue styling for final states (processed and adjusted)
     const isFinalState = status === 'processed' || status === 'adjusted';
-    const blueClasses = isFinalState ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : '';
+    const blueClasses = isFinalState ? 'bg-green-500/10 text-blue-600 border-blue-500/20' : '';
     
     return <Badge variant={config.variant} className={blueClasses}>{config.label}</Badge>;
   };
@@ -1136,7 +1136,7 @@ export default function ViewTimesheetPage() {
                           disabled={entry.did_not_work}
                           className={`w-24 text-right font-semibold ${
                             manuallyEditedDays.has(index) 
-                              ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700' 
+                              ? 'bg-green-50 dark:bg-green-950/30 border-blue-300 dark:border-blue-700'
                               : ''
                           }`}
                         />
@@ -1325,7 +1325,7 @@ export default function ViewTimesheetPage() {
                           disabled={entry.did_not_work}
                           className={`w-24 text-right text-lg font-bold ${
                             manuallyEditedDays.has(index) 
-                              ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700' 
+                              ? 'bg-green-50 dark:bg-green-950/30 border-blue-300 dark:border-blue-700'
                               : ''
                           }`}
                         />

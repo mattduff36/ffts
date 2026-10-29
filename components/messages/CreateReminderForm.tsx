@@ -198,7 +198,7 @@ export function CreateReminderForm({ onSuccess }: CreateReminderFormProps) {
               onClick={() => setMode('notification')}
               className={`rounded-lg border p-4 text-left transition-all ${
                 mode === 'notification'
-                  ? 'border-blue-500/40 bg-blue-500/10 ring-2 ring-brand-yellow'
+                  ? 'border-blue-500/40 bg-green-500/10 ring-2 ring-brand-yellow'
                   : 'border-border bg-white hover:bg-muted/30 dark:bg-slate-900'
               }`}
             >

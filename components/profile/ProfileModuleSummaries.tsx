@@ -31,7 +31,7 @@ function getTimesheetStatusBadgeClass(status: string): string {
   if (normalized === 'approved') return 'border-green-500/40 bg-green-500/15 text-green-300';
   if (normalized === 'rejected') return 'border-red-500/40 bg-red-500/15 text-red-300';
   if (normalized === 'processed' || normalized === 'adjusted') {
-    return 'border-blue-500/40 bg-blue-500/15 text-blue-300';
+    return 'border-blue-500/40 bg-green-500/15 text-blue-300';
   }
   return 'border-slate-500/40 bg-slate-500/15 text-slate-200';
 }
@@ -48,7 +48,7 @@ function getInspectionStatusBadgeClass(inspection: ProfileInspectionSummaryItem)
 function getAbsenceStatusBadgeClass(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized === 'approved') return 'border-green-500/40 bg-green-500/15 text-green-300';
-  if (normalized === 'processed') return 'border-blue-500/40 bg-blue-500/15 text-blue-300';
+  if (normalized === 'processed') return 'border-blue-500/40 bg-green-500/15 text-blue-300';
   if (normalized === 'pending') return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
   if (normalized === 'rejected' || normalized === 'cancelled') {
     return 'border-red-500/40 bg-red-500/15 text-red-300';

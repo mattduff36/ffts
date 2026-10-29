@@ -1629,7 +1629,7 @@ export function CivilsTimesheet({
       )}
 
       {timesheetType === 'plant' && (
-        <Card className="border-blue-400/40 bg-blue-500/10">
+        <Card className="border-blue-400/40 bg-green-500/10">
           <CardContent className="pt-4">
             <p className="text-sm text-blue-100">
               Plant timesheet routing is active for this team. This entry will be saved as a plant timesheet.
@@ -1873,7 +1873,7 @@ export function CivilsTimesheet({
                           disabled={disableWorkingInputs || disableStatusForTraining}
                           className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 transition-all ${
                             entry.working_in_yard
-                              ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                              ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
                               : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
                           } disabled:opacity-30 disabled:cursor-not-allowed`}
                         >
@@ -2080,7 +2080,7 @@ export function CivilsTimesheet({
                             disabled={disableWorkingInputs || disableStatusForTraining}
                             className={`flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all ${
                               entry.working_in_yard
-                                ? 'bg-blue-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                                ? 'bg-green-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
                                 : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800/50'
                             } disabled:opacity-30 disabled:cursor-not-allowed`}
                             title="Working in Yard"

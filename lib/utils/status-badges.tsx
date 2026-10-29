@@ -94,7 +94,7 @@ export function getTimesheetStatusBadge(status: string) {
   // Apply blue styling for final states (processed and adjusted)
   const isFinalState = status === 'processed' || status === 'adjusted';
   const blueClasses = isFinalState 
-    ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' 
+    ? 'bg-green-500/10 text-blue-600 border-blue-500/20'
     : '';
 
   return (

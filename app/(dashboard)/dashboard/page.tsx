@@ -73,7 +73,7 @@ function applyAlphaToHSL(color: string): string {
 
   // Fallback: return semi-transparent slate if invalid format
   console.warn(`Invalid HSL color format: "${color}". Using fallback color.`);
-  return 'hsl(215 16% 47% / 0.15)'; // slate-600 with 15% opacity
+  return 'hsl(128 24% 35% / 0.15)'; // slate-600 with 15% opacity
 }
 
 function getInitials(fullName: string | null | undefined): string {
@@ -162,7 +162,7 @@ export default function DashboardPage() {
         label: 'Timesheets',
         count: timesheetsCount,
         icon: FileText,
-        color: 'hsl(210 90% 50%)',
+        color: 'hsl(var(--timesheet-primary))',
         href: '/approvals?tab=timesheets',
       },
       {

@@ -115,7 +115,7 @@ export function ConfirmationModal({
 
         <div className="space-y-6">
           {/* Date Confirmation (Q9 requirement) */}
-          <Alert className="bg-blue-500/10 border-blue-500/50">
+          <Alert className="bg-green-500/10 border-blue-500/50">
             <Calendar className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-600 dark:text-blue-400">
               <span className="font-semibold">Week Ending:</span> {formatDate(weekEnding)}
@@ -229,7 +229,7 @@ export function ConfirmationModal({
                           {getEntryJobNumbers(entry).map((jobNumber) => (
                             <span
                               key={`${entry.day_of_week}-${jobNumber}`}
-                              className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded"
+                              className="text-xs bg-green-100 dark:bg-green-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded"
                             >
                               Job: {jobNumber}
                             </span>
@@ -252,7 +252,7 @@ export function ConfirmationModal({
                             </Badge>
                           )}
                           {entry.night_shift && (
-                            <Badge className="text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                            <Badge className="text-xs bg-green-100 dark:bg-green-900/30 text-indigo-700 dark:text-indigo-400">
                               Night Shift
                             </Badge>
                           )}

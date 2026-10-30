@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.8.7
+
+**GIT COMMIT MESSAGE**
+`fix(analytics): default site usage recording on for Joe Cane`
+
+**PUSHED AT**
+2026-10-30T09:49:03.300Z
+
+**WHAT CHANGED**
+Default site usage recording on for Joe Cane.
+
+**VERSION HISTORY DETAILS**
+- Updated app reliability, with changes to automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `fix(analytics): default site usage recording on for Joe Cane`
+
 ## 1026.8.6
 
 **GIT COMMIT MESSAGE**

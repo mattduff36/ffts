@@ -1,5 +1,18 @@
 [
   {
+    "version": "1026.8.7",
+    "updateKind": "minor",
+    "title": "Analytics improvements",
+    "description": "Default site usage recording on for Joe Cane.",
+    "summary": "Default site usage recording on for Joe Cane.",
+    "details": [
+      "Updated app reliability, with changes to automated tests."
+    ],
+    "areas": [],
+    "areaKeys": [],
+    "pushedAt": "2026-10-30T09:49:03.300Z"
+  },
+  {
     "version": "1026.8.6",
     "updateKind": "minor",
     "title": "Quotes maintenance update",

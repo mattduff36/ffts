@@ -2,6 +2,40 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1026.8.6
+
+**GIT COMMIT MESSAGE**
+`perf(quotes): skip unused summary for paginated list loads`
+
+**PUSHED AT**
+2026-10-30T02:15:33.726Z
+
+**WHAT CHANGED**
+Retain current region for application rollout. Preserve current production branding and navigation. Prepare separate London region rollout. Validate quote SELECT InitPlan in isolated Postgres. Render ordinary previews within the viewport. Defer quote creation host until first open. Load site assignments on demand. Load collections by tab with context guards. Defer PDF renderer imports until attachment rendering. Skip unused summary for paginated list loads.
+
+**VERSION HISTORY DETAILS**
+- Defer PDF renderer imports until attachment rendering, with changes to background routes, app screens, shared logic, and automated tests.
+- Load collections by tab with context guards, with changes to app screens and automated tests.
+- Render ordinary previews within the viewport, with changes to app screens, interface components, and automated tests.
+- Load site assignments on demand, with changes to app screens and automated tests.
+- Updated help and FAQ, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `chore(release): retain current region for application rollout`
+- `merge: preserve current production branding and navigation`
+- `chore(perf): prepare separate London region rollout`
+- `test(perf): validate quote SELECT InitPlan in isolated Postgres`
+- `perf(pdf): render ordinary previews within the viewport`
+- `perf(scheduling): defer quote creation host until first open`
+- `perf(inventory): load site assignments on demand`
+- `perf(training): load collections by tab with context guards`
+- `perf(quotes): defer PDF renderer imports until attachment rendering`
+- `perf(quotes): skip unused summary for paginated list loads`
+
+# Production release log
+
+Private changelog for production builds. Newest entries first.
+
 ## 1026.8.5
 
 **GIT COMMIT MESSAGE**

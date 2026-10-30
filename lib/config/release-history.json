@@ -1,5 +1,34 @@
 [
   {
+    "version": "1026.8.6",
+    "updateKind": "minor",
+    "title": "Quotes maintenance update",
+    "description": "Retain current region for application rollout. Preserve current production branding and navigation. Prepare separate London region rollout. Validate quote SELECT InitPlan in isolated Postgres. Render ordinary previews within the viewport. Defer quote creation host until first open. Load site assignments on demand. Load collections by tab with context guards. Defer PDF document renderer imports until attachment rendering. Skip unused summary for paginated list loads.",
+    "summary": "Retain current region for application rollout. Preserve current production branding and navigation. Prepare separate London region rollout. Validate quote SELECT InitPlan in isolated Postgres. Render ordinary previews within the viewport. Defer quote creation host until first open. Load site assignments on demand. Load collections by tab with context guards. Defer PDF document renderer imports until attachment rendering. Skip unused summary for paginated list loads.",
+    "details": [
+      "Defer PDF document renderer imports until attachment rendering, with changes to background routes, app screens, shared logic, and automated tests.",
+      "Load collections by tab with context guards, with changes to app screens and automated tests.",
+      "Render ordinary previews within the viewport, with changes to app screens, interface components, and automated tests.",
+      "Load site assignments on demand, with changes to app screens and automated tests.",
+      "Updated help and FAQ, with changes to documentation."
+    ],
+    "areas": [
+      "Release automation",
+      "PDF documents",
+      "Inventory",
+      "Training",
+      "Quotes"
+    ],
+    "areaKeys": [
+      "release-automation",
+      "pdf-documents",
+      "inventory",
+      "training",
+      "quotes"
+    ],
+    "pushedAt": "2026-10-30T02:15:33.726Z"
+  },
+  {
     "version": "1026.8.5",
     "updateKind": "minor",
     "title": "Navigation improvements",

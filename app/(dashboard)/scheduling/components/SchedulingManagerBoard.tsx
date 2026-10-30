@@ -29,6 +29,7 @@ import {
   useQueryStates,
 } from 'nuqs';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { AppPageHeader } from '@/components/layout/AppPageShell';
 import {
   AlertTriangle,
@@ -304,9 +305,13 @@ import {
 import { SchedulingDateRangeControls } from './SchedulingDateRangeControls';
 import { schedulingControlStyles } from './scheduling-control-styles';
 import { ScheduleTeamColoursProvider, ScheduleAssignmentTeamMarkers, ScheduleVisitTeamColours } from './ScheduleTeamColours';
-import { QuoteCreationHost } from '@/app/(dashboard)/quotes/components/QuoteCreationHost';
 import { ProjectNumberFormDialog } from '@/app/(dashboard)/quotes/components/ProjectNumberFormDialog';
 import type { QuoteManagerOption, QuoteProjectNumber } from '@/app/(dashboard)/quotes/types';
+
+const QuoteCreationHost = dynamic(
+  () => import('@/app/(dashboard)/quotes/components/QuoteCreationHost').then((module) => module.QuoteCreationHost),
+  { ssr: false, loading: () => <div role="status" aria-live="polite">Loading quote form...</div> }
+);
 
 interface WeeklyDayHeaderProps {
   date: string;
@@ -2016,6 +2021,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     useState<Map<string, ColdWeekLoadState>>(() => new Map());
   const coldWeekEpochsRef = useRef<Map<string, number>>(new Map());
   const [quoteCreationOpen, setQuoteCreationOpen] = useState(false);
+  const [quoteCreationHostOwner, setQuoteCreationHostOwner] = useState<string | null>(null);
+  const quoteCreationIdentity = useRef(userId);
   const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [quoteManagerOptions, setQuoteManagerOptions] = useState<QuoteManagerOption[]>([]);
   const [quoteManagerOptionsError, setQuoteManagerOptionsError] = useState<string | null>(null);
@@ -2184,11 +2191,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [canCreateQuotes, quotesSensitiveAccess.canAccess]);
   useEffect(() => {
     if (!pendingCreationKind || !quotesSensitiveAccess.canAccess) return;
-    if (pendingCreationKind === 'quote') setQuoteCreationOpen(true);
+    if (pendingCreationKind === 'quote') {
+      if (quoteCreationIdentity.current !== userId || !canCreateQuotes) return;
+      setQuoteCreationHostOwner(userId);
+      setQuoteCreationOpen(true);
+    }
     else if (pendingCreationKind === 'project') setProjectCreationOpen(true);
     else setQuickAddOpen(true);
     setPendingCreationKind(null);
-  }, [pendingCreationKind, quotesSensitiveAccess.canAccess]);
+  }, [pendingCreationKind, quotesSensitiveAccess.canAccess, canCreateQuotes, userId]);
+  useEffect(() => {
+    const identityChanged = quoteCreationIdentity.current !== userId;
+    quoteCreationIdentity.current = userId;
+    if (identityChanged || !canCreateQuotes || !quotesSensitiveAccess.canAccess) {
+      setQuoteCreationHostOwner(null);
+      setQuoteCreationOpen(false);
+    }
+    if (identityChanged || !canCreateQuotes) setPendingCreationKind((current) => current === 'quote' ? null : current);
+  }, [canCreateQuotes, quotesSensitiveAccess.canAccess, userId]);
   useEffect(() => {
     if (quotesSensitiveAccess.canAccess) return;
     setSelectedQuote((current) => current?.kind === 'project' ? null : current);
@@ -2202,7 +2222,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       setPendingCreationKind(kind);
       return;
     }
-    if (kind === 'quote') setQuoteCreationOpen(true);
+    if (kind === 'quote') {
+      setQuoteCreationHostOwner(userId);
+      setQuoteCreationOpen(true);
+    }
     else if (kind === 'project') setProjectCreationOpen(true);
     else setQuickAddOpen(true);
   }
@@ -7497,7 +7520,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             onClose={() => setProjectPlacement(null)}
             onSubmit={handleProjectPlacementSubmit}
           />
-          <QuoteCreationHost
+          {canCreateQuotes && quoteCreationHostOwner === userId ? <QuoteCreationHost
             open={quoteCreationOpen}
             onClose={() => setQuoteCreationOpen(false)}
             onCreated={(quote) => {
@@ -7526,7 +7549,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 ...candidate,
               });
             }}
-          />
+          /> : null}
         </>
       ) : null}
       {quotesSensitiveAccess.canAccess ? (

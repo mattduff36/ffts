@@ -2,6 +2,7 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 
 import type { ReactNode } from 'react';
+import type { Quote } from '@/app/(dashboard)/quotes/types';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
@@ -174,6 +175,38 @@ const {
   mockAssignDayTeam: vi.fn(),
   mockSaveTeamSettings: vi.fn(),
 }));
+
+const quoteHostState = vi.hoisted(() => ({ loader: vi.fn(), mounts: vi.fn(), unmounts: vi.fn() }));
+
+vi.mock('next/dynamic', async () => {
+  const React = await import('react');
+  return { default: (loader: () => Promise<React.ComponentType<Record<string, unknown>>>, options: { loading: React.ComponentType }) => {
+    return function DynamicQuoteHost(props: Record<string, unknown>) {
+      const [Host, setHost] = React.useState<React.ComponentType<Record<string, unknown>> | null>(null);
+      React.useEffect(() => {
+        let active = true;
+        quoteHostState.loader();
+        void loader().then((component) => { if (active) setHost(() => component); });
+        return () => { active = false; };
+      }, []);
+      return Host ? <Host {...props} /> : <options.loading />;
+    };
+  } };
+});
+
+vi.mock('@/app/(dashboard)/quotes/components/QuoteCreationHost', async () => {
+  const React = await import('react');
+  return { QuoteCreationHost: ({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (quote: Quote) => void }) => {
+    const [draft, setDraft] = React.useState('');
+    React.useEffect(() => { quoteHostState.mounts(); return () => { quoteHostState.unmounts(); }; }, []);
+    if (!open) return null;
+    return <section aria-label="Quote host fixture">
+      <input aria-label="Quote host draft" value={draft} onChange={event => setDraft(event.target.value)} />
+      <button onClick={onClose}>Close quote fixture</button>
+      <button onClick={() => { onCreated({ id: 'created-quote', quote_reference: 'Q-NEW-2', base_quote_reference: 'Q-NEW', subject_line: 'Created job', customer: { company_name: 'Created Customer' }, customer_site: { site_name: 'Created Site' }, estimated_duration_days: 2, estimated_duration_minutes: 90 } as Quote); onClose(); }}>Create quote fixture</button>
+    </section>;
+  } };
+});
 
 vi.mock('@dnd-kit/dom', () => ({
   Accessibility: {
@@ -456,20 +489,21 @@ function installReceiverSensitiveBrowserTimers() {
   };
 }
 
-function renderBoard(searchParams = '') {
+function renderBoard(searchParams = '', userId = 'manager-1') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  let currentUserId = userId;
   const renderTree = () => (
     <NuqsTestingAdapter searchParams={searchParams} hasMemory>
       <QueryClientProvider client={queryClient}>
-        <SchedulingManagerBoard userId="manager-1" />
+        <SchedulingManagerBoard userId={currentUserId} />
       </QueryClientProvider>
     </NuqsTestingAdapter>
   );
   const result = render(renderTree());
   return Object.assign(result, {
-    rerenderBoard: () => result.rerender(renderTree()),
+    rerenderBoard: (nextUserId = currentUserId) => { currentUserId = nextUserId; result.rerender(renderTree()); },
     queryClient,
   });
 }
@@ -663,6 +697,98 @@ describe('SchedulingManagerBoard', () => {
         }),
       };
     }));
+  });
+
+  it('does not load or mount the quote host before first permitted open', async () => {
+    renderBoard(); await screen.findByText('Weekly job board');
+    expect(quoteHostState.loader).not.toHaveBeenCalled();
+    expect(quoteHostState.mounts).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    expect(await screen.findByRole('region', { name: 'Quote host fixture' })).toBeInTheDocument();
+    expect(quoteHostState.loader).toHaveBeenCalledTimes(1);
+    expect(quoteHostState.mounts).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the loaded quote host and draft across close/reopen', async () => {
+    renderBoard(); await screen.findByText('Weekly job board');
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    fireEvent.change(await screen.findByLabelText('Quote host draft'), { target: { value: 'Retained draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close quote fixture' }));
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+    expect(quoteHostState.unmounts).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    expect(screen.getByLabelText('Quote host draft')).toHaveValue('Retained draft');
+    expect(quoteHostState.loader).toHaveBeenCalledTimes(1);
+    expect(quoteHostState.mounts).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not load the quote host on denied access or while PIN gated', async () => {
+    permissionState.quotes = false;
+    const view = renderBoard(); await screen.findByText('Weekly job board');
+    expect(screen.getByRole('button', { name: 'New Quote' })).toBeDisabled();
+    expect(quoteHostState.loader).not.toHaveBeenCalled();
+    permissionState.quotes = true; sensitiveAccessState.unlocked = false; sensitiveAccessState.canAccess = false;
+    view.rerenderBoard(); fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    expect(screen.getByTestId('quotes-sensitive-pin-gate')).toBeInTheDocument();
+    expect(quoteHostState.loader).not.toHaveBeenCalled();
+    sensitiveAccessState.unlocked = true; sensitiveAccessState.canAccess = true; view.rerenderBoard();
+    expect(await screen.findByLabelText('Quote host draft')).toBeInTheDocument();
+    expect(quoteHostState.mounts).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['identity', 'permission', 'sensitive'] as const)('clears quote host lifetime on %s change without automatic reopening', async (change) => {
+    const view = renderBoard(); await screen.findByText('Weekly job board');
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    fireEvent.change(await screen.findByLabelText('Quote host draft'), { target: { value: 'Old draft' } });
+    if (change === 'permission') permissionState.quotes = false;
+    if (change === 'sensitive') sensitiveAccessState.canAccess = false;
+    view.rerenderBoard(change === 'identity' ? 'manager-2' : 'manager-1');
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+    expect(quoteHostState.unmounts).toHaveBeenCalledTimes(1);
+    permissionState.quotes = true; sensitiveAccessState.canAccess = true; view.rerenderBoard();
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+    expect(quoteHostState.mounts).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    expect(await screen.findByLabelText('Quote host draft')).toHaveValue('');
+    expect(quoteHostState.mounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops pending PIN quote creation after permission loss and re-grant', async () => {
+    sensitiveAccessState.canAccess = false; sensitiveAccessState.unlocked = false;
+    const view = renderBoard(); await screen.findByText('Weekly job board');
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    permissionState.quotes = false; view.rerenderBoard();
+    permissionState.quotes = true; sensitiveAccessState.canAccess = true; sensitiveAccessState.unlocked = true;
+    view.rerenderBoard();
+    await waitFor(() => expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument());
+    expect(quoteHostState.loader).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+  });
+
+  it('drops a pending PIN-gated quote request when identity changes', async () => {
+    sensitiveAccessState.canAccess = false; sensitiveAccessState.unlocked = false;
+    const view = renderBoard(); await screen.findByText('Weekly job board');
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    sensitiveAccessState.canAccess = true; sensitiveAccessState.unlocked = true; view.rerenderBoard('manager-2');
+    await waitFor(() => expect(screen.queryByTestId('quotes-sensitive-pin-gate')).not.toBeInTheDocument());
+    expect(quoteHostState.loader).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+  });
+
+  it('preserves created quote candidate mapping, selection, draft stage and background reconciliation', async () => {
+    const { queryClient } = renderBoard(); await screen.findByText('Weekly job board');
+    fireEvent.click(screen.getByRole('button', { name: 'New Quote' }));
+    await screen.findByLabelText('Quote host draft');
+    const initialReads = mockFetchQuoteCandidates.mock.calls.length;
+    mockFetchQuoteCandidates.mockImplementation(() => new Promise(() => {}));
+    fireEvent.click(screen.getByRole('button', { name: 'Create quote fixture' }));
+    expect(queryClient.getQueryData(['scheduling-quote-candidates'])).toEqual(expect.arrayContaining([{
+      id: 'created-quote', quote_reference: 'Q-NEW-2', base_quote_reference: 'Q-NEW', title: 'Created job', customer_name: 'Created Customer', status: 'draft', start_date: null, end_date: null, estimated_duration_days: 2, estimated_duration_minutes: 90, site_name: 'Created Site',
+    }]));
+    expect(screen.getByRole('tab', { name: 'Draft (1)' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('schedule-quote-created-quote')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText('Quote host draft')).not.toBeInTheDocument();
+    await waitFor(() => expect(mockFetchQuoteCandidates.mock.calls.length).toBeGreaterThan(initialReads));
   });
 
   it('loads the week specified by a valid URL date', async () => {

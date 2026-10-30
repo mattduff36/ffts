@@ -105,7 +105,7 @@ function PDFViewerContent() {
   return (
     <div className="relative w-full" style={{ overscrollBehavior: 'contain' }}>
       <div className={`px-2 sm:px-4 ${showSign ? 'pb-32' : 'pb-8'}`}>
-        <PDFCanvasRenderer url={pdfUrl} />
+        <PDFCanvasRenderer url={pdfUrl} renderMode={showSign ? 'all' : 'viewport'} />
       </div>
 
       {showSign && (

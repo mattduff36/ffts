@@ -12,6 +12,7 @@ import {
 
 const PROFILE_A = '11111111-1111-4111-8111-111111111111';
 const PROFILE_B = '22222222-2222-4222-8222-222222222222';
+const JOE_CANE_PROFILE = '9eaacb08-743b-462e-8853-f0441e5aa014';
 
 function memoryStorage(): SiteUsageStorage & { values: Map<string, string> } {
   const values = new Map<string, string>();
@@ -90,6 +91,60 @@ describe('site usage sanitizing', () => {
 });
 
 describe('site usage recorder', () => {
+  it('starts Joe Cane recording by default once and captures subsequent navigation', async () => {
+    const harness = createHarness();
+    harness.controller.setProfile(JOE_CANE_PROFILE);
+    expect(harness.controller.getStatus().enabled).toBe(true);
+    await harness.controller.flush();
+    harness.controller.setProfile(JOE_CANE_PROFILE);
+    harness.controller.notePath('/quotes?token=SECRET');
+    await harness.controller.flush();
+    const events = vi.mocked(harness.transport).mock.calls.flatMap(([body]) => JSON.parse(body).events);
+    expect(events.filter((event) => event.event_type === 'recording_started')).toHaveLength(1);
+    expect(events).toContainEqual(expect.objectContaining({ event_type: 'navigation', route: '/quotes' }));
+    expect(JSON.stringify(events)).not.toContain('SECRET');
+  });
+
+  it('does not carry Joe default recording into another account or sign-out', async () => {
+    const harness = createHarness();
+    harness.controller.setProfile(JOE_CANE_PROFILE);
+    await harness.controller.flush();
+    const calls = vi.mocked(harness.transport).mock.calls.length;
+    harness.controller.setProfile(PROFILE_B);
+    harness.controller.notePath('/training');
+    await harness.controller.flush();
+    expect(harness.controller.getStatus()).toMatchObject({ enabled: false, recordingId: null });
+    expect(harness.transport).toHaveBeenCalledTimes(calls);
+    harness.controller.setProfile(null);
+    expect(harness.controller.getStatus()).toMatchObject({ enabled: false, recordingId: null });
+  });
+
+  it('respects Joe manual off choice when restoring the same tab session', async () => {
+    const storage = memoryStorage();
+    const first = createHarness({ storage });
+    first.controller.setProfile(JOE_CANE_PROFILE);
+    await first.controller.flush();
+    await first.controller.setEnabled(false);
+    const restored = createHarness({ storage });
+    restored.controller.setProfile(JOE_CANE_PROFILE);
+    await restored.controller.flush();
+    expect(restored.controller.getStatus().enabled).toBe(false);
+    expect(restored.transport).not.toHaveBeenCalled();
+  });
+
+  it('restores Joe existing recording without starting another recording', async () => {
+    const storage = memoryStorage();
+    const first = createHarness({ storage });
+    first.controller.setProfile(JOE_CANE_PROFILE);
+    await first.controller.flush();
+    const restored = createHarness({ storage });
+    restored.controller.setProfile(JOE_CANE_PROFILE);
+    expect(restored.controller.getStatus()).toMatchObject({
+      enabled: true, recordingId: first.controller.getStatus().recordingId,
+    });
+    expect(restored.transport).not.toHaveBeenCalled();
+  });
+
   it('uploads active dwell during recording and stops producing events when off', async () => {
     const harness = createHarness();
     harness.controller.setProfile(PROFILE_A);

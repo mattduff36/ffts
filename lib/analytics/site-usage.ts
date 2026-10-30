@@ -22,6 +22,8 @@ const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const MAX_DURATION_MS = 86_400_000;
 const STORAGE_PREFIX = 'ffts_site_usage_v1:';
+// Temporary diagnostic default for Joe Cane only; a saved manual off choice wins.
+const DEFAULT_RECORDING_PROFILE_ID = '9eaacb08-743b-462e-8853-f0441e5aa014';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -401,7 +403,11 @@ class SiteUsageSession implements SiteUsageController {
     this.upload = 'idle';
     this.retryCount = 0;
     this.retryMs = 1000;
-    this.hydrate();
+    const restored = this.hydrate();
+    if (!restored && this.profileId === DEFAULT_RECORDING_PROFILE_ID) {
+      void this.setEnabled(true);
+      return;
+    }
     if (this.enabled) this.openDwell(this.now());
     this.emit();
     if (this.profileId && this.queue.length > 0) void this.flush();
@@ -718,13 +724,13 @@ class SiteUsageSession implements SiteUsageController {
     }
   }
 
-  private hydrate(): void {
-    if (!this.storage || !this.profileId) return;
+  private hydrate(): boolean {
+    if (!this.storage || !this.profileId) return false;
     try {
       const raw = this.storage.getItem(this.storageKey());
-      if (!raw || raw.length > 100_000) return;
+      if (!raw || raw.length > 100_000) return false;
       const stored = JSON.parse(raw) as StoredState;
-      if (!stored || !Array.isArray(stored.queue)) return;
+      if (!stored || !Array.isArray(stored.queue)) return false;
       this.recordingId = stored.recordingId && UUID_RE.test(stored.recordingId) ? stored.recordingId : null;
       this.enabled = stored.enabled === true && this.recordingId != null;
       this.route = typeof stored.route === 'string' ? sanitizeSiteUsageRoute(stored.route) : null;
@@ -733,9 +739,11 @@ class SiteUsageSession implements SiteUsageController {
         : 0;
       this.queue = stored.queue.filter(isQueuedEvent).slice(0, MAX_QUEUE_HARD);
       this.upload = this.queue.length > 0 ? 'pending' : 'idle';
+      return true;
     } catch {
       this.enabled = false;
       this.queue = [];
+      return false;
     }
   }
 

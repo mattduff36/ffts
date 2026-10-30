@@ -14,15 +14,15 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const socialImage = new URL("/branding/social-card.png", templateConfig.branding.publicUrl).toString();
+const socialImage = new URL("/branding/social-card.png?v=ffts-centered-1", templateConfig.branding.publicUrl).toString();
 const appTitle = templateConfig.branding.appName;
 const appDescription = `${templateConfig.branding.companyName} digital field operations system`;
-const appleTouchIcon = "/apple-touch-icon.png?v=ffts-lettered-1";
-const appleTouchIcon180 = "/apple-touch-icon-180x180.png?v=ffts-lettered-1";
-const appleTouchIcon152 = "/apple-touch-icon-152x152.png?v=ffts-lettered-1";
-const appleTouchIcon167 = "/apple-touch-icon-167x167.png?v=ffts-lettered-1";
-const appleTouchIcon120 = "/apple-touch-icon-120x120.png?v=ffts-lettered-1";
-const appleTouchIconPrecomposed = "/apple-touch-icon-precomposed.png?v=ffts-lettered-1";
+const appleTouchIcon = "/apple-touch-icon.png?v=ffts-centered-1";
+const appleTouchIcon180 = "/apple-touch-icon-180x180.png?v=ffts-centered-1";
+const appleTouchIcon152 = "/apple-touch-icon-152x152.png?v=ffts-centered-1";
+const appleTouchIcon167 = "/apple-touch-icon-167x167.png?v=ffts-centered-1";
+const appleTouchIcon120 = "/apple-touch-icon-120x120.png?v=ffts-centered-1";
+const appleTouchIconPrecomposed = "/apple-touch-icon-precomposed.png?v=ffts-centered-1";
 
 export const viewport: Viewport = {
   width: "device-width",

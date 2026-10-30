@@ -1,5 +1,39 @@
 [
   {
+    "version": "1026.8.5",
+    "updateKind": "minor",
+    "title": "Navigation improvements",
+    "description": "Updated navigation.",
+    "summary": "Updated navigation.",
+    "details": [
+      "Updated navigation, with changes to interface components."
+    ],
+    "areas": [
+      "Navigation"
+    ],
+    "areaKeys": [
+      "navigation"
+    ],
+    "pushedAt": "2026-10-30T00:20:14.751Z"
+  },
+  {
+    "version": "1026.8.4",
+    "updateKind": "minor",
+    "title": "Navigation improvements",
+    "description": "Updated navigation.",
+    "summary": "Updated navigation.",
+    "details": [
+      "Updated navigation across 1 changed file."
+    ],
+    "areas": [
+      "Navigation"
+    ],
+    "areaKeys": [
+      "navigation"
+    ],
+    "pushedAt": "2026-10-29T23:54:20.970Z"
+  },
+  {
     "version": "1026.8.3",
     "updateKind": "minor",
     "title": "Navigation improvements",

@@ -591,9 +591,6 @@ export function Navbar() {
                 className="flex items-center gap-2 group"
               >
                 <BrandLogo compact />
-                <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                  FFTSApp
-                </div>
               </Link>
               <div className="ml-auto flex items-center gap-2">
                 <SiteUsageMonitor />
@@ -604,27 +601,21 @@ export function Navbar() {
             </div>
           ) : (
           <div className="flex items-center h-16">
-            {/* Mobile-only text logo */}
+            {/* Mobile brand logo */}
             <Link 
               href="/dashboard" 
               className="md:hidden flex items-center gap-2 mr-4 group"
               onClick={() => setMobileMenuOpen(false)}
             >
               <BrandLogo compact />
-              <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                FFTSApp
-              </div>
             </Link>
 
-            {/* Desktop text logo */}
+            {/* Desktop brand logo */}
             <Link
               href="/dashboard"
               className="hidden md:flex flex-shrink-0 items-center gap-2 mr-4 group"
             >
               <BrandLogo compact />
-              <div className="text-xl font-bold text-white group-hover:text-brand-yellow transition-colors">
-                FFTSApp
-              </div>
             </Link>
 
             {/* Desktop Navigation - Centered, auto-compacts to icon-only when space is tight */}

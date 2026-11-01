@@ -652,7 +652,7 @@ function generateReport(patterns: ErrorPattern[], totalFetched: number, totalFil
   }
 
   lines.push(
-    'Mechanical clusters and TEE lanes below are advisory input for the premium analysis step, which writes `docs_private/error-analysis-decision.md`.'
+    'Mechanical clusters and TEE lanes below are advisory input for analysis by the premium parent or assigned worker, which writes `docs_private/error-analysis-decision.md`.'
   );
   lines.push('');
 

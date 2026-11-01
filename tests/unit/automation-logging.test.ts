@@ -346,7 +346,7 @@ describe('automation logging helpers', () => {
     expect(review).toContain('standard: 1 run(s)');
     expect(review).toContain('dry-run: 1 run(s)');
     expect(review).toContain('Builds average 3.0m');
-    expect(review).toContain('## Copy/Paste Cursor Prompt');
+    expect(review).toContain('## Premium Lead Handoff');
   });
 
   it('renders fixerrors advisor sections with fetch and pattern guidance', () => {
@@ -403,7 +403,7 @@ describe('automation logging helpers', () => {
     expect(review).toContain('The 200-log fetch limit was hit');
     expect(review).toContain('filtered more than 75%');
     expect(review).toContain('untriaged');
-    expect(review).toContain('## Copy/Paste Cursor Prompt');
+    expect(review).toContain('## Premium Lead Handoff');
   });
 
   it('preserves human-edited suggestion statuses when memory is updated', () => {
@@ -534,6 +534,15 @@ describe('automation logging helpers', () => {
 
       expect(result.planPath).toBe(path.join(fixture.root, 'docs_private', 'automation', 'plans', 'finalise-2026-06-upgrade-plan.md'));
       expect(existsSync(result.planPath!)).toBe(true);
+      const plan = readFileSync(result.planPath!, 'utf8');
+      expect(plan).toContain('Implementation: premium parent or assigned premium worker');
+      expect(plan).not.toContain('Cursor Grok');
+      expect(plan).toContain('routingDecision: explicit_premium');
+      expect(plan).toContain('workers never delegate');
+      const resolver = readFileSync(path.join(process.cwd(), 'scripts/automation/resolve-monthly-follow-up.ts'), 'utf8');
+      expect(resolver).not.toContain('spawnSync');
+      expect(resolver).not.toContain('writeCursorPlanCopy');
+      expect(resolver).toContain('Repository-local plan file:');
       expect(readFileSync(result.planPath!, 'utf8')).toContain('## Implementation Steps');
       expect(readFileSync(result.planPath!, 'utf8')).toContain('Keep this plan file todo metadata aligned');
       expect(persistedSuggestions[0].status).toBe('approved');
@@ -671,7 +680,7 @@ describe('automation logging helpers', () => {
       expect(existsSync(path.join(fixture.knowledgeDirectory, 'finalise-memory.json'))).toBe(false);
       expect(renderedOutput).toContain('Non-interactive monthly follow-up mode detected.');
       expect(renderedOutput).toContain('Suggestions remain pending.');
-      expect(renderedOutput).toContain('Ready-to-use Cursor prompt:');
+      expect(renderedOutput).toContain('Ready-to-use premium lead prompt:');
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }

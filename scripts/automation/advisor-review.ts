@@ -401,10 +401,11 @@ function buildPrompt(params: {
   };
 }
 
-function renderCursorPrompt(scriptName: string): string[] {
+function renderLeadPrompt(scriptName: string): string[] {
   return [
     '```text',
     `Review the advisor report for ${scriptName} and the current automation script implementation.`,
+    'Use the premium parent or an assigned premium worker for approved implementation; workers never delegate.',
     'Do not implement every suggestion automatically.',
     'First, list the suggested changes as approval checkboxes and ask me which ones to apply.',
     'After I approve specific items, implement only those approved changes, keep deterministic checks intact, store logs under docs_private/automation, run focused tests, and do not run a production build, commit, or push.',
@@ -573,9 +574,9 @@ function buildFinalisePackage(options: AdvisorPackageOptions): AutomationAdvisor
     '',
     ...renderList(metrics.slowestSteps.map((step) => `${step.name}: ${formatDuration(step.durationMs)} (${step.status})`), 'No step timing data found.'),
     '',
-    '## Copy/Paste Cursor Prompt',
+    '## Premium Lead Handoff',
     '',
-    ...renderCursorPrompt('finalise'),
+    ...renderLeadPrompt('finalise'),
     '',
   ].join('\n');
 
@@ -620,7 +621,7 @@ function buildFixErrorsSuggestions(options: AdvisorPackageOptions, metrics: FixE
       monthKey: options.monthKey,
       id: 'improve-source-extraction',
       title: 'Improve source extraction when stack traces lack source files',
-      reason: 'Some patterns had no source files, making Cursor fixes harder.',
+      reason: 'Some patterns had no source files, making scoped fixes harder.',
       evidence: [`Patterns without source files: ${metrics.noSourcePatternCount}`],
     }));
   }
@@ -731,9 +732,9 @@ function buildFixErrorsPackage(options: AdvisorPackageOptions): AutomationAdviso
     '',
     ...renderList(metrics.repeatedSourceFiles.map((entry) => `${entry.file}: ${entry.count} occurrence(s)`), 'No repeated source files captured.'),
     '',
-    '## Copy/Paste Cursor Prompt',
+    '## Premium Lead Handoff',
     '',
-    ...renderCursorPrompt('fixerrors'),
+    ...renderLeadPrompt('fixerrors'),
     '',
   ].join('\n');
 
@@ -801,9 +802,9 @@ export function createAutomationAdvisorPackage(options: AdvisorPackageOptions): 
       '',
       'No script-specific advisor is configured yet. The deterministic review still applies.',
       '',
-      '## Copy/Paste Cursor Prompt',
+      '## Premium Lead Handoff',
       '',
-      ...renderCursorPrompt(options.scriptName),
+      ...renderLeadPrompt(options.scriptName),
       '',
     ].join('\n'),
     promptMarkdown: renderReviewPromptMarkdown(options.scriptName, prompt),

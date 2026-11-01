@@ -145,7 +145,7 @@ async function main(): Promise<void> {
       .join('/');
     console.log(`Repository-local plan file: ${relativePlan}`);
     console.log(
-      'Build this plan from the repository-local path. External Cursor plan copies are not written.'
+      'Give this approved repository-local plan to the premium lead. No editor, worker or schedule was launched.'
     );
   }
 }

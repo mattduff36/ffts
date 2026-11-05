@@ -104,14 +104,14 @@ export function ScheduleVisitDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg border-border">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col overflow-hidden border-border">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{visit ? 'Edit visit' : 'Add visit'}</DialogTitle>
             <DialogDescription>
               {job ? `${job.job_reference} — visit ${visit?.sequence_number || 'time'}` : 'Set the visit time.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className="grid min-h-0 gap-4 overflow-y-auto py-2">
             <div className="grid gap-4 sm:grid-cols-[1fr_150px]">
               <div className="space-y-2">
                 <Label htmlFor="schedule-visit-title">Visit label (optional)</Label>
@@ -164,7 +164,7 @@ export function ScheduleVisitDialog({
               />
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:justify-between">
+          <DialogFooter className="shrink-0 gap-2 border-t border-border pt-3 sm:justify-between">
             {visit ? (
               <Button
                 type="button"

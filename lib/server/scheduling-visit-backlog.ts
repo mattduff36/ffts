@@ -83,7 +83,7 @@ export async function loadScheduleVisitBacklog(
     const job = pickRelation(
       visit?.job as Record<string, unknown> | Array<Record<string, unknown>> | null
     );
-    if (!visit || !job) return [];
+    if (!visit || !job || job.status === 'completed' || job.status === 'cancelled') return [];
     const customer = pickRelation(
       job.customer as Record<string, unknown> | Array<Record<string, unknown>> | null
     );

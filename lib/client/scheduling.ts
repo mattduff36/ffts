@@ -78,6 +78,13 @@ export async function fetchSchedulingContext(): Promise<SchedulingContext> {
   return readResponse(await fetch('/api/scheduling/context', { cache: 'no-store' }));
 }
 
+export async function fetchScheduleResourceJobs(): Promise<ScheduleJob[]> {
+  const result = await readResponse<{ jobs: ScheduleJob[] }>(
+    await fetch('/api/scheduling/jobs', { cache: 'no-store' })
+  );
+  return result.jobs.map((job) => ({ ...job, tags: job.tags || [] }));
+}
+
 export async function fetchSchedulingBoard(weekStart: string): Promise<SchedulingBoardPayload> {
   return readResponse(
     await fetch(`/api/scheduling/board?week_start=${encodeURIComponent(weekStart)}`, { cache: 'no-store' })
@@ -444,13 +451,14 @@ export async function addScheduleDayTeamMember(
 }
 
 export async function removeScheduleDayTeamMember(
-  input: ScheduleDayTeamEmployeeRequest
+  input: ScheduleDayTeamEmployeeRequest & { assignment_ids: string[] }
 ): Promise<{ success: boolean }> {
   assertNoProvisionalIds(input);
   const params = new URLSearchParams({
     work_date: input.work_date,
     slot_index: String(input.slot_index),
     profile_id: input.profile_id,
+    assignment_ids: JSON.stringify(input.assignment_ids),
   });
   return readResponse(
     await fetch(`/api/scheduling/day-teams?${params.toString()}`, {

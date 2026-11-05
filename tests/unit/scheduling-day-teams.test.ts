@@ -6,6 +6,7 @@ import {
   profileIdsHiddenFromScheduleResources,
   scheduleEmployeeInlineAssignment,
   removeScheduleDayTeamMember,
+  removeScheduleDayTeamMemberAndAssignments,
   SCHEDULE_DAY_TEAM_SLOT_CAPACITY,
   SCHEDULE_DAY_TEAM_SLOT_INDEXES,
   resolveScheduleDayTeamName,
@@ -16,6 +17,7 @@ import {
 import { formatScheduleTeamName } from '@/lib/utils/scheduling';
 import type {
   ScheduleDayTeamMember,
+  ScheduleAssignment,
   ScheduleDayTeamSlotIndex,
   ScheduleTeamSettings,
   SchedulingBoardPayload,
@@ -69,6 +71,21 @@ function boardWithTeams(
 }
 
 describe('schedule day team helpers', () => {
+  it('removes only the member and that employee’s assignments on the confirmed day', () => {
+    const original = boardWithTeams([member('e1', 1), member('e2', 1)]);
+    original.assignments = [
+      { id: 'remove', resource_type: 'employee', profile_id: 'e1', work_date: '2026-09-01' },
+      { id: 'other-day', resource_type: 'employee', profile_id: 'e1', work_date: '2026-09-02' },
+      { id: 'other-person', resource_type: 'employee', profile_id: 'e2', work_date: '2026-09-01' },
+      { id: 'plant', resource_type: 'plant', plant_id: 'p1', work_date: '2026-09-01' },
+    ] as ScheduleAssignment[];
+    const removed = removeScheduleDayTeamMemberAndAssignments(original, '2026-09-01', 1, 'e1');
+    expect(removed.assignments.map((item) => item.id)).toEqual(['other-day', 'other-person', 'plant']);
+    expect(slotsForScheduleDate(removed.day_teams, '2026-09-01')[0].members.map((item) => item.profile_id)).toEqual(['e2']);
+    expect(original.assignments).toHaveLength(4);
+    expect(original.day_teams[0].slots[0].members).toHaveLength(2);
+  });
+
   it('exports sixteen bounded slot indexes and eight visible by default', () => {
     expect(SCHEDULE_DAY_TEAM_SLOT_INDEXES).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,

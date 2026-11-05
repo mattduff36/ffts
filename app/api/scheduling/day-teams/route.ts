@@ -120,25 +120,61 @@ export async function DELETE(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const { error } = parsed.data.plant_id
+    const confirmedAssignments = parsed.data.profile_id
+      ? z.array(z.uuid()).max(1000).safeParse(
+          (() => {
+            try { return JSON.parse(url.searchParams.get('assignment_ids') || 'null'); }
+            catch { return null; }
+          })()
+        )
+      : null;
+    if (parsed.data.profile_id && !confirmedAssignments?.success) {
+      return NextResponse.json(
+        { error: 'Review and confirm this employee’s day assignments before removing them.' },
+        { status: 400 }
+      );
+    }
+    const { data, error } = parsed.data.plant_id
       ? await admin.rpc('remove_schedule_day_team_plant_v1', {
           p_work_date: parsed.data.work_date,
           p_slot_index: parsed.data.slot_index,
           p_plant_id: parsed.data.plant_id,
           p_actor_user_id: access.userId,
         })
-      : await admin.rpc('remove_schedule_day_team_member_v1', {
+      : await admin.rpc('remove_schedule_day_team_member_with_assignments_v1', {
           p_work_date: parsed.data.work_date,
           p_slot_index: parsed.data.slot_index,
           p_profile_id: parsed.data.profile_id,
           p_actor_user_id: access.userId,
+          p_assignment_ids: confirmedAssignments?.success ? confirmedAssignments.data : [],
         });
     if (error) {
+      if (error.code === 'PGRST202' && parsed.data.profile_id) {
+        console.error('Atomic day-team removal RPC is not installed:', error.code);
+        return NextResponse.json(
+          { error: 'Safe team removal is not available yet. The scheduling database update must be installed.' },
+          { status: 409 }
+        );
+      }
       const mapped = mapDayTeamRpcError(error);
       if (mapped) {
         return NextResponse.json({ error: mapped.error }, { status: mapped.status });
       }
       throw error;
+    }
+    if (parsed.data.profile_id) {
+      const confirmation = z.array(z.object({
+        success: z.literal(true),
+        removed_assignment_ids: z.array(z.uuid()),
+      })).length(1).safeParse(data);
+      const expected = confirmedAssignments?.success
+        ? [...new Set(confirmedAssignments.data.map((id) => id.toLowerCase()))].sort()
+        : [];
+      if (!confirmation.success
+        || JSON.stringify(confirmation.data[0].removed_assignment_ids.map((id) => id.toLowerCase()).sort())
+          !== JSON.stringify(expected)) {
+        throw new Error('Atomic day-team removal returned an invalid assignment confirmation.');
+      }
     }
 
     return NextResponse.json({ success: true });

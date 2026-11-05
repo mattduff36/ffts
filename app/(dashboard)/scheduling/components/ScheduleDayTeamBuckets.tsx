@@ -168,8 +168,9 @@ function DayTeamSlotCard({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
+                        className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
                         aria-label={`Remove ${fullName} from ${teamName}`}
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -234,6 +235,7 @@ export function ScheduleDayTeamBuckets({
   occupancyBySlot,
   onRemoveMember,
   onRemovePlant,
+  vertical = false,
 }: {
   workDate: string;
   slots: ScheduleDayTeamSlot[];
@@ -242,6 +244,7 @@ export function ScheduleDayTeamBuckets({
   occupancyBySlot?: Partial<Record<ScheduleDayTeamSlotIndex, ScheduleOccupancySegment[]>>;
   onRemoveMember: (slotIndex: ScheduleDayTeamSlotIndex, profileId: string) => void;
   onRemovePlant: (slotIndex: ScheduleDayTeamSlotIndex, plantId: string) => void;
+  vertical?: boolean;
 }) {
   const settings = teamSettings || defaultScheduleTeamSettings();
   const resolvedSlots = buildScheduleDayTeams(
@@ -254,7 +257,7 @@ export function ScheduleDayTeamBuckets({
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="schedule-team-grid w-full gap-2"
+        className={vertical ? 'grid w-full grid-cols-1 gap-2' : 'schedule-team-grid w-full gap-2'}
         style={{ "--team-columns": Math.ceil(resolvedSlots.length / 2), "--team-wide-columns": resolvedSlots.length } as CSSProperties}
         data-testid={`schedule-day-team-buckets-${dndScope}`}
         aria-label="Day team buckets"

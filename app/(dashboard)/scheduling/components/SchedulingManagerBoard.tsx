@@ -36,6 +36,7 @@ import {
   CalendarDays,
   CalendarOff,
   CalendarPlus,
+  Columns3,
   Check,
   Clock3,
   ExternalLink,
@@ -43,6 +44,7 @@ import {
   GripVertical,
   Hash,
   ListRestart,
+  LayoutPanelLeft,
   Minimize2,
   MoveHorizontal,
   Pencil,
@@ -56,6 +58,12 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  readSchedulingLayoutPreference,
+  writeSchedulingLayoutPreference,
+  type SchedulingLayout,
+} from '@/lib/config/scheduling-layout-preference';
+import { isUnfinishedScheduleJob, unfinishedScheduleJobs } from '@/lib/utils/scheduling-resource-jobs';
 import { acknowledgeSuccess } from '@/lib/client/action-feedback';
 import {
   AlertDialog,
@@ -98,6 +106,7 @@ import {
   fetchScheduleProjectCandidates,
   fetchScheduleVisitBacklog,
   fetchSchedulingBoard,
+  fetchScheduleResourceJobs,
   moveScheduleAssignment,
   previewScheduleVisitBacklog,
   quickAddScheduleProject,
@@ -129,7 +138,6 @@ import {
   patchBoardWithPlantBlock,
   patchBoardWithAssignment,
   patchBoardWithDayTeamMember,
-  patchBoardRemoveDayTeamMember,
   patchBoardWithTeamSettings,
   patchBoardWithQuickAdd,
   patchBoardWithVisit,
@@ -144,6 +152,7 @@ import {
 import {
   createOptimisticEntityId,
   isOptimisticEntityId,
+  operationsOverlap,
   projectSchedulingState,
   reconcileOptimisticOperations,
   removeOptimisticOperation,
@@ -196,6 +205,7 @@ import {
 import {
   isScheduleDayTeamSlotIndex,
   removeScheduleDayTeamPlant as removePlantFromDayTeamBoard,
+  removeScheduleDayTeamMemberAndAssignments,
   resolveScheduleDayTeamName,
   scheduleEmployeeInlineAssignment,
   standingLeaderProfileIds,
@@ -464,7 +474,7 @@ function ResourcesReturnDropCard({ children }: { children: ReactNode }) {
     <Card
       ref={ref}
       className={cn(
-        'flex h-full min-h-0 flex-col overflow-hidden border-border transition',
+        'schedule-resources-panel flex h-full min-h-0 flex-col overflow-hidden border-border transition',
         isDropTarget && 'border-scheduling bg-scheduling-soft ring-2 ring-scheduling'
       )}
       data-testid="schedule-resources-panel"
@@ -1904,6 +1914,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const [primary, setPrimary] = useState<SchedulingBoardPrimary>(() =>
     readSchedulingPrimaryPreference(userId)
   );
+  const [layout, setLayout] = useState<SchedulingLayout>(() =>
+    readSchedulingLayoutPreference(userId)
+  );
+  const [pendingTeamRemoval, setPendingTeamRemoval] = useState<{
+    workDate: string;
+    slotIndex: ScheduleDayTeamSlotIndex;
+    profileId: string;
+    name: string;
+    assignmentIds: string[];
+    jobReferences: string[];
+  } | null>(null);
   const [sidebarTab, setSidebarTab] = useState<'jobs' | 'employee' | 'plant'>('jobs');
   const [quoteStage, setQuoteStage] =
     useState<ScheduleQuoteStage | 'projects' | 'all'>('all');
@@ -2046,7 +2067,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   const backgroundRefreshBlocked = inFlightMutationKeys.size > 0
     || Boolean(draggedResource || draggedAssignment || draggedQuote || draggedVisit || draggedDayTeam)
     || quickAddOpen || jobDialogOpen || unavailabilityOpen || teamSettingsOpen
-    || quoteCreationOpen || projectCreationOpen;
+    || quoteCreationOpen || projectCreationOpen || Boolean(pendingTeamRemoval);
   useEffect(() => {
     if (backgroundRefreshBlocked) return pauseSoftRefresh();
   }, [backgroundRefreshBlocked]);
@@ -2068,6 +2089,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     queryKey: ['scheduling-visit-backlog'],
     queryFn: fetchScheduleVisitBacklog,
   });
+  const resourceJobsQuery = useQuery({
+    queryKey: ['scheduling-resource-jobs'],
+    queryFn: fetchScheduleResourceJobs,
+  });
+  useEffect(() => {
+    if (boardQuery.dataUpdatedAt > 0) {
+      void queryClient.invalidateQueries({ queryKey: ['scheduling-resource-jobs'], exact: true });
+    }
+  }, [boardQuery.dataUpdatedAt, queryClient]);
   const projectedState = useMemo(
     () => projectSchedulingState(
       {
@@ -2303,6 +2333,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     id?: string;
     kind: string;
     lockKeys: string[];
+    claims?: SchedulingOptimisticOperation['claims'];
     queryKeys: string[];
     proofs?: SchedulingOptimisticOperation['proofs'];
     apply: SchedulingOptimisticOperation['apply'];
@@ -2313,7 +2344,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       kind: input.kind,
       status: 'pending',
       lockKeys: input.lockKeys,
-      claims: claimsFromLockKeys(input.lockKeys),
+      claims: input.claims ?? claimsFromLockKeys(input.lockKeys),
       queryKeys: input.queryKeys,
       reconciledKeys: [],
       proofs: input.proofs || {},
@@ -2784,6 +2815,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
 
   const board = projectedState.board;
+  const resourceJobsById = useMemo(() => new Map(
+    [...(resourceJobsQuery.data || []), ...(board?.jobs || [])].map((job) => [job.id, job])
+  ), [resourceJobsQuery.data, board?.jobs]);
+  const closedJobQuoteIds = useMemo(() => new Set(
+    [...resourceJobsById.values()].filter((job) => !isUnfinishedScheduleJob(job))
+      .map((job) => job.quote_id).filter((id): id is string => Boolean(id))
+  ), [resourceJobsById]);
+  const unfinishedResourceJobs = unfinishedScheduleJobs([...resourceJobsById.values()]);
+  const resourceJobs = unfinishedResourceJobs.filter((job) => {
+    if (quoteStage !== 'all' && quoteStage !== 'projects') return false;
+    if (quoteStage === 'projects' && !job.quote_project_number_id) return false;
+    const search = quoteSearch.trim().toLowerCase();
+    return !search || `${job.job_reference} ${job.title} ${job.customer_name || ''}`.toLowerCase().includes(search);
+  });
   const coldWeekState = coldWeekStates.get(weekStart);
   const isTentativeWeek =
     coldWeekState?.status === 'loading' || coldWeekState?.status === 'failed';
@@ -2884,9 +2929,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }, [board]);
   const unscheduledQuotes = useMemo<SchedulingQueueItem[]>(
     () => (projectedState.quoteCandidates || []).filter(
-      (quote) => quote.optimistic || getScheduleQuoteStage(quote.status) !== null
+      (quote) => !closedJobQuoteIds.has(quote.id)
+        && (quote.optimistic || getScheduleQuoteStage(quote.status) !== null)
     ).map((quote) => ({ ...quote, kind: 'quote' as const })),
-    [projectedState.quoteCandidates]
+    [projectedState.quoteCandidates, closedJobQuoteIds]
   );
   const unscheduledProjects = useMemo<SchedulingQueueItem[]>(
     () => (quotesSensitiveAccess.canAccess ? projectedState.projectCandidates || [] : []).map((project) => ({
@@ -2906,7 +2952,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     [projectedState.projectCandidates, quotesSensitiveAccess.canAccess]
   );
   const returnedVisits = useMemo<SchedulingQueueItem[]>(
-    () => (projectedState.visitBacklog || []).map((item) => ({
+    () => (projectedState.visitBacklog || [])
+      .filter((item) => {
+        const job = resourceJobsById.get(item.job_id) || item.job;
+        return !job || isUnfinishedScheduleJob(job);
+      })
+      .map((item) => ({
       kind: 'returned_visit' as const,
       id: item.visit_id,
       quote_reference: item.job_reference,
@@ -2921,7 +2972,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       estimated_duration_minutes: item.duration_minutes,
       returned_visit: item,
     })),
-    [projectedState.visitBacklog]
+    [projectedState.visitBacklog, resourceJobsById]
   );
   const quoteStageCounts = useMemo(() => {
     const counts: Record<ScheduleQuoteStage, number> = {
@@ -4636,7 +4687,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
   }
 
-  async function removeEmployeeFromDayTeam(
+  function requestEmployeeRemoval(
     slotIndex: ScheduleDayTeamSlotIndex,
     profileId: string
   ) {
@@ -4644,13 +4695,58 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       toast.info('Change this team leader in Settings instead.');
       return;
     }
-    const workDate = selectedDate;
+    const assignments = (board?.assignments || []).filter((assignment) =>
+      assignment.resource_type === 'employee'
+      && assignment.profile_id === profileId
+      && assignment.work_date === selectedDate
+    );
+    setPendingTeamRemoval({
+      workDate: selectedDate,
+      slotIndex,
+      profileId,
+      name: board?.resources.employees.find((employee) => employee.id === profileId)?.full_name || 'this employee',
+      assignmentIds: assignments.map((assignment) => assignment.id).sort(),
+      jobReferences: [...new Set(assignments.map((assignment) =>
+        board?.jobs.find((job) => job.id === assignment.job_id)?.job_reference || assignment.job_id
+      ))],
+    });
+  }
+
+  async function removeEmployeeFromDayTeam(
+    slotIndex: ScheduleDayTeamSlotIndex,
+    profileId: string,
+    workDate: string,
+    assignmentIds: string[]
+  ) {
+    if (standingLeaderProfileIds(teamSettingsFromBoard(board)).has(profileId)) {
+      toast.info('Change this team leader in Settings instead.');
+      return;
+    }
+    const removalLockKeys = [
+      `day-team:${workDate}`,
+      `day-team-profile:${workDate}:${profileId}`,
+      `resource-day:employee:${profileId}:${workDate}`,
+      ...assignmentIds.map((id) => `assignment:${id}`),
+    ];
+    const removalClaims = [
+      ...claimsFromLockKeys(removalLockKeys),
+      ...(board?.assignments || []).filter((assignment) => assignmentIds.includes(assignment.id))
+        .flatMap((assignment) => [
+          { scope: 'job-tree', id: assignment.job_id, mode: 'shared' as const },
+          ...(assignment.visit_id ? [{ scope: 'visit-tree', id: assignment.visit_id, mode: 'shared' as const }] : []),
+        ]),
+    ];
+    if (operationsOverlap({ lockKeys: removalLockKeys, claims: removalClaims }, optimisticOperationsRef.current)) {
+      toast.error('This employee or team has a pending scheduling change. Wait for it to finish, then review removal again.');
+      return;
+    }
     const mutationKey = `day-team:${workDate}`;
     const mutationEpoch = beginMutation(mutationKey);
     if (mutationEpoch == null) return;
     const operation = registerOptimisticOperation({
       kind: 'day-team-remove',
-      lockKeys: [`day-team:${workDate}`, `day-team-profile:${workDate}:${profileId}`],
+      lockKeys: removalLockKeys,
+      claims: removalClaims,
       queryKeys: [`board:${weekStart}`],
       proofs: {
         [`board:${weekStart}`]: (state) =>
@@ -4661,12 +4757,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 slot.slot_index === slotIndex
                 && slot.members.some((item) => item.profile_id === profileId)
             )
+          ) !== true
+          && state.board?.assignments.some((assignment) =>
+            assignment.resource_type === 'employee'
+            && assignment.profile_id === profileId
+            && assignment.work_date === workDate
           ) !== true,
       },
       apply: (state) => ({
         ...state,
         board: state.board
-          ? patchBoardRemoveDayTeamMember(state.board, workDate, slotIndex, profileId)
+          ? removeScheduleDayTeamMemberAndAssignments(state.board, workDate, slotIndex, profileId)
           : state.board,
       }),
     });
@@ -4679,6 +4780,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         work_date: workDate,
         slot_index: slotIndex,
         profile_id: profileId,
+        assignment_ids: assignmentIds,
       });
       if (!isCurrentMutation(mutationKey, mutationEpoch)) return;
       settleOptimisticOperation(operation.id);
@@ -6249,13 +6351,40 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             description="Plan work across the week and allocate employees and plant with clear availability warnings."
             icon={<CalendarDays className="h-5 w-5" />}
             className="shrink-0"
-            contentClassName="flex-row flex-nowrap items-center justify-between gap-3"
+            contentClassName="flex-col items-start justify-between gap-3 sm:flex-row sm:flex-wrap sm:items-center"
             headingClassName="min-w-0 shrink space-y-1"
-            titleClassName="whitespace-nowrap"
+            titleClassName="sm:whitespace-nowrap"
             descriptionClassName="truncate"
-            actionsClassName="w-auto shrink-0 flex-nowrap"
+            actionsClassName="w-full shrink-0 sm:w-auto"
             actions={(
-              <ScheduleExpandingActionGroup>
+              <ScheduleExpandingActionGroup className="flex-wrap">
+                <TooltipProvider delayDuration={200}>
+                  <div className="flex items-center gap-1" role="group" aria-label="Scheduling layout">
+                    {([
+                      ['standard', 'Standard layout', LayoutPanelLeft],
+                      ['columns', 'Resources, Teams and Calendar columns', Columns3],
+                    ] as const).map(([value, label, Icon]) => (
+                      <Tooltip key={value}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn('h-8 w-8', layout === value ? schedulingControlStyles.primary : schedulingControlStyles.ghost)}
+                            aria-label={label}
+                            aria-pressed={layout === value}
+                            onClick={() => {
+                              setLayout(value);
+                              writeSchedulingLayoutPreference(userId, value);
+                            }}
+                          >
+                            <Icon className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{label}</TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </TooltipProvider>
                 <ScheduleExpandingAction
                   icon={CalendarOff}
                   label="Plant availability"
@@ -6311,8 +6440,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         </div>
 
         <div
-          className="grid min-h-0 flex-1 grid-cols-[350px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4"
+          className="schedule-manager-layout grid min-h-0 flex-1 gap-4 overflow-auto"
           data-testid="schedule-manager-layout"
+          data-layout={layout}
         >
           <ResourcesReturnDropCard>
             <CardHeader className="shrink-0 py-2">
@@ -6360,9 +6490,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       setQuoteStage(value as ScheduleQuoteStage | 'projects' | 'all')
                     }
                   >
-                    <TabsList className="grid w-full grid-cols-5">
+                    <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                       <TabsTrigger value="all" className="px-1 text-[10px]">
-                        All ({returnedVisits.length + unscheduledQuotes.length + unscheduledProjects.length})
+                        All ({returnedVisits.length + unscheduledQuotes.length + unscheduledProjects.length + unfinishedResourceJobs.length})
                       </TabsTrigger>
                       <TabsTrigger value={SCHEDULE_QUOTE_STAGES.draft} className="px-1 text-[10px]">
                         Draft ({quoteStageCounts.draft})
@@ -6374,7 +6504,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         Accepted ({quoteStageCounts.accepted})
                       </TabsTrigger>
                       <TabsTrigger value="projects" className="px-1 text-[10px]">
-                        Projects ({unscheduledProjects.length})
+                        Projects ({unscheduledProjects.length + unfinishedResourceJobs.filter((job) => job.quote_project_number_id).length})
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -6383,7 +6513,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     <Input
                       value={quoteSearch}
                       onChange={(event) => setQuoteSearch(event.target.value)}
-                      placeholder="Search unscheduled jobs"
+                      placeholder="Search jobs"
                       className="pl-9"
                     />
                   </div>
@@ -6408,7 +6538,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       quotesSensitiveAccess.canAccess
                       && projectCandidatesQuery.isError
                     )
-                    || visitBacklogQuery.isError ? (
+                    || visitBacklogQuery.isError || resourceJobsQuery.isError ? (
                     <div className="rounded-lg border border-red-500/30 p-3 text-sm text-red-300">
                       <p>Some queued jobs could not be loaded. Available results are still shown.</p>
                       <Button
@@ -6421,6 +6551,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             ? [projectCandidatesQuery.refetch()]
                             : []),
                           visitBacklogQuery.refetch(),
+                          resourceJobsQuery.refetch(),
                         ])}
                       >
                         Try again
@@ -6434,6 +6565,23 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     data-testid="schedule-jobs-scroll-area"
                   >
                     <div className="space-y-1">
+                        {resourceJobs.map((job) => (
+                          <button
+                            key={`existing:${job.id}`}
+                            type="button"
+                            className={cn('w-full rounded-lg border border-border px-3 py-2 text-left', schedulingControlStyles.ghost)}
+                            data-testid={`schedule-resource-job-${job.id}`}
+                            onClick={() => {
+                              setJobDraft(null);
+                              setEditingJob(job);
+                              setJobDialogOpen(true);
+                            }}
+                          >
+                            <span className="block text-sm font-semibold">{job.job_reference}</span>
+                            <span className="block truncate text-xs">{job.title}</span>
+                            <span className="text-xs text-muted-foreground">Unfinished · Open job</span>
+                          </button>
+                        ))}
                         {quoteCandidatesQuery.isLoading
                           && projectCandidatesQuery.isLoading
                           && visitBacklogQuery.isLoading ? (
@@ -6453,11 +6601,11 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               }
                             />
                           ))
-                        ) : (
+                        ) : resourceJobs.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
                             No {quoteStage === 'all' ? 'queued jobs' : quoteStage === 'projects' ? 'Projects' : quoteStage} match this search.
                           </div>
-                        )}
+                        ) : null}
                     </div>
                   </ScrollArea>
                 </>
@@ -6685,13 +6833,33 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             </CardContent>
           </ResourcesReturnDropCard>
 
+          {layout === 'columns' ? (
+            <Card className="schedule-teams-panel flex min-h-0 min-w-0 flex-col overflow-hidden border-border" data-testid="schedule-teams-panel">
+              <CardHeader className="shrink-0 py-3">
+                <CardTitle className="text-base">Teams</CardTitle>
+                <p className="text-xs text-muted-foreground">{format(parseISO(selectedDate), 'EEE d MMM')}</p>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-y-auto">
+                <ScheduleDayTeamBuckets
+                  workDate={selectedDate}
+                  slots={slotsForScheduleDate(board.day_teams, selectedDate, teamSettingsFromBoard(board))}
+                  teamSettings={teamSettingsFromBoard(board)}
+                  occupancyBySlot={dayTeamOccupancyBySlot}
+                  dndScope="desktop"
+                  vertical
+                  onRemoveMember={requestEmployeeRemoval}
+                  onRemovePlant={removePlantFromDayTeam}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
           <Card
-            className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-border"
+            className="schedule-board-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-border"
             data-testid="schedule-board-panel"
           >
             <CardHeader className="shrink-0 gap-3">
               <div
-                className="flex flex-nowrap items-center gap-3"
+                className="flex flex-wrap items-center gap-3"
                 data-testid="schedule-board-title-row"
               >
                 <div className="flex min-w-0 items-center gap-1.5">
@@ -6709,7 +6877,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </ScheduleHelpHint>
                 </div>
                 <div
-                  className="ml-auto flex shrink-0 flex-nowrap items-center gap-2"
+                  className="flex min-w-0 flex-wrap items-center gap-2"
                   data-testid="schedule-board-title-controls"
                 >
                   <SchedulingDateRangeControls
@@ -6731,8 +6899,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   </div>
                 </div>
               </div>
-              {view === SCHEDULING_BOARD_VIEWS.daily ? (
-                <div className="hidden md:block">
+              {view === SCHEDULING_BOARD_VIEWS.daily && layout === 'standard' ? (
+                <div className="hidden max-h-[25dvh] overflow-y-auto md:block">
                   <ScheduleDayTeamBuckets
                     workDate={selectedDate}
                     slots={slotsForScheduleDate(
@@ -6743,7 +6911,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     teamSettings={teamSettingsFromBoard(board)}
                     occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="desktop"
-                    onRemoveMember={removeEmployeeFromDayTeam}
+                    onRemoveMember={requestEmployeeRemoval}
                     onRemovePlant={removePlantFromDayTeam}
                   />
                 </div>
@@ -7187,8 +7355,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 </div>
               </div>
 
-              <div className="space-y-3 md:hidden" data-mobile-scroll-lock="true">
-                {view === SCHEDULING_BOARD_VIEWS.daily ? (
+              <div className="min-h-0 space-y-3 overflow-y-auto md:hidden" data-mobile-scroll-lock="true">
+                {view === SCHEDULING_BOARD_VIEWS.daily && layout === 'standard' ? (
                   <ScheduleDayTeamBuckets
                     workDate={selectedDate}
                     slots={slotsForScheduleDate(
@@ -7199,7 +7367,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     teamSettings={teamSettingsFromBoard(board)}
                     occupancyBySlot={dayTeamOccupancyBySlot}
                     dndScope="mobile"
-                    onRemoveMember={removeEmployeeFromDayTeam}
+                    onRemoveMember={requestEmployeeRemoval}
                     onRemovePlant={removePlantFromDayTeam}
                   />
                 ) : null}
@@ -7636,6 +7804,32 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           onDelete={handlePlantBlockDelete}
         />
       ) : null}
+      <AlertDialog open={pendingTeamRemoval !== null} onOpenChange={(open) => !open && setPendingTeamRemoval(null)}>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove team member and day assignments?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove {pendingTeamRemoval?.name} from this team on {pendingTeamRemoval?.workDate}.
+              {' '}This also removes all {pendingTeamRemoval?.assignmentIds.length || 0} of their job assignments on that day
+              {pendingTeamRemoval?.jobReferences.length ? ` (${pendingTeamRemoval.jobReferences.join(', ')})` : ''}.
+              {' '}Other employees, other dates, visits and plant reservations will not change.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className={schedulingControlStyles.outline}>Keep member</AlertDialogCancel>
+            <AlertDialogAction
+              className={schedulingControlStyles.danger}
+              disabled={inFlightMutationKeys.size > 0}
+              onClick={() => {
+                if (!pendingTeamRemoval) return;
+                const { slotIndex, profileId, workDate, assignmentIds } = pendingTeamRemoval;
+                setPendingTeamRemoval(null);
+                void removeEmployeeFromDayTeam(slotIndex, profileId, workDate, assignmentIds);
+              }}
+            >Remove member and assignments</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={pendingConflict !== null}
         onOpenChange={(open) => !open && setPendingConflict(null)}

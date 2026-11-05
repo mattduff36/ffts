@@ -68,6 +68,9 @@ export function mapDayTeamRpcError(error: { code?: string; message?: string }): 
   error: string;
 } | null {
   const message = error.message || '';
+  if (message.includes('TEAM_ASSIGNMENTS_CHANGED') || message.includes('TEAM_MEMBER_CHANGED')) {
+    return { status: 409, error: 'This employee’s team or assignments changed. Refresh the board and review removal again.' };
+  }
   if (message.includes('TEAM_SLOT_FULL')) {
     return { status: 409, error: 'This team already has six employees.' };
   }

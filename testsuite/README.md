@@ -38,6 +38,19 @@ npx tsx testsuite/runner/run.ts --grep "reminders"
 
 ## Data Safety
 
+### Isolated scheduling responsive fixtures
+
+These checks do not start Next.js, load application authentication or contact Supabase. They render the real manager board and dialogs in an isolated Vite shell; every API request is fulfilled with fictional in-memory data, and unexpected/external requests fail the check. No credentials, account provisioning or database writes are required.
+
+Run in separate terminals:
+
+```powershell
+npx vite --config testsuite\isolated-scheduling\vite.config.mjs
+npx playwright test --config testsuite\isolated-scheduling\playwright.config.ts
+```
+
+Open `http://127.0.0.1:4017/?fixtures=1&date=2026-11-05` for standalone review. The `fixtures` flag installs the same in-memory data in the isolated shell only; removal/completion changes reset on reload, other saves fail explicitly, and no application authentication bypass exists. The harness uses installed Microsoft Edge and reserves the same 132px vertical shell budget plus sidebar space as the scheduling page. Screenshots of both layouts, calendar scroll positions and Quick add at 390x844, 768x1024, 1024x768, 1280x720 and 1440x900 go to ignored `testsuite\reports\scheduling-local\screenshots\`; test output goes to `testsuite\reports\scheduling-local\results\`. Removal checks cover cancellation, overlapping pending job edits, success and denied/conflicting/ambiguous errors without changing a real database. SQL contract tests do not substitute for approved migration execution or database concurrency testing. Typecheck this isolated fixture and its imported application components with `npx tsc --noEmit --project testsuite\isolated-scheduling\tsconfig.json`.
+
 - Never edit or delete a pre-existing row.
 - Tag created records with the current `TESTSUITE-<timestamp>` run tag.
 - Register every created record with cleanup helpers.

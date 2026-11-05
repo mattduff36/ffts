@@ -170,6 +170,13 @@ describe('/api/scheduling/quotes', () => {
     expect(payload.quotes).toEqual([]);
   });
 
+  it.each(['completed', 'cancelled'])('excludes %s jobs even without a timed visit', async (status) => {
+    mockRelatedJobs.mockReturnValue([{ id: 'closed-job', quote_id: quoteId, status }]);
+    const { GET } = await import('@/app/api/scheduling/quotes/route');
+    const response = await GET();
+    expect((await response.json()).quotes).toEqual([]);
+  });
+
   it('keeps a quote whose only visit is cancelled or has no positive duration', async () => {
     mockRelatedJobs.mockReturnValue([{ id: 'job-open', quote_id: quoteId }]);
     mockRelatedVisits.mockReturnValue([

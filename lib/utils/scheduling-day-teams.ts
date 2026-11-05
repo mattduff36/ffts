@@ -375,6 +375,23 @@ export function removeScheduleDayTeamMember(
   };
 }
 
+export function removeScheduleDayTeamMemberAndAssignments(
+  board: SchedulingBoardPayload,
+  workDate: string,
+  slotIndex: ScheduleDayTeamSlotIndex,
+  profileId: string
+): SchedulingBoardPayload {
+  if (standingLeaderProfileIds(teamSettingsFromBoard(board)).has(profileId)) return board;
+  return {
+    ...removeScheduleDayTeamMember(board, workDate, slotIndex, profileId),
+    assignments: board.assignments.filter((assignment) =>
+      !(assignment.resource_type === 'employee'
+        && assignment.profile_id === profileId
+        && assignment.work_date === workDate)
+    ),
+  };
+}
+
 export function upsertScheduleDayTeamPlant(
   board: SchedulingBoardPayload,
   plant: ScheduleDayTeamPlant

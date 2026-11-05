@@ -1,13 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarDays, RefreshCw } from 'lucide-react';
 import { AppPageHeader, AppPageShell } from '@/components/layout/AppPageShell';
@@ -20,143 +13,19 @@ import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { cn } from '@/lib/utils/cn';
 import { SchedulingManagerBoard } from './components/SchedulingManagerBoard';
 import { schedulingControlStyles } from './components/scheduling-control-styles';
-import {
-  getSchedulingViewportFit,
-  measureSchedulingMinContentWidth,
-  SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX,
-  SCHEDULING_MOBILE_MAX_WIDTH_PX,
-} from './components/scheduling-viewport-fit';
-
-function SchedulingWiderScreenMessage() {
-  return (
-    <div className="flex h-full min-h-0 flex-1 flex-col" data-testid="schedule-wide-screen-layout">
-      <AppPageHeader
-        title="Job Scheduling"
-        description="Plan work across the week and allocate employees and plant with clear availability warnings."
-        icon={<CalendarDays className="h-5 w-5" />}
-        className="shrink-0"
-      />
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <Card className="w-fit max-w-md border-amber-500/30" data-testid="schedule-wide-screen-required">
-          <CardContent className="flex w-fit flex-col items-center gap-4 px-6 py-8 text-center">
-            <AlertTriangle className="h-10 w-10 text-amber-400" />
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                Job Scheduling needs a wider screen
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This page is built for a desktop-width browser. Open it on a larger display, or widen this window, to use the job board.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 function SchedulingManagerViewport({
   userId,
 }: {
   userId: string;
 }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [availableWidth, setAvailableWidth] = useState(0);
-  const [minContentWidth, setMinContentWidth] = useState(SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX);
-  const [isMobile, setIsMobile] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  useLayoutEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || typeof window === 'undefined') return;
-
-    const media =
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia(`(max-width: ${SCHEDULING_MOBILE_MAX_WIDTH_PX}px)`)
-        : null;
-    const syncViewport = () => {
-      setIsMobile(Boolean(media?.matches));
-      setAvailableWidth(viewport.clientWidth);
-      const content = contentRef.current;
-      if (content) {
-        setMinContentWidth(measureSchedulingMinContentWidth(content));
-      }
-      setReady(true);
-    };
-
-    syncViewport();
-    media?.addEventListener('change', syncViewport);
-    window.addEventListener('resize', syncViewport);
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncViewport);
-    observer?.observe(viewport);
-
-    return () => {
-      media?.removeEventListener('change', syncViewport);
-      window.removeEventListener('resize', syncViewport);
-      observer?.disconnect();
-    };
-  }, []);
-
-  const fit = useMemo(
-    () =>
-      getSchedulingViewportFit({
-        availableWidth,
-        minContentWidth,
-        isMobile,
-      }),
-    [availableWidth, isMobile, minContentWidth]
-  );
-
-  useLayoutEffect(() => {
-    if (!ready || fit.mode === 'blocked') return;
-    const content = contentRef.current;
-    if (!content) return;
-    const syncMinWidth = () => {
-      setMinContentWidth(measureSchedulingMinContentWidth(content));
-    };
-    syncMinWidth();
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncMinWidth);
-    observer?.observe(content);
-    return () => observer?.disconnect();
-  }, [fit.mode, ready]);
-
-  const scaledStyle: CSSProperties | undefined = ready && fit.mode === 'scaled'
-    ? {
-        width: minContentWidth,
-        height: `${100 / fit.scale}%`,
-        transform: `scale(${fit.scale})`,
-        transformOrigin: 'top left',
-      }
-    : undefined;
-
   return (
     <div
-      ref={viewportRef}
-      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-auto"
       data-testid="scheduling-viewport"
-      data-fit-mode={ready ? fit.mode : 'pending'}
+      data-fit-mode="responsive"
     >
-      {!ready ? (
-        <PageLoader message="Loading scheduling..." />
-      ) : fit.mode === 'blocked' ? (
-        <SchedulingWiderScreenMessage />
-      ) : (
-        <div
-          ref={contentRef}
-          className={
-            ready && fit.mode === 'scaled'
-              ? 'flex min-h-0 shrink-0 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col'
-              : 'flex h-full min-h-0 flex-1 flex-col [&>:first-child]:flex [&>:first-child]:h-full [&>:first-child]:min-h-0 [&>:first-child]:flex-1 [&>:first-child]:flex-col'
-          }
-          data-testid="scheduling-scaled-content"
-          style={scaledStyle}
-        >
-          <SchedulingManagerBoard userId={userId} />
-        </div>
-      )}
+      <SchedulingManagerBoard userId={userId} />
     </div>
   );
 }

@@ -5,11 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SchedulingPage from '@/app/(dashboard)/scheduling/page';
-import {
-  SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX,
-  SCHEDULING_MOBILE_MAX_WIDTH_PX,
-} from '@/app/(dashboard)/scheduling/components/scheduling-viewport-fit';
-
 const { mockFetchContext, mockPermissionCheck } = vi.hoisted(() => ({
   mockFetchContext: vi.fn(),
   mockPermissionCheck: vi.fn(),
@@ -93,91 +88,20 @@ describe('SchedulingPage access states', () => {
       'flex-1'
     );
     expect(screen.getByTestId('scheduling-viewport').style.height).toBe('');
-    expect(screen.getByTestId('scheduling-scaled-content')).toHaveClass(
-      'h-full',
-      'min-h-0',
-      'flex-1'
-    );
+    expect(screen.getByTestId('scheduling-viewport')).toHaveAttribute('data-fit-mode', 'responsive');
   });
 
-  it('asks for a wider screen on mobile instead of rendering the board', async () => {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes(`max-width: ${SCHEDULING_MOBILE_MAX_WIDTH_PX}px`),
-      media: query,
+  it.each([390, 768, 1024])('keeps the board available at %ipx without a wider-screen blocker', async (width) => {
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      matches: width < 768,
+      media: '',
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }));
-
     renderPage();
-
-    expect(
-      await screen.findByText('Job Scheduling needs a wider screen')
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('schedule-wide-screen-required')).toBeInTheDocument();
-    expect(screen.getByTestId('schedule-wide-screen-required')).toHaveClass('w-fit');
-    expect(screen.getByTestId('schedule-wide-screen-layout')).toHaveClass(
-      'flex-1',
-      'flex-col'
-    );
-    expect(screen.getByTestId('schedule-wide-screen-layout').querySelector('.flex-1.items-center.justify-center')).toBeTruthy();
-    expect(
-      screen.queryByText('Manager scheduling board for manager-1')
-    ).not.toBeInTheDocument();
-  });
-
-  it('scales the manager board when the content area is between 67% and 100% of min width', async () => {
-    const originalWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-      configurable: true,
-      get() {
-        return Math.round(SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX * 0.8);
-      },
-    });
-
-    try {
-      renderPage();
-      expect(
-        await screen.findByText('Manager scheduling board for manager-1')
-      ).toBeInTheDocument();
-      expect(screen.getByTestId('scheduling-viewport')).toHaveAttribute('data-fit-mode', 'scaled');
-      expect(screen.getByTestId('scheduling-viewport').style.height).toBe('');
-      expect(screen.getByTestId('scheduling-scaled-content')).toHaveStyle({
-        transform: 'scale(0.8)',
-        height: '125%',
-      });
-    } finally {
-      if (originalWidth) {
-        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalWidth);
-      } else {
-        delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-      }
-    }
-  });
-
-  it('asks for a wider screen when zoom would drop below 67%', async () => {
-    const originalWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-      configurable: true,
-      get() {
-        return Math.round(SCHEDULING_BOARD_MIN_CONTENT_WIDTH_PX * 0.66);
-      },
-    });
-
-    try {
-      renderPage();
-      expect(
-        await screen.findByText('Job Scheduling needs a wider screen')
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText('Manager scheduling board for manager-1')
-      ).not.toBeInTheDocument();
-    } finally {
-      if (originalWidth) {
-        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalWidth);
-      } else {
-        delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
-      }
-    }
+    expect(await screen.findByText('Manager scheduling board for manager-1')).toBeInTheDocument();
+    expect(screen.queryByText('Job Scheduling needs a wider screen')).not.toBeInTheDocument();
+    expect(screen.getByTestId('scheduling-viewport')).toHaveClass('overflow-auto');
   });
 
   it('shows a retryable error when scheduling context fails', async () => {

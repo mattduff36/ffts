@@ -306,6 +306,7 @@ vi.mock('@/lib/client/scheduling', async () => {
     fetchSchedulingBoard: mockFetchBoard,
     fetchScheduleQuoteCandidates: mockFetchQuoteCandidates,
     fetchScheduleVisitBacklog: mockFetchVisitBacklog,
+    fetchScheduleResourceJobs: vi.fn().mockResolvedValue([]),
     moveScheduleAssignment: mockMoveAssignment,
     previewScheduleVisitBacklog: mockPreviewVisitBacklog,
     quickAddScheduleProject: mockQuickAdd,
@@ -1506,13 +1507,13 @@ describe('SchedulingManagerBoard', () => {
       '[&>*]:flex-1'
     );
     expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
-      'grid-cols-[350px_minmax(0,1fr)]'
+      'schedule-manager-layout'
     );
     expect(screen.getByTestId('schedule-manager-layout')).not.toHaveClass('h-full');
     expect(screen.getByTestId('schedule-manager-layout')).toHaveClass(
       'flex-1',
       'min-h-0',
-      'grid-rows-[minmax(0,1fr)]'
+      'overflow-auto'
     );
     expect(screen.getByTestId('schedule-resources-panel')).toHaveClass(
       'h-full',

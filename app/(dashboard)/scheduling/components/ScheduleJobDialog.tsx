@@ -318,7 +318,7 @@ export function ScheduleJobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto border-border">
           <DialogHeader>
             <DialogTitle>{job ? 'Edit scheduled job' : 'Add Project job'}</DialogTitle>
             <DialogDescription>
@@ -647,7 +647,7 @@ export function ScheduleJobDialog({
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="sticky -bottom-6 z-10 shrink-0 gap-2 border-t border-border bg-background py-4">
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
               {isQuoteJob && job ? (

@@ -89,7 +89,7 @@ describe('POST/DELETE /api/scheduling/day-teams (SCH-TEAM-API-001)', () => {
     const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
     const response = await DELETE(
       new NextRequest(
-        'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222',
+        'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222&assignment_ids=[]',
         { method: 'DELETE' }
       )
     );
@@ -128,21 +128,75 @@ describe('POST/DELETE /api/scheduling/day-teams (SCH-TEAM-API-001)', () => {
   });
 
   it('removes a member for the requested date and slot', async () => {
-    mockRpc.mockResolvedValue({ data: [], error: null });
+    const assignmentId = '55555555-5555-4555-8555-555555555555';
+    mockRpc.mockResolvedValue({ data: [{ success: true, removed_assignment_ids: [assignmentId] }], error: null });
     const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
     const response = await DELETE(
       new NextRequest(
-        'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=3&profile_id=22222222-2222-4222-8222-222222222222',
+        `http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=3&profile_id=22222222-2222-4222-8222-222222222222&assignment_ids=${encodeURIComponent(JSON.stringify([assignmentId]))}`,
         { method: 'DELETE' }
       )
     );
     expect(response.status).toBe(200);
     expect(mockRpc).toHaveBeenCalledWith(
-      'remove_schedule_day_team_member_v1',
-      expect.objectContaining({
+      'remove_schedule_day_team_member_with_assignments_v1',
+      {
         p_work_date: '2026-09-01',
         p_slot_index: 3,
-      })
+        p_profile_id: '22222222-2222-4222-8222-222222222222',
+        p_actor_user_id: managerAccess.userId,
+        p_assignment_ids: [assignmentId],
+      }
     );
+  });
+
+  it.each([null, [], [{ success: false }], [{ success: true }], [{
+    success: true, removed_assignment_ids: ['55555555-5555-4555-8555-555555555555'],
+  }]].map((data) => ({ data })))('rejects missing or inconsistent removal confirmation $data', async ({ data }) => {
+    mockRpc.mockResolvedValue({ data, error: null });
+    const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
+    const response = await DELETE(new NextRequest(
+      'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222&assignment_ids=[]',
+      { method: 'DELETE' }
+    ));
+    expect(response.status).toBe(500);
+    expect((await response.json()).error).toBeTruthy();
+  });
+
+  it('denies employee removal before accessing the RPC', async () => {
+    mockAccess.mockResolvedValue({ allowed: false, status: 403, error: 'Manager access required' });
+    const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
+    const response = await DELETE(new NextRequest(
+      'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222&assignment_ids=[]',
+      { method: 'DELETE' }
+    ));
+    expect(response.status).toBe(403);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit confirmed assignment set', async () => {
+    const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
+    const response = await DELETE(new NextRequest(
+      'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222',
+      { method: 'DELETE' }
+    ));
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['TEAM_ASSIGNMENTS_CHANGED', 'P0001', 409],
+    ['TEAM_MEMBER_CHANGED', 'P0001', 409],
+    ['RPC unavailable', 'PGRST202', 409],
+    ['Unexpected database failure', 'XX000', 500],
+  ])('surfaces %s without claiming success', async (message, code, status) => {
+    mockRpc.mockResolvedValue({ data: null, error: { message, code } });
+    const { DELETE } = await import('@/app/api/scheduling/day-teams/route');
+    const response = await DELETE(new NextRequest(
+      'http://localhost/api/scheduling/day-teams?work_date=2026-09-01&slot_index=1&profile_id=22222222-2222-4222-8222-222222222222&assignment_ids=[]',
+      { method: 'DELETE' }
+    ));
+    expect(response.status).toBe(status);
+    expect((await response.json()).error).toBeTruthy();
   });
 });

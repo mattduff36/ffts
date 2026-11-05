@@ -82,12 +82,12 @@ export function ScheduleQuoteDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={contentRef}
-        className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto border-border"
+        className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-hidden border-border"
         onInteractOutside={handleInteractOutside}
         onPointerDownOutside={handlePointerDownOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Reschedule Quote job</DialogTitle>
           <DialogDescription>
             Set the planning window here. The Quote remains the source of truth and its
@@ -95,7 +95,7 @@ export function ScheduleQuoteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="min-h-0 space-y-5 overflow-y-auto py-2">
           <div className="rounded-lg border border-scheduling/40 bg-scheduling-soft p-4">
             <p className="text-sm font-semibold text-foreground">{job.job_reference}</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -126,7 +126,7 @@ export function ScheduleQuoteDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" className={schedulingControlStyles.outline} onClick={discard}>
             {isFormDirty ? 'Discard Changes' : 'Cancel'}
           </Button>

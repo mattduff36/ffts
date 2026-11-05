@@ -211,20 +211,20 @@ export function ScheduleBoardQuickAddDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={contentRef}
-        className="max-w-lg border-border"
+        className="flex max-h-[calc(100dvh-2rem)] max-w-3xl flex-col overflow-hidden border-border"
         onInteractOutside={handleInteractOutside}
         onEscapeKeyDown={handleEscapeKeyDown}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Quick add job</DialogTitle>
           <DialogDescription>
             Create a Project Number, schedule it, and open the first visit ready for
             crew assignment. No quote or document upload is required.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="grid min-h-0 gap-4 overflow-y-auto pr-1 sm:grid-cols-2" data-testid="schedule-quick-add-scroll">
           <div className="space-y-2">
-            <Label>Manager *</Label>
+            <Label htmlFor="quick-add-manager">Manager *</Label>
             <Select
               value={form.manager_profile_id}
               onValueChange={(value) =>
@@ -232,7 +232,7 @@ export function ScheduleBoardQuickAddDialog({
               }
               disabled={activeManagerOptions.length === 0}
             >
-              <SelectTrigger className="min-h-11">
+              <SelectTrigger id="quick-add-manager" className="min-h-11">
                 <SelectValue placeholder="Select manager" />
               </SelectTrigger>
               <SelectContent>
@@ -260,7 +260,7 @@ export function ScheduleBoardQuickAddDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Customer *</Label>
+            <Label htmlFor="quick-add-customer">Customer *</Label>
             <Select
               value={form.customer_id}
               onValueChange={(value) => {
@@ -275,7 +275,7 @@ export function ScheduleBoardQuickAddDialog({
                 }));
               }}
             >
-              <SelectTrigger className="min-h-11">
+              <SelectTrigger id="quick-add-customer" className="min-h-11">
                 <SelectValue placeholder="Select customer" />
               </SelectTrigger>
               <SelectContent>
@@ -289,7 +289,7 @@ export function ScheduleBoardQuickAddDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Site</Label>
+            <Label htmlFor="quick-add-site">Site</Label>
             <Select
               value={form.site_id || 'none'}
               onValueChange={(value) => {
@@ -298,7 +298,7 @@ export function ScheduleBoardQuickAddDialog({
               }}
               disabled={!form.customer_id}
             >
-              <SelectTrigger className="min-h-11">
+              <SelectTrigger id="quick-add-site" className="min-h-11">
                 <SelectValue placeholder="Select site" />
               </SelectTrigger>
               <SelectContent>
@@ -329,7 +329,7 @@ export function ScheduleBoardQuickAddDialog({
               placeholder="e.g. 3"
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
             <div className="space-y-2 sm:col-span-1">
               <Label htmlFor="quick-add-date">Date *</Label>
               <Input
@@ -388,7 +388,7 @@ export function ScheduleBoardQuickAddDialog({
             />
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border pt-3">
           <Button className={schedulingControlStyles.outline} onClick={discard}>
             Cancel
           </Button>

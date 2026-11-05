@@ -70,7 +70,7 @@ export function SchedulingDateRangeControls({
   }
 
   return (
-    <div className="flex shrink-0 flex-nowrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <Tabs value={view} onValueChange={handleViewChange}>
         <TabsList aria-label="Job board date range" className="grid h-9 grid-cols-2">
           <TabsTrigger value={SCHEDULING_BOARD_VIEWS.daily} className="px-3">

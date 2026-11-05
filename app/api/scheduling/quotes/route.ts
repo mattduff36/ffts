@@ -108,15 +108,18 @@ export async function GET() {
 
     const jobsResult = await admin
       .from('schedule_jobs')
-      .select('id, quote_id')
+      .select('id, quote_id, status')
       .in('quote_id', quotes.map((quote) => quote.id))
       .eq('source_type', 'quote');
     if (jobsResult.error) throw jobsResult.error;
 
-    const relatedJobs = ((jobsResult.data || []) as Array<{ id?: string; quote_id?: string | null }>)
+    const relatedJobs = ((jobsResult.data || []) as Array<{ id?: string; quote_id?: string | null; status?: string }>)
       .filter((job) => typeof job.id === 'string' && typeof job.quote_id === 'string');
     const quoteIdByJobId = new Map(relatedJobs.map((job) => [String(job.id), String(job.quote_id)]));
-    const blockedQuoteIds = new Set<string>();
+    const blockedQuoteIds = new Set<string>(
+      relatedJobs.filter((job) => job.status === 'completed' || job.status === 'cancelled')
+        .map((job) => String(job.quote_id))
+    );
     if (relatedJobs.length > 0) {
       const visitsResult = await admin
         .from('schedule_visits')

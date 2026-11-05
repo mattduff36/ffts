@@ -22,7 +22,7 @@ class FakeQuery implements PromiseLike<QueryResult> {
 }
 
 describe('schedule visit backlog job order', () => {
-  it('JOB-ORDER-011: backlog projections propagate board_sequence', async () => {
+  it.each(['scheduled', 'in_progress', 'completed', 'cancelled'])('JOB-ORDER-011: preserves ordering but excludes closed %s jobs', async (status) => {
     const admin = {
       from: () =>
         new FakeQuery({
@@ -50,7 +50,7 @@ describe('schedule visit backlog job order', () => {
                 title: 'Job A',
                 description: null,
                 site_address: null,
-                status: 'scheduled',
+                status,
                 source_type: 'manual',
                 start_date: '2026-09-01',
                 end_date: '2026-09-07',
@@ -75,6 +75,10 @@ describe('schedule visit backlog job order', () => {
     } as unknown as SupabaseClient;
 
     const items = await loadScheduleVisitBacklog(admin);
+    if (status === 'completed' || status === 'cancelled') {
+      expect(items).toEqual([]);
+      return;
+    }
     expect(items).toHaveLength(1);
     expect(items[0].job.board_sequence).toBe(2);
     expect(items[0].job.id).toBe('job-a');

@@ -3185,9 +3185,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         assignments: board?.assignments || [],
         employees: board?.resources.employees || [],
         plant: board?.resources.plant || [],
-        dates: weekDates,
+        dates: primary === SCHEDULING_BOARD_PRIMARIES.job && view === SCHEDULING_BOARD_VIEWS.daily
+          ? [selectedDate] : weekDates,
       }),
-    [board, filteredJobs, primary, weekDates]
+    [board, filteredJobs, primary, selectedDate, view, weekDates]
   );
   const hasActiveJobFilters =
     Boolean(jobSearch.trim()) || jobFilters.tags.length > 0;

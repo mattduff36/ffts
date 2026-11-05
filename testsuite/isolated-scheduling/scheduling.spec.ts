@@ -231,34 +231,23 @@ test('short daily card keeps overflow actions clear of resize and pan gestures',
 });
 
 for (const [view, width] of [['daily', 1440], ['weekly', 1440], ['daily', 390], ['weekly', 390]] as const) {
-  test(`Jobs without a visible visit retain management actions: ${view} ${width}px`, async ({ page }) => {
+  test(`Jobs without a visible visit stay off the calendar: ${view} ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
     const data = await mockScheduling(page);
-    data.board.visits = [];
-    data.board.assignments = [{
-      ...data.board.assignments[0], visit_id: null, visit: null,
-      work_date: view === 'weekly' ? '2026-11-02' : date,
-    }];
+    // A visit elsewhere in the same week must not populate the selected day.
+    if (view === 'daily') {
+      data.board.visits[0].starts_at = '2026-11-04T08:00:00.000Z';
+      data.board.visits[0].ends_at = '2026-11-04T11:00:00.000Z';
+    } else data.board.visits = [];
+    data.board.assignments = [];
     await page.addInitScript(({ userId, view }) => {
       localStorage.setItem(`ffts:scheduling-board-view:v1:${userId}`, view);
     }, { userId, view });
     await page.goto(`/?date=${date}`);
-    const row = page.getByTestId(`schedule-board-row-job-${jobId}${width < 768 ? '-mobile' : ''}`);
-    const empty = row.getByTestId(new RegExp(`^schedule-empty-job-${jobId}-`));
-    await expect(empty).toBeVisible();
-    await expect(empty).toContainText('Oak crown reduction');
-    await expect(empty).toContainText('1/3 staff');
-    await empty.getByRole('button', { name: 'Actions for LOCAL-60001', exact: true }).click();
-    await expect(page.getByRole('menu')).toContainText('LOCAL-60001 · 1/3');
-    await page.getByRole('menuitem', { name: 'Edit scheduled job', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Edit scheduled job', exact: true })).toBeVisible();
-    await page.getByRole('dialog', { name: 'Edit scheduled job', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
-    await mkdir(screenshots, { recursive: true });
-    await row.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: resolve(screenshots, `jobs-no-column-empty-${view}${width < 768 ? '-390x844' : ''}.png`) });
-    expect(data.board.visits).toEqual([]);
+    await expect(page.getByTestId(`schedule-resource-job-${jobId}`)).toBeVisible();
+    await expect(page.getByTestId(`schedule-board-row-job-${jobId}${width < 768 ? '-mobile' : ''}`)).toHaveCount(0);
+    await expect(page.getByText('No visits in view', { exact: true })).toHaveCount(0);
     expect(data.writes).toEqual([]);
-    expect(data.unexpected).toEqual([]);
   });
 }
 

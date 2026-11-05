@@ -249,7 +249,7 @@ describe('buildScheduleBoardRows', () => {
     expect(rows.some(row => row.kind === 'unassigned')).toBe(false);
   });
 
-  it('keeps in-range jobs without visible visits for management, without creating bookings', () => {
+  it('excludes in-range jobs without scheduled visits, including cancelled and other-period visits', () => {
     const legacyOnly = job('job-legacy', { start_date: '2026-07-13', end_date: '2026-07-15' });
     const untimed = job('job-none');
     const cancelled = job('job-cancelled');
@@ -271,7 +271,7 @@ describe('buildScheduleBoardRows', () => {
     });
 
     expect(rows.map((row) => row.id)).toEqual([
-      'job:job-1', 'job:job-legacy', 'job:job-none', 'job:job-cancelled',
+      'job:job-1',
     ]);
     expect(rows[0]?.legacyAssignmentsByDate['2026-07-14']).toEqual([]);
     expect(rows.slice(1).every((row) =>

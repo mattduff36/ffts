@@ -187,7 +187,7 @@ function buildJobRows(
       }) || placed;
     }
 
-    if (!placed) return [];
+    if (!placed && !dates.some((date) => date >= job.start_date && date <= job.end_date)) return [];
 
     for (const date of dates) {
       visitsByDate[date] = sortPlacements(visitsByDate[date]);

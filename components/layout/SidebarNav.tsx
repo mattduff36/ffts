@@ -49,7 +49,7 @@ interface SidebarNavProps {
   onToggle: () => void;
 }
 
-const HOVER_EXPAND_DELAY_MS = 500;
+const HOVER_EXPAND_DELAY_MS = 150;
 
 export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   const pathname = usePathname();
@@ -527,7 +527,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
       {/* Sidebar - Always visible on desktop, hidden on mobile */}
       <div
         ref={sidebarRef}
-        className={`hidden md:flex md:flex-col fixed left-0 top-[68px] bottom-0 bg-slate-900 border-r border-slate-700 z-[60] overflow-x-hidden transition-all duration-300 ease-in-out ${
+        className={`hidden md:flex md:flex-col fixed left-0 top-[68px] bottom-0 bg-slate-900 border-r border-slate-700 z-[60] overflow-x-hidden transition-all ${isExpanded ? 'duration-150' : 'duration-300'} ease-in-out ${
           isExpanded ? 'w-64' : 'w-16'
         }`}
         onMouseEnter={handleSidebarMouseEnter}
@@ -535,8 +535,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
       >
         {/* Header */}
         <div className="h-16 flex items-center justify-between px-3 border-b border-border">
-          <h2 className={`text-lg font-semibold text-white transition-opacity duration-200 ${
-            isExpanded ? 'opacity-100 delay-300' : 'opacity-0 w-0 overflow-hidden'
+          <h2 className={`text-lg font-semibold text-white transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} ${
+            isExpanded ? 'opacity-100 delay-150' : 'opacity-0 w-0 overflow-hidden'
           }`}>
             {isManager ? 'Manager Menu' : 'Admin Tools'}
           </h2>
@@ -547,7 +547,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
             className="text-muted-foreground hover:text-white hover:bg-slate-800"
             title={open ? 'Collapse menu' : 'Expand menu'}
           >
-            <PanelLeftClose className={`h-5 w-5 transition-transform duration-300 ${isExpanded ? '' : 'rotate-180'}`} />
+            <PanelLeftClose className={`h-5 w-5 transition-transform ${isExpanded ? 'duration-150' : 'duration-300'} ${isExpanded ? '' : 'rotate-180'}`} />
           </Button>
         </div>
 
@@ -556,8 +556,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
           {/* Manager Links */}
           {(isManager || isAdmin) && sidebarManagerLinks.length > 0 && (
           <div className="px-3 mb-6">
-            <div className={`px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider transition-opacity duration-200 ${
-              isExpanded ? 'opacity-100 delay-300' : 'opacity-0 pointer-events-none'
+            <div className={`px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} ${
+              isExpanded ? 'opacity-100 delay-150' : 'opacity-0 pointer-events-none'
             }`}>
               Management
             </div>
@@ -586,8 +586,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                         </span>
                       )}
                     </div>
-                    <span className={`min-w-0 transition-opacity duration-200 whitespace-nowrap ${
-                      isExpanded ? 'opacity-100 delay-300' : 'opacity-0 w-0 overflow-hidden'
+                    <span className={`min-w-0 transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} whitespace-nowrap ${
+                      isExpanded ? 'opacity-100 delay-150' : 'opacity-0 w-0 overflow-hidden'
                     }`}>
                       {link.label}
                     </span>
@@ -606,8 +606,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
           {/* Admin Links */}
           {adminLinks.length > 0 && (
             <div className="px-3 mb-6">
-              <div className={`px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider transition-opacity duration-200 ${
-                isExpanded ? 'opacity-100 delay-300' : 'opacity-0 pointer-events-none'
+              <div className={`px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} ${
+                isExpanded ? 'opacity-100 delay-150' : 'opacity-0 pointer-events-none'
               }`}>
                 Administration
               </div>
@@ -628,8 +628,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                       }`}
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
-                      <span className={`min-w-0 transition-opacity duration-200 whitespace-nowrap ${
-                        isExpanded ? 'opacity-100 delay-300' : 'opacity-0 w-0 overflow-hidden'
+                      <span className={`min-w-0 transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} whitespace-nowrap ${
+                        isExpanded ? 'opacity-100 delay-150' : 'opacity-0 w-0 overflow-hidden'
                       }`}>
                         {link.label}
                       </span>
@@ -643,8 +643,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
           {/* Developer Tools - SuperAdmin Only */}
           {showDeveloperTools && (
             <div className="px-3">
-              <div className={`px-3 py-2 text-xs font-semibold text-red-500 uppercase tracking-wider transition-opacity duration-200 ${
-                isExpanded ? 'opacity-100 delay-300' : 'opacity-0 pointer-events-none'
+              <div className={`px-3 py-2 text-xs font-semibold text-red-500 uppercase tracking-wider transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} ${
+                isExpanded ? 'opacity-100 delay-150' : 'opacity-0 pointer-events-none'
               }`}>
                 Developer
               </div>
@@ -668,8 +668,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                   }`}
                 >
                   <Activity className="w-4 h-4 flex-shrink-0" />
-                  <span className={`min-w-0 transition-opacity duration-200 whitespace-nowrap ${
-                    isExpanded ? 'opacity-100 delay-300' : 'opacity-0 w-0 overflow-hidden'
+                  <span className={`min-w-0 transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} whitespace-nowrap ${
+                    isExpanded ? 'opacity-100 delay-150' : 'opacity-0 w-0 overflow-hidden'
                   }`}>
                     Active Now
                   </span>
@@ -686,8 +686,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                   }`}
                 >
                   <Bug className="w-4 h-4 flex-shrink-0" />
-                  <span className={`min-w-0 transition-opacity duration-200 whitespace-nowrap ${
-                    isExpanded ? 'opacity-100 delay-300' : 'opacity-0 w-0 overflow-hidden'
+                  <span className={`min-w-0 transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} whitespace-nowrap ${
+                    isExpanded ? 'opacity-100 delay-150' : 'opacity-0 w-0 overflow-hidden'
                   }`}>
                     Debug Console
                   </span>

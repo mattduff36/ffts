@@ -249,7 +249,7 @@ describe('buildScheduleBoardRows', () => {
     expect(rows.some(row => row.kind === 'unassigned')).toBe(false);
   });
 
-  it('omits jobs with no visits, legacy assignments, cancelled visits, or visits outside the dates', () => {
+  it('keeps in-range jobs without visible visits for management, without creating bookings', () => {
     const legacyOnly = job('job-legacy', { start_date: '2026-07-13', end_date: '2026-07-15' });
     const untimed = job('job-none');
     const cancelled = job('job-cancelled');
@@ -270,8 +270,13 @@ describe('buildScheduleBoardRows', () => {
       dates: DATES,
     });
 
-    expect(rows.map((row) => row.id)).toEqual(['job:job-1']);
+    expect(rows.map((row) => row.id)).toEqual([
+      'job:job-1', 'job:job-legacy', 'job:job-none', 'job:job-cancelled',
+    ]);
     expect(rows[0]?.legacyAssignmentsByDate['2026-07-14']).toEqual([]);
+    expect(rows.slice(1).every((row) =>
+      Object.values(row.visitsByDate).every((placements) => placements.length === 0)
+    )).toBe(true);
   });
 
   it('keeps a visit that overlaps a day even when the job plan dates do not', () => {

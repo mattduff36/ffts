@@ -47,6 +47,7 @@ import {
   LayoutPanelLeft,
   Minimize2,
   MoveHorizontal,
+  MoreHorizontal,
   Pencil,
   Plus,
   Search,
@@ -75,9 +76,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -572,130 +580,155 @@ function DraggableQuoteCard({
 
 interface ScheduledJobActionsProps {
   job: ScheduleJob;
-  visitDate?: string;
-  isMobile?: boolean;
+  visitDate: string;
+  visit?: ScheduleVisit;
+  staffingBadge: { label: string; short: boolean } | null;
   onAddVisit: () => void;
   onEdit: () => void;
   onRemove: () => void;
   onReschedule: () => void;
+  onEditVisit: () => void;
+  onReturnVisit: () => void;
 }
 
 function ScheduledJobActions({
   job,
   visitDate,
-  isMobile = false,
+  visit,
+  staffingBadge,
   onAddVisit,
   onEdit,
   onRemove,
   onReschedule,
+  onEditVisit,
+  onReturnVisit,
 }: ScheduledJobActionsProps) {
-  const buttonClass = cn(
-    'p-0',
-    isMobile ? 'h-11 w-11' : 'h-6 w-6'
-  );
-  const iconClass = isMobile ? 'h-4 w-4' : 'h-3 w-3';
-
   return (
     <div
-      className="flex shrink-0 items-center gap-0.5"
-      data-testid={`schedule-job-actions-${isMobile ? 'mobile' : 'desktop'}-${job.id}`}
+      className="shrink-0"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      data-no-timeline-pan
+      data-testid={`schedule-job-actions-${job.id}`}
     >
-      {visitDate ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className={cn(
-            buttonClass,
-            schedulingControlStyles.ghost
-          )}
-          onClick={onAddVisit}
-          aria-label={`Add Additional Visit to ${job.job_reference} on ${visitDate}`}
-          title="Add Additional Visit"
-        >
-          <Plus className={iconClass} />
-        </Button>
-      ) : null}
-      {job.source_type === 'quote' && job.quote_id ? (
-        <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            className={cn(
-              buttonClass,
-              schedulingControlStyles.ghost
-            )}
-            onClick={onReschedule}
-            aria-label={`Reschedule ${job.job_reference}`}
-            title="Reschedule"
+            className={cn('h-11 w-11 p-0 md:h-6 md:w-6', schedulingControlStyles.ghost)}
+            aria-label={`Actions for ${job.job_reference}${visit ? ` visit ${visit.sequence_number}` : ''}`}
+            title={`Job and visit actions for ${job.job_reference}`}
           >
-            <CalendarPlus className={iconClass} />
+            <MoreHorizontal className="h-4 w-4" />
           </Button>
-          <Button
-            asChild
-            size="sm"
-            variant="ghost"
-            className={cn(
-              buttonClass,
-              schedulingControlStyles.ghost
-            )}
-          >
-            <Link
-              href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open Quote ${job.job_reference} in new tab`}
-              title="Open Quote in new tab"
-            >
-              <ExternalLink className={iconClass} />
-            </Link>
-          </Button>
-        </>
-      ) : null}
-      {job.source_type === 'manual' && job.quote_project_number_id ? (
-        <Button asChild size="sm" variant="ghost" className={cn(buttonClass, schedulingControlStyles.ghost)}>
-          <Link
-            href="/quotes?tab=projects"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open Project ${job.job_reference} in new tab`}
-            title="Open Projects in new tab"
-          >
-            <ExternalLink className={iconClass} />
-          </Link>
-        </Button>
-      ) : null}
-      {job.source_type !== 'sample' ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className={cn(
-            buttonClass,
-            schedulingControlStyles.ghost
-          )}
-          onClick={onRemove}
-          aria-label={`Remove ${job.job_reference}`}
-          title="Remove from schedule"
-        >
-          <Trash2 className={iconClass} />
-        </Button>
-      ) : null}
-      {job.source_type !== 'quote' ? <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className={cn(
-          buttonClass,
-          schedulingControlStyles.ghost
-        )}
-        onClick={onEdit}
-        aria-label={`Edit ${job.job_reference}`}
-        title="Edit scheduled job"
-      >
-        <Pencil className={iconClass} />
-      </Button> : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64 [&_[role=menuitem]]:min-h-11 md:[&_[role=menuitem]]:min-h-8">
+          <DropdownMenuLabel className="space-y-1">
+            <span className="block">{job.job_reference}{staffingBadge ? ` · ${staffingBadge.label}` : ''}</span>
+            <span className="block break-words font-normal">{job.title}</span>
+            <span className="block break-words text-xs font-normal">{job.site_address || 'No site'}</span>
+            {job.estimated_duration_minutes ? (
+              <span className="block text-xs font-normal">
+                Estimated {Math.round(job.estimated_duration_minutes / 60 * 10) / 10} hours
+              </span>
+            ) : null}
+            <span className="block text-xs font-normal">
+              {job.source_type === 'manual' && job.quote_project_number_id ? 'Project' : job.source_type === 'manual' ? 'Manual job' : job.source_type === 'quote' ? 'Quote' : 'Sample'}
+              {(job.tags || []).map((tag) => ` · ${tag.name}`).join('')}
+            </span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {visit ? (
+            <>
+              <DropdownMenuItem onSelect={onEditVisit} title="Edit visit times and details">
+                <Pencil /> Edit visit {visit.sequence_number}
+              </DropdownMenuItem>
+              {visit.status === 'planned' ? (
+                <DropdownMenuItem onSelect={onReturnVisit} title="Return visit to Jobs">
+                  <ListRestart /> Return visit to Jobs
+                </DropdownMenuItem>
+              ) : null}
+            </>
+          ) : null}
+          <DropdownMenuItem onSelect={onAddVisit} title={`Add Additional Visit on ${visitDate}`}>
+            <Plus /> Add Additional Visit
+          </DropdownMenuItem>
+          {job.source_type === 'quote' && job.quote_id ? (
+            <>
+              <DropdownMenuItem onSelect={onReschedule} title="Reschedule">
+                <CalendarPlus /> Reschedule
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/quotes/overview/${encodeURIComponent(job.job_reference)}`} target="_blank" rel="noopener noreferrer" title="Open Quote in new tab">
+                  <ExternalLink /> Open Quote in new tab
+                </Link>
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {job.source_type === 'manual' && job.quote_project_number_id ? (
+            <DropdownMenuItem asChild>
+              <Link href="/quotes?tab=projects" target="_blank" rel="noopener noreferrer" title="Open Projects in new tab">
+                <ExternalLink /> Open Project in new tab
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
+          {job.source_type !== 'quote' ? (
+            <DropdownMenuItem onSelect={onEdit} title="Edit scheduled job">
+              <Pencil /> Edit scheduled job
+            </DropdownMenuItem>
+          ) : null}
+          {job.source_type !== 'sample' ? (
+            <DropdownMenuItem onSelect={onRemove} title="Remove from schedule">
+              <Trash2 /> Remove from schedule
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+type RenderCalendarJobActions = (job: ScheduleJob, date: string, visit?: ScheduleVisit) => ReactNode;
+
+function getCalendarJobStaffing(job: ScheduleJob, date: string, assignments: ScheduleAssignment[]) {
+  return formatStaffingBadge(countAssignedStaffForJobDate({
+    jobId: job.id,
+    workDate: date,
+    assignments,
+  }), job.required_staff_count);
+}
+
+function EmptyCalendarJobCard({
+  job,
+  date,
+  renderJobActions,
+  staffingBadge,
+}: {
+  job: ScheduleJob;
+  date: string;
+  renderJobActions: RenderCalendarJobActions;
+  staffingBadge: ReturnType<typeof formatStaffingBadge>;
+}) {
+  return (
+    <div
+      className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-card p-2"
+      data-testid={`schedule-empty-job-${job.id}-${date}`}
+      data-no-timeline-pan
+    >
+      <div className="min-w-0 flex-1 text-xs">
+        <p className="truncate font-semibold" title={job.job_reference}>{job.job_reference}</p>
+        <p className="mt-1 truncate" title={job.title}>{job.title}</p>
+        {staffingBadge ? (
+          <p className={cn('mt-1 text-[10px]', staffingBadge.short ? 'text-amber-200' : 'text-slate-200')}>
+            {staffingBadge.label} staff
+          </p>
+        ) : null}
+        <p className="mt-1 text-muted-foreground">No visits in view</p>
+      </div>
+      {renderJobActions(job, date)}
     </div>
   );
 }
@@ -787,12 +820,15 @@ function AssignmentChip({
 interface DayCellProps {
   row: ScheduleBoardRow;
   date: string;
+  staffingAssignments: ScheduleAssignment[];
   activeVisitId: string | null;
   onActivateVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onAddVisit: ((job: ScheduleJob) => void) | null;
   onEditVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onReturnVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
+  renderJobActions?: RenderCalendarJobActions;
+  showEmptyJobCard?: boolean;
 }
 
 interface VisitCardProps {
@@ -812,6 +848,8 @@ interface VisitCardProps {
   cardWidth?: number;
   dndInstanceId?: string;
   hiddenAssignment?: ScheduleBoardHiddenAssignment | null;
+  jobActions?: ReactNode;
+  staffingBadge?: { label: string; short: boolean } | null;
 }
 
 function visitCardTestId(visitId: string, dndInstanceId?: string): string {
@@ -837,6 +875,8 @@ function VisitCard({
   dndInstanceId,
   hiddenAssignment = null,
   disableDrag = false,
+  jobActions,
+  staffingBadge,
 }: VisitCardProps) {
   const workDate = getScheduleVisitDate(visit.starts_at);
   const cardAssignments = filterHiddenBoardAssignments(assignments, hiddenAssignment);
@@ -896,6 +936,7 @@ function VisitCard({
       style={{ ...style, touchAction: 'none' }}
       className={cn(
         'relative flex h-full min-h-0 cursor-grab flex-col overflow-hidden rounded-md border border-border bg-card/80 p-1.5',
+        jobActions && 'px-2.5 [container-type:inline-size]',
         className,
         visit.status === 'cancelled' && 'opacity-60',
         isDragging && 'cursor-grabbing opacity-40',
@@ -904,7 +945,7 @@ function VisitCard({
       )}
     >
       <ScheduleVisitTeamColours assignments={assignments} jobId={job.id} visitId={visit.id} workDate={workDate} />
-      <div className="mb-1 flex min-w-0 items-start justify-between gap-1">
+      <div className={cn('mb-1 flex min-w-0 items-start justify-between gap-1', jobActions && cardWidth !== undefined && cardWidth < 120 && 'flex-col-reverse')}>
         <button
           ref={dragHandleRef}
           data-schedule-visit-move-handle
@@ -913,6 +954,7 @@ function VisitCard({
           onPointerDown={resetDragState}
           className={cn(
             'min-w-0 flex-1 touch-none cursor-grab overflow-hidden rounded text-left text-xs font-semibold text-slate-100 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
+            jobActions && cardWidth !== undefined && cardWidth < 120 && 'w-full',
             isDragging && 'cursor-grabbing'
           )}
           style={{ touchAction: 'none' }}
@@ -921,7 +963,16 @@ function VisitCard({
               ? `Edit cancelled visit ${visit.sequence_number} for ${job.job_reference}`
               : `Select visit ${visit.sequence_number} for ${job.job_reference}`
           }
+          title={jobActions ? `${job.job_reference} · ${job.title} · ${staffingBadge?.label || ''} · ${formatScheduleVisitTime(visit.starts_at)}–${formatScheduleVisitTime(visit.ends_at)}` : undefined}
         >
+          <span className={jobActions ? 'schedule-job-card-details' : undefined}>
+          <span className="block min-w-0">
+          {jobActions ? (
+            <>
+              <span className="block truncate" title={job.job_reference}>{job.job_reference}</span>
+              <span className="block truncate font-normal" title={job.title}>{job.title}</span>
+            </>
+          ) : null}
           <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
             <Clock3 className="h-3 w-3 shrink-0" />
             {formatScheduleVisitTime(visit.starts_at)}–{formatScheduleVisitTime(visit.ends_at)}
@@ -931,10 +982,20 @@ function VisitCard({
               </span>
             ) : null}
           </span>
+          </span>
+          <span className="block min-w-0">
           <span className="mt-0.5 block truncate font-normal" title={job.customer_name || undefined}>{job.customer_name || 'Customer not set'}</span>
           <span className="block truncate font-normal text-muted-foreground" title={job.site_name || undefined}>{job.site_name || 'Site not set'}</span>
           <span className="block truncate font-normal text-muted-foreground" title={visit.title || job.title}>{visit.title || job.title}</span>
-          {dndInstanceId || (cardWidth !== undefined && cardWidth >= 120) ? (
+          {jobActions && staffingBadge ? (
+            <span data-testid={`schedule-job-staffing-${job.id}`} title={staffingBadge.label}
+              className={cn('block truncate text-[10px] font-semibold', staffingBadge.short ? 'text-amber-200' : 'text-slate-200')}>
+              {staffingBadge.label}
+            </span>
+          ) : null}
+          </span>
+          </span>
+          {!jobActions && (dndInstanceId || (cardWidth !== undefined && cardWidth >= 120)) ? (
             <span
               className="mt-0.5 block truncate text-[10px] font-medium text-slate-300"
               title={job.job_reference}
@@ -943,7 +1004,7 @@ function VisitCard({
             </span>
           ) : null}
         </button>
-        <span className="flex shrink-0 items-center gap-0.5">
+        {jobActions || <span className="flex shrink-0 items-center gap-0.5">
           {visit.status === 'planned' ? (
             <button
               type="button"
@@ -968,8 +1029,17 @@ function VisitCard({
           >
             <Pencil className="h-3 w-3" />
           </button>
-        </span>
+        </span>}
       </div>
+      {!jobActions && staffingBadge ? (
+        <span
+          data-testid={`schedule-job-staffing-${job.id}`}
+          title={staffingBadge.label}
+          className={cn('mb-1 block truncate text-[10px] font-semibold', staffingBadge.short ? 'text-amber-200' : 'text-slate-200')}
+        >
+          {staffingBadge.label}
+        </span>
+      ) : null}
       <div
         className="mt-auto shrink-0 space-y-1"
         data-testid={`schedule-assignment-layout-${visit.id}`}
@@ -1004,12 +1074,15 @@ function boardRowDndInstanceId(row: ScheduleBoardRow): string | undefined {
 function DayCell({
   row,
   date,
+  staffingAssignments,
   activeVisitId,
   onActivateVisit,
   onAddVisit,
   onEditVisit,
   onReturnVisit,
   onDeleteAssignment,
+  renderJobActions,
+  showEmptyJobCard = false,
 }: DayCellProps) {
   const job = row.job;
   const placements = row.visitsByDate[date] || [];
@@ -1030,6 +1103,9 @@ function DayCell({
       )}
     >
       <div className="space-y-1">
+        {job && showEmptyJobCard && renderJobActions ? (
+          <EmptyCalendarJobCard job={job} date={date} renderJobActions={renderJobActions} staffingBadge={getCalendarJobStaffing(job, date, staffingAssignments)} />
+        ) : null}
         {filterHiddenBoardAssignments(legacyAssignments, row.hiddenAssignment).map((assignment) => (
           <AssignmentChip
             key={`${assignment.resource_type}-${assignment.id}`}
@@ -1053,6 +1129,8 @@ function DayCell({
             onDeleteAssignment={onDeleteAssignment}
             dndInstanceId={dndInstanceId}
             hiddenAssignment={row.hiddenAssignment}
+            jobActions={renderJobActions?.(placement.job, date, placement.visit)}
+            staffingBadge={renderJobActions ? getCalendarJobStaffing(placement.job, date, staffingAssignments) : undefined}
           />
         ))}
       </div>
@@ -1079,7 +1157,7 @@ const DAILY_TIMELINE_DEFAULT_START_HOUR = 5;
 const DAILY_TIMELINE_DEFAULT_END_HOUR = 20;
 const DAILY_TIMELINE_HOUR_WIDTH = 96;
 const DAILY_TIMELINE_MIN_FIT_HOUR_WIDTH = 64;
-const DAILY_TIMELINE_JOB_COLUMN_WIDTH = 240;
+const DAILY_TIMELINE_AXIS_COLUMN_WIDTH = 240;
 const DAILY_TIMELINE_PAN_THRESHOLD = 5;
 const DAILY_JOB_ROW_MIN_HEIGHT = 144;
 const DAILY_TIMELINE_EDGE_PADDING = 8;
@@ -1104,6 +1182,7 @@ interface DailyTimelineRange {
 interface DailyTimelineCellProps {
   row: ScheduleBoardRow;
   date: string;
+  staffingAssignments: ScheduleAssignment[];
   range: DailyTimelineRange;
   layout: DailyTimelineLayout;
   isPannable: boolean;
@@ -1113,6 +1192,7 @@ interface DailyTimelineCellProps {
   onEditVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onReturnVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
+  renderJobActions?: RenderCalendarJobActions;
   onResizeVisit: (
     visit: ScheduleVisit,
     startsAt: string,
@@ -1134,7 +1214,8 @@ interface DailyTimelineLayout {
 function getDailyTimelineLayout(
   dayPlacements: ScheduleBoardVisitPlacement[],
   legacyAssignments: ScheduleAssignment[],
-  range: DailyTimelineRange
+  range: DailyTimelineRange,
+  showJobIdentity = false
 ): DailyTimelineLayout {
   const sortedPlacements = [...dayPlacements].sort((first, second) =>
     first.visit.starts_at.localeCompare(second.visit.starts_at)
@@ -1152,7 +1233,8 @@ function getDailyTimelineLayout(
       hourWidth: range.hourWidth,
       rangeWidth: range.width,
     });
-    const height = getDailyVisitLaneHeight(placement.assignments.length, cardWidth);
+    const height = getDailyVisitLaneHeight(placement.assignments.length, cardWidth)
+      + (showJobIdentity ? (cardWidth >= 322 ? -20 : cardWidth < 120 ? 64 : 40) : 0);
     const laidOut = { ...placement, top: nextTop, height };
     nextTop += height;
     if (index < sortedPlacements.length - 1) nextTop += DAILY_TIMELINE_LANE_GAP;
@@ -1208,15 +1290,16 @@ function getDailyTimelineRange(
 
 function canFitDailyTimeline(
   viewportWidth: number,
-  range: DailyTimelineRange
+  range: DailyTimelineRange,
+  axisWidth: number
 ): boolean {
-  const timelineWidth = getDailyTimelineAvailableWidth(viewportWidth);
+  const timelineWidth = getDailyTimelineAvailableWidth(viewportWidth, axisWidth);
   const durationHours = range.endHour - range.startHour;
   return timelineWidth / durationHours >= DAILY_TIMELINE_MIN_FIT_HOUR_WIDTH;
 }
 
-function getDailyTimelineAvailableWidth(viewportWidth: number): number {
-  return Math.max(0, viewportWidth - DAILY_TIMELINE_JOB_COLUMN_WIDTH);
+function getDailyTimelineAvailableWidth(viewportWidth: number, axisWidth: number): number {
+  return Math.max(0, viewportWidth - axisWidth);
 }
 
 const capturedSchedulePointers = new Map<number, Element>();
@@ -1370,6 +1453,8 @@ interface ResizableDailyVisitProps {
   onResizeVisit: DailyTimelineCellProps['onResizeVisit'];
   dndInstanceId?: string;
   hiddenAssignment?: ScheduleBoardHiddenAssignment | null;
+  jobActions?: ReactNode;
+  staffingBadge?: ReturnType<typeof formatStaffingBadge>;
 }
 
 function getResizedVisitTimes(
@@ -1434,6 +1519,8 @@ function ResizableDailyVisit({
   onResizeVisit,
   dndInstanceId,
   hiddenAssignment = null,
+  jobActions,
+  staffingBadge,
 }: ResizableDailyVisitProps) {
   const [draftTimes, setDraftTimesState] = useState<VisitResizeTimes | null>(
     null
@@ -1577,7 +1664,8 @@ function ResizableDailyVisit({
       <button
         type="button"
         className={cn(
-          'group/resize absolute inset-y-0 z-10 w-3 touch-none cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300',
+          'group/resize absolute inset-y-0 z-10 touch-none cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300',
+          jobActions ? 'w-2' : 'w-3',
           isStart ? 'left-0' : 'right-0'
         )}
         onPointerDown={(event) => handleResizePointerDown(event, edge)}
@@ -1644,6 +1732,8 @@ function ResizableDailyVisit({
         cardWidth={width}
         dndInstanceId={dndInstanceId}
         hiddenAssignment={hiddenAssignment}
+        jobActions={jobActions}
+        staffingBadge={staffingBadge}
       />
       {visit.status !== 'cancelled' ? (
         <>
@@ -1658,6 +1748,7 @@ function ResizableDailyVisit({
 function DailyTimelineCell({
   row,
   date,
+  staffingAssignments,
   range,
   layout,
   isPannable,
@@ -1668,6 +1759,7 @@ function DailyTimelineCell({
   onReturnVisit,
   onDeleteAssignment,
   onResizeVisit,
+  renderJobActions,
 }: DailyTimelineCellProps) {
   const dndInstanceId = boardRowDndInstanceId(row);
   const addVisitJob = row.kind === 'job' ? row.job : null;
@@ -1731,9 +1823,15 @@ function DailyTimelineCell({
           onResizeVisit={onResizeVisit}
           dndInstanceId={dndInstanceId}
           hiddenAssignment={row.hiddenAssignment}
+          jobActions={renderJobActions?.(job, date, visit)}
+          staffingBadge={renderJobActions ? getCalendarJobStaffing(job, date, staffingAssignments) : undefined}
         />
       ))}
-      {layout.placements.length === 0 && addVisitJob && onAddVisit ? (
+      {layout.placements.length === 0 && addVisitJob && renderJobActions ? (
+        <div className="sticky left-2 top-2 m-2 w-64 max-w-[calc(100%-1rem)]" style={{ marginTop: visibleLegacyAssignments.length > 0 ? 56 : undefined }}>
+          <EmptyCalendarJobCard job={addVisitJob} date={date} renderJobActions={renderJobActions} staffingBadge={getCalendarJobStaffing(addVisitJob, date, staffingAssignments)} />
+        </div>
+      ) : layout.placements.length === 0 && addVisitJob && onAddVisit ? (
         <button
           type="button"
           onClick={() => onAddVisit(addVisitJob)}
@@ -1763,51 +1861,10 @@ function resourceFromPlant(plant: SchedulePlantResource): SelectedScheduleResour
 function BoardRowIdentity({
   row,
   primary,
-  staffingBadge,
 }: {
   row: ScheduleBoardRow;
   primary: SchedulingBoardPrimary;
-  staffingBadge?: { label: string; short: boolean } | null;
 }) {
-  if (row.kind === 'job' && row.job) {
-    return (
-      <div className="min-w-0 overflow-hidden">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="block min-w-0 truncate font-semibold text-foreground">
-            {row.job.job_reference}
-          </span>
-          {staffingBadge ? (
-            <span
-              data-testid={`schedule-job-staffing-${row.job.id}`}
-              className={cn(
-                'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-                staffingBadge.short
-                  ? 'bg-amber-500/20 text-amber-200'
-                  : 'bg-slate-700 text-slate-200'
-              )}
-            >
-              {staffingBadge.label}
-            </span>
-          ) : null}
-        </div>
-        <p
-          className="mt-1 truncate text-sm text-muted-foreground"
-          title={`${row.job.customer_name ? `${row.job.customer_name} · ` : ''}${row.job.title}`}
-        >
-          {row.job.customer_name ? `${row.job.customer_name} · ` : ''}{row.job.title}
-        </p>
-        <p className="truncate text-xs text-muted-foreground">
-          {row.job.site_address || 'No site'}
-        </p>
-        {row.job.estimated_duration_minutes ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Estimated {Math.round(row.job.estimated_duration_minutes / 60 * 10) / 10} hours
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
   if (row.kind === 'team') {
     return <span className="block truncate font-semibold text-foreground">{row.teamName}</span>;
   }
@@ -2844,9 +2901,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     () => getDailyTimelineRange(board?.visits || [], selectedDate),
     [board?.visits, selectedDate]
   );
+  const dailyTimelineAxisWidth = primary === SCHEDULING_BOARD_PRIMARIES.job
+    ? 0
+    : DAILY_TIMELINE_AXIS_COLUMN_WIDTH;
   const isDailyTimelineFitEligible =
     dailyTimelineViewportWidth === null
-    || canFitDailyTimeline(dailyTimelineViewportWidth, dailyTimelineBaseRange);
+    || canFitDailyTimeline(dailyTimelineViewportWidth, dailyTimelineBaseRange, dailyTimelineAxisWidth);
   const effectiveDailyTimelineMode =
     dailyTimelineMode === 'fit' && isDailyTimelineFitEligible ? 'fit' : 'scroll';
   const dailyTimelineRange = useMemo(() => {
@@ -2855,7 +2915,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       || dailyTimelineViewportWidth === null
     ) return dailyTimelineBaseRange;
 
-    const availableWidth = getDailyTimelineAvailableWidth(dailyTimelineViewportWidth);
+    const availableWidth = getDailyTimelineAvailableWidth(dailyTimelineViewportWidth, dailyTimelineAxisWidth);
     const durationHours =
       dailyTimelineBaseRange.endHour - dailyTimelineBaseRange.startHour;
     const hourWidth = Math.floor(availableWidth / durationHours);
@@ -2870,6 +2930,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     dailyTimelineBaseRange,
     dailyTimelineViewportWidth,
     effectiveDailyTimelineMode,
+    dailyTimelineAxisWidth,
   ]);
 
   useEffect(() => {
@@ -6071,6 +6132,27 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     setSchedulingQuoteJob(job);
   }
 
+  function renderCalendarJobActions(job: ScheduleJob, date: string, visit?: ScheduleVisit) {
+    return (
+      <ScheduledJobActions
+        job={job}
+        visitDate={date}
+        visit={visit}
+        staffingBadge={getCalendarJobStaffing(job, date, board?.assignments || [])}
+        onAddVisit={() => openVisitEditor(job, date)}
+        onEdit={() => {
+          setJobDraft(null);
+          setEditingJob(job);
+          setJobDialogOpen(true);
+        }}
+        onRemove={() => setPendingRemoveJob(job)}
+        onReschedule={() => openQuoteScheduler(job)}
+        onEditVisit={() => { if (visit) openVisitEditor(job, date, visit); }}
+        onReturnVisit={() => { if (visit) void prepareVisitReturn({ job, visit }); }}
+      />
+    );
+  }
+
   if (boardQuery.isLoading) return <PageLoader message="Loading scheduling board..." />;
   if (!board) {
     return (
@@ -7093,15 +7175,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 <div
                   className={cn(
                     'flex min-h-full flex-col',
-                    view !== SCHEDULING_BOARD_VIEWS.daily && 'min-w-[1260px]'
+                    view !== SCHEDULING_BOARD_VIEWS.daily && (
+                      primary === SCHEDULING_BOARD_PRIMARIES.job ? 'min-w-[980px]' : 'min-w-[1260px]'
+                    )
                   )}
                   style={
                     view === SCHEDULING_BOARD_VIEWS.daily
                       ? {
                           minWidth:
-                            DAILY_TIMELINE_JOB_COLUMN_WIDTH + dailyTimelineRange.width,
+                            dailyTimelineAxisWidth + dailyTimelineRange.width,
                           width:
-                            DAILY_TIMELINE_JOB_COLUMN_WIDTH + dailyTimelineRange.width,
+                            dailyTimelineAxisWidth + dailyTimelineRange.width,
                         }
                       : undefined
                   }
@@ -7115,18 +7199,20 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     className={cn(
                       'grid shrink-0 bg-muted/60',
                       view !== SCHEDULING_BOARD_VIEWS.daily
-                        && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                        && (primary === SCHEDULING_BOARD_PRIMARIES.job
+                          ? 'grid-cols-[repeat(7,minmax(140px,1fr))]'
+                          : 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]')
                     )}
                     style={
                       view === SCHEDULING_BOARD_VIEWS.daily
                         ? {
                             gridTemplateColumns:
-                              `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                              `${dailyTimelineAxisWidth ? `${dailyTimelineAxisWidth}px ` : ''}${dailyTimelineRange.width}px`,
                           }
                         : undefined
                     }
                   >
-                    <div
+                    {primary !== SCHEDULING_BOARD_PRIMARIES.job ? <div
                       className={cn(
                         'border-r border-border p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
                         view === SCHEDULING_BOARD_VIEWS.daily
@@ -7145,7 +7231,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           {format(parseISO(selectedDate), 'EEE d MMM')}
                         </span>
                       ) : null}
-                    </div>
+                    </div> : null}
                     {view === SCHEDULING_BOARD_VIEWS.daily ? (
                       <DailyTimelineHeader
                         date={selectedDate}
@@ -7176,7 +7262,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     const dailyLayout = getDailyTimelineLayout(
                       row.visitsByDate[selectedDate] || [],
                       row.legacyAssignmentsByDate[selectedDate] || [],
-                      dailyTimelineRange
+                      dailyTimelineRange,
+                      primary === SCHEDULING_BOARD_PRIMARIES.job
                     );
                     const job = row.job;
 
@@ -7186,20 +7273,22 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       className={cn(
                         'grid shrink-0 border-t border-border',
                         view !== SCHEDULING_BOARD_VIEWS.daily
-                          && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                          && (primary === SCHEDULING_BOARD_PRIMARIES.job
+                            ? 'grid-cols-[repeat(7,minmax(140px,1fr))]'
+                            : 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]')
                       )}
                       data-testid={getScheduleBoardRowTestId(row)}
                       style={
                         view === SCHEDULING_BOARD_VIEWS.daily
                           ? {
                               gridTemplateColumns:
-                                `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                                `${dailyTimelineAxisWidth ? `${dailyTimelineAxisWidth}px ` : ''}${dailyTimelineRange.width}px`,
                             height: dailyLayout.rowHeight,
                             }
                           : undefined
                       }
                     >
-                      <div
+                      {primary !== SCHEDULING_BOARD_PRIMARIES.job ? <div
                         className={cn(
                           'flex h-full min-h-0 flex-col overflow-hidden border-r border-border p-3',
                           view === SCHEDULING_BOARD_VIEWS.daily
@@ -7220,60 +7309,14 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                         <BoardRowIdentity
                           row={row}
                           primary={primary}
-                          staffingBadge={
-                            row.job
-                              ? formatStaffingBadge(
-                                  countAssignedStaffForJobDate({
-                                    jobId: row.job.id,
-                                    workDate: selectedDate,
-                                    assignments: board?.assignments || [],
-                                  }),
-                                  row.job.required_staff_count
-                                )
-                              : null
-                          }
                         />
-                        {job ? (
-                        <div
-                          className="mt-auto flex min-w-0 items-end justify-between gap-1 pt-2"
-                          data-testid={`schedule-job-footer-desktop-${job.id}`}
-                        >
-                          <div className="flex max-h-10 min-w-0 flex-wrap items-center gap-1 overflow-hidden">
-                            {job.source_type === 'sample' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Sample</Badge> : null}
-                            {job.source_type === 'quote' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Quote</Badge> : null}
-                            {job.source_type === 'manual' && job.quote_project_number_id ? (
-                              <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Project</Badge>
-                            ) : null}
-                            {(job.tags || []).map((tag) => (
-                              <Badge key={tag.id} variant="secondary">{tag.name}</Badge>
-                            ))}
-                          </div>
-                          <ScheduledJobActions
-                            job={job}
-
-                            visitDate={
-                              view === SCHEDULING_BOARD_VIEWS.daily
-                                ? selectedDate
-                                : undefined
-                            }
-                            onAddVisit={() => openVisitEditor(job, selectedDate)}
-                            onEdit={() => {
-                              setJobDraft(null);
-                              setEditingJob(job);
-                              setJobDialogOpen(true);
-                            }}
-                            onRemove={() => setPendingRemoveJob(job)}
-                            onReschedule={() => openQuoteScheduler(job)}
-
-                          />
-                        </div>
-                        ) : null}
-                      </div>
+                      </div> : null}
                       {view === SCHEDULING_BOARD_VIEWS.daily ? (
                         <DailyTimelineCell
                           key={`${row.id}-${selectedDate}`}
                           row={row}
                           date={selectedDate}
+                          staffingAssignments={board.assignments}
                           range={dailyTimelineRange}
                           layout={dailyLayout}
                           isPannable={effectiveDailyTimelineMode === 'scroll'}
@@ -7288,6 +7331,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                           onDeleteAssignment={setPendingDeleteAssignment}
                           onResizeVisit={resizeVisit}
+                          renderJobActions={job ? renderCalendarJobActions : undefined}
                         />
                       ) : (
                         weekDates.map((date) => (
@@ -7295,6 +7339,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             key={`${row.id}-${date}`}
                             row={row}
                             date={date}
+                            staffingAssignments={board.assignments}
                             activeVisitId={activeVisitTarget?.visit.id || null}
                             onActivateVisit={(placementJob, visit) => activateVisit(placementJob, visit)}
                             onAddVisit={
@@ -7305,6 +7350,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, date, visit)}
                             onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                             onDeleteAssignment={setPendingDeleteAssignment}
+                            renderJobActions={job ? renderCalendarJobActions : undefined}
+                            showEmptyJobCard={Boolean(job)
+                              && !weekDates.some((workDate) => row.visitsByDate[workDate]?.length)
+                              && date === (weekDates.find((workDate) => job && workDate >= job.start_date && workDate <= job.end_date) || weekDates[0])}
                           />
                         ))
                       )}
@@ -7315,7 +7364,9 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                     className={cn(
                       'grid min-h-0 flex-1',
                       view !== SCHEDULING_BOARD_VIEWS.daily
-                        && 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+                        && (primary === SCHEDULING_BOARD_PRIMARIES.job
+                          ? 'grid-cols-[repeat(7,minmax(140px,1fr))]'
+                          : 'grid-cols-[240px_repeat(7,minmax(140px,1fr))]')
                     )}
                     data-testid="schedule-board-grid-fill"
                     aria-hidden="true"
@@ -7323,19 +7374,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       view === SCHEDULING_BOARD_VIEWS.daily
                         ? {
                             gridTemplateColumns:
-                              `${DAILY_TIMELINE_JOB_COLUMN_WIDTH}px ${dailyTimelineRange.width}px`,
+                              `${dailyTimelineAxisWidth ? `${dailyTimelineAxisWidth}px ` : ''}${dailyTimelineRange.width}px`,
                           }
                         : undefined
                     }
                   >
-                    <div
+                    {primary !== SCHEDULING_BOARD_PRIMARIES.job ? <div
                       className={cn(
                         'border-r border-t border-border',
                         view === SCHEDULING_BOARD_VIEWS.daily
                           ? 'sticky left-0 z-30 bg-[hsl(var(--background)/0.5)]'
                           : 'sticky left-0 z-10 bg-slate-900'
                       )}
-                    />
+                    /> : null}
                     {view === SCHEDULING_BOARD_VIEWS.daily ? (
                       <div
                         className="min-h-0 border-l border-t border-border bg-muted/10"
@@ -7398,72 +7449,25 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 {boardRows.map((row) => {
                   const job = row.job;
                   const dndInstanceId = boardRowDndInstanceId(row);
-                  const mobileDates = job
+                  const jobDates = job
                     ? weekDates.filter((date) =>
                         (row.visitsByDate[date]?.length || 0) > 0
                         || (date >= job.start_date && date <= job.end_date)
                       )
                     : weekDates;
+                  const mobileDates = jobDates.length > 0 ? jobDates : weekDates.slice(0, 1);
                   return (
                   <div
                     key={row.id}
                     className="rounded-lg border border-border bg-muted/20 p-3"
                     data-testid={`${getScheduleBoardRowTestId(row)}-mobile`}
                   >
-                    <div className="mb-3 min-w-0">
+                    {!job ? <div className="mb-3 min-w-0">
                       <BoardRowIdentity
                         row={row}
                         primary={primary}
-                        staffingBadge={
-                          row.job
-                            ? formatStaffingBadge(
-                                countAssignedStaffForJobDate({
-                                  jobId: row.job.id,
-                                  workDate: selectedDate,
-                                  assignments: board?.assignments || [],
-                                }),
-                                row.job.required_staff_count
-                              )
-                            : null
-                        }
                       />
-                      {job ? (
-                      <div
-                        className="mt-2 flex min-w-0 items-end justify-between gap-2"
-                        data-testid={`schedule-job-footer-mobile-${job.id}`}
-                      >
-                        <div className="flex min-w-0 flex-wrap items-center gap-1 overflow-hidden">
-                          {job.source_type === 'sample' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Sample</Badge> : null}
-                          {job.source_type === 'quote' ? <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Quote</Badge> : null}
-                          {job.source_type === 'manual' && job.quote_project_number_id ? (
-                            <Badge variant="outline" className={schedulingControlStyles.sourceBadge}>Project</Badge>
-                          ) : null}
-                          {(job.tags || []).map((tag) => (
-                            <Badge key={tag.id} variant="secondary">{tag.name}</Badge>
-                          ))}
-                        </div>
-                        <ScheduledJobActions
-                          job={job}
-                          visitDate={
-                            view === SCHEDULING_BOARD_VIEWS.daily
-                              ? selectedDate
-                              : undefined
-                          }
-                          isMobile
-
-                          onAddVisit={() => openVisitEditor(job, selectedDate)}
-                          onEdit={() => {
-                            setJobDraft(null);
-                            setEditingJob(job);
-                            setJobDialogOpen(true);
-                          }}
-                          onRemove={() => setPendingRemoveJob(job)}
-                          onReschedule={() => openQuoteScheduler(job)}
-
-                        />
-                      </div>
-                      ) : null}
-                    </div>
+                    </div> : null}
                     <div className="space-y-2">
                       {mobileDates.map((date) => {
                         const placements = row.visitsByDate[date] || [];
@@ -7530,9 +7534,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     dndScope="mobile"
                                     dndInstanceId={dndInstanceId}
                                     hiddenAssignment={row.hiddenAssignment}
+                                    jobActions={job ? renderCalendarJobActions(placement.job, date, placement.visit) : undefined}
+                                    staffingBadge={job ? getCalendarJobStaffing(placement.job, date, board.assignments) : undefined}
                                   />
                               ))}
-                              {legacyAssignments.length === 0 && placements.length === 0 ? (
+                              {job && placements.length === 0
+                                && !weekDates.some((workDate) => row.visitsByDate[workDate]?.length)
+                                && date === mobileDates[0] ? (
+                                <EmptyCalendarJobCard job={job} date={date} renderJobActions={renderCalendarJobActions} staffingBadge={getCalendarJobStaffing(job, date, board.assignments)} />
+                              ) : legacyAssignments.length === 0 && placements.length === 0 ? (
                                 <span className="text-xs text-muted-foreground">No visits yet</span>
                               ) : null}
                             </div>

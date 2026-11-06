@@ -1,5 +1,26 @@
 [
   {
+    "version": "1126.0.0",
+    "updateKind": "minor",
+    "title": "Release automation maintenance update",
+    "description": "Hand off approved plans to premium workers.",
+    "summary": "Hand off approved plans to premium workers.",
+    "details": [
+      "Updated navigation, with changes to interface components, shared logic, and automated tests.",
+      "Updated data storage, with changes to data storage.",
+      "Updated quotes, with changes to background routes, app screens, and automated tests.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated projects, with changes to app screens."
+    ],
+    "areas": [
+      "Release automation"
+    ],
+    "areaKeys": [
+      "release-automation"
+    ],
+    "pushedAt": "2026-11-06T00:09:28.934Z"
+  },
+  {
     "version": "1026.8.7",
     "updateKind": "minor",
     "title": "Analytics improvements",

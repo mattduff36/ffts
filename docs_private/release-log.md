@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1126.0.0
+
+**GIT COMMIT MESSAGE**
+`refactor(automation): hand off approved plans to premium workers`
+
+**PUSHED AT**
+2026-11-06T00:09:28.934Z
+
+**WHAT CHANGED**
+Hand off approved plans to premium workers.
+
+**VERSION HISTORY DETAILS**
+- Updated navigation, with changes to interface components, shared logic, and automated tests.
+- Updated data storage, with changes to data storage.
+- Updated quotes, with changes to background routes, app screens, and automated tests.
+- Updated help and FAQ, with changes to documentation.
+- Updated projects, with changes to app screens.
+
+**COMMITS IN THIS RELEASE**
+- `refactor(automation): hand off approved plans to premium workers`
+
 ## 1026.8.7
 
 **GIT COMMIT MESSAGE**

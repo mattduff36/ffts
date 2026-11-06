@@ -116,6 +116,7 @@ const {
   mockFetchProjectCandidates,
   mockFetchQuoteCandidates,
   mockFetchVisitBacklog,
+  mockFetchResourceJobs,
   mockMoveAssignment,
   mockPreviewVisitBacklog,
   mockQuickAdd,
@@ -159,6 +160,7 @@ const {
   mockFetchProjectCandidates: vi.fn(),
   mockFetchQuoteCandidates: vi.fn(),
   mockFetchVisitBacklog: vi.fn(),
+  mockFetchResourceJobs: vi.fn(),
   mockMoveAssignment: vi.fn(),
   mockPreviewVisitBacklog: vi.fn(),
   mockQuickAdd: vi.fn(),
@@ -306,7 +308,7 @@ vi.mock('@/lib/client/scheduling', async () => {
     fetchSchedulingBoard: mockFetchBoard,
     fetchScheduleQuoteCandidates: mockFetchQuoteCandidates,
     fetchScheduleVisitBacklog: mockFetchVisitBacklog,
-    fetchScheduleResourceJobs: vi.fn().mockResolvedValue([]),
+    fetchScheduleResourceJobs: mockFetchResourceJobs,
     moveScheduleAssignment: mockMoveAssignment,
     previewScheduleVisitBacklog: mockPreviewVisitBacklog,
     quickAddScheduleProject: mockQuickAdd,
@@ -534,6 +536,13 @@ function prepareDailyBoard() {
   return today;
 }
 
+async function openJobActions() {
+  fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Actions for JOB-101 visit 1' })[0], {
+    button: 0, ctrlKey: false, pointerType: 'mouse',
+  });
+  return within(await screen.findByRole('menu'));
+}
+
 describe('SchedulingManagerBoard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -556,6 +565,7 @@ describe('SchedulingManagerBoard', () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     mockWideViewport(false);
     mockFetchBoard.mockResolvedValue(board);
+    mockFetchResourceJobs.mockResolvedValue([]);
     mockCreateAssignment.mockResolvedValue({
       assignments: [{
         id: 'assignment-new',
@@ -1023,11 +1033,12 @@ describe('SchedulingManagerBoard', () => {
     mockDeleteJob.mockImplementationOnce(() => new Promise((resolve) => {
       resolveDelete = resolve;
     }));
+    mockFetchResourceJobs.mockResolvedValue(board.jobs);
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(await screen.findByTestId('schedule-resource-job-job-1')).toBeInTheDocument();
 
-    const removeButton = screen.getAllByRole('button', { name: 'Remove JOB-101' })[0];
-    expect(removeButton).toHaveClass('bg-transparent', 'text-[#e2e8f0]');
+    const removeButton = (await openJobActions()).getByRole('menuitem', { name: 'Remove from schedule' });
     fireEvent.click(removeButton);
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Remove Project job from the schedule?',
@@ -1038,7 +1049,8 @@ describe('SchedulingManagerBoard', () => {
 
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
     expect(mockDeleteJob).toHaveBeenCalledWith('job-1');
-    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-job-job-1')).not.toBeInTheDocument();
     expect(mockFetchBoard).toHaveBeenCalledTimes(1);
     mockFetchBoard.mockRejectedValueOnce(new Error('reconciliation failed'));
     resolveDelete({
@@ -1048,7 +1060,8 @@ describe('SchedulingManagerBoard', () => {
       project_number_id: 'project-1',
     });
     await waitFor(() => expect(mockFetchBoard.mock.calls.length).toBeGreaterThan(1));
-    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-job-job-1')).not.toBeInTheDocument();
   });
 
   it('FOLLOWUP-UNCERTAIN-002 keeps an ambiguous removal projected over a stale refetch', async () => {
@@ -1056,19 +1069,24 @@ describe('SchedulingManagerBoard', () => {
     mockDeleteJob.mockImplementationOnce(() => new Promise((_, reject) => {
       rejectDelete = reject;
     }));
+    mockFetchResourceJobs.mockResolvedValue(board.jobs);
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
+    expect(await screen.findByTestId('schedule-resource-job-job-1')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+    fireEvent.click((await openJobActions()).getByRole('menuitem', { name: 'Remove from schedule' }));
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Remove Project job from the schedule?',
     });
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Remove job' }));
-    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-job-job-1')).not.toBeInTheDocument();
 
     rejectDelete(new TypeError('network interrupted after write'));
     await waitFor(() => expect(mockFetchBoard.mock.calls.length).toBeGreaterThan(1));
-    expect(screen.queryByRole('button', { name: 'Remove JOB-101' })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockFetchResourceJobs.mock.calls.length).toBeGreaterThan(1));
+    expect(screen.queryByTestId('schedule-board-row-job-job-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-resource-job-job-1')).not.toBeInTheDocument();
   });
 
   it('explains that removing a Quote job preserves and requeues its Quote', async () => {
@@ -1084,7 +1102,7 @@ describe('SchedulingManagerBoard', () => {
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+    fireEvent.click((await openJobActions()).getByRole('menuitem', { name: 'Remove from schedule' }));
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Remove Quote job from the schedule?',
     });
@@ -1187,7 +1205,7 @@ describe('SchedulingManagerBoard', () => {
     expect(quoteDragCue).not.toHaveAttribute('tabindex');
     expect(draftCard.querySelector('button')).toBeNull();
     expect(screen.getByText('Q-SCHEDULED')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'All (4)' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'All (5)' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
@@ -1271,16 +1289,12 @@ describe('SchedulingManagerBoard', () => {
     expect(mockPreviewVisitBacklog).toHaveBeenCalledWith('visit-1');
   });
 
-  it('returns a visit to Jobs immediately from the card button', async () => {
+  it('returns a visit to Jobs immediately from the card action menu', async () => {
     mockWideViewport(true);
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getAllByRole('button', {
-        name: 'Return visit 1 for JOB-101 to Jobs',
-      })[0]
-    );
+    fireEvent.click((await openJobActions()).getByRole('menuitem', { name: 'Return visit to Jobs' }));
 
     expect(screen.queryByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
@@ -1385,8 +1399,8 @@ describe('SchedulingManagerBoard', () => {
       status: 'open',
     }]);
     renderBoard();
-    expect(await screen.findByRole('tab', { name: 'Projects (1)' })).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Projects (1)' }), {
+    expect(await screen.findByRole('tab', { name: 'Projects (2)' })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Projects (2)' }), {
       button: 0,
       ctrlKey: false,
     });
@@ -1530,7 +1544,7 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(screen.getByTestId('schedule-board-grid-fill')).toHaveClass(
       'flex-1',
-      'grid-cols-[240px_repeat(7,minmax(140px,1fr))]'
+      'grid-cols-[repeat(7,minmax(140px,1fr))]'
     );
     expect(screen.getByTestId('schedule-resources-panel')).toBeInTheDocument();
     expect(screen.getByTestId('schedule-resource-tabs')).toHaveClass(
@@ -2410,9 +2424,9 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.queryByText(/Drag from the grip handle/)).not.toBeInTheDocument();
 
     const titleControls = screen.getByTestId('schedule-board-title-controls');
-    expect(titleControls).toHaveClass('ml-auto', 'shrink-0');
+    expect(titleControls).toHaveClass('flex', 'flex-wrap');
     expect(titleControls).toContainElement(screen.getByTestId('schedule-primary-tabs'));
-    expect(titleControls).toContainElement(screen.getByPlaceholderText('Search jobs'));
+    expect(within(titleControls).getByPlaceholderText('Search jobs')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Resources help' }));
     expect(await screen.findByText(/Drag a queued job onto a date/)).toBeInTheDocument();
@@ -2455,18 +2469,16 @@ describe('SchedulingManagerBoard', () => {
     });
     renderBoard();
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
-    const quoteActions = screen.getByTestId('schedule-job-actions-desktop-job-1');
-    expect(within(quoteActions).queryByRole('button', { name: 'Edit JOB-101' }))
+    const quoteActions = await openJobActions();
+    expect(quoteActions.queryByRole('menuitem', { name: 'Edit scheduled job' }))
       .not.toBeInTheDocument();
-    const openQuoteLink = within(quoteActions).getByRole('link', {
-      name: 'Open Quote JOB-101 in new tab',
+    const openQuoteLink = quoteActions.getByRole('menuitem', {
+      name: 'Open Quote in new tab',
     });
     expect(openQuoteLink).toHaveAttribute('target', '_blank');
     expect(openQuoteLink).toHaveAttribute('rel', 'noopener noreferrer');
 
-    fireEvent.click(
-      screen.getAllByRole('button', { name: 'Reschedule JOB-101' })[0]
-    );
+    fireEvent.click(quoteActions.getByRole('menuitem', { name: 'Reschedule' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reschedule Quote job' });
     expect(within(dialog).getByLabelText('Start date')).toHaveValue('2026-07-13');
     expect(within(dialog).getByLabelText('End date')).toHaveValue('2026-07-15');
@@ -2489,7 +2501,7 @@ describe('SchedulingManagerBoard', () => {
     expect(await screen.findByText('Weekly job board')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Offer if crew finishes early' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Offer if crew free' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('schedule-job-actions-desktop-job-1')).toBeInTheDocument();
+    expect(screen.getAllByTestId('schedule-job-actions-job-1').length).toBeGreaterThan(0);
     expect(mockSaveScheduleJob).not.toHaveBeenCalled();
   });
 
@@ -2560,22 +2572,9 @@ describe('SchedulingManagerBoard', () => {
     expect(screen.getByTestId('schedule-daily-timeline-content')).toHaveStyle({
       width: '1800px',
     });
-    const jobHeader = screen.getByTestId('schedule-daily-job-header');
-    const jobCell = screen.getByTestId('schedule-daily-job-cell-job-1');
-    expect(jobHeader).toHaveClass(
-      'sticky',
-      'left-0',
-      'z-30',
-      'bg-[hsl(var(--background)/0.5)]'
-    );
-    expect(jobHeader).not.toHaveClass('backdrop-blur');
-    expect(jobCell).toHaveClass(
-      'sticky',
-      'left-0',
-      'z-30',
-      'bg-[hsl(var(--background)/0.5)]'
-    );
-    expect(within(jobCell).getByRole('button', { name: 'Edit JOB-101' }))
+    expect(screen.queryByTestId('schedule-daily-job-header')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-daily-job-cell-job-1')).not.toBeInTheDocument();
+    expect(within(dailyTimeline).getByRole('button', { name: 'Actions for JOB-101 visit 1' }))
       .toBeInTheDocument();
     expect(screen.getByTestId('schedule-daily-timeline-header')).toHaveClass(
       'relative',
@@ -2611,9 +2610,8 @@ describe('SchedulingManagerBoard', () => {
     const visitPlacement = within(dailyTimeline).getByTestId(
       'schedule-timeline-visit-visit-1'
     );
-    expect(jobCell).toHaveStyle({ height: '144px' });
-    expect(timelineCell).toHaveStyle({ height: '144px' });
-    expect(visitPlacement).toHaveStyle({ top: '8px', height: '128px' });
+    expect(timelineCell).toHaveStyle({ height: '180px' });
+    expect(visitPlacement).toHaveStyle({ top: '8px', height: '164px' });
     const timelineVisit = within(dailyTimeline).getByTestId('schedule-visit-visit-1');
     expect(timelineVisit).toHaveClass(
       'flex',
@@ -2649,23 +2647,23 @@ describe('SchedulingManagerBoard', () => {
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'fit');
     expect(dailyTimeline).toHaveClass('overflow-x-hidden', 'overflow-y-hidden');
     expect(dailyTimeline).not.toHaveClass('overflow-x-auto');
-    expect(timelineHeader).toHaveAttribute('data-hour-width', '144');
-    expect(timelineHeader).toHaveStyle({ width: '2160px' });
+    expect(timelineHeader).toHaveAttribute('data-hour-width', '160');
+    expect(timelineHeader).toHaveStyle({ width: '2400px' });
 
     dailyTimeline.scrollLeft = 42;
     act(() => resizeTimelineViewport(2707, 9999));
 
     await waitFor(() => expect(timelineContent).toHaveStyle({ width: '2700px' }));
     await waitFor(() => expect(dailyTimeline.scrollLeft).toBe(0));
-    expect(timelineHeader).toHaveAttribute('data-hour-width', '164');
-    expect(timelineHeader).toHaveStyle({ width: '2460px' });
+    expect(timelineHeader).toHaveAttribute('data-hour-width', '180');
+    expect(timelineHeader).toHaveStyle({ width: '2700px' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Scroll' }));
 
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll');
     expect(dailyTimeline).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
     expect(dailyTimeline).not.toHaveClass('overflow-x-hidden');
-    expect(timelineContent).toHaveStyle({ width: '1680px' });
+    expect(timelineContent).toHaveStyle({ width: '1440px' });
     expect(timelineHeader).toHaveAttribute('data-hour-width', '96');
     expect(timelineHeader).toHaveStyle({ width: '1440px' });
   });
@@ -2689,7 +2687,7 @@ describe('SchedulingManagerBoard', () => {
     expect(dailyTimeline).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
     expect(dailyTimeline).toHaveClass('[scrollbar-width:thin]');
     expect(screen.getByTestId('schedule-daily-timeline-content')).toHaveStyle({
-      width: '1680px',
+      width: '1440px',
     });
     expect(screen.getByTestId('schedule-daily-timeline-header')).toHaveStyle({
       width: '1440px',
@@ -2697,7 +2695,7 @@ describe('SchedulingManagerBoard', () => {
   });
 
   it('disables Fit and forces Scroll when the measured scale would be too narrow', async () => {
-    timelineViewportWidth = 1100;
+    timelineViewportWidth = 900;
     prepareDailyBoard();
     renderBoard();
 
@@ -2711,7 +2709,7 @@ describe('SchedulingManagerBoard', () => {
     expect(dailyTimeline).toHaveAttribute('data-fit-eligible', 'false');
     expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll');
     expect(screen.getByTestId('schedule-daily-timeline-content')).toHaveStyle({
-      width: '1680px',
+      width: '1440px',
     });
   });
 
@@ -2727,13 +2725,13 @@ describe('SchedulingManagerBoard', () => {
     await waitFor(() => expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'fit'));
     expect(timelineContent).toHaveStyle({ width: '1800px' });
 
-    act(() => resizeTimelineViewport(1100));
+    act(() => resizeTimelineViewport(900));
 
     await waitFor(() => expect(dailyTimeline).toHaveAttribute('data-timeline-mode', 'scroll'));
     expect(dailyTimeline).toHaveAttribute('data-fit-eligible', 'false');
     expect(fitButton).toBeDisabled();
     expect(scrollButton).toHaveAttribute('aria-pressed', 'true');
-    expect(timelineContent).toHaveStyle({ width: '1680px' });
+    expect(timelineContent).toHaveStyle({ width: '1440px' });
 
     act(() => resizeTimelineViewport(1800));
 
@@ -2746,7 +2744,7 @@ describe('SchedulingManagerBoard', () => {
   });
 
   it('pans Scroll mode from empty timeline space without hijacking visit controls', async () => {
-    timelineViewportWidth = 1100;
+    timelineViewportWidth = 900;
     const today = prepareDailyBoard();
     renderBoard();
 
@@ -2907,7 +2905,7 @@ describe('SchedulingManagerBoard', () => {
     expect(within(layout).queryByTestId('schedule-assignment-overflow-visit-1')).not.toBeInTheDocument();
     expect(within(dailyTimeline).getByTestId('schedule-timeline-visit-visit-1')).toHaveStyle({
       top: '8px',
-      height: '196px',
+      height: '236px',
     });
     expect(layout).toHaveClass('mt-auto', 'shrink-0');
     expect(layout).not.toHaveClass('overflow-hidden');
@@ -2964,14 +2962,12 @@ describe('SchedulingManagerBoard', () => {
       'schedule-timeline-visit-visit-2'
     );
 
-    expect(timelineCell).toHaveStyle({ height: '272px' });
-    expect(screen.getByTestId('schedule-daily-job-cell-job-1')).toHaveStyle({
-      height: '272px',
-    });
-    expect(firstPlacement).toHaveStyle({ top: '8px', height: '124px' });
-    expect(secondPlacement).toHaveStyle({ top: '140px', height: '124px' });
-    expect(8 + 124).toBeLessThan(140);
-    expect(140 + 124).toBeLessThanOrEqual(272);
+    expect(timelineCell).toHaveStyle({ height: '352px' });
+    expect(screen.queryByTestId('schedule-daily-job-cell-job-1')).not.toBeInTheDocument();
+    expect(firstPlacement).toHaveStyle({ top: '8px', height: '164px' });
+    expect(secondPlacement).toHaveStyle({ top: '180px', height: '164px' });
+    expect(8 + 164).toBeLessThan(180);
+    expect(180 + 164).toBeLessThanOrEqual(352);
   });
 
   it('moves a daily visit as a whole with keyboard controls', async () => {
@@ -3713,34 +3709,21 @@ describe('SchedulingManagerBoard', () => {
     );
   });
 
-  it('keeps Job details full-width and places actions beside the source footer badge', async () => {
+  it('keeps Job details in the visit and exposes metadata and additional visits through its action menu', async () => {
     const today = prepareDailyBoard();
     renderBoard();
     expect(await screen.findByText('Daily job board')).toBeInTheDocument();
 
-    const jobCell = screen.getByTestId('schedule-daily-job-cell-job-1');
-    const jobReference = within(jobCell).getByText('JOB-101');
-    const footer = within(jobCell).getByTestId('schedule-job-footer-desktop-job-1');
-    const actionRow = within(footer).getByTestId('schedule-job-actions-desktop-job-1');
-    expect(jobCell).toHaveClass('flex', 'h-full', 'flex-col');
-    expect(jobReference).toBeInTheDocument();
-    expect(jobReference.parentElement).not.toContainElement(actionRow);
-    expect(within(jobCell).getByText('Crown reduction')).toBeInTheDocument();
-    expect(within(jobCell).getByText('Riverside Estate')).toBeInTheDocument();
-    expect(within(jobCell).getByText('Estimated 4 hours')).toBeInTheDocument();
-    expect(within(footer).getByText('Project')).toHaveClass(
-      'border-[#64748b]',
-      'bg-slate-900',
-      'text-[#cbd5e1]'
-    );
-    expect(footer).toHaveClass('mt-auto');
-    expect(within(jobCell).queryByText('Add visit')).not.toBeInTheDocument();
-
-    const addVisitButton = within(actionRow).getByRole('button', {
-      name: `Add Additional Visit to JOB-101 on ${today}`,
-    });
-    expect(addVisitButton).toHaveAttribute('title', 'Add Additional Visit');
-    expect(addVisitButton).toHaveClass('h-6', 'w-6');
+    const visit = within(screen.getByTestId('schedule-daily-timeline')).getByTestId('schedule-visit-visit-1');
+    expect(within(visit).getByText('JOB-101')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-daily-job-cell-job-1')).not.toBeInTheDocument();
+    const actions = await openJobActions();
+    expect(actions.getByText('Crown reduction')).toBeInTheDocument();
+    expect(actions.getByText('Riverside Estate')).toBeInTheDocument();
+    expect(actions.getByText('Estimated 4 hours')).toBeInTheDocument();
+    expect(actions.getByText('Project')).toBeInTheDocument();
+    const addVisitButton = actions.getByRole('menuitem', { name: 'Add Additional Visit' });
+    expect(addVisitButton).toHaveAttribute('title', `Add Additional Visit on ${today}`);
     fireEvent.click(addVisitButton);
 
     expect(await screen.findByRole('dialog', { name: 'Add visit' })).toHaveTextContent(
@@ -3814,7 +3797,8 @@ describe('SchedulingManagerBoard', () => {
     renderBoard('?tags=tag-hospital&ready=true');
 
     expect(await screen.findAllByText('JOB-101')).not.toHaveLength(0);
-    expect(screen.queryByText('JOB-202')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-board-row-job-job-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('schedule-resource-job-job-2')).toHaveTextContent('JOB-202');
     const selectedTagButton = screen.getByRole('button', { name: 'Hospital' });
     expect(selectedTagButton).toHaveAttribute(
       'aria-pressed',
@@ -3912,7 +3896,7 @@ describe('SchedulingManagerBoard', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
       await waitFor(() => expect(mockQuickAdd).toHaveBeenCalled());
 
-      fireEvent.click(screen.getAllByRole('button', { name: 'Remove JOB-101' })[0]);
+      fireEvent.click((await openJobActions()).getByRole('menuitem', { name: 'Remove from schedule' }));
       const confirmation = await screen.findByRole('alertdialog', {
         name: 'Remove Project job from the schedule?',
       });
@@ -4123,7 +4107,8 @@ describe('SchedulingManagerBoard', () => {
     );
     expect(screen.getByTestId('schedule-board-row-job-job-1')).toBeInTheDocument();
     expect(screen.queryByTestId('schedule-board-row-employee-employee-1')).not.toBeInTheDocument();
-    expect(screen.getByTestId('schedule-job-footer-desktop-job-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-job-footer-desktop-job-1')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('schedule-job-actions-job-1').length).toBeGreaterThan(0);
   });
 
   it('groups the board by scheduling buckets with no Unassigned row', async () => {

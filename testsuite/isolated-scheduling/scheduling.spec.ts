@@ -418,6 +418,29 @@ test('an expired unfinished job is read-only until explicitly completed, then le
   expect(data.unexpected).toEqual([]);
 });
 
+test('off-week completion stays projected when Resources repeatedly returns stale jobs', async ({ page }) => {
+  const data = await mockScheduling(page);
+  const stalePayload = structuredClone(data.respond(new URL('http://127.0.0.1:4017/api/scheduling/jobs'), 'GET').json);
+  let staleReadsAfterSave = 0;
+  await page.route('**/api/scheduling/jobs', async (route) => {
+    if (data.writes.length > 0) staleReadsAfterSave += 1;
+    await route.fulfill({ json: stalePayload });
+  });
+  await page.goto(`/?date=${date}`);
+  const job = page.getByTestId('schedule-resource-job-11111111-1111-4111-8111-111111111112');
+  await expect(job).toBeVisible();
+  await job.click();
+  const dialog = page.getByRole('dialog', { name: 'Edit scheduled job' });
+  await dialog.getByLabel('Status', { exact: true }).click();
+  await page.getByRole('option', { name: 'Completed', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save job', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => staleReadsAfterSave).toBeGreaterThanOrEqual(2);
+  await expect(job).toHaveCount(0);
+  expect(data.writes).toEqual(['PATCH /api/scheduling/jobs/11111111-1111-4111-8111-111111111112']);
+  expect(data.unexpected).toEqual([]);
+});
+
 test('standalone fixture preview serves fictional data without Playwright API routes', async ({ page }) => {
   const apiRequests: string[] = [];
   page.on('request', (request) => {

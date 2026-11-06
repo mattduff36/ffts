@@ -126,6 +126,37 @@ describe('scheduling optimistic ledger', () => {
       .toHaveLength(1);
   });
 
+  it('keeps Resources Jobs projected independently after the board has reconciled', () => {
+    const board: SchedulingBoardPayload = {
+      week: { start: '2026-08-17', end: '2026-08-23' },
+      jobs: [], tags: [], visits: [], assignments: [],
+      resources: { employees: [], plant: [] },
+      employee_capacity: [], plant_unavailability: [], day_teams: [],
+    };
+    const acknowledged: SchedulingOptimisticOperation = {
+      ...operation('remove-job', 1, ['job:one'], (state) => ({
+        ...state,
+        resourceJobs: [],
+      })),
+      status: 'acknowledged',
+      queryKeys: ['board:2026-08-17', 'resource-jobs'],
+      proofs: {
+        'board:2026-08-17': (base) => base.board?.jobs.length === 0,
+        'resource-jobs': (base) => base.resourceJobs?.length === 0,
+      },
+    };
+    const base = { ...emptyProjection, board };
+    const operations = reconcileOptimisticOperations(
+      [acknowledged], 'board:2026-08-17', base, new Set([acknowledged.id])
+    );
+    expect(operations).toHaveLength(1);
+    expect(projectSchedulingState(base, operations, 'board:2026-08-17').resourceJobs)
+      .toEqual([]);
+    expect(reconcileOptimisticOperations(
+      operations, 'resource-jobs', { ...base, resourceJobs: [] }, new Set([acknowledged.id])
+    )).toEqual([]);
+  });
+
   it('OPT-LOCK-001 and OPT-ALIAS-001 enforce related locks and scoped IDs', () => {
     const current = operation('one', 1, ['job-tree:job-1'], (state) => state);
     expect(operationsOverlap({ lockKeys: ['job-tree:job-1'] }, [current])).toBe(true);

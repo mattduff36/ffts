@@ -33,15 +33,18 @@ BEGIN
     RAISE EXCEPTION 'TEAM_MEMBER_CHANGED' USING ERRCODE = 'P0001';
   END IF;
 
-  -- Moves lock assignment rows before the resource/date advisory lock.
+  -- Existing RPCs/trigger take visit, assignment and resource locks in different
+  -- orders. Never wait while holding this removal's locks.
+  IF NOT pg_try_advisory_xact_lock(
+    hashtextextended('employee:' || p_profile_id::TEXT || ':' || p_work_date::TEXT, 0)
+  ) THEN
+    RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED' USING ERRCODE = 'P0001';
+  END IF;
   PERFORM assignment.id
   FROM public.schedule_employee_assignments AS assignment
   WHERE assignment.profile_id = p_profile_id AND assignment.work_date = p_work_date
   ORDER BY assignment.id
-  FOR UPDATE;
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended('employee:' || p_profile_id::TEXT || ':' || p_work_date::TEXT, 0)
-  );
+  FOR UPDATE NOWAIT;
   SELECT COALESCE(array_agg(assignment.id ORDER BY assignment.id), '{}'::UUID[])
   INTO v_current
   FROM public.schedule_employee_assignments AS assignment
@@ -52,6 +55,17 @@ BEGIN
   IF v_current IS DISTINCT FROM v_expected THEN
     RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED' USING ERRCODE = 'P0001';
   END IF;
+
+  -- Pre-lock the stable confirmed set before the backlog DELETE trigger runs.
+  PERFORM visit.id
+  FROM public.schedule_visits AS visit
+  WHERE visit.id IN (
+    SELECT assignment.visit_id
+    FROM public.schedule_employee_assignments AS assignment
+    WHERE assignment.id = ANY(v_current)
+  )
+  ORDER BY visit.id
+  FOR UPDATE NOWAIT;
 
   WITH deleted AS (
     DELETE FROM public.schedule_employee_assignments AS assignment
@@ -66,6 +80,9 @@ BEGIN
     RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED' USING ERRCODE = 'P0001';
   END IF;
   RETURN QUERY SELECT TRUE, v_deleted;
+EXCEPTION
+  WHEN lock_not_available THEN
+    RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED' USING ERRCODE = 'P0001';
 END;
 $$;
 

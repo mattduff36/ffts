@@ -1,5 +1,6 @@
 import type {
   ScheduleProjectCandidate,
+  ScheduleJob,
   ScheduleQuoteCandidate,
   ScheduleVisitBacklogItem,
   SchedulingBoardPayload,
@@ -15,6 +16,7 @@ export interface SchedulingProjection {
   quoteCandidates: ScheduleQuoteCandidate[] | undefined;
   projectCandidates: ScheduleProjectCandidate[] | undefined;
   visitBacklog: ScheduleVisitBacklogItem[] | undefined;
+  resourceJobs?: ScheduleJob[];
 }
 
 export type SchedulingOptimisticStatus = 'pending' | 'acknowledged' | 'uncertain';
@@ -87,6 +89,10 @@ export function projectSchedulingState(
           operation.queryKeys.includes('backlog') && shouldApply('backlog')
             ? applied.visitBacklog
             : state.visitBacklog,
+        resourceJobs:
+          operation.queryKeys.includes('resource-jobs') && shouldApply('resource-jobs')
+            ? applied.resourceJobs
+            : state.resourceJobs,
       };
     }, base);
 }

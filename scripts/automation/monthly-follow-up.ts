@@ -298,6 +298,9 @@ function renderPlan(params: {
   });
 
   // Reuse the registered premium role as a compatibility label, not an autonomy grant.
+  if (!contract.recommendedBuildModel) {
+    throw new Error('Monthly follow-up plan requires a recommended build model.');
+  }
   contract.recommendedBuildModel.implementation = { role: 'premium-planning', tier: 'premium', family: 'gpt-sol' };
 
   return [

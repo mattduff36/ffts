@@ -8,8 +8,10 @@ describe('atomic confirmed team removal SQL contract (not a database execution)'
   it('reuses membership authorization/leader protection and rejects stale confirmation sets', () => {
     expect(sql).toContain('public.remove_schedule_day_team_member_v1(');
     expect(sql).toContain("RAISE EXCEPTION 'TEAM_MEMBER_CHANGED'");
-    expect(sql.match(/RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED'/g)).toHaveLength(3);
-    expect(sql.indexOf('FOR UPDATE')).toBeLessThan(sql.indexOf('PERFORM pg_advisory_xact_lock('));
+    expect(sql.match(/RAISE EXCEPTION 'TEAM_ASSIGNMENTS_CHANGED'/g)).toHaveLength(5);
+    expect(sql.indexOf('pg_try_advisory_xact_lock(')).toBeLessThan(sql.indexOf('FOR UPDATE NOWAIT'));
+    expect(sql).toMatch(/ORDER BY visit\.id\s+FOR UPDATE NOWAIT;/u);
+    expect(sql).toContain('WHEN lock_not_available THEN');
     expect(sql).toContain('v_current IS DISTINCT FROM v_expected');
     expect(sql).toContain('v_deleted IS DISTINCT FROM v_expected');
   });

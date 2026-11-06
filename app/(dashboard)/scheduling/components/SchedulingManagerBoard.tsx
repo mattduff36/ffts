@@ -701,38 +701,6 @@ function getCalendarJobStaffing(job: ScheduleJob, date: string, assignments: Sch
   }), job.required_staff_count);
 }
 
-function EmptyCalendarJobCard({
-  job,
-  date,
-  renderJobActions,
-  staffingBadge,
-}: {
-  job: ScheduleJob;
-  date: string;
-  renderJobActions: RenderCalendarJobActions;
-  staffingBadge: ReturnType<typeof formatStaffingBadge>;
-}) {
-  return (
-    <div
-      className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-card p-2"
-      data-testid={`schedule-empty-job-${job.id}-${date}`}
-      data-no-timeline-pan
-    >
-      <div className="min-w-0 flex-1 text-xs">
-        <p className="truncate font-semibold" title={job.job_reference}>{job.job_reference}</p>
-        <p className="mt-1 truncate" title={job.title}>{job.title}</p>
-        {staffingBadge ? (
-          <p className={cn('mt-1 text-[10px]', staffingBadge.short ? 'text-amber-200' : 'text-slate-200')}>
-            {staffingBadge.label} staff
-          </p>
-        ) : null}
-        <p className="mt-1 text-muted-foreground">No visits in view</p>
-      </div>
-      {renderJobActions(job, date)}
-    </div>
-  );
-}
-
 interface AssignmentChipProps {
   assignment: ScheduleAssignment;
   onDelete: (assignment: ScheduleAssignment) => void;
@@ -828,7 +796,6 @@ interface DayCellProps {
   onReturnVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
   renderJobActions?: RenderCalendarJobActions;
-  showEmptyJobCard?: boolean;
 }
 
 interface VisitCardProps {
@@ -1082,7 +1049,6 @@ function DayCell({
   onReturnVisit,
   onDeleteAssignment,
   renderJobActions,
-  showEmptyJobCard = false,
 }: DayCellProps) {
   const job = row.job;
   const placements = row.visitsByDate[date] || [];
@@ -1103,9 +1069,6 @@ function DayCell({
       )}
     >
       <div className="space-y-1">
-        {job && showEmptyJobCard && renderJobActions ? (
-          <EmptyCalendarJobCard job={job} date={date} renderJobActions={renderJobActions} staffingBadge={getCalendarJobStaffing(job, date, staffingAssignments)} />
-        ) : null}
         {filterHiddenBoardAssignments(legacyAssignments, row.hiddenAssignment).map((assignment) => (
           <AssignmentChip
             key={`${assignment.resource_type}-${assignment.id}`}
@@ -1188,7 +1151,6 @@ interface DailyTimelineCellProps {
   isPannable: boolean;
   activeVisitId: string | null;
   onActivateVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
-  onAddVisit: ((job: ScheduleJob) => void) | null;
   onEditVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onReturnVisit: (job: ScheduleJob, visit: ScheduleVisit) => void;
   onDeleteAssignment: (assignment: ScheduleAssignment) => void;
@@ -1754,7 +1716,6 @@ function DailyTimelineCell({
   isPannable,
   activeVisitId,
   onActivateVisit,
-  onAddVisit,
   onEditVisit,
   onReturnVisit,
   onDeleteAssignment,
@@ -1762,7 +1723,6 @@ function DailyTimelineCell({
   renderJobActions,
 }: DailyTimelineCellProps) {
   const dndInstanceId = boardRowDndInstanceId(row);
-  const addVisitJob = row.kind === 'job' ? row.job : null;
   const visibleLegacyAssignments = filterHiddenBoardAssignments(
     layout.legacyAssignments,
     row.hiddenAssignment
@@ -1827,21 +1787,6 @@ function DailyTimelineCell({
           staffingBadge={renderJobActions ? getCalendarJobStaffing(job, date, staffingAssignments) : undefined}
         />
       ))}
-      {layout.placements.length === 0 && addVisitJob && renderJobActions ? (
-        <div className="sticky left-2 top-2 m-2 w-64 max-w-[calc(100%-1rem)]" style={{ marginTop: visibleLegacyAssignments.length > 0 ? 56 : undefined }}>
-          <EmptyCalendarJobCard job={addVisitJob} date={date} renderJobActions={renderJobActions} staffingBadge={getCalendarJobStaffing(addVisitJob, date, staffingAssignments)} />
-        </div>
-      ) : layout.placements.length === 0 && addVisitJob && onAddVisit ? (
-        <button
-          type="button"
-          onClick={() => onAddVisit(addVisitJob)}
-          className={cn('absolute left-4 top-4 flex items-center gap-1 rounded-md px-3 py-2 text-xs font-medium', schedulingControlStyles.outline)}
-          aria-label={`Add visit to ${addVisitJob.job_reference} on ${date}`}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add timed visit
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -2162,6 +2107,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         quoteCandidates: quoteCandidatesQuery.data,
         projectCandidates: projectCandidatesQuery.data,
         visitBacklog: visitBacklogQuery.data,
+        resourceJobs: resourceJobsQuery.data,
       },
       optimisticOperations,
       `board:${weekStart}`
@@ -2172,6 +2118,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       projectCandidatesQuery.data,
       quoteCandidatesQuery.data,
       visitBacklogQuery.data,
+      resourceJobsQuery.data,
       weekStart,
     ]
   );
@@ -2561,6 +2508,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     if (key === 'quotes') return ['scheduling-quote-candidates'];
     if (key === 'projects') return ['scheduling-project-candidates'];
     if (key === 'backlog') return ['scheduling-visit-backlog'];
+    if (key === 'resource-jobs') return ['scheduling-resource-jobs'];
     return null;
   }
 
@@ -2661,6 +2609,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       quoteCandidates: queryClient.getQueryData(['scheduling-quote-candidates']),
       projectCandidates: queryClient.getQueryData(['scheduling-project-candidates']),
       visitBacklog: queryClient.getQueryData(['scheduling-visit-backlog']),
+      resourceJobs: queryClient.getQueryData(['scheduling-resource-jobs']),
     };
   }
 
@@ -2873,8 +2822,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
 
   const board = projectedState.board;
   const resourceJobsById = useMemo(() => new Map(
-    [...(resourceJobsQuery.data || []), ...(board?.jobs || [])].map((job) => [job.id, job])
-  ), [resourceJobsQuery.data, board?.jobs]);
+    [...(projectedState.resourceJobs || []), ...(board?.jobs || [])].map((job) => [job.id, job])
+  ), [projectedState.resourceJobs, board?.jobs]);
   const closedJobQuoteIds = useMemo(() => new Set(
     [...resourceJobsById.values()].filter((job) => !isUnfinishedScheduleJob(job))
       .map((job) => job.quote_id).filter((id): id is string => Boolean(id))
@@ -3819,11 +3768,17 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       updated_by: userId,
       updated_at: new Date().toISOString(),
     };
+    const isBoardJob = board?.jobs.some((item) => item.id === job.id) === true;
     const operation = registerOptimisticOperation({
       kind: 'update-job',
       lockKeys: [`job:${job.id}`],
-      queryKeys: [`board:${weekStart}`],
+      queryKeys: [...(isBoardJob ? [`board:${weekStart}`] : []), 'resource-jobs'],
       proofs: {
+        'resource-jobs': (state) => state.resourceJobs?.some((item) =>
+          item.id === job.id && Object.entries(jobFields).every(
+            ([key, value]) => item[key as keyof ScheduleJob] === value
+          )
+        ) === true,
         [`board:${weekStart}`]: (state) =>
           state.board?.jobs.some((item) =>
             item.id === job.id
@@ -3835,7 +3790,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       },
       apply: (state) => ({
         ...state,
-        board: state.board
+        resourceJobs: (state.resourceJobs || []).map((item) => item.id === job.id ? optimisticJob : item),
+        board: isBoardJob && state.board
           ? patchBoardWithJob(state.board, optimisticJob)
           : state.board,
       }),
@@ -3847,12 +3803,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     }
     void saveScheduleJob(input, job.id)
       .then((authoritative) => {
-        setBoardBaseData((current) => patchBoardWithJob(current, authoritative));
+        if (isBoardJob) setBoardBaseData((current) => patchBoardWithJob(current, authoritative));
         settleOptimisticOperation(operation.id, 'success', undefined, {
-          proofs: { [`board:${weekStart}`]: provesJob(authoritative) },
+          proofs: {
+            [`board:${weekStart}`]: provesJob(authoritative),
+            'resource-jobs': (state) => state.resourceJobs?.some((item) =>
+              item.id === authoritative.id && item.updated_at === authoritative.updated_at
+                && item.status === authoritative.status
+            ) === true,
+          },
           apply: (state) => ({
             ...state,
-            board: state.board
+            resourceJobs: (state.resourceJobs || []).map((item) => item.id === job.id ? authoritative : item),
+            board: isBoardJob && state.board
               ? patchBoardWithJob(state.board, authoritative)
               : state.board,
           }),
@@ -5925,6 +5888,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         : null;
     const queryKeys = [
       `board:${weekStart}`,
+      'resource-jobs',
       ...(quoteCandidate ? ['quotes'] : []),
       ...(projectCandidate ? ['projects'] : []),
     ];
@@ -5933,6 +5897,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       lockKeys: [`job-tree:${job.id}`],
       queryKeys,
       proofs: {
+        'resource-jobs': (state) => state.resourceJobs !== undefined
+          && !state.resourceJobs.some((item) => item.id === job.id),
         [`board:${weekStart}`]: provesBoardEntityAbsent('job', job.id),
         ...(quoteCandidate
           ? {
@@ -5953,6 +5919,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       },
       apply: (state) => ({
         ...state,
+        resourceJobs: state.resourceJobs?.filter((item) => item.id !== job.id),
         board: state.board ? patchBoardRemoveJob(state.board, job.id) : state.board,
         quoteCandidates: quoteCandidate
           ? upsertQuoteCandidate(state.quoteCandidates, quoteCandidate)
@@ -5972,6 +5939,8 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
       setBoardBaseData((current) => patchBoardRemoveJob(current, job.id));
       settleOptimisticOperation(operation.id, 'success', undefined, {
         proofs: {
+          'resource-jobs': (state) => state.resourceJobs !== undefined
+            && !state.resourceJobs.some((item) => item.id === job.id),
           [`board:${weekStart}`]: provesBoardEntityAbsent('job', job.id),
           ...(quoteCandidate
             ? {
@@ -5992,6 +5961,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         },
         apply: (state) => ({
           ...state,
+          resourceJobs: state.resourceJobs?.filter((item) => item.id !== job.id),
           board: state.board ? patchBoardRemoveJob(state.board, job.id) : state.board,
           quoteCandidates: quoteCandidate
             ? upsertQuoteCandidate(state.quoteCandidates, quoteCandidate)
@@ -7323,11 +7293,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                           isPannable={effectiveDailyTimelineMode === 'scroll'}
                           activeVisitId={activeVisitTarget?.visit.id || null}
                           onActivateVisit={(placementJob, visit) => activateVisit(placementJob, visit)}
-                          onAddVisit={
-                            job
-                              ? () => openVisitEditor(job, selectedDate)
-                              : null
-                          }
                           onEditVisit={(placementJob, visit) => openVisitEditor(placementJob, selectedDate, visit)}
                           onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                           onDeleteAssignment={setPendingDeleteAssignment}
@@ -7352,9 +7317,6 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                             onReturnVisit={(placementJob, visit) => void prepareVisitReturn({ job: placementJob, visit })}
                             onDeleteAssignment={setPendingDeleteAssignment}
                             renderJobActions={job ? renderCalendarJobActions : undefined}
-                            showEmptyJobCard={Boolean(job)
-                              && !weekDates.some((workDate) => row.visitsByDate[workDate]?.length)
-                              && date === (weekDates.find((workDate) => job && workDate >= job.start_date && workDate <= job.end_date) || weekDates[0])}
                           />
                         ))
                       )}
@@ -7539,11 +7501,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                                     staffingBadge={job ? getCalendarJobStaffing(placement.job, date, board.assignments) : undefined}
                                   />
                               ))}
-                              {job && placements.length === 0
-                                && !weekDates.some((workDate) => row.visitsByDate[workDate]?.length)
-                                && date === mobileDates[0] ? (
-                                <EmptyCalendarJobCard job={job} date={date} renderJobActions={renderCalendarJobActions} staffingBadge={getCalendarJobStaffing(job, date, board.assignments)} />
-                              ) : legacyAssignments.length === 0 && placements.length === 0 ? (
+                              {legacyAssignments.length === 0 && placements.length === 0 ? (
                                 <span className="text-xs text-muted-foreground">No visits yet</span>
                               ) : null}
                             </div>

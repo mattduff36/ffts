@@ -71,7 +71,7 @@ function isBoardVisibleTimedVisit(
   return startMs < rangeEndMs && endMs > rangeStartMs;
 }
 
-function mapJob(row: Record<string, unknown>): ScheduleJob {
+export function mapScheduleJob(row: Record<string, unknown>): ScheduleJob {
   const customer = pickRelation(row.customer as { company_name?: string | null } | Array<{ company_name?: string | null }> | null);
   const tagLinks = Array.isArray(row.tag_links)
     ? row.tag_links as Array<Record<string, unknown>>
@@ -334,7 +334,7 @@ export async function loadSchedulingBoard(
   if (jobsResult.error) throw jobsResult.error;
   const jobs = sortJobsByBoardSequence(
     ((jobsResult.data || []) as Array<Record<string, unknown>>)
-      .map(mapJob)
+      .map(mapScheduleJob)
       .filter((job) => visibleJobIds.has(job.id))
   );
   const employeeRows = (
@@ -516,7 +516,7 @@ export async function loadSchedulingSelf(
   );
   const jobsById = new Map(
     ((jobsResult.data || []) as Array<Record<string, unknown>>)
-      .map(mapJob)
+      .map(mapScheduleJob)
       .filter((job) => job.status !== 'cancelled')
       .map((job) => [job.id, job])
   );

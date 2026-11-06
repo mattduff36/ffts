@@ -18,6 +18,7 @@ import { updateAutomationMemory } from '@/scripts/automation/memory';
 import { reviewAutomationRun } from '@/scripts/automation/self-review';
 import type { AutomationMemory, AutomationMemorySuggestion, AutomationRunLog } from '@/scripts/automation/types';
 import * as workflowEvents from '@/scripts/automation/workflow-events';
+import { extractPlanContractMarker } from '@/scripts/automation/workflow-plan-contract';
 import {
   createEmptyWorkflowReviewState,
   getWorkflowPaths,
@@ -538,6 +539,11 @@ describe('automation logging helpers', () => {
       expect(plan).toContain('Implementation: premium parent or assigned premium worker');
       expect(plan).not.toContain('Cursor Grok');
       expect(plan).toContain('routingDecision: explicit_premium');
+      expect(JSON.parse(extractPlanContractMarker(plan).raw || '{}')).toMatchObject({
+        recommendedBuildModel: {
+          implementation: { role: 'premium-planning', tier: 'premium', family: 'gpt-sol' },
+        },
+      });
       expect(plan).toContain('workers never delegate');
       const resolver = readFileSync(path.join(process.cwd(), 'scripts/automation/resolve-monthly-follow-up.ts'), 'utf8');
       expect(resolver).not.toContain('spawnSync');

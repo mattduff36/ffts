@@ -5,6 +5,7 @@ import { requireSchedulingManagerAccess } from '@/lib/server/scheduling-auth';
 import { resolveCustomerSiteSelection } from '@/lib/server/customer-sites';
 import { requireSensitiveModuleAccess } from '@/lib/server/sensitive-module-access';
 import { syncProjectNumberSiteLocation } from '@/lib/server/inventory-site-location-sync';
+import { mapScheduleJob } from '@/lib/server/scheduling-board';
 import {
   loadScheduleJobTags,
   loadTagsForScheduleJob,
@@ -103,21 +104,32 @@ export async function GET() {
     }
 
     const admin = createAdminClient();
-    const [jobsResult, customersResult, tags] = await Promise.all([
-      admin
-        .from('schedule_jobs')
-        .select('*, tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
-        .order('start_date', { ascending: false }),
+    const [jobs, customersResult, tags] = await Promise.all([
+      (async () => {
+        const jobs: ScheduleJob[] = [];
+        const pageSize = 500;
+        for (let from = 0; ; from += pageSize) {
+          const result = await admin
+            .from('schedule_jobs')
+            .select('*, customer_site:customer_sites!schedule_jobs_customer_site_id_fkey(site_name), customer:customers(company_name), tag_links:schedule_job_tag_links(tag:schedule_job_tags(id, name, color, description, is_active))')
+            .order('start_date', { ascending: false })
+            .order('id', { ascending: true })
+            .range(from, from + pageSize - 1);
+          if (result.error) throw result.error;
+          const rows = result.data || [];
+          jobs.push(...rows.map(mapScheduleJob));
+          if (rows.length < pageSize) return jobs;
+        }
+      })(),
       admin
         .from('customers')
         .select('id, company_name, status, sites:customer_sites(*)')
         .order('company_name', { ascending: true }),
       loadScheduleJobTags(admin),
     ]);
-    if (jobsResult.error) throw jobsResult.error;
     if (customersResult.error) throw customersResult.error;
     return NextResponse.json({
-      jobs: jobsResult.data || [],
+      jobs,
       customers: customersResult.data || [],
       tags,
     });

@@ -10,6 +10,7 @@ import {
   writeProtocolRecord,
 } from '@/scripts/automation/workflow-review-protocol';
 import { getFinaliseProtocolReadiness } from '@/scripts/automation/workflow-finalise-correlation';
+import type { WorkflowProtocolRecord } from '@/scripts/automation/types';
 import {
   createDefaultPlanContract,
   renderPlanContractMarker,
@@ -39,7 +40,7 @@ afterEach(async () => {
   await new Promise<void>((resolve) => setImmediate(resolve));
 });
 
-describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
+describe('TEE V2.4 lineage budget and disposition', { timeout: 120_000 }, () => {
   it('TEE-V24-BUDGET-001 / T-V24-CLOSURE-AFTER-FIRST-FAIL / T-V24-SECOND-FAIL-ROUTING / T-V24-FIRST-REJECT-AT-2 / T-V24-CLOSURE-REJECT-AT-2', () => {
     const repoRoot = makeTempRoot('budget');
     const baseCommit = initGitRepo(repoRoot);
@@ -133,7 +134,7 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     ).toBe(false);
   });
 
-  it('TEE-V24-ROUTE-001 / T-V24-ROUTE-NO-APPROVE / T-V24-ROUTE-NO-BIND-HEAD / T-V24-ROUTE-NO-FINALISE-READY / T-V24-EXHAUSTED-BLOCKS-FINALISE / T-V24-REMOVAL-RESOLVES-WITHOUT-FINALISE / T-V24-SUPERSEDE-REQUIRES-GIT', { timeout: 60_000 }, () => {
+  it('TEE-V24-ROUTE-001 / T-V24-ROUTE-NO-APPROVE / T-V24-ROUTE-NO-BIND-HEAD / T-V24-ROUTE-NO-FINALISE-READY / T-V24-EXHAUSTED-BLOCKS-FINALISE / T-V24-REMOVAL-RESOLVES-WITHOUT-FINALISE / T-V24-SUPERSEDE-REQUIRES-GIT', () => {
     const repoRoot = makeTempRoot('route');
     const baseline = initGitRepo(repoRoot);
     const impl = commitFile(repoRoot, 'impl.ts', 'impl');
@@ -196,12 +197,13 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     );
   });
 
-  it('TEE-V24-REHOME-001 / T-V24-REHOME-REQUIRES-INDEPENDENT-GIT / T-V24-SPLIT-CHILD-NOT-REHOME / T-V24-NEW-ID-NO-FRESH-BUDGET / T-V24-SUCCESSOR-RETAINS-PREDECESSOR / T-V24-ILLEGAL-ATTEMPTS-AUDIT-ONLY', { timeout: 60_000 }, () => {
+  it('TEE-V24-REHOME-001 / T-V24-REHOME-REQUIRES-INDEPENDENT-GIT / T-V24-SPLIT-CHILD-NOT-REHOME / T-V24-NEW-ID-NO-FRESH-BUDGET / T-V24-SUCCESSOR-RETAINS-PREDECESSOR / T-V24-ILLEGAL-ATTEMPTS-AUDIT-ONLY', async () => {
     const repoRoot = makeTempRoot('rehome');
     const baseline = initGitRepo(repoRoot);
     const blocked = commitFile(repoRoot, 'blocked.ts', 'blocked');
     initWorkstream(repoRoot, 'ws_ffts_pred', baseline);
     failFirstThenClosure(repoRoot, 'ws_ffts_pred');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     const split = applyProtocolTransition({
       repoRoot,
       command: 'split',
@@ -248,6 +250,7 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
         pass: 'first',
       }).ok
     ).toBe(false);
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     const predStub = createEmptyProtocolRecord({
       workstreamId: 'ws_ffts_pred_leaf',
@@ -364,12 +367,13 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     expect(boundary).not.toContain('Do not launch a third premium review without routing or split.');
   });
 
-  it('FD-GIT / FD-REHOME / FD-LINEAGE / FD-VERIFY first-review blocker family', { timeout: 60_000 }, () => {
+  it('FD-GIT / FD-REHOME / FD-LINEAGE / FD-VERIFY first-review blocker family', async () => {
     const repoRoot = makeTempRoot('first-fix');
     const baseline = initGitRepo(repoRoot);
     const impl = commitFile(repoRoot, 'impl.ts', 'impl');
     initWorkstream(repoRoot, 'ws_ffts_fix', baseline);
     failFirstThenClosure(repoRoot, 'ws_ffts_fix');
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     const emptyRehome = applyProtocolTransition({
       repoRoot,
@@ -491,13 +495,14 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     expect(verifyPreflight.ok).toBe(false);
   });
 
-  it('T-FD-GIT-003-BINDS-COMMITS / T-FD-GIT-003-CHANGE-COMMIT / T-FD-GIT-003-ADD-COMMIT / T-FD-GIT-003-REMOVE-COMMIT / T-FD-GIT-003-REORDER-COMMITS / T-FD-GIT-003-OMIT-LIST / T-FD-GIT-003-NONOBJECT-COMMIT / T-FD-GIT-003-OMIT-RANGE / T-FD-GIT-003-DUPLICATE-COMMITS / T-FD-GIT-003-FRESH-HASH-TAMPER', { timeout: 60_000 }, () => {
+  it('T-FD-GIT-003-BINDS-COMMITS / T-FD-GIT-003-CHANGE-COMMIT / T-FD-GIT-003-ADD-COMMIT / T-FD-GIT-003-REMOVE-COMMIT / T-FD-GIT-003-REORDER-COMMITS / T-FD-GIT-003-OMIT-LIST / T-FD-GIT-003-NONOBJECT-COMMIT / T-FD-GIT-003-OMIT-RANGE / T-FD-GIT-003-DUPLICATE-COMMITS / T-FD-GIT-003-FRESH-HASH-TAMPER', async () => {
     const repoRoot = makeTempRoot('fd-git-003');
     const baseline = initGitRepo(repoRoot);
     const first = commitFile(repoRoot, 'one.ts', 'one');
     const second = commitFile(repoRoot, 'two.ts', 'two');
     initWorkstream(repoRoot, 'ws_fd_git', baseline);
     failFirstThenClosure(repoRoot, 'ws_fd_git');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     spawnSync('git', ['checkout', '-b', 'successor', baseline], { cwd: repoRoot, shell: false });
 
     const nonObject = applyProtocolTransition({
@@ -627,8 +632,10 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
       },
     };
     writeProtocolRecord(repoRoot, omittedStored);
-    expect(revalidateRouteDisposition({ repoRoot, record: omittedStored }).ok).toBe(false);
-    expect(revalidateRouteDisposition({ repoRoot, record: omittedStored }).message).toMatch(
+    const omittedResult = revalidateRouteDisposition({ repoRoot, record: omittedStored });
+    expect(omittedResult.ok).toBe(false);
+    if (omittedResult.ok) throw new Error('Omitted implementation commits were accepted');
+    expect(omittedResult.message).toMatch(
       /omits implementation commit|incomplete|not match/i
     );
 
@@ -657,16 +664,18 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     writeProtocolRecord(repoRoot, freshHashTamper);
     const freshResult = revalidateRouteDisposition({ repoRoot, record: freshHashTamper });
     expect(freshResult.ok).toBe(false);
+    if (freshResult.ok) throw new Error('Tampered implementation commits were accepted');
     expect(freshResult.message).toMatch(/git-derived|no longer holds|not match/i);
   });
 
-  it('revalidates a rehomed isolate after the same checkout moves to a later isolated successor', () => {
+  it('revalidates a rehomed isolate after the same checkout moves to a later isolated successor', async () => {
     const repoRoot = makeTempRoot('rehome-checkout-drift');
     const baseline = initGitRepo(repoRoot);
     const first = commitFile(repoRoot, 'one.ts', 'one');
     const second = commitFile(repoRoot, 'two.ts', 'two');
     initWorkstream(repoRoot, 'ws_rehome_drift', baseline);
     failFirstThenClosure(repoRoot, 'ws_rehome_drift');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     spawnSync('git', ['checkout', '-b', 'successor', baseline], { cwd: repoRoot, shell: false });
 
     const routed = applyProtocolTransition({
@@ -717,4 +726,3 @@ describe('TEE V2.4 lineage budget and disposition', { timeout: 50_000 }, () => {
     expect(deleted.ok === false && deleted.message).toMatch(/successor branch does not exist/i);
   });
 });
-

@@ -638,22 +638,22 @@ describe('TEE verification progress', () => {
     expect(
       createHumanVerifyProgress({
         title: 'Preflight',
-        env: { TEE_VERIFY_PROGRESS: 'off' },
+        env: { NODE_ENV: 'test', TEE_VERIFY_PROGRESS: 'off' },
         stderrIsTty: true,
       })
     ).toBeUndefined();
-    expect(shouldUseMachineProgress({ TEE_VERIFY_PROGRESS: 'plain' }, true)).toBe(true);
-    expect(shouldUseMachineProgress({ TEE_VERIFY_PROGRESS: 'live' }, false)).toBe(false);
-    expect(shouldUseMachineProgress({ CI: 'true', TEE_VERIFY_PROGRESS: 'live' }, true)).toBe(true);
-    expect(shouldUseMachineProgress({ CURSOR_AGENT: '1', VSCODE_PID: '1' }, false)).toBe(false);
-    expect(shouldUseMachineProgress({ CI: '1', CURSOR_AGENT: '1', VSCODE_PID: '1' }, true)).toBe(true);
-    expect(isCursorInteractiveProgressHost({ TERM_PROGRAM: 'vscode' })).toBe(true);
-    expect(isCursorInteractiveProgressHost({ TERM_PROGRAM: 'vscode', CI: 'true' })).toBe(false);
+    expect(shouldUseMachineProgress({ NODE_ENV: 'test', TEE_VERIFY_PROGRESS: 'plain' }, true)).toBe(true);
+    expect(shouldUseMachineProgress({ NODE_ENV: 'test', TEE_VERIFY_PROGRESS: 'live' }, false)).toBe(false);
+    expect(shouldUseMachineProgress({ NODE_ENV: 'test', CI: 'true', TEE_VERIFY_PROGRESS: 'live' }, true)).toBe(true);
+    expect(shouldUseMachineProgress({ NODE_ENV: 'test', CURSOR_AGENT: '1', VSCODE_PID: '1' }, false)).toBe(false);
+    expect(shouldUseMachineProgress({ NODE_ENV: 'test', CI: '1', CURSOR_AGENT: '1', VSCODE_PID: '1' }, true)).toBe(true);
+    expect(isCursorInteractiveProgressHost({ NODE_ENV: 'test', TERM_PROGRAM: 'vscode' })).toBe(true);
+    expect(isCursorInteractiveProgressHost({ NODE_ENV: 'test', TERM_PROGRAM: 'vscode', CI: 'true' })).toBe(false);
     expect(resolveProgressIsTty({ stdoutIsTty: true, stderrIsTty: false })).toBe(true);
-    expect(resolveProgressIsTty({ stdoutIsTty: false, stderrIsTty: false, env: {} })).toBe(false);
-    expect(shouldUseAlternateScreen({ TERM: 'dumb' })).toBe(false);
-    expect(shouldUseAlternateScreen({ TERM: 'dumb', CURSOR_AGENT: '1', VSCODE_PID: '1' })).toBe(true);
-    expect(shouldUseAlternateScreen({ TEE_VERIFY_PROGRESS_ALT: '0' })).toBe(false);
+    expect(resolveProgressIsTty({ stdoutIsTty: false, stderrIsTty: false, env: { NODE_ENV: 'test' } })).toBe(false);
+    expect(shouldUseAlternateScreen({ NODE_ENV: 'test', TERM: 'dumb' })).toBe(false);
+    expect(shouldUseAlternateScreen({ NODE_ENV: 'test', TERM: 'dumb', CURSOR_AGENT: '1', VSCODE_PID: '1' })).toBe(true);
+    expect(shouldUseAlternateScreen({ NODE_ENV: 'test', TEE_VERIFY_PROGRESS_ALT: '0' })).toBe(false);
     expect(ttyLiveStartSequence(false)).not.toContain('\u001b[?1049h');
     const progressSource = readFileSync(
       path.join(path.resolve(__dirname, '..', '..'), 'scripts/automation/workflow-verify-progress.ts'),
@@ -694,7 +694,7 @@ describe('TEE verification progress', () => {
     }) as typeof process.kill;
     try {
       expect(typeof handler).toBe('function');
-      handler?.call(process);
+      handler?.call(process, 'SIGINT');
       const text = chunks.join('');
       expect(text).toContain(ttyLiveRestoreSequence(true));
       expect(text).toContain('\u001b[?25h');

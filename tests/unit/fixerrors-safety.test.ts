@@ -253,6 +253,15 @@ class SafetyClient implements PgClientLike {
     text: string,
     values: unknown[] = []
   ): Promise<{ rows: T[]; rowCount: number | null }> {
+    const { rows, rowCount } = this.dispatchQuery(text, values);
+    // Like pg, the SQL caller selects the result row type.
+    return { rows: rows as T[], rowCount };
+  }
+
+  private dispatchQuery(
+    text: string,
+    values: unknown[]
+  ): { rows: Record<string, unknown>[]; rowCount: number } {
     this.queryLog.push(text);
     if (text.includes('fixerrors:export-begin')) {
       this.transactionRows = [...this.rows.values()]
@@ -260,14 +269,14 @@ class SafetyClient implements PgClientLike {
         .sort(compareRows)
         .map((row) => ({ ...row }));
       this.afterExportBegin?.(this);
-      return result([]) as { rows: T[]; rowCount: number };
+      return result([]);
     }
     if (
       text.includes('fixerrors:cleanup-begin') ||
       text.includes('fixerrors:retention-begin')
     ) {
       this.beginWorking();
-      return result([]) as { rows: T[]; rowCount: number };
+      return result([]);
     }
     if (text.includes('fixerrors:server-identity')) {
       return result([
@@ -277,37 +286,22 @@ class SafetyClient implements PgClientLike {
           server_port: SERVER_IDENTITY.serverPort,
           system_identifier: SERVER_IDENTITY.systemIdentifier,
         },
-      ]) as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:transaction-time')) {
-      return result([{ transaction_started_at: EXPORT_TIME }]) as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result([{ transaction_started_at: EXPORT_TIME }]);
     }
     if (text.includes('fixerrors:schema-columns')) {
-      return result(this.schemaColumns) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result(this.schemaColumns);
     }
     if (text.includes('fixerrors:check-constraint-catalog')) {
-      return result(this.checkConstraints) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result(this.checkConstraints);
     }
     if (text.includes('fixerrors:fk-catalog')) {
-      return result(this.foreignKeys) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result(this.foreignKeys);
     }
     if (text.includes('fixerrors:trigger-catalog')) {
-      return result(this.triggerRows) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result(this.triggerRows);
     }
     if (text.includes('fixerrors:snapshot-boundary')) {
       const row = this.transactionRows.at(-1);
@@ -323,7 +317,7 @@ class SafetyClient implements PgClientLike {
               },
             ]
           : []
-      ) as unknown as { rows: T[]; rowCount: number };
+      );
     }
     if (text.includes('fixerrors:snapshot-count')) {
       const boundary = {
@@ -335,7 +329,7 @@ class SafetyClient implements PgClientLike {
       ).length;
       return result([
         { count: String(this.countOverride ?? count) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:snapshot-page')) {
       const boundary = {
@@ -362,7 +356,7 @@ class SafetyClient implements PgClientLike {
               }
             : row
         );
-      return result(rows) as unknown as { rows: T[]; rowCount: number };
+      return result(rows);
     }
     if (text.includes('fixerrors:dependency-alert-inventory')) {
       const ids = new Set(values[0] as string[]);
@@ -371,34 +365,34 @@ class SafetyClient implements PgClientLike {
           .filter((id) => ids.has(id))
           .sort()
           .map((error_log_id) => ({ error_log_id }))
-      ) as unknown as { rows: T[]; rowCount: number };
+      );
     }
     if (text.includes('fixerrors:dependency-usage-inventory')) {
       const ids = new Set(values[0] as string[]);
       return result([
         { count: String(this.usageReferences.filter((id) => ids.has(id)).length) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:dependency-service-inventory')) {
       const ids = new Set(values[0] as string[]);
       return result([
         { count: String(this.serviceReferences.filter((id) => ids.has(id)).length) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:lock-target-rows')) {
       const ids = values[0] as string[];
       return result(
         ids
           .map((id) => this.workingRows.get(id))
-          .filter((row): row is DbRow => Boolean(row))
+          .filter((row): row is DbRow => row !== undefined)
           .sort(compareRows)
-      ) as unknown as { rows: T[]; rowCount: number };
+      );
     }
     if (text.includes('fixerrors:archive-error-batch')) {
       if (this.failArchiveBatch) throw new Error('forced archive failure');
       const archived = (values[0] as string[])
         .map((id) => this.workingRows.get(id))
-        .filter((row): row is DbRow => Boolean(row) && row.status === 'active')
+        .filter((row): row is DbRow => row !== undefined && row.status === 'active')
         .map((row) => {
           this.workingRows.set(row.id, {
             ...row,
@@ -407,7 +401,7 @@ class SafetyClient implements PgClientLike {
           });
           return { id: row.id };
         });
-      return result(archived) as unknown as { rows: T[]; rowCount: number };
+      return result(archived);
     }
     if (text.includes('fixerrors:remaining-count')) {
       return result([
@@ -418,14 +412,11 @@ class SafetyClient implements PgClientLike {
             ).length
           ),
         },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:retention-cutoff')) {
       expect(values[0]).toBe(ERROR_LOG_RETENTION_MONTHS);
-      return result([{ cutoff: RETENTION_CUTOFF }]) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result([{ cutoff: RETENTION_CUTOFF }]);
     }
     if (text.includes('fixerrors:retention-eligible')) {
       return result(
@@ -442,29 +433,29 @@ class SafetyClient implements PgClientLike {
               left.id.localeCompare(right.id)
           )
           .map((row) => ({ id: row.id }))
-      ) as unknown as { rows: T[]; rowCount: number };
+      );
     }
     if (text.includes('fixerrors:retention-alert-collateral')) {
       const ids = new Set(values[0] as string[]);
       return result([
         { count: String(this.workingAlerts.filter((id) => ids.has(id)).length) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:retention-usage-collateral')) {
       const ids = new Set(values[0] as string[]);
       return result([
         { count: String(this.workingUsage.filter((id) => ids.has(id)).length) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:retention-service-collateral')) {
       const ids = new Set(values[0] as string[]);
       return result([
         { count: String(this.workingService.filter((id) => ids.has(id)).length) },
-      ]) as unknown as { rows: T[]; rowCount: number };
+      ]);
     }
     if (text.includes('fixerrors:retention-delete-batch')) {
       if (this.shortRetentionDelete) {
-        return result([]) as unknown as { rows: T[]; rowCount: number };
+        return result([]);
       }
       const ids = values[0] as string[];
       const cutoff = String(values[1]);
@@ -484,10 +475,7 @@ class SafetyClient implements PgClientLike {
         this.workingService = this.workingService.filter((ref) => ref !== id);
         return true;
       });
-      return result(deleted.map((id) => ({ id }))) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result(deleted.map((id) => ({ id })));
     }
     if (text.includes('fixerrors:retention-remaining-expired')) {
       const cutoff = String(values[0]);
@@ -497,10 +485,7 @@ class SafetyClient implements PgClientLike {
           row.archived_at !== null &&
           row.archived_at < cutoff
       ).length;
-      return result([{ count: String(count) }]) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result([{ count: String(count) }]);
     }
     if (
       text.includes('fixerrors:retention-active-before') ||
@@ -509,25 +494,22 @@ class SafetyClient implements PgClientLike {
       const count = [...this.workingRows.values()].filter(
         (row) => row.status === 'active'
       ).length;
-      return result([{ count: String(count) }]) as unknown as {
-        rows: T[];
-        rowCount: number;
-      };
+      return result([{ count: String(count) }]);
     }
     if (
       text.includes('fixerrors:cleanup-commit') ||
       text.includes('fixerrors:retention-commit')
     ) {
       this.commitWorking();
-      return result([]) as { rows: T[]; rowCount: number };
+      return result([]);
     }
     if (
       text.includes('fixerrors:cleanup-rollback') ||
       text.includes('fixerrors:retention-rollback')
     ) {
-      return result([]) as { rows: T[]; rowCount: number };
+      return result([]);
     }
-    return result([]) as { rows: T[]; rowCount: number };
+    return result([]);
   }
 }
 

@@ -47,7 +47,10 @@ function postRequest(body: unknown, origin = 'http://localhost') {
 
 function mockUpsert(result: { data: Array<{ event_id: string }> | null; error: { message: string } | null }) {
   const select = vi.fn().mockResolvedValue(result);
-  const upsert = vi.fn(() => ({ select }));
+  const upsert = vi.fn((
+    _rows: Array<Record<string, unknown>>,
+    _options: { onConflict: string; ignoreDuplicates: boolean },
+  ) => ({ select }));
   const from = vi.fn(() => ({ upsert }));
   vi.mocked(createAdminClient).mockReturnValue({ from } as never);
   return { upsert };
@@ -114,7 +117,7 @@ describe('POST /api/me/site-usage', () => {
       }],
     }));
     const payload = await response.json();
-    const rows = upsert.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
+    const [rows] = upsert.mock.calls[0];
 
     expect(response.status).toBe(200);
     expect(payload).toMatchObject({ success: true, accepted: 1, inserted: 0, deduped: 1 });

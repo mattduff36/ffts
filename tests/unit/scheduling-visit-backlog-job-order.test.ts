@@ -80,7 +80,8 @@ describe('schedule visit backlog job order', () => {
       return;
     }
     expect(items).toHaveLength(1);
-    expect(items[0].job.board_sequence).toBe(2);
-    expect(items[0].job.id).toBe('job-a');
+    expect(items[0]).toMatchObject({
+      job: { board_sequence: 2, id: 'job-a' },
+    });
   });
 });

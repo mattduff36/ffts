@@ -237,7 +237,7 @@ describe('schedule day team helpers', () => {
         },
       }],
     });
-    const board = {
+    const board: SchedulingBoardPayload = {
       ...boardWithTeams([member('e1', 2)], teamSettings),
       jobs: [{
         id: 'job-1',
@@ -267,6 +267,7 @@ describe('schedule day team helpers', () => {
         job_id: 'job-1',
         work_date: '2026-09-01',
         visit_id: null,
+        visit: null,
         notes: null,
         conflict_override: false,
         conflict_codes: [],

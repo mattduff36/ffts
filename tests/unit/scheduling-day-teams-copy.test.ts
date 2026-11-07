@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockLoadSettings } = vi.hoisted(() => ({
@@ -21,7 +22,7 @@ function adminMock(options: {
   sourceError?: { code?: string; message?: string } | null;
   plantError?: { code?: string; message?: string } | null;
   rpc?: ReturnType<typeof vi.fn>;
-}) {
+}): SupabaseClient {
   return {
     from: vi.fn((table: string) => {
       const rows = table === 'schedule_day_team_members'
@@ -60,7 +61,7 @@ function adminMock(options: {
       }],
       error: null,
     }),
-  };
+  } as unknown as SupabaseClient;
 }
 
 describe('copyScheduleDayTeamMembers', () => {
@@ -108,7 +109,7 @@ describe('copyScheduleDayTeamMembers', () => {
         { work_date: '2026-09-20', slot_index: 9, profile_id: '44444444-4444-4444-8444-444444444444' },
       ],
       rpc,
-    }) as never, {
+    }), {
       fromDate: '2026-09-20',
       toDate: '2026-09-21',
       actorUserId: actorId,
@@ -159,7 +160,7 @@ describe('copyScheduleDayTeamMembers', () => {
         { work_date: '2026-09-20', slot_index: 3, profile_id: '55555555-5555-4555-8555-555555555555' },
       ],
       rpc,
-    }) as never, {
+    }), {
       fromDate: '2026-09-20',
       toDate: '2026-09-21',
       actorUserId: actorId,
@@ -202,7 +203,7 @@ describe('copyScheduleDayTeamMembers', () => {
         { work_date: '2026-09-20', slot_index: 9, plant_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
       ],
       rpc,
-    }) as never, {
+    }), {
       fromDate: '2026-09-20',
       toDate: '2026-09-21',
       actorUserId: actorId,
@@ -252,7 +253,7 @@ describe('copyScheduleDayTeamMembers', () => {
         { work_date: '2026-09-20', slot_index: 2, plant_id: plantId },
       ],
       rpc,
-    }) as never, {
+    }), {
       fromDate: '2026-09-20',
       toDate: '2026-09-21',
       actorUserId: actorId,
@@ -282,7 +283,7 @@ describe('copyScheduleDayTeamMembers', () => {
         { work_date: '2026-09-20', slot_index: 2, plant_id: plantId },
       ],
       rpc: failing,
-    }) as never, {
+    }), {
       fromDate: '2026-09-20',
       toDate: '2026-09-21',
       actorUserId: actorId,

@@ -90,7 +90,8 @@ afterEach(async () => {
 
 function expectOk<T extends { ok: true } | { ok: false; message: string }>(
   result: T
-): Extract<T, { ok: true }> {
+): Extract<T, { ok: true }>;
+function expectOk(result: { ok: true } | { ok: false; message: string }) {
   if (!result.ok) throw new Error(result.message);
   return result;
 }

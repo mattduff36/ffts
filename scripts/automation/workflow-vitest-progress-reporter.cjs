@@ -1,5 +1,7 @@
 'use strict';
 
+// This .cjs reporter is loaded synchronously by Vitest's CommonJS adapter.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require('fs');
 
 function emit(event) {

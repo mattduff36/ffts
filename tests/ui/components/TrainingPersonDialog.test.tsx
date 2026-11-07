@@ -21,11 +21,11 @@ function makePerson(profileId = ''): TrainingPerson & {
     date_of_births: [],
     source_sheets: ['CPCS'],
     record_count: 1,
+    created_at: '2026-09-01T08:00:00.000Z',
+    updated_at: '2026-09-01T08:00:00.000Z',
     profile: profileId
       ? { id: profileId, full_name: 'Historical Ada', employee_id: 'OLD-1' }
       : null,
-  } as TrainingPerson & {
-    profile?: { id: string; full_name: string | null; employee_id: string | null } | null;
   };
 }
 

@@ -36,6 +36,8 @@ Quote identity fixtures distinguish the saved site name from its address snapsho
 
 The combined Git rehome fixture has a 120-second budget, matching the standard suite timeout: its many real Git repositories take about 70 seconds on this Windows host. Its validation assertions are unchanged.
 
+The lineage-budget tests use the same 120-second per-test budget and yield between synchronous Git fixture phases so Vitest can process task-update replies. For focused workflow runs, use `npm run test:run -- --hookTimeout=180000 <test files>` to keep the standard single-thread settings and allow the shared bound-provenance setup to finish on Windows. These tests use temporary local repositories, not live services.
+
 ## Isolated quote SELECT InitPlan validation
 
 `tests/integration/quote-select-initplan.test.ts` is skipped by default, including normal suite discovery. It never reads the application's database URL and does not use `RUN_LIVE_DB_TESTS`. No shared database fixtures are permitted.

@@ -244,7 +244,10 @@ function dispatch(state: FakeState, sql: string, params: unknown[] = []) {
 
 function createDeps(state: FakeState, overrides: Partial<QuoteRamsDeps> = {}) {
   const sent: string[] = [];
-  const query: QuoteRamsDb['query'] = async (sql, params) => dispatch(state, sql, params);
+  const query: QuoteRamsDb['query'] = async <T>(sql: string, params?: unknown[]) => {
+    const { rows, rowCount } = dispatch(state, sql, params);
+    return { rows: rows as T[], rowCount };
+  };
   const deps: QuoteRamsDeps = {
     query,
     runTransaction: async (fn) => {

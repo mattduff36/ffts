@@ -95,7 +95,7 @@ function useControlledFinaliseEnvironment(): void {
     }
     delete process.env[key];
   }
-  process.env.NODE_ENV = 'test';
+  vi.stubEnv('NODE_ENV', 'test');
 }
 
 function initializeGitRepo(repoRoot: string): void {
@@ -133,6 +133,7 @@ function createAutomationLog(steps: AutomationStepLog[]): AutomationRunLog {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   if (environmentSnapshot) {
     for (const key of Object.keys(process.env)) delete process.env[key];
     Object.assign(process.env, environmentSnapshot);

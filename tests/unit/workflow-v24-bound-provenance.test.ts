@@ -203,10 +203,8 @@ describe('TEE V2.4 bound rehome provenance integrity', { timeout: 60_000 }, () =
   it('TEE-V24-BOUND-ANCESTOR-MISSING-011: ancestry flag missing fails', () => {
     const fixture = shared;
     const provenance = requireBound(fixture);
-    const tampered = cloneJson(provenance) as WorkflowRehomeProvenance & {
-      predecessorHeadIsAncestor?: false;
-    };
-    delete tampered.predecessorHeadIsAncestor;
+    const tampered = cloneJson(provenance);
+    Reflect.deleteProperty(tampered, 'predecessorHeadIsAncestor');
     tampered.evidence = {
       ...tampered.evidence!,
       evidenceHash: hashBoundRehomeSecurityObject(tampered),
@@ -302,10 +300,8 @@ describe('TEE V2.4 bound rehome provenance integrity', { timeout: 60_000 }, () =
           path: 'predecessorHeadIsAncestor',
           mutate: (value) => ({ ...value, predecessorHeadIsAncestor: true as never }),
           remove: (value) => {
-            const next = cloneJson(value) as WorkflowRehomeProvenance & {
-              predecessorHeadIsAncestor?: false;
-            };
-            delete next.predecessorHeadIsAncestor;
+            const next = cloneJson(value);
+            Reflect.deleteProperty(next, 'predecessorHeadIsAncestor');
             return next;
           },
         },

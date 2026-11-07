@@ -131,6 +131,7 @@ function assignment(id: string, jobId: string, visitId: string): ScheduleAssignm
     job_id: jobId,
     work_date: '2026-09-02',
     visit_id: visitId,
+    visit: null,
     notes: null,
     conflict_override: false,
     conflict_codes: [],
@@ -148,6 +149,7 @@ function assignment(id: string, jobId: string, visitId: string): ScheduleAssignm
       employee_id: null,
       team_id: null,
       team_name: null,
+      kind: 'employee',
     },
   };
 }

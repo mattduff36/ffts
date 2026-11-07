@@ -101,6 +101,7 @@ test.describe('Jobs timeline coordinates', () => {
     const header = page.getByTestId('schedule-daily-timeline-header');
     const quoteCard = page.getByTestId(`schedule-quote-${quote.id}`);
     await expect(quoteCard).toBeVisible();
+    await quoteCard.scrollIntoViewIfNeeded();
     await page.getByTestId('schedule-daily-timeline').evaluate((element) => { element.scrollLeft = 180; });
     const hourWidth = Number(await header.getAttribute('data-hour-width'));
     const target = (await header.boundingBox())!;

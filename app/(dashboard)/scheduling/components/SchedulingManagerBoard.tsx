@@ -500,6 +500,30 @@ interface DraggableQuoteCardProps {
   onSelect: () => void;
 }
 
+function DraggableResourceJob({ job, onEdit, children }: {
+  job: ScheduleJob;
+  onEdit: () => void;
+  children: ReactNode;
+}) {
+  const { ref, handleRef, isDragging } = useDraggable({
+    id: `schedule-resource-job:${job.id}`,
+    type: 'schedule-queue-item',
+    data: { resourceJob: job },
+  });
+  const { handleClick, resetDragState } = useDragSafeActivation(isDragging, onEdit);
+  return <div ref={ref}>
+    <button ref={handleRef} type="button"
+      className={cn('w-full touch-none cursor-grab rounded-lg border border-border px-3 py-2 text-left', schedulingControlStyles.ghost, isDragging && 'cursor-grabbing opacity-40')}
+      data-testid={`schedule-resource-job-${job.id}`}
+      aria-label={`${job.job_reference}: edit job or drag to a calendar date`}
+      onPointerDown={resetDragState}
+      onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') resetDragState(); }}
+      onClick={handleClick}>
+      {children}
+    </button>
+  </div>;
+}
+
 function formatQuoteStatusLabel(status: string | null): string {
   if (!status) return 'No status';
   return status
@@ -4219,13 +4243,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     const operationId = crypto.randomUUID();
     setVisitDraft(input);
     const now = new Date().toISOString();
-    const job = board?.jobs.find((item) => item.id === input.job_id)
+    const job = resourceJobsById.get(input.job_id)
       || (existingVisit
         ? board?.jobs.find((item) => item.id === existingVisit.job_id)
         : undefined);
     if (!job && !existingVisit) return;
     const targetJob = job || existingVisit && board?.jobs.find((item) => item.id === existingVisit.job_id);
     if (!targetJob) return;
+    const includeTargetJob = (current: SchedulingBoardPayload) =>
+      current.jobs.some(item => item.id === targetJob.id) ? current : patchBoardWithJob(current, targetJob);
     const optimisticVisit: ScheduleVisit = existingVisit
       ? { ...existingVisit, ...input, updated_by: userId, updated_at: now }
       : {
@@ -4279,7 +4305,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         ...state,
         board: state.board
           ? patchBoardWithVisit(
-              state.board,
+              includeTargetJob(state.board),
               {
                 ...optimisticVisit,
                 id: coordinator.resolveIdentity(optimisticVisit.id),
@@ -4307,7 +4333,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               : undefined,
           }) || authoritative;
           setBoardBaseData((current) =>
-            patchBoardWithVisit(current, savedVisit, existingVisit ? undefined : optimisticVisit.id)
+            patchBoardWithVisit(current ? includeTargetJob(current) : current, savedVisit, existingVisit ? undefined : optimisticVisit.id)
           );
           setVisitDraft(null);
           acknowledgeSuccess();
@@ -4320,7 +4346,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             apply: (state: SchedulingProjection) => ({
               ...state,
               board: state.board
-                ? patchBoardWithVisit(state.board, savedVisit, optimisticVisit.id)
+                ? patchBoardWithVisit(includeTargetJob(state.board), savedVisit, optimisticVisit.id)
                 : state.board,
             }),
           };
@@ -6255,6 +6281,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         }),
       ]}
       onDragStart={(event) => {
+        const resourceJob = event.operation.source?.data?.resourceJob as ScheduleJob | undefined;
         const resource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const assignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
         const quote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
@@ -6264,7 +6291,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         dragUiRef.current = {
           resource: Boolean(resource),
           assignment: Boolean(assignment),
-          quote: Boolean(quote),
+          quote: Boolean(quote || resourceJob),
           visit: Boolean(visit && job),
           dayTeam: Boolean(dayTeam),
         };
@@ -6276,6 +6303,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         beginBoardPointerBusy('drag-start');
       }}
       onDragEnd={(event) => {
+        const sourceResourceJob = event.operation.source?.data?.resourceJob as ScheduleJob | undefined;
         const sourceResource = event.operation.source?.data?.resource as SelectedScheduleResource | undefined;
         const sourceAssignment = event.operation.source?.data?.assignment as ScheduleAssignment | undefined;
         const sourceQuote = event.operation.source?.data?.quote as SchedulingQueueItem | undefined;
@@ -6291,7 +6319,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         } | undefined;
         const operationPosition = (
           event.operation as unknown as {
-            position?: { current?: { x?: number } };
+            position?: { current?: { x?: number; y?: number } };
           }
         ).position?.current;
         const dropClientX =
@@ -6323,7 +6351,19 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           void prepareVisitReturn({ visit: sourceVisit, job: sourceVisitJob });
           return;
         }
-        if (sourceQuote) {
+        if (sourceResourceJob && !targetData?.workDate) {
+          const bounds = dailyTimelineViewportRef.current?.getBoundingClientRect();
+          const y = operationPosition?.y;
+          if (view !== SCHEDULING_BOARD_VIEWS.daily || !bounds || dropClientX == null || y == null
+            || dropClientX < bounds.left || dropClientX > bounds.right || y < bounds.top || y > bounds.bottom) return;
+        }
+        if (sourceQuote || sourceResourceJob) {
+          const place = (date: string, visit?: { starts_at: string; ends_at: string }) => {
+            if (sourceQuote) return void scheduleQuoteFromDate(sourceQuote, date, visit);
+            if (!sourceResourceJob || !isUnfinishedScheduleJob(sourceResourceJob)) return;
+            const window = visit || buildDateOnlyQuoteInitialVisit(date, sourceResourceJob.estimated_duration_minutes);
+            handleVisitSave({ job_id: sourceResourceJob.id, title: sourceResourceJob.title, ...window, status: 'planned' }, null);
+          };
           if (
             view === SCHEDULING_BOARD_VIEWS.daily
             && dropClientX !== null
@@ -6340,7 +6380,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                 endHour: dailyTimelineRange.endHour,
               });
               if (
-                sourceQuote.kind === 'returned_visit'
+                sourceQuote?.kind === 'returned_visit'
                 && startMinutes
                   + Math.ceil(
                     sourceQuote.returned_visit.duration_milliseconds / 60_000
@@ -6352,7 +6392,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
               }
               const window = getDailyInitialVisitWindow(
                 startMinutes,
-                sourceQuote.estimated_duration_minutes || null,
+                (sourceQuote || sourceResourceJob)?.estimated_duration_minutes || null,
                 dailyTimelineRange.endHour
               );
               const toIso = (minutes: number) => {
@@ -6363,7 +6403,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
                 );
               };
-              void scheduleQuoteFromDate(sourceQuote, selectedDate, {
+              place(selectedDate, {
                 starts_at: toIso(window.startMinutes),
                 ends_at: toIso(window.endMinutes),
               });
@@ -6374,7 +6414,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
             toast.info('Drop onto a calendar date.');
             return;
           }
-          void scheduleQuoteFromDate(sourceQuote, targetData.workDate);
+          place(targetData.workDate);
           return;
         }
         if (sourceDayTeam) {
@@ -6646,12 +6686,10 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                   >
                     <div className="space-y-1">
                         {resourceJobs.map((job) => (
-                          <button
+                          <DraggableResourceJob
                             key={`existing:${job.id}`}
-                            type="button"
-                            className={cn('w-full rounded-lg border border-border px-3 py-2 text-left', schedulingControlStyles.ghost)}
-                            data-testid={`schedule-resource-job-${job.id}`}
-                            onClick={() => {
+                            job={job}
+                            onEdit={() => {
                               setJobDraft(null);
                               setEditingJob(job);
                               setJobDialogOpen(true);
@@ -6666,7 +6704,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               <span>{formatQuoteStatusLabel(job.status)}</span>
                             </span>
                             <span className="block text-[10px] text-muted-foreground">Unfinished · Open job</span>
-                          </button>
+                          </DraggableResourceJob>
                         ))}
                         {quoteCandidatesQuery.isLoading
                           && projectCandidatesQuery.isLoading

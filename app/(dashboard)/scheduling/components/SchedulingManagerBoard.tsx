@@ -20,6 +20,7 @@ import {
 import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pauseSoftRefresh } from '@/lib/client/soft-refresh';
+import { SCHEDULING_PANEL_SAVED } from '@/lib/client/scheduling-panel-events';
 import { addMinutes, format, parseISO } from 'date-fns';
 import {
   createParser,
@@ -1988,6 +1989,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
   }
   const reconciliationAttemptsRef = useRef<Map<string, number>>(new Map());
   const deferredReconcileKeysRef = useRef<string[]>([]);
+  const panelReconcileKeysRef = useRef(new Set<string>());
   const boardInteractionBusyRef = useRef(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddDraft, setQuickAddDraft] =
@@ -2617,6 +2619,24 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
     backgroundReconcilerRef.current?.schedule(keys);
   }
 
+  useEffect(() => {
+    const saved = () => {
+      const keys = [
+        ...queryClient.getQueryCache().findAll({ queryKey: ['scheduling-board'] })
+          .map(query => `board:${String(query.queryKey[1])}`),
+        'quotes', 'backlog', 'resource-jobs',
+        ...(quotesSensitiveAccess.canAccess ? ['projects'] : []),
+      ];
+      keys.forEach(key => panelReconcileKeysRef.current.add(key));
+      scheduleBackgroundReconciliation(keys);
+      void queryClient.invalidateQueries({ queryKey: ['scheduling-context'] }, { throwOnError: true }).catch(() => {
+        toast.warning('Changes saved. Scheduling access could not be refreshed.');
+      });
+    };
+    window.addEventListener(SCHEDULING_PANEL_SAVED, saved);
+    return () => window.removeEventListener(SCHEDULING_PANEL_SAVED, saved);
+  }, [queryClient, quotesSensitiveAccess.canAccess]);
+
   async function runCoalescedReconciliation(keys: string[]) {
     if (isBoardPointerBusy()) {
       deferredReconcileKeysRef.current = Array.from(
@@ -2667,6 +2687,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
           { queryKey, exact: true, type: 'all' },
           { throwOnError: true, cancelRefetch: true }
         );
+        panelReconcileKeysRef.current.delete(key);
         const proofBoardWeek = boardWeek || weekStart;
         const base = readConfirmedProjection(proofBoardWeek);
         const updated = eligibleOperationIds.size > 0
@@ -2703,6 +2724,12 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
         );
         if (needsRetry) scheduleBackgroundReconciliation([key]);
       } catch {
+        if (panelReconcileKeysRef.current.has(key)) {
+          toast.warning('Changes saved. Some scheduling data could not be refreshed.', {
+            id: 'scheduling-panel-refresh-failed',
+            action: { label: 'Retry', onClick: () => scheduleBackgroundReconciliation([...panelReconcileKeysRef.current]) },
+          });
+        }
         if (boardWeek && coldEpoch !== null) {
           setColdWeekStateIfCurrent(boardWeek, coldEpoch, {
             status: 'failed',

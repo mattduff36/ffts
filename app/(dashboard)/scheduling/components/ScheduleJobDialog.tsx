@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { SCHEDULING_PANEL_SAVED } from '@/lib/client/scheduling-panel-events';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -145,8 +146,11 @@ export function ScheduleJobDialog({
   useEffect(() => {
     if (!open) return;
     let isCancelled = false;
+    let latestRequest = 0;
 
-    void fetch('/api/scheduling/jobs')
+    const refreshOptions = () => {
+      const request = ++latestRequest;
+      void fetch('/api/scheduling/jobs')
       .then(async response => {
         const payload = await response.json().catch(() => ({})) as {
           customers?: CustomerOption[];
@@ -154,22 +158,26 @@ export function ScheduleJobDialog({
           error?: string;
         };
         if (!response.ok) throw new Error(payload.error || 'Unable to load customers.');
-        if (!isCancelled) {
+        if (!isCancelled && request === latestRequest) {
           setCustomers(payload.customers || []);
           setAvailableTags(payload.tags || []);
         }
       })
       .catch(error => {
-        if (!isCancelled) {
+        if (!isCancelled && request === latestRequest) {
           toast.error(error instanceof Error ? error.message : 'Unable to load customers.');
         }
       })
       .finally(() => {
-        if (!isCancelled) setCustomersLoading(false);
+        if (!isCancelled && request === latestRequest) setCustomersLoading(false);
       });
+    };
+    refreshOptions();
+    window.addEventListener(SCHEDULING_PANEL_SAVED, refreshOptions);
 
     return () => {
       isCancelled = true;
+      window.removeEventListener(SCHEDULING_PANEL_SAVED, refreshOptions);
     };
   }, [open]);
 

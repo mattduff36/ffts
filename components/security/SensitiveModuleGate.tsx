@@ -169,11 +169,13 @@ export function SensitiveModuleSessionManager({
   access,
   initialLastActivityAt,
   initialWarningOpen = false,
+  onAccessLost,
 }: {
   moduleLabel: string;
   access: SensitiveModuleAccessState;
   initialLastActivityAt?: number;
   initialWarningOpen?: boolean;
+  onAccessLost?: () => void;
 }) {
   const router = useRouter();
   const { canAccess, renew, state } = access;
@@ -184,6 +186,10 @@ export function SensitiveModuleSessionManager({
   const [confirming, setConfirming] = useState(false);
   const moduleName = state?.module_name;
   const canManageSession = canAccess && state?.required === true && Boolean(state.expires_at);
+  const leaveModule = useCallback(() => {
+    if (onAccessLost) onAccessLost();
+    else router.push('/dashboard');
+  }, [onAccessLost, router]);
 
   const runHeartbeat = useCallback(async () => {
     if (!canManageSession) return;
@@ -192,7 +198,7 @@ export function SensitiveModuleSessionManager({
     heartbeatRunningRef.current = true;
     try {
       if (warningOpenRef.current) {
-        router.push('/dashboard');
+        leaveModule();
         return;
       }
 
@@ -200,7 +206,7 @@ export function SensitiveModuleSessionManager({
       if (idleFor <= SENSITIVE_ACCESS_HEARTBEAT_MS) {
         const renewed = await renew();
         if (!renewed) {
-          router.push('/dashboard');
+          leaveModule();
         }
         return;
       }
@@ -212,7 +218,7 @@ export function SensitiveModuleSessionManager({
     } finally {
       heartbeatRunningRef.current = false;
     }
-  }, [canManageSession, renew, router]);
+  }, [canManageSession, renew, leaveModule]);
 
   const confirmStillActive = useCallback(async () => {
     setConfirming(true);
@@ -223,12 +229,12 @@ export function SensitiveModuleSessionManager({
     try {
       const renewed = await renew();
       if (!renewed) {
-        router.push('/dashboard');
+        leaveModule();
       }
     } finally {
       setConfirming(false);
     }
-  }, [renew, router]);
+  }, [renew, leaveModule]);
 
   useEffect(() => {
     if (!canManageSession) return;

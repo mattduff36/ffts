@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import {
   Check
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { schedulingPanelForLink, type SchedulingPanelModule } from '@/lib/client/scheduling-panel-events';
 import { usePermissionSnapshot } from '@/lib/hooks/usePermissionSnapshot';
 import { usePendingAbsenceCount } from '@/lib/hooks/useNavMetrics';
 import { managerNavItems, adminNavItems, getFilteredNavByPermissions } from '@/lib/config/navigation';
@@ -50,9 +52,12 @@ interface SidebarNavProps {
 }
 
 const HOVER_EXPAND_DELAY_MS = 150;
+const SchedulingNavPanel = dynamic(() => import('@/components/scheduling-panels/SchedulingNavPanel').then(module => module.SchedulingNavPanel));
 
 export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   const pathname = usePathname();
+  const [schedulingPanel, setSchedulingPanel] = useState<SchedulingPanelModule | null>(null);
+  const panelTriggerRef = useRef<HTMLAnchorElement | null>(null);
   const { profile, isAdmin, isManager, effectiveRole, isViewingAs, isActualSuperAdmin } = useAuth();
   const { tabletModeEnabled } = useTabletMode();
   const [viewAsRoleId, setViewAsRoleIdState] = useState<string>('');
@@ -115,11 +120,18 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
     setActiveUsersPanelOpen(false);
   }, [isInsideSidebarHoverZone, open, clearHoverExpandTimer]);
 
-  const handleNavLinkClick = useCallback(() => {
+  const handleNavLinkClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const panel = schedulingPanelForLink(pathname, href, event);
+    if (panel && event.currentTarget.target !== '_blank' && !event.currentTarget.hasAttribute('download')) {
+      event.preventDefault();
+      panelTriggerRef.current = event.currentTarget;
+      setSchedulingPanel(panel);
+      if (open) onToggle();
+    }
     clearHoverExpandTimer();
     setHoverExpanded(false);
     setActiveUsersPanelOpen(false);
-  }, [clearHoverExpandTimer]);
+  }, [clearHoverExpandTimer, pathname, open, onToggle]);
 
   const handleBackdropClick = useCallback(() => {
     if (open) {
@@ -195,6 +207,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
   useEffect(() => {
     if (prevPathnameRef.current !== pathname) {
       prevPathnameRef.current = pathname;
+      setSchedulingPanel(null);
       setViewAsMenuOpen(false);
       setActiveUsersPanelOpen(false);
       clearHoverExpandTimer();
@@ -571,7 +584,8 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                     key={link.href}
                     href={link.href}
                     title={!isExpanded ? link.label : undefined}
-                    onClick={handleNavLinkClick}
+                    onClick={event => handleNavLinkClick(event, link.href)}
+                    aria-haspopup={pathname === '/scheduling' && (link.href === '/quotes' || link.href === '/customers') ? 'dialog' : undefined}
                     className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-brand-yellow text-slate-900'
@@ -620,12 +634,13 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                       key={link.href}
                       href={link.href}
                       title={!isExpanded ? link.label : undefined}
-                      onClick={handleNavLinkClick}
+                      onClick={event => handleNavLinkClick(event, link.href)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                         isActive
                           ? 'bg-brand-yellow text-slate-900 [&>svg]:text-slate-900'
                           : 'text-muted-foreground hover:bg-slate-800 hover:text-white'
                       }`}
+                      aria-haspopup={pathname === '/scheduling' && (link.href === '/quotes' || link.href === '/customers') ? 'dialog' : undefined}
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
                       <span className={`min-w-0 transition-opacity ${isExpanded ? 'duration-100' : 'duration-200'} whitespace-nowrap ${
@@ -678,7 +693,7 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
                 <Link
                   href="/debug"
                   title={!isExpanded ? 'Debug Console' : undefined}
-                  onClick={handleNavLinkClick}
+                  onClick={(event) => handleNavLinkClick(event, '/debug')}
                   className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     pathname === '/debug'
                       ? 'bg-red-600 text-white'
@@ -732,6 +747,9 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
         )}
       </div>
       {isSuperAdmin && viewAsDialog}
+      {pathname === '/scheduling' && schedulingPanel && (
+        <SchedulingNavPanel module={schedulingPanel} onClose={() => setSchedulingPanel(null)} returnFocus={() => panelTriggerRef.current?.focus({ preventScroll: true })} />
+      )}
       {activeUsersPanelOpen && (
         <div
           ref={activeUsersPanelRef}
@@ -749,4 +767,3 @@ export function SidebarNav({ open, onToggle }: SidebarNavProps) {
     </>
   );
 }
-

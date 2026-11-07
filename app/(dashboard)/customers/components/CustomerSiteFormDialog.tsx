@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
 import { handleEnterAdvancesFields } from '@/lib/forms/enter-advances-fields';
 import { useDirtyDialogGuard } from '@/lib/hooks/useDirtyDialogGuard';
+import { notifySchedulingPanelLocked } from '@/lib/client/scheduling-panel-events';
 import type { CustomerSite } from '../types';
 
 interface CustomerSiteFormDialogProps {
@@ -131,6 +132,7 @@ export function CustomerSiteFormDialog({
       } | null;
 
       if (!response.ok || !payload?.site) {
+        if (!response.ok) notifySchedulingPanelLocked(`/api/customers/${customerId}/sites`, response.status);
         setFieldErrors(payload?.field_errors || {});
         setFormError(payload?.error || 'Failed to add site');
         return;

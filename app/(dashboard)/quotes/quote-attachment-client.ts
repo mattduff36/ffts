@@ -1,4 +1,5 @@
 import type { QuoteAttachment } from './types';
+import { notifySchedulingPanelLocked } from '@/lib/client/scheduling-panel-events';
 
 interface UploadQuoteAttachmentOptions {
   quoteId: string;
@@ -41,6 +42,7 @@ export function getQuoteAttachmentUrl(quoteId: string, attachmentId: string) {
 }
 
 export async function buildAttachmentResponseError(response: Response, fallback: string) {
+  notifySchedulingPanelLocked('/api/quotes', response.status);
   const payload = await response.json().catch(() => null) as { error?: string } | null;
   return new Error(payload?.error || fallback);
 }

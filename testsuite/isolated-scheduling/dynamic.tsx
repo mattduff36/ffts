@@ -1,3 +1,12 @@
-export default function dynamic() {
-  return function UnusedQuoteCreationHost() { return null; };
+import { lazy, Suspense, type ComponentType } from 'react';
+
+export default function dynamic<P extends object>(
+  loader: () => Promise<ComponentType<P>>,
+  options?: { loading?: ComponentType },
+) {
+  const Component = lazy(async () => ({ default: await loader() }));
+  const Loading = options?.loading;
+  return function FixtureDynamic(props: P) {
+    return <Suspense fallback={Loading ? <Loading /> : null}><Component {...props} /></Suspense>;
+  };
 }

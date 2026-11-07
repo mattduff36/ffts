@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { ScheduleAssignment, ScheduleJob, SchedulingBoardPayload } from '@/types/scheduling';
 import { buildScheduleDayTeams, SCHEDULE_DAY_TEAM_SLOT_INDEXES } from '@/lib/utils/scheduling-day-teams';
+import { createPanelFixture } from './panel-fixture';
 
 export const userId = '33333333-3333-4333-8333-333333333333';
 export const employeeId = '22222222-2222-4222-8222-222222222222';
@@ -59,12 +60,19 @@ export function fixture() {
   ] };
 }
 
-export function createFixtureApi(removalStatus = 200) {
+export function createFixtureApi(removalStatus = 200, withPanels = false) {
   const data = fixture();
+  const panels = createPanelFixture();
   const removals: URL[] = [];
   const writes: string[] = [];
+  const reads: string[] = [];
   const unexpected: string[] = [];
   function respond(url: URL, method: string, body?: unknown): { status: number; json: unknown } {
+    if (method === 'GET') reads.push(url.pathname);
+    if (url.pathname.startsWith('/api/sensitive-access') || (withPanels && (url.pathname.startsWith('/api/customers') || url.pathname.startsWith('/api/quotes')))) {
+      const response = panels.respond(url, method, body as Record<string, unknown> | undefined);
+      if (response) return response;
+    }
     if (method !== 'GET') writes.push(`${method} ${url.pathname}`);
     if (method !== 'GET' && method !== 'PATCH' && method !== 'DELETE') {
       unexpected.push(`${method} ${url.pathname}`);
@@ -82,12 +90,22 @@ export function createFixtureApi(removalStatus = 200) {
       if (boardJob) boardJob.status = 'completed';
       payload = { job };
     }
-    else if (url.pathname === '/api/scheduling/board' && method === 'GET') payload = data.board;
-    else if (url.pathname === '/api/scheduling/jobs' && method === 'GET') payload = {
-      jobs: data.jobs, tags: [],
-      customers: [{ id: data.jobs[0].customer_id, company_name: 'Fictional Customer', status: 'active', sites: [] }],
+    else if (url.pathname === '/api/scheduling/context' && method === 'GET') payload = {
+      user_id: userId, access_level: 4, is_manager_or_admin: true, role_name: 'manager', role_class: 'manager', team_id: null, team_name: null,
     };
-    else if (url.pathname === '/api/scheduling/quotes' && method === 'GET') payload = { quotes: [] };
+    else if (url.pathname === '/api/scheduling/board' && method === 'GET') payload = {
+      ...data.board, jobs: data.board.jobs.map(job => ({ ...job, customer_name: panels.customers.find(customer => customer.id === job.customer_id)?.company_name || job.customer_name })),
+    };
+    else if (url.pathname === '/api/scheduling/jobs' && method === 'GET') payload = {
+      jobs: data.jobs.map(job => ({ ...job, customer_name: panels.customers.find(customer => customer.id === job.customer_id)?.company_name || job.customer_name })), tags: [],
+      customers: withPanels ? panels.customers : [{ id: data.jobs[0].customer_id, company_name: 'Fictional Customer', status: 'active', sites: [] }],
+    };
+    else if (url.pathname === '/api/scheduling/quotes' && method === 'GET') payload = { quotes: withPanels ? panels.quotes.map(quote => ({
+      id: quote.id, quote_reference: quote.quote_reference, base_quote_reference: quote.base_quote_reference,
+      title: quote.subject_line, customer_name: panels.customers.find(customer => customer.id === quote.customer_id)?.company_name,
+      site_name: panels.customers.flatMap(customer => customer.sites).find(site => site.id === quote.customer_site_id)?.site_name,
+      status: quote.status, start_date: null, end_date: null, estimated_duration_days: 1, estimated_duration_minutes: 60,
+    })) : [] };
     else if (url.pathname === '/api/scheduling/projects' && method === 'GET') payload = { projects: [] };
     else if (url.pathname === '/api/scheduling/visit-backlog' && method === 'GET') payload = { items: [] };
     else if (url.pathname === '/api/quotes/metadata' && method === 'GET') payload = {
@@ -113,11 +131,11 @@ export function createFixtureApi(removalStatus = 200) {
     }
     return { status: 200, json: payload };
   }
-  return { ...data, removals, writes, unexpected, respond };
+  return { ...data, panels, removals, writes, reads, unexpected, respond };
 }
 
-export async function mockScheduling(page: Page, removalStatus = 200) {
-  const api = createFixtureApi(removalStatus);
+export async function mockScheduling(page: Page, removalStatus = 200, withPanels = false) {
+  const api = createFixtureApi(removalStatus, withPanels);
   await page.route('**/*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -132,14 +150,14 @@ export async function mockScheduling(page: Page, removalStatus = 200) {
 }
 
 export function installReviewFixtures() {
-  const api = createFixtureApi();
+  const api = createFixtureApi(200, new URLSearchParams(location.search).has('panels'));
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const request = new Request(new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href), init);
     const url = new URL(request.url);
     if (url.origin !== location.origin) throw new Error('External requests are disabled in the scheduling fixture preview.');
     if (!url.pathname.startsWith('/api/')) return originalFetch(input, init);
-    const body = request.method === 'PATCH' ? await request.json() : undefined;
+    const body = request.method === 'PATCH' || request.method === 'POST' ? await request.json() : undefined;
     const response = api.respond(url, request.method, body);
     return Response.json(response.json, { status: response.status });
   };

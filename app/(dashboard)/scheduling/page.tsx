@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { NuqsClientAdapter } from '@/components/providers/NuqsClientAdapter';
-import { fetchSchedulingContext } from '@/lib/client/scheduling';
+import { fetchSchedulingContext, SchedulingApiError } from '@/lib/client/scheduling';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
 import { cn } from '@/lib/utils/cn';
 import { SchedulingManagerBoard } from './components/SchedulingManagerBoard';
@@ -83,7 +83,9 @@ export default function SchedulingPage() {
       </AppPageShell>
     );
   }
-  if (contextQuery.isError) {
+  const accessRevoked = contextQuery.error instanceof SchedulingApiError
+    && [401, 403, 428].includes(contextQuery.error.status);
+  if (contextQuery.isError && (!contextQuery.data || accessRevoked)) {
     return (
       <AppPageShell width="full">
         <AppPageHeader
@@ -127,6 +129,10 @@ export default function SchedulingPage() {
       )}
       data-testid="scheduling-page-shell"
     >
+      {contextQuery.isError && <div role="alert" className="flex shrink-0 items-center justify-between gap-3 rounded border border-amber-500/40 p-3 text-sm text-amber-200">
+        Scheduling access could not be refreshed. Your current schedule is retained.
+        <Button variant="ghost" onClick={() => void contextQuery.refetch()}>Retry access check</Button>
+      </div>}
       {isManagerBoard ? (
         <div className="flex h-full min-h-0 flex-1 flex-col">
           <NuqsClientAdapter>

@@ -46,6 +46,7 @@ function buildCustomerFormDirtySnapshot(form: CustomerFormData) {
 export function CustomerFormDialog({ open, onClose, onSubmit, customer }: CustomerFormDialogProps) {
   const [form, setForm] = useState<CustomerFormData>({ ...EMPTY_CUSTOMER_FORM, secondary_contacts: [] });
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [initialDirtySnapshot, setInitialDirtySnapshot] = useState('');
   const isEditing = !!customer;
   const isSingleSiteCustomer = form.sites.length === 1;
@@ -124,6 +125,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
       setInitialDirtySnapshot(buildCustomerFormDirtySnapshot(nextForm));
     }
     hydratedKeyRef.current = customerHydrateKey;
+    setSubmitError(null);
   }, [customer, customerHydrateKey, open]);
 
   function updateField<K extends keyof CustomerFormData>(key: K, value: CustomerFormData[K]) {
@@ -222,9 +224,12 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setSubmitError(null);
     try {
       await onSubmit(form);
       onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to save customer.');
     } finally {
       setSaving(false);
     }
@@ -241,6 +246,7 @@ export function CustomerFormDialog({ open, onClose, onSubmit, customer }: Custom
         onEscapeKeyDown={handleEscapeKeyDown}
       >
         <form onSubmit={handleSubmit} onKeyDown={handleEnterAdvancesFields}>
+          {submitError && <p role="alert" className="mb-4 rounded border border-red-500/40 p-3 text-sm text-red-300">{submitError}</p>}
           <DialogHeader>
             <DialogTitle className="text-white">
               {isEditing ? 'Edit Customer' : 'Add Customer'}

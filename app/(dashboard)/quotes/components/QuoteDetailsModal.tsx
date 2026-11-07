@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSoftRefresh } from '@/lib/hooks/useSoftRefresh';
+import { notifySchedulingPanelLocked } from '@/lib/client/scheduling-panel-events';
 import {
   Dialog,
   DialogContent,
@@ -83,7 +84,7 @@ interface QuoteDetailsModalProps {
   quoteId: string | null;
   onQuoteChange: (quoteId: string) => void;
   onEdit: (quote: Quote) => void;
-  onRefresh: () => void;
+  onRefresh: (savedQuote?: Quote) => void;
   managerOptions: QuoteManagerOption[];
 }
 
@@ -278,6 +279,7 @@ function getBillingStatusConfig(status: NonNullable<Quote['invoice_summary']>['s
 }
 
 async function buildResponseError(response: Response, fallback: string) {
+  notifySchedulingPanelLocked('/api/quotes', response.status);
   const payload = await response.json().catch(() => null) as { error?: string; field_errors?: DetailFieldErrors } | null;
   const error = new Error(payload?.error || fallback) as Error & { fieldErrors?: DetailFieldErrors };
   error.fieldErrors = payload?.field_errors || {};
@@ -615,7 +617,11 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
     return errors;
   }
 
+  const confirmedQuoteRef = useRef<Quote | null>(null);
   const applyQuoteState = useCallback((nextQuote: Quote) => {
+    const confirmed = confirmedQuoteRef.current;
+    if (confirmed?.id === nextQuote.id && Date.parse(confirmed.updated_at) > Date.parse(nextQuote.updated_at)) return;
+    confirmedQuoteRef.current = nextQuote;
     const today = new Date().toISOString().slice(0, 10);
     const nextInvoiceAmount = nextQuote.invoice_summary?.remainingBalance ? String(nextQuote.invoice_summary.remainingBalance) : '';
     const nextInvoiceRequestAmount = nextQuote.invoice_summary?.availableToRequest ? String(nextQuote.invoice_summary.availableToRequest) : '';
@@ -789,14 +795,14 @@ export function QuoteDetailsModal({ open, onClose, quoteId, onQuoteChange, onEdi
         throw await buildResponseError(res, 'Unable to update this quote right now.');
       }
       const data = await res.json();
+      onRefresh(data.quote);
       if (updates.action === 'create_revision' || updates.action === 'duplicate') {
         applyQuoteState(data.quote);
         selectQuoteVersion(data.quote.id);
       } else {
-        await fetchQuote();
+        applyQuoteState(data.quote);
       }
       toast.success('Quote updated');
-      onRefresh();
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update this quote right now.';

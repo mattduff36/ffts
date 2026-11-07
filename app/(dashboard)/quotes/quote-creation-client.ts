@@ -1,4 +1,5 @@
 import { uploadQuoteAttachment } from './quote-attachment-client';
+import { notifySchedulingPanelLocked } from '@/lib/client/scheduling-panel-events';
 import type { QuoteImmediateWorkflowAction } from './quote-quick-actions';
 import type { Quote, QuoteFormData } from './types';
 
@@ -13,7 +14,10 @@ export async function runQuoteWorkflowAction(
     body: JSON.stringify({ action, ...extra }),
   });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || 'Failed to update quote');
+  if (!response.ok) {
+    notifySchedulingPanelLocked(`/api/quotes/${quoteId}`, response.status);
+    throw new Error(payload.error || 'Failed to update quote');
+  }
   return payload.quote;
 }
 

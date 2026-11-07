@@ -10,8 +10,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
+      { find: '@/components/providers/NuqsClientAdapter', replacement: local('./stubs.tsx') },
       { find: '@/lib/hooks/usePermissionCheck', replacement: local('./stubs.tsx') },
-      { find: '@/components/security/SensitiveModuleGate', replacement: local('./stubs.tsx') },
+      { find: '@/lib/hooks/useAuth', replacement: local('./stubs.tsx') },
+      { find: '@/lib/hooks/usePermissionSnapshot', replacement: local('./stubs.tsx') },
+      { find: '@/lib/hooks/useNavMetrics', replacement: local('./stubs.tsx') },
+      { find: '@/components/layout/tablet-mode-context', replacement: local('./stubs.tsx') },
+      { find: 'next/navigation', replacement: local('./stubs.tsx') },
       { find: 'next/link', replacement: local('./link.tsx') },
       { find: 'next/dynamic', replacement: local('./dynamic.tsx') },
       { find: '@', replacement: local('../../') },

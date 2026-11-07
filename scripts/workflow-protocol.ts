@@ -8,6 +8,7 @@ import {
   formatFinaliseProtocolReadinessReport,
   getFinaliseProtocolReadiness,
 } from './automation/workflow-finalise-correlation';
+import { auditWorkflowEvidence, retireWorkflowEvidence } from './automation/workflow-evidence-retirement';
 import type {
   WorkflowProtocolReviewPass,
   WorkflowRouteDispositionTarget,
@@ -39,6 +40,9 @@ Commands:
   finalise-start --workstream <id>
   status --workstream <id>
   status --blocking [--json]
+  evidence-backfill [--dry-run]
+  retire-evidence --workstream <id> --missing-commit <full-sha> \\
+    --reason <text> --owner-authorised-retirement [--dry-run]
 
 Exit codes:
   0 success
@@ -65,6 +69,23 @@ function splitCsv(value: string | undefined): string[] | undefined {
     .filter(Boolean);
 }
 
+function validateEvidenceArgs(args: string[], command: 'evidence-backfill' | 'retire-evidence'): void {
+  const switches = new Set(['--dry-run', ...(command === 'retire-evidence' ? ['--owner-authorised-retirement'] : [])]);
+  const values = new Set(['--repo-root', ...(command === 'retire-evidence' ? ['--workstream', '--missing-commit', '--reason'] : [])]);
+  const seen = new Set<string>();
+  for (let index = 1; index < args.length; index++) {
+    const flag = args[index];
+    if (seen.has(flag) || (!switches.has(flag) && !values.has(flag))) {
+      throw new Error(`unknown or repeated ${command} argument: ${flag}`);
+    }
+    seen.add(flag);
+    if (values.has(flag)) {
+      const value = args[++index];
+      if (!value?.trim() || value.startsWith('--')) throw new Error(`${flag} requires a value`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0] as WorkflowProtocolCommand | undefined;
@@ -74,6 +95,26 @@ async function main(): Promise<void> {
   }
 
   const repoRoot = readFlag(args, '--repo-root') ?? process.cwd();
+  if (args[0] === 'evidence-backfill') {
+    validateEvidenceArgs(args, 'evidence-backfill');
+    const result = auditWorkflowEvidence({ repoRoot, dryRun: hasFlag(args, '--dry-run') });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    // Missing objects are reported even though all available evidence can still be retained.
+    process.exit(result.missing.length > 0 ? 1 : 0);
+  }
+  if (args[0] === 'retire-evidence') {
+    validateEvidenceArgs(args, 'retire-evidence');
+    const result = retireWorkflowEvidence({
+      repoRoot,
+      workstreamId: readFlag(args, '--workstream') ?? '',
+      missingCommit: readFlag(args, '--missing-commit') ?? '',
+      reason: readFlag(args, '--reason') ?? '',
+      ownerAuthorisedRetirement: hasFlag(args, '--owner-authorised-retirement'),
+      dryRun: hasFlag(args, '--dry-run'),
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exit(0);
+  }
   if (command === 'status' && hasFlag(args, '--blocking')) {
     const readiness = getFinaliseProtocolReadiness(repoRoot);
     if (hasFlag(args, '--json')) {

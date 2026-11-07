@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import path from 'path';
+import { retainWorkflowEvidenceBeforeWrite } from './workflow-git-evidence';
 import type {
   WorkflowActiveFinaliseContext,
   WorkflowProtocolPhase,
@@ -395,6 +396,7 @@ export function readProtocolRecord(
 
 export function writeProtocolRecord(repoRoot: string, record: WorkflowProtocolRecord): string {
   const filePath = getProtocolRecordPath(repoRoot, record.workstreamId);
+  retainWorkflowEvidenceBeforeWrite(repoRoot, record);
   writeJsonAtomic(filePath, record);
   return filePath;
 }
@@ -1956,7 +1958,7 @@ export function applyFinaliseProtocolOutcome(params: {
       nextAction: 'rerun_or_repair_finalise',
       updatedAt,
     };
-    writeJsonAtomic(getProtocolRecordPath(params.repoRoot, params.workstreamId), failedRecord);
+    writeProtocolRecord(params.repoRoot, failedRecord);
     return {
       state: upsertProtocolInState(params.state, failedRecord),
       record: failedRecord,

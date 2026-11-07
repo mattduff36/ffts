@@ -100,6 +100,55 @@ Cursor commands under `.cursor/commands/` cover `/workflow-review`, `/finalise`,
 
 Model registry version: `ffts-tee-model-registry-v1`.
 
+### Local evidence retention and audited retirement
+
+Protocol and workflow-state writers retain available commit evidence before publishing records in
+direct, SHA-keyed `refs/ffts/workflow-evidence/<full-sha>` refs. This includes failed review candidates,
+baselines, immutable route/import evidence and finalise results. Ref creation is atomic and
+compare-and-swap checked; conflicting or symbolic refs fail the write. Missing legacy objects are
+reported explicitly, never recreated or treated as passed evidence.
+
+Audit existing records without mutation, then explicitly backfill available objects:
+
+```bash
+npm run workflow-protocol -- evidence-backfill --dry-run
+npm run workflow-protocol -- evidence-backfill
+```
+
+Both commands report `available`, `missing` and `unpinned` commit arrays. `unpinned` describes the
+pre-command state. Missing objects cause exit 1, including after apply has retained all available
+objects; repeat apply is safe and does not hide the missing history. Disk/state divergence or unsafe
+evidence fails closed. Status commands never pin objects or repair artifacts.
+
+An owner may explicitly retire one obsolete missing legal review candidate only when its exhausted,
+non-release rehome has an unambiguous, reciprocal, hash-bound local successor chain ending in a
+genuinely passed and finalised successor already incorporated into current HEAD:
+
+```bash
+npm run workflow-protocol -- retire-evidence --workstream <historical-id> --missing-commit <full-sha> --reason "<owner-approved reason>" --owner-authorised-retirement --dry-run
+npm run workflow-protocol -- retire-evidence --workstream <historical-id> --missing-commit <full-sha> --reason "<owner-approved reason>" --owner-authorised-retirement
+npm run workflow-protocol -- status --blocking
+```
+
+This command does not recover the object, rewrite history, clear old blockers, grant review approval
+or reset review budgets. It binds an append-only receipt to the complete original/successor records,
+terminal passed review, passed finalise correlation and authorising HEAD. Intermediate discarded
+imports need not be ancestors of HEAD. Every normal finalise gate revalidates the immutable chain,
+all other required objects and current terminal incorporation; unrelated blockers remain enforced.
+
+Receipts are ignored local files at `docs_private/automation/evidence-retirements/<id>.json`, sealed
+as Git blobs under direct `refs/ffts/workflow-retirements/<id>` refs. Apply holds the workflow lock and
+refuses pending transactions or active finalise. A crash after sealing but before writing the audit
+mirror blocks status/finalise: replay the identical authorised command, with the same SHA and reason,
+to restore that mirror. Dry run only diagnoses it. Conflicting replays, modified receipts, missing or
+symbolic seals, malformed artifacts and later chain/finalise regressions block rather than overwrite
+evidence. Preserve and investigate corrupt artifacts; do not hand-edit them to unblock release.
+
+These refs protect locally against branch deletion, reflog expiration and ordinary Git GC/pruning.
+They are not branches or tags, are not pushed automatically, and do not protect another clone.
+They are not a backup or a security boundary against someone who can delete/rewrite local files and
+refs. Back up the private audit files and dedicated ref namespaces together when moving a checkout.
+
 ## Automation Artifacts
 
 `fixerrors` creates `docs_private/` when needed and writes ignored analysis, decision, fix-log, snapshot (`error-snapshot.json` / `error-snapshots/`), and structured automation-run files. The default command archives exact verified active snapshot IDs, then deletes only expired archived rows bound to a captured candidate set. It refuses automatic retry after failed or indeterminate archive/retention outcomes. Leftover v1 snapshots are rejected before any database connection. Debug UI clear and `scripts/clear-all-error-logs.ts` remain untrusted unbounded archive-active surfaces.

@@ -45,6 +45,7 @@ import {
   revalidateRouteDisposition,
 } from './workflow-v24-disposition';
 import { lastOwnedCommit, readWorkflowGitBinding } from './workflow-git-binding';
+import { inspectWorkflowRetirements } from './workflow-evidence-retirement';
 
 function runGit(repoRoot: string, args: string[]): string | null {
   const result = spawnSync('git', args, {
@@ -483,6 +484,15 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
   };
 
   const inventory = listDiskProtocolInventory(repoRoot);
+  const retirements = inspectWorkflowRetirements(repoRoot);
+  for (const error of retirements.errors) {
+    pushBlocker(makeBlocker({
+      workstreamId: error.workstreamId,
+      role: 'malformed',
+      phase: byId.get(error.workstreamId)?.phase ?? 'unknown',
+      message: `historical evidence retirement failed revalidation: ${error.message}`,
+    }));
+  }
   for (const name of inventory.unsafeDirectoryNames) {
     pushBlocker(
       makeBlocker({
@@ -594,6 +604,18 @@ export function getFinaliseProtocolReadiness(repoRoot: string): WorkflowFinalise
     );
 
     if (isNonReleaseDispositionPhase(protocol.phase)) {
+      if (retirements.retired.has(protocol.workstreamId)) {
+        lineages.push(makeBlocker({
+          workstreamId: protocol.workstreamId,
+          role: 'non_release_disposition',
+          phase: protocol.phase,
+          message: `historical missing-object dependency for ${protocol.workstreamId} has an owner-authorised audited retirement; original failed history remains unchanged, not approval`,
+          protocol,
+          byId,
+          childWorkstreamIds,
+        }));
+        continue;
+      }
       const disposition = revalidateRouteDisposition({ repoRoot, record: protocol });
       if (!disposition.ok) {
         pushBlocker(

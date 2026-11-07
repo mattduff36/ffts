@@ -12,6 +12,7 @@ import {
   unlinkSync,
 } from 'fs';
 import path from 'path';
+import { retainWorkflowEvidenceBeforeWrite } from './workflow-git-evidence';
 import type {
   WorkflowReviewState,
   WorkflowStopEvent,
@@ -207,6 +208,8 @@ export function writeJsonAtomic(filePath: string, value: unknown): void {
 }
 
 export function saveWorkflowReviewState(statePath: string, state: WorkflowReviewState): void {
+  const repoRoot = path.resolve(path.dirname(statePath), '..', '..', '..');
+  retainWorkflowEvidenceBeforeWrite(repoRoot, state);
   writeJsonAtomic(statePath, {
     ...state,
     updatedAt: new Date().toISOString(),

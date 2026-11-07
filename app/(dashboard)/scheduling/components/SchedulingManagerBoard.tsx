@@ -6630,9 +6630,15 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                               setJobDialogOpen(true);
                             }}
                           >
-                            <span className="block text-sm font-semibold">{job.job_reference}</span>
-                            <span className="block truncate text-xs">{job.title}</span>
-                            <span className="text-xs text-muted-foreground">Unfinished · Open job</span>
+                            <span className="block truncate text-sm font-semibold" title={job.job_reference}>{job.job_reference}</span>
+                            <span className="mt-0.5 block truncate text-xs" title={job.customer_name || undefined}>{job.customer_name || 'Customer not set'}</span>
+                            <span className="block truncate text-xs text-muted-foreground" title={job.site_name || job.site_address || undefined}>{job.site_name || job.site_address || 'Site not set'}</span>
+                            <span className="block truncate text-xs" title={job.title}>{job.title}</span>
+                            <span className="mt-1 flex flex-wrap justify-between gap-x-2 text-[10px] text-muted-foreground">
+                              <span>{job.estimated_duration_minutes ? `${Math.round(job.estimated_duration_minutes / 60 * 100) / 100} hours` : 'No estimate'}</span>
+                              <span>{formatQuoteStatusLabel(job.status)}</span>
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">Unfinished · Open job</span>
                           </button>
                         ))}
                         {quoteCandidatesQuery.isLoading

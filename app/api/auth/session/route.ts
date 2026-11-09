@@ -5,7 +5,7 @@ import { getCurrentAuthenticatedProfile } from '@/lib/server/app-auth/session';
 import { canIssueSupabaseDataToken } from '@/lib/server/app-auth/supabase-token';
 
 export async function GET() {
-  const current = await getCurrentAuthenticatedProfile({ includeEmail: true });
+  const current = await getCurrentAuthenticatedProfile({ includeEmail: true, allowPendingPasswordChange: true });
   if (!current) {
     return NextResponse.json(
       {
@@ -26,8 +26,8 @@ export async function GET() {
     },
     profile: current.profile,
     can_edit_basic_fields: canEditOwnBasicProfileFields(current.profile),
-    data_token_available: canIssueSupabaseDataToken(current.profile.email),
-  });
+    data_token_available: current.profile.must_change_password !== true && canIssueSupabaseDataToken(current.profile.email),
+  }, { headers: { 'Cache-Control': 'no-store' } });
   applyValidationCookieIfNeeded(response, current.validation);
   return response;
 }

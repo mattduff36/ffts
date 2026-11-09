@@ -1,5 +1,6 @@
 import {
   createClient as createSupabaseClient,
+  AuthApiError,
   type Session,
   type SupabaseClient,
   type User,
@@ -11,8 +12,25 @@ import { issueSupabaseDataToken } from '@/lib/server/app-auth/supabase-token'
 import { validateAppSession } from '@/lib/server/app-auth/session'
 import { withAuthOverrides } from '@/lib/supabase/with-auth-overrides'
 import type { Database } from '@/types/database'
+import { isPasswordChangeRequired } from '@/lib/server/app-auth/profile'
 
-export async function createClient() {
+function createRestrictedClient(
+  url: string,
+  anonKey: string,
+  signOut?: SupabaseClient<Database>['auth']['signOut']
+): SupabaseClient<Database> {
+  const client = createSupabaseClient<Database>(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
+  const error = new AuthApiError('Choose a permanent password before using the app.', 403, 'PASSWORD_CHANGE_REQUIRED')
+  return withAuthOverrides(client, {
+    getUser: (async () => ({ data: { user: null }, error })) as typeof client.auth.getUser,
+    getSession: (async () => ({ data: { session: null }, error })) as typeof client.auth.getSession,
+    ...(signOut ? { signOut } : {}),
+  })
+}
+
+export async function createClient(options: { allowPendingPasswordChange?: boolean } = {}) {
   const cookieStore = await cookies()
   const viewAsRoleId = cookieStore.get(VIEW_AS_ROLE_COOKIE_NAME)?.value || ''
   const viewAsTeamId = cookieStore.get(VIEW_AS_TEAM_COOKIE_NAME)?.value || ''
@@ -39,7 +57,12 @@ export async function createClient() {
   const canUseAppSession = session && validation.status !== 'invalid' && validation.status !== 'missing'
 
   if (!canUseAppSession) {
-    return createServerClient<Database>(
+    if (validation.status === 'invalid') {
+      return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
+        auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+      })
+    }
+    const legacyClient = createServerClient<Database>(
       supabaseUrl,
       supabaseAnonKey,
       {
@@ -63,9 +86,18 @@ export async function createClient() {
         },
       }
     )
+    const { data: { user } } = await legacyClient.auth.getUser()
+    if (user && !options.allowPendingPasswordChange && await isPasswordChangeRequired(user.id)) {
+      return createRestrictedClient(supabaseUrl, supabaseAnonKey, legacyClient.auth.signOut.bind(legacyClient.auth))
+    }
+    return legacyClient
   }
 
-  const dataToken = await issueSupabaseDataToken({
+  const pendingPasswordChange = await isPasswordChangeRequired(session.profile_id)
+  if (pendingPasswordChange && !options.allowPendingPasswordChange) {
+    return createRestrictedClient(supabaseUrl, supabaseAnonKey)
+  }
+  const dataToken = pendingPasswordChange ? null : await issueSupabaseDataToken({
     profileId: session.profile_id,
     email: validation.email,
     sessionId: session.id,

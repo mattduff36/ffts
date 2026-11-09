@@ -132,6 +132,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Biometric login failed' }, { status: 401 });
     }
 
+    const profile = await getAppAuthProfile(credential.profile_id, null);
+    const activeCredential = await getWebAuthnCredentialByCredentialId(credential.credential_id);
+    if (!activeCredential || profile.must_change_password === true) {
+      return NextResponse.json(
+        { error: 'Sign in with your temporary password and choose a permanent password.', code: 'PASSWORD_CHANGE_REQUIRED' },
+        { status: 403 }
+      );
+    }
+
     await updateWebAuthnCredentialCounter({
       credentialId: credential.credential_id,
       counter: verification.authenticationInfo.newCounter,
@@ -147,11 +156,20 @@ export async function POST(request: NextRequest) {
       actorProfileId: credential.profile_id,
     });
 
+    const latestProfile = await getAppAuthProfile(credential.profile_id, null);
+    const latestCredential = await getWebAuthnCredentialByCredentialId(credential.credential_id);
+    if (!latestCredential || latestProfile.must_change_password === true) {
+      await revokeAppSession(nextSession.row.id, 'account_reset_during_biometric_login');
+      return NextResponse.json(
+        { error: 'Sign in with your temporary password and choose a permanent password.', code: 'PASSWORD_CHANGE_REQUIRED' },
+        { status: 403 }
+      );
+    }
+
     if (existing.session) {
       await revokeAppSession(existing.session.id, 'replaced_by_biometric_login', nextSession.row.id);
     }
 
-    const profile = await getAppAuthProfile(credential.profile_id, null);
     await trackServerUsageEvent({
       eventName: 'auth_login_success',
       userId: credential.profile_id,

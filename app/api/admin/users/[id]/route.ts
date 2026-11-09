@@ -139,6 +139,20 @@ export async function PUT(
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    const { data: existingAuthUser, error: authLookupError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (authLookupError || !existingAuthUser.user) {
+      return NextResponse.json({ error: 'Unable to load current account email' }, { status: 500 });
+    }
+    const notificationEmail = existingAuthUser.user.email || null;
+    if (email !== undefined && (
+      typeof email !== 'string' ||
+      email.trim().toLowerCase() !== (notificationEmail || '').trim().toLowerCase()
+    )) {
+      return NextResponse.json(
+        { error: 'Use Change email & reset password to change this account email.', code: 'ACCOUNT_HANDOVER_REQUIRED' },
+        { status: 400 }
+      );
+    }
 
     const { data: requestedRole, error: requestedRoleError } = await supabaseAdmin
       .from('roles')
@@ -210,14 +224,6 @@ export async function PUT(
 
     // Track changes for email notification
     const changes: ProfileChanges = {};
-    const notificationEmail = email || null;
-    if (email) {
-      const { data: existingAuthUser } = await supabaseAdmin.auth.admin.getUserById(userId);
-      const existingEmail = existingAuthUser?.user?.email || '';
-      if (email !== existingEmail) {
-        changes.email = { old: existingEmail, new: email };
-      }
-    }
     if (full_name !== existingUser.full_name) {
       changes.full_name = { old: existingUser.full_name, new: full_name };
     }
@@ -263,22 +269,6 @@ export async function PUT(
         old: oldRoleAccess?.display_name || 'Unknown',
         new: newRoleAccess?.display_name || 'Unknown'
       };
-    }
-
-    // Update email in auth if it changed
-    if (email) {
-      const { error: emailError } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
-        { email }
-      );
-
-      if (emailError) {
-        console.error('Email update error:', emailError);
-        return NextResponse.json(
-          { error: `Failed to update email: ${emailError.message}` },
-          { status: 400 }
-        );
-      }
     }
 
     // Update profile data (email is only in auth, not in profiles table)

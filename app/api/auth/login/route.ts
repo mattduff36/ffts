@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import {
   setAppSessionCookieInResponse,
 } from '@/lib/server/app-auth/cookies';
@@ -7,7 +7,6 @@ import { clearAllAuthCookies } from '@/lib/server/app-auth/response';
 import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 import { issueAppSession, validateAppSession, revokeAppSession } from '@/lib/server/app-auth/session';
 import { isWebAuthnConfigured } from '@/lib/server/webauthn/config';
-import { createClient } from '@/lib/supabase/server';
 import { trackServerUsageEvent } from '@/lib/server/user-analytics';
 import type { Database } from '@/types/database';
 
@@ -72,7 +71,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = createSupabaseClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
+    );
     const user = await verifyPasswordLogin(supabase, email, password);
     if (!user) {
       await trackServerUsageEvent({
@@ -100,6 +103,13 @@ export async function POST(request: NextRequest) {
       deviceLabel: shouldTrackWebAuthnDevice ? body.deviceLabel || null : null,
       actorProfileId: user.id,
     });
+
+    // A reset may have changed credentials while the app session was being created.
+    const confirmedUser = await verifyPasswordLogin(supabase, email, password);
+    if (confirmedUser?.id !== user.id) {
+      await revokeAppSession(nextSession.row.id, 'credentials_changed_during_login');
+      return NextResponse.json({ error: 'Credentials changed during sign-in. Please sign in again.' }, { status: 401 });
+    }
 
     if (existing.session) {
       await revokeAppSession(existing.session.id, 'replaced_by_password_login', nextSession.row.id);

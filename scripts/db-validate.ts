@@ -25,6 +25,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'path';
 import pg from 'pg';
+import { developmentPgOptions } from '../lib/utils/development-pg-options';
 import { AutomationRun } from './automation/logger';
 
 config({ path: resolve(process.cwd(), '.env.local') });
@@ -138,14 +139,17 @@ async function main(): Promise<number> {
   }
 
   const url = new URL(connectionString);
-  const dbClient = new pg.Client({
-    host: url.hostname,
-    port: parseInt(url.port) || 5432,
-    database: url.pathname.slice(1),
-    user: url.username,
-    password: url.password ? decodeURIComponent(url.password) : undefined,
-    ssl: { rejectUnauthorized: false },
-  });
+  const connectionOptions = process.env.FFTS_DATA_ENVIRONMENT === 'development'
+    ? developmentPgOptions(process.env, { connectionTimeoutMillis: 10000 })
+    : {
+        host: url.hostname,
+        port: parseInt(url.port) || 5432,
+        database: url.pathname.slice(1),
+        user: url.username,
+        password: url.password ? decodeURIComponent(url.password) : undefined,
+        ssl: { rejectUnauthorized: false },
+      };
+  const dbClient = new pg.Client(connectionOptions);
   client = dbClient;
 
   await run.step('Connect to database', () => dbClient.connect(), {

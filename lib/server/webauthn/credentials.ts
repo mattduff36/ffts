@@ -291,6 +291,19 @@ export async function revokeWebAuthnCredentialsForDevice({
   return (data || []).length;
 }
 
+export async function revokeWebAuthnCredentialsForProfile(profileId: string): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('webauthn_credentials')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('profile_id', profileId)
+    .is('revoked_at', null)
+    .select('id');
+
+  if (error || !data) throw new Error('Failed to revoke biometric credentials');
+  return data.length;
+}
+
 export async function isBiometricPromptDismissed({
   profileId,
   rawDeviceId,

@@ -44,6 +44,12 @@ To undo a just-staged rollback before committing it, use `git apply --reverse --
 6. Test helpers must use deterministic fictional fixtures and must not alter production data unless a runbook explicitly authorizes it.
 7. The hosted/client target is protected after sample cleanup, even while pre-launch. Retained test identities do not make it disposable. Fixtures and automated tests are development-only; use proportionate data/security gates. See `docs/guides/SAMPLE_DATA_PHASE.md`.
 
+### Local release migrations and schema validation
+
+`npm run finalise` applies pending local migrations only to the verified NAS development target. It requires `FFTS_DATA_ENVIRONMENT=development` and the exact API, PostgreSQL and app targets accepted by `developmentPgOptions`; the SSH-tunnel PostgreSQL connection uses no additional TLS. Hosted targets and conflicting connection options fail before any SQL runs. Apply reviewed production migrations separately after deploying compatible application code.
+
+`npm run db:validate` uses the same guarded NAS connection in development mode. Explicitly targeted hosted validation remains read-only and retains the hosted SSL connection; supply hosted credentials through the reviewed operational wrapper, never by replacing the local development environment files.
+
 ### Development-only sample fixtures and test users
 
 `scripts/testing/scheduling-sample.ts` and `scripts/testing/fleet-inventory-sample.ts` require `FFTS_DATA_ENVIRONMENT=development` and exact verified API/PG/app targets even for read-only plans. Hosted tools report unavailable; legacy production-project allowlists cannot override this. CLI entrypoints load only `.env.development.local`; importing pure fixture builders loads no environment files.
@@ -210,3 +216,9 @@ Follow-up plan generation requires an explicit build-model recommendation and fa
 Run `npm run dev:nas:tunnel` from this repository on MPDEE-SERVER, then `npm run dev` in a second terminal. The tunnel uses SSH and the existing NAS Docker engine; it does not install Docker on the PC or alter services. It checks only the dedicated FFTS containers, their internal network/static destinations, free local ports and all four forwarded services. It stops on an occupied port, configuration mismatch or SSH forwarding denial. Ctrl+C closes its own tunnel.
 
 Use `npm run testsuite:setup:development` to provision the three local testsuite accounts after target verification. The production setup alias is removed. Environment separation, generated private files, fixture confirmations, maintenance and recovery are documented in `docs/guides/LOCAL_DEVELOPMENT.md`; public NAS configuration is in `infra/nas-development/`. Never track runtime volumes, private `.env` files, copied data, auth state or backup archives.
+
+## Account handover permission regression
+
+Run `node scripts/testing/verify-account-handover-guards.cjs` with the NAS tunnel and local app running. It loads only ignored `.env.development.local`, checks the exact development API/PostgreSQL target and the app's development identity, then replays `20261109190808_staff_account_handover_guards.sql` inside a transaction. Fictional Auth/profile fixtures prove that role/onboarding changes and profile insertion/deletion are denied to browser roles, while self-service contact updates and authorised holiday-allowance changes still work. Every fixture and DDL statement rolls back on success or failure; the command prints a credential-free JSON summary and never sends mail or opens a hosted connection.
+
+The migration itself is applied separately through the reviewed `pg.Client` path. Deploy the compatible application first: password reset/completion must use the checked service-role profile writes before authenticated column grants are narrowed. Preserve a function/ACL inventory and verify data fingerprints before and after the hosted application. See `docs/guides/USER_ACCOUNT_HANDOVER.md` for admin operation and partial-failure recovery. Do not run the entire baseline against an existing database.

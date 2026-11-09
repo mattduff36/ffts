@@ -16,6 +16,21 @@ describe('auth session route', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps pending users authenticated for password replacement but disables data tokens', async () => {
+    vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
+      validation: { cookieValue: null, cookieExpiresAt: null },
+      profile: { id: 'user-1', email: 'user@example.test', must_change_password: true },
+    } as never);
+    const response = await sessionGet();
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.authenticated).toBe(true);
+    expect(payload.profile.must_change_password).toBe(true);
+    expect(payload.data_token_available).toBe(false);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(getCurrentAuthenticatedProfile).toHaveBeenCalledWith({ includeEmail: true, allowPendingPasswordChange: true });
+  });
+
   it('reports the active authenticated session without lock state', async () => {
     vi.mocked(getCurrentAuthenticatedProfile).mockResolvedValue({
       validation: {

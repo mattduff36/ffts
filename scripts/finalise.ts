@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { existsSync, readFileSync, rmSync } from 'fs';
 import path from 'path';
 import pg from 'pg';
+import { developmentPgOptions } from '../lib/utils/development-pg-options';
 import { parseCommitsFromMessages, selectPrimaryCommitMessage } from '../lib/config/release-version-logic';
 import { AutomationRun } from './automation/logger';
 import {
@@ -690,29 +691,10 @@ function migrationNeedsDbValidate(relativePath: string): boolean {
   );
 }
 
-function getDbConnectionString(): string {
-  const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-
-  if (!connectionString) {
-    throw new Error('POSTGRES_URL_NON_POOLING or POSTGRES_URL is not set in .env.local');
-  }
-
-  return connectionString;
-}
-
 async function createDbClient(): Promise<pg.Client> {
-  const connectionString = getDbConnectionString();
-  const url = new URL(connectionString);
-
-  const client = new Client({
-    host: url.hostname,
-    port: Number(url.port) || 5432,
-    database: url.pathname.slice(1),
-    user: url.username,
-    password: url.password ? decodeURIComponent(url.password) : undefined,
-    ssl: { rejectUnauthorized: false },
-  });
-
+  // Automatic local migrations must use the verified NAS development target.
+  // Hosted migrations are applied separately with an explicitly reviewed target.
+  const client = new Client(developmentPgOptions(process.env, { connectionTimeoutMillis: 10000 }));
   await client.connect();
   return client;
 }

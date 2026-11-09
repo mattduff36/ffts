@@ -28,6 +28,31 @@ export interface AppAuthProfile {
   email: string | null;
 }
 
+export class PasswordChangeRequiredError extends Error {
+  readonly status = 403;
+  readonly code = 'PASSWORD_CHANGE_REQUIRED';
+
+  constructor() {
+    super('Choose a permanent password before using the app.');
+    this.name = 'PasswordChangeRequiredError';
+  }
+}
+
+// Never cache this security flag: an administrator can reset an active account.
+export async function isPasswordChangeRequired(profileId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('profiles')
+    .select('must_change_password')
+    .eq('id', profileId)
+    .single();
+
+  if (error || !data) {
+    throw new Error('Unable to verify password-change requirement');
+  }
+  return data.must_change_password === true;
+}
+
 export async function getAppAuthProfile(profileId: string, email: string | null): Promise<AppAuthProfile> {
   const admin = createAdminClient();
   const { data, error } = await admin

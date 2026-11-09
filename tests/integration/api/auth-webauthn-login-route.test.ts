@@ -109,6 +109,35 @@ describe('auth webauthn login verify route', () => {
     });
   });
 
+  it('denies biometric entry while a permanent password is required', async () => {
+    getAppAuthProfileMock.mockResolvedValueOnce({ id: 'profile-1', must_change_password: true });
+    const response = await verifyPost(new Request('http://localhost/api/auth/webauthn/login/verify', {
+      method: 'POST', body: JSON.stringify({ challenge: 'challenge-1', response: { id: 'credential-1' } }),
+    }) as never);
+    expect(response.status).toBe(403);
+    expect(issueAppSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a credential revoked during verification', async () => {
+    getWebAuthnCredentialByCredentialIdMock.mockResolvedValueOnce({ credential_id: 'credential-1', profile_id: 'profile-1' })
+      .mockResolvedValueOnce(null);
+    const response = await verifyPost(new Request('http://localhost/api/auth/webauthn/login/verify', {
+      method: 'POST', body: JSON.stringify({ challenge: 'challenge-1', response: { id: 'credential-1' } }),
+    }) as never);
+    expect(response.status).toBe(403);
+    expect(issueAppSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('revokes a biometric session when reset occurs during session creation', async () => {
+    getAppAuthProfileMock.mockResolvedValueOnce({ id: 'profile-1', must_change_password: false })
+      .mockResolvedValueOnce({ id: 'profile-1', must_change_password: true });
+    const response = await verifyPost(new Request('http://localhost/api/auth/webauthn/login/verify', {
+      method: 'POST', body: JSON.stringify({ challenge: 'challenge-1', response: { id: 'credential-1' } }),
+    }) as never);
+    expect(response.status).toBe(403);
+    expect(revokeAppSessionMock).toHaveBeenCalledWith('session-1', 'account_reset_during_biometric_login');
+  });
+
   it('verifies the credential and issues a biometric app session', async () => {
     const request = new Request('http://localhost/api/auth/webauthn/login/verify', {
       method: 'POST',

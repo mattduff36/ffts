@@ -16,6 +16,9 @@ const {
   sha256HexMock,
   getSupabaseUserMock,
   randomTokenMock,
+  revokeSelectMock,
+  revokeIsMock,
+  updateMock,
 } = vi.hoisted(() => ({
   maybeSingleMock: vi.fn(),
   singleMock: vi.fn(),
@@ -26,6 +29,9 @@ const {
   sha256HexMock: vi.fn(),
   getSupabaseUserMock: vi.fn(),
   randomTokenMock: vi.fn(),
+  revokeSelectMock: vi.fn(),
+  revokeIsMock: vi.fn(),
+  updateMock: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -45,11 +51,10 @@ vi.mock('@/lib/supabase/admin', () => ({
           single: singleMock,
         })),
       })),
-      update: vi.fn(() => ({
+      update: updateMock.mockImplementation(() => ({
         eq: vi.fn(() => ({
-          select: vi.fn(() => ({
-            single: singleMock,
-          })),
+          select: vi.fn(() => ({ single: singleMock })),
+          is: revokeIsMock,
         })),
       })),
     })),
@@ -88,13 +93,15 @@ vi.mock('@/lib/supabase/server', () => ({
   })),
 }));
 
-import { getCurrentAuthenticatedProfile, validateAppSession } from '@/lib/server/app-auth/session';
+import { getCurrentAuthenticatedProfile, validateAppSession, revokeAppSessionsForProfile } from '@/lib/server/app-auth/session';
 
 describe('app auth session helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-04T12:00:00.000Z'));
+    revokeIsMock.mockReturnValue({ select: revokeSelectMock });
+    revokeSelectMock.mockResolvedValue({ data: [{ id: 'session-1' }, { id: 'session-2' }], error: null });
 
     maybeSingleMock.mockResolvedValue({
       data: {
@@ -239,6 +246,45 @@ describe('app auth session helpers', () => {
     expect(current?.profile.id).toBe('user-1');
     expect(getAppAuthProfileMock).toHaveBeenCalledWith('user-1', 'user-1@example.com');
     expect(getUserByIdMock).toHaveBeenCalledWith('user-1');
+  });
+
+  it('denies pending profiles for ordinary business authorization but allows password replacement', async () => {
+    getAppAuthProfileMock.mockResolvedValue({ id: 'user-1', must_change_password: true });
+    expect(await getCurrentAuthenticatedProfile()).toBeNull();
+    expect((await getCurrentAuthenticatedProfile({ allowPendingPasswordChange: true }))?.profile.id).toBe('user-1');
+    expect(getSupabaseUserMock).not.toHaveBeenCalled();
+  });
+
+  it('does not revive a revoked app session through Supabase fallback', async () => {
+    maybeSingleMock.mockResolvedValueOnce({ data: { revoked_at: '2026-04-04T11:00:00.000Z' }, error: null });
+    expect(await getCurrentAuthenticatedProfile()).toBeNull();
+    expect(getSupabaseUserMock).not.toHaveBeenCalled();
+  });
+
+  it('denies pending legacy SSR users for ordinary business authorization', async () => {
+    getCurrentAppSessionCookiePayloadMock.mockResolvedValueOnce(null);
+    getSupabaseUserMock.mockResolvedValueOnce({ data: { user: { id: 'user-2' } }, error: null });
+    getAppAuthProfileMock.mockResolvedValueOnce({ id: 'user-2', must_change_password: true });
+    expect(await getCurrentAuthenticatedProfile()).toBeNull();
+  });
+
+  it('reads email live across requests after an account handover', async () => {
+    await validateAppSession({ includeEmail: true });
+    getUserByIdMock.mockResolvedValueOnce({ data: { user: { email: 'new@example.test' } }, error: null });
+    expect((await validateAppSession({ includeEmail: true })).email).toBe('new@example.test');
+    expect(getUserByIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('revokes all active sessions for the profile, not just the current device', async () => {
+    expect(await revokeAppSessionsForProfile('user-1', 'admin_password_reset')).toBe(2);
+    expect(updateMock).toHaveBeenCalledWith({ revoked_at: expect.any(String), revoked_reason: 'admin_password_reset' });
+    expect(updateMock.mock.results[0].value.eq).toHaveBeenCalledWith('profile_id', 'user-1');
+    expect(revokeIsMock).toHaveBeenCalledWith('revoked_at', null);
+  });
+
+  it('does not claim profile-wide session revocation after a failed write', async () => {
+    revokeSelectMock.mockResolvedValueOnce({ data: null, error: { message: 'offline' } });
+    await expect(revokeAppSessionsForProfile('user-1', 'admin_password_reset')).rejects.toThrow('Failed to revoke');
   });
 
   it('falls back to the Supabase SSR user when no app-session cookie exists', async () => {

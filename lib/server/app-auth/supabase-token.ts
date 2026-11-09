@@ -5,6 +5,7 @@ import {
   SUPABASE_DATA_TOKEN_TTL_SECONDS,
 } from '@/lib/server/app-auth/constants';
 import { signJwtHS256 } from '@/lib/server/app-auth/jwt';
+import { isPasswordChangeRequired, PasswordChangeRequiredError } from '@/lib/server/app-auth/profile';
 
 export interface SupabaseDataTokenOptions {
   profileId: string;
@@ -22,6 +23,10 @@ export async function issueSupabaseDataToken(
   const signingSecret = getSupabaseJwtSigningSecret();
   if (!signingSecret) {
     return null;
+  }
+
+  if (await isPasswordChangeRequired(options.profileId)) {
+    throw new PasswordChangeRequiredError();
   }
 
   const now = Math.floor(Date.now() / 1000);

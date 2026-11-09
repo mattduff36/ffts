@@ -27,11 +27,19 @@ vi.mock('@/lib/server/app-auth/session', () => ({
   issueAppSession,
 }));
 
+vi.mock('@/lib/server/app-auth/profile', () => ({
+  isPasswordChangeRequired: vi.fn(async () => false),
+}));
+
+import { isPasswordChangeRequired } from '@/lib/server/app-auth/profile';
 import { GET as bootstrapGet } from '@/app/api/auth/bootstrap/route';
 
 describe('auth bootstrap route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.test');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'mock-anon-key');
+    vi.mocked(isPasswordChangeRequired).mockResolvedValue(false);
     validateAppSession.mockResolvedValue({
       status: 'missing',
       session: null,
@@ -62,6 +70,20 @@ describe('auth bootstrap route', () => {
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('http://localhost/dashboard');
     expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBeTruthy();
+  });
+
+  it('routes pending users to password replacement rather than business pages', async () => {
+    vi.mocked(isPasswordChangeRequired).mockResolvedValueOnce(true);
+    const response = await bootstrapGet(new NextRequest('http://localhost/api/auth/bootstrap?returnTo=%2Fadmin%2Fusers'));
+    expect(response.headers.get('location')).toBe('http://localhost/change-password');
+  });
+
+  it('does not bootstrap a revoked app session from legacy cookies', async () => {
+    validateAppSession.mockResolvedValueOnce({ status: 'invalid', session: null });
+    const response = await bootstrapGet(new NextRequest('http://localhost/api/auth/bootstrap'));
+    expect(response.headers.get('location')).toBe('http://localhost/login');
+    expect(getUser).not.toHaveBeenCalled();
+    expect(issueAppSession).not.toHaveBeenCalled();
   });
 
   it('redirects unauthenticated users back to login', async () => {

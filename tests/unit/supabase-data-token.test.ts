@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isPasswordChangeRequired } from '@/lib/server/app-auth/profile';
+
+vi.mock('@/lib/server/app-auth/profile', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/app-auth/profile')>(),
+  isPasswordChangeRequired: vi.fn(async () => false),
+}));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -24,6 +30,14 @@ describe('Supabase data tokens', () => {
     });
 
     expect(token).toBeNull();
+  });
+
+  it('denies a fresh token while a permanent password is required', async () => {
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'forest-test-jwt-secret');
+    vi.mocked(isPasswordChangeRequired).mockResolvedValueOnce(true);
+    const { issueSupabaseDataToken } = await import('@/lib/server/app-auth/supabase-token');
+    await expect(issueSupabaseDataToken({ profileId: 'profile-123', email: null, sessionId: 'session-1' }))
+      .rejects.toMatchObject({ code: 'PASSWORD_CHANGE_REQUIRED' });
   });
 
   it('enables signed data tokens when the Supabase JWT secret is configured', async () => {

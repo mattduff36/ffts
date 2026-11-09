@@ -93,27 +93,14 @@ async function getCurrentRequestMetadata(): Promise<{ userAgent: string | null; 
   };
 }
 
-const AUTH_USER_EMAIL_CACHE_TTL_MS = 5 * 60 * 1000;
-const authUserEmailCache = new Map<string, { email: string | null; expiresAt: number }>();
-
 async function getAuthUserEmail(profileId: string): Promise<string | null> {
-  const cachedEntry = authUserEmailCache.get(profileId);
-  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
-    return cachedEntry.email;
-  }
-
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.getUserById(profileId);
   if (error || !data.user) {
-    return null;
+    throw new Error('Unable to load current account email');
   }
 
-  const email = data.user.email || null;
-  authUserEmailCache.set(profileId, {
-    email,
-    expiresAt: Date.now() + AUTH_USER_EMAIL_CACHE_TTL_MS,
-  });
-  return email;
+  return data.user.email || null;
 }
 
 async function resolveDeviceId(
@@ -393,8 +380,26 @@ export async function validateAppSession(
   };
 }
 
+export async function revokeAppSessionsForProfile(profileId: string, reason: string): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('app_auth_sessions')
+    .update({ revoked_at: new Date().toISOString(), revoked_reason: reason })
+    .eq('profile_id', profileId)
+    .is('revoked_at', null)
+    .select('id');
+
+  if (error || !data) throw new Error('Failed to revoke application sessions');
+  return data.length;
+}
+
+interface AuthenticatedProfileOptions {
+  includeEmail?: boolean;
+  allowPendingPasswordChange?: boolean;
+}
+
 export async function getCurrentAuthenticatedProfile(
-  options: { includeEmail?: boolean } = {}
+  options: AuthenticatedProfileOptions = {}
 ) {
   const validation = await validateAppSession(options);
   if (
@@ -403,19 +408,21 @@ export async function getCurrentAuthenticatedProfile(
     validation.status !== 'invalid'
   ) {
     const profile = await getAppAuthProfile(validation.session.profile_id, validation.email);
+    if (profile.must_change_password === true && !options.allowPendingPasswordChange) return null;
     return {
       validation,
       profile,
     };
   }
 
+  if (validation.status === 'invalid') return null;
   return getCurrentAuthenticatedProfileFromSupabase(options);
 }
 
 export async function getCurrentAuthenticatedProfileFromSupabase(
-  options: { includeEmail?: boolean } = {}
+  options: AuthenticatedProfileOptions = {}
 ) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient({ allowPendingPasswordChange: true });
   const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error || !user) {
@@ -424,6 +431,7 @@ export async function getCurrentAuthenticatedProfileFromSupabase(
 
   const email = options.includeEmail ? user.email || null : null;
   const profile = await getAppAuthProfile(user.id, email);
+  if (profile.must_change_password === true && !options.allowPendingPasswordChange) return null;
 
   return {
     validation: {

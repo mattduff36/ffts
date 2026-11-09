@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { validatePasswordStrength, getPasswordRequirements } from '@/lib/utils/password';
 import { loadClientAuthSession } from '@/lib/app-auth/client-session';
+import { useAuth } from '@/lib/providers/auth-provider';
 import { PageLoader } from '@/components/ui/page-loader';
 
 interface AuthSessionResponse {
@@ -21,6 +22,7 @@ interface AuthSessionResponse {
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const { refreshSession } = useAuth();
 
   // State
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [userName, setUserName] = useState('');
+  const [userId, setUserId] = useState('');
 
   // Check if user is logged in and needs to change password
   useEffect(function () {
@@ -53,6 +56,7 @@ export default function ChangePasswordPage() {
         }
 
         setUserName(profile.full_name || 'User');
+        setUserId(sessionResult.payload.user?.id || '');
 
         // If they don't need to change password, redirect to dashboard
         if (!profile.must_change_password) {
@@ -113,14 +117,34 @@ export default function ChangePasswordPage() {
       }
 
       setSuccess(true);
-
-      // Redirect to dashboard after 2 seconds
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      await refreshAccess();
     } catch (error) {
       console.error('Error changing password:', error);
       setError(error instanceof Error ? error.message : 'Failed to change password');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function refreshAccess() {
+    setSubmitting(true);
+    setError('');
+    try {
+      const result = await refreshSession();
+      const profile = result.payload?.profile;
+      if (result.status !== 'authenticated' || result.payload?.authenticated !== true ||
+          !userId || result.payload.user?.id !== userId ||
+          !profile || typeof profile !== 'object' ||
+          !('id' in profile) || profile.id !== userId ||
+          !('must_change_password' in profile) || profile.must_change_password !== false) {
+        throw new Error('Unable to confirm restored access');
+      }
+      router.replace('/dashboard');
+    } catch {
+      setError('Your password has changed, but access could not be refreshed. Retry refreshing access, or sign in again with your new password. Do not submit the password change again.');
     } finally {
       setSubmitting(false);
     }
@@ -160,7 +184,17 @@ export default function ChangePasswordPage() {
                 </div>
               </div>
               <h2 className="text-2xl font-bold text-white">Password Changed Successfully!</h2>
-              <p className="text-muted-foreground">Redirecting you to the dashboard...</p>
+              {error ? (
+                <>
+                  <p role="alert" className="text-sm text-red-400">{error}</p>
+                  <Button onClick={() => void refreshAccess()} disabled={submitting} className="w-full">
+                    {submitting ? 'Refreshing access...' : 'Retry refreshing access'}
+                  </Button>
+                  <a href="/login" className="block text-sm text-muted-foreground underline">Sign in with your new password</a>
+                </>
+              ) : (
+                <p className="text-muted-foreground">Refreshing access before opening the dashboard...</p>
+              )}
             </div>
           </CardContent>
         </Card>

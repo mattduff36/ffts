@@ -53,6 +53,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { useBrowserSupabaseClient } from '@/lib/hooks/useBrowserSupabaseClient';
+import { invalidateCachedDataToken } from '@/lib/supabase/client';
 import { fetchAdminTeamDirectory } from '@/lib/admin/team-directory-client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePermissionCheck } from '@/lib/hooks/usePermissionCheck';
@@ -384,6 +385,8 @@ export default function UsersAdminPage() {
   // Password display states
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [emailSent, setEmailSent] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [selfReset, setSelfReset] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
 
@@ -1247,6 +1250,8 @@ export default function UsersAdminPage() {
   // Open reset password dialog
   function openResetPasswordDialog(userProfile: ProfileWithEmail) {
     setSelectedUser(userProfile);
+    setResetEmail(userProfile.email || '');
+    setSelfReset(false);
     setFormError('');
     setResetPasswordDialogOpen(true);
   }
@@ -1267,6 +1272,8 @@ export default function UsersAdminPage() {
 
       const response = await fetch(`/api/admin/users/${selectedUser.id}/reset-password`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail }),
       });
 
       const result = await response.json();
@@ -1275,18 +1282,20 @@ export default function UsersAdminPage() {
         throw new Error(result.error || 'Failed to reset password');
       }
 
-      // Show new password to admin
       setTemporaryPassword(result.temporaryPassword);
-      setEmailSent(result.emailSent);
+      setEmailSent(result.emailSent === true);
+      setSelfReset(result.selfReset === true || selectedUser.id === currentUser?.id);
+      setUsers((existing) => existing.map((entry) => entry.id === selectedUser.id ? { ...entry, email: result.email } : entry));
+      setFilteredUsers((existing) => existing.map((entry) => entry.id === selectedUser.id ? { ...entry, email: result.email } : entry));
       setIsNewUser(false);
       setPasswordCopied(false);
       setPasswordDisplayDialogOpen(true);
       setResetPasswordDialogOpen(false);
       setSelectedUser(null);
     } catch (error) {
-      console.error('Error resetting password:', error);
-      setFormError('Failed to reset password');
+      setFormError(error instanceof Error ? error.message : 'Failed to reset password');
     } finally {
+      if (selectedUser.id === currentUser?.id) invalidateCachedDataToken();
       setFormLoading(false);
     }
   }
@@ -1747,7 +1756,7 @@ export default function UsersAdminPage() {
                               size="sm"
                               onClick={() => openResetPasswordDialog(user)}
                               className="text-amber-400 hover:text-amber-300 hover:bg-slate-800"
-                              title="Reset Password"
+                              title="Change email & reset password"
                             >
                               <KeyRound className="h-3 w-3" />
                             </Button>
@@ -2192,10 +2201,18 @@ export default function UsersAdminPage() {
                 id="edit-email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                readOnly
                 className="bg-input border-border text-white"
               />
-              <p className="text-xs text-amber-500">⚠️ Changing email will require the user to verify their new address</p>
+              <Button type="button" variant="link" className="p-0 text-amber-500" onClick={() => {
+                if (selectedUser) {
+                  setEditDialogOpen(false);
+                  openResetPasswordDialog(selectedUser);
+                }
+              }}>
+                Change email &amp; reset password
+              </Button>
+              <p className="text-xs text-muted-foreground">Email changes require a new temporary password and sign out existing devices.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-name">Full Name *</Label>
@@ -2463,10 +2480,10 @@ export default function UsersAdminPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-amber-500" />
-              Reset User Password
+              Change email &amp; reset password
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              This will generate a new temporary password for the user. They will be required to change it on their next login.
+              Confirm the destination email. This signs out existing devices, removes biometric sign-in and requires a permanent password before app use. Keep the same email for a normal reset.
             </DialogDescription>
           </DialogHeader>
           {selectedUser && (
@@ -2481,13 +2498,17 @@ export default function UsersAdminPage() {
               </p>
             </div>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Destination email</Label>
+            <Input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} disabled={formLoading} />
+          </div>
           {formError && (
             <div className="bg-red-500/10 border border-red-500/50 rounded p-3 text-sm text-red-400">
               {formError}
             </div>
           )}
           <div className="bg-amber-500/10 border border-amber-500/50 rounded p-3 text-sm text-amber-400">
-            <strong>Note:</strong> The new password will be sent to the user&apos;s email address and displayed to you.
+            <strong>Note:</strong> A fresh temporary password will be emailed only to the destination above and displayed to you. Resetting your own account signs you out.
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setResetPasswordDialogOpen(false); setSelectedUser(null); }} className="border-slate-600 text-white hover:bg-slate-800">
@@ -2506,7 +2527,7 @@ export default function UsersAdminPage() {
               ) : (
                 <>
                   <KeyRound className="h-4 w-4 mr-2" />
-                  Reset Password
+                  Change email &amp; reset password
                 </>
               )}
             </Button>
@@ -2576,7 +2597,12 @@ export default function UsersAdminPage() {
       </Dialog>
 
       {/* Password Display Dialog */}
-      <Dialog open={passwordDisplayDialogOpen} onOpenChange={setPasswordDisplayDialogOpen}>
+      <Dialog open={passwordDisplayDialogOpen} onOpenChange={(open) => {
+        setPasswordDisplayDialogOpen(open);
+        if (!open && selfReset) {
+          void fetch('/api/auth/logout', { method: 'POST' }).finally(() => window.location.replace('/login'));
+        }
+      }}>
         <DialogContent className={dialogContentViewportClassName({ size: 'lg', className: 'border-border text-white' })}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2649,6 +2675,9 @@ export default function UsersAdminPage() {
                 setPasswordDisplayDialogOpen(false);
                 setTemporaryPassword('');
                 setPasswordCopied(false);
+                if (selfReset) {
+                  void fetch('/api/auth/logout', { method: 'POST' }).finally(() => window.location.replace('/login'));
+                }
               }}
               className="bg-brand-yellow hover:bg-brand-yellow-hover text-slate-900"
             >

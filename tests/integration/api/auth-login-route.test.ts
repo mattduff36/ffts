@@ -15,8 +15,8 @@ const {
   isWebAuthnConfigured: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
     auth: {
       signInWithPassword,
     },
@@ -43,6 +43,7 @@ import { getAppAuthProfile } from '@/lib/server/app-auth/profile';
 describe('auth login route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    signInWithPassword.mockReset().mockResolvedValue({ data: { user: { id: 'user-1', email: 'user-1@example.com' } }, error: null });
     isWebAuthnConfigured.mockReturnValue(true);
     validateAppSession.mockResolvedValue({
       status: 'missing',
@@ -130,6 +131,28 @@ describe('auth login route', () => {
     expect(payload.success).toBe(true);
     expect(getAppAuthProfile).toHaveBeenCalledWith('user-1', 'user-1@example.com');
     expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBeTruthy();
+  });
+
+  it('allows temporary-password entry and returns the forced-change flag', async () => {
+    vi.mocked(getAppAuthProfile).mockResolvedValueOnce({ id: 'user-1', must_change_password: true } as never);
+    signInWithPassword.mockResolvedValueOnce({ data: { user: { id: 'user-1', email: 'new@example.test' } }, error: null });
+    const response = await loginPost(new Request('http://localhost/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ email: 'new@example.test', password: 'TMPabc12' }),
+    }) as never);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ profile: { must_change_password: true } });
+    expect(response.cookies.get(APP_SESSION_COOKIE_NAME)?.value).toBeTruthy();
+  });
+
+  it('revokes a new session when credentials change during session creation', async () => {
+    signInWithPassword.mockResolvedValueOnce({ data: { user: { id: 'user-1' } }, error: null })
+      .mockResolvedValueOnce({ data: { user: null }, error: { message: 'Invalid login credentials' } });
+    const response = await loginPost(new Request('http://localhost/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ email: 'user-1@example.com', password: 'OldPassword123' }),
+    }) as never);
+    expect(response.status).toBe(401);
+    expect(revokeAppSession).toHaveBeenCalledWith('session-1', 'credentials_changed_during_login');
+    expect(response.cookies.get(APP_SESSION_COOKIE_NAME)).toBeUndefined();
   });
 
   it('does not block password login with WebAuthn device metadata when biometrics are disabled', async () => {

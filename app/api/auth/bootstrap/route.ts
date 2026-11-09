@@ -4,10 +4,11 @@ import { applyValidationCookieIfNeeded, clearAllAuthCookies } from '@/lib/server
 import { setAppSessionCookieInResponse } from '@/lib/server/app-auth/cookies';
 import { issueAppSession, validateAppSession } from '@/lib/server/app-auth/session';
 import type { Database } from '@/types/database';
+import { isPasswordChangeRequired } from '@/lib/server/app-auth/profile';
 
 function getReturnTo(request: NextRequest): string {
   const candidate = request.nextUrl.searchParams.get('returnTo') || '/dashboard';
-  if (!candidate.startsWith('/')) {
+  if (!candidate.startsWith('/') || candidate.startsWith('//')) {
     return '/dashboard';
   }
   return candidate;
@@ -19,7 +20,15 @@ export async function GET(request: NextRequest) {
   redirectUrl.pathname = getReturnTo(request);
   redirectUrl.search = '';
 
-  if (existing.session && existing.status !== 'invalid' && existing.status !== 'missing') {
+  if (existing.status === 'invalid') {
+    redirectUrl.pathname = '/login';
+    const response = NextResponse.redirect(redirectUrl, 307);
+    clearAllAuthCookies(request, response);
+    return response;
+  }
+
+  if (existing.session && existing.status !== 'missing') {
+    if (await isPasswordChangeRequired(existing.session.profile_id)) redirectUrl.pathname = '/change-password';
     const response = NextResponse.redirect(redirectUrl, 307);
     applyValidationCookieIfNeeded(response, existing);
     return response;
@@ -63,6 +72,8 @@ export async function GET(request: NextRequest) {
     loginUrl.search = '';
     return NextResponse.redirect(loginUrl, 307);
   }
+
+  if (await isPasswordChangeRequired(user.id)) redirectUrl.pathname = '/change-password';
 
   const nextSession = await issueAppSession({
     profileId: user.id,

@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePathname } from 'next/navigation';
 import { type SupabaseClient, type User } from '@supabase/supabase-js';
 import {
   broadcastAuthStateChange,
@@ -225,11 +226,11 @@ function buildAuthenticatedRedirectUrl(payload: ClientAuthSessionResponse): stri
     'must_change_password' in payload.profile &&
     (payload.profile as { must_change_password?: unknown }).must_change_password === true;
 
-  if (currentPath.startsWith('/login')) {
-    if (mustChangePassword) {
-      return '/change-password';
-    }
+  if (mustChangePassword && !currentPath.startsWith('/change-password')) {
+    return '/change-password';
+  }
 
+  if (currentPath.startsWith('/login')) {
     const redirectTarget = currentUrl.searchParams.get('redirect');
     if (isSafeInternalRedirectTarget(redirectTarget)) {
       return redirectTarget;
@@ -252,6 +253,7 @@ function isAuthScopedQueryKey(queryKey: readonly unknown[]): boolean {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const queryClient = useQueryClient();
+  const pathname = usePathname();
   const previousUserIdRef = useRef<string | null>(null);
   const sessionSnapshotRef = useRef<AuthSessionSnapshot>(getUnauthenticatedSessionSnapshot());
   const redirectInProgressRef = useRef<'login' | null>(null);
@@ -352,6 +354,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearLocalAuthState]);
 
   const applySessionPayload = useCallback((payload: ClientAuthSessionResponse) => {
+    if (payload.data_token_available === false || (
+      typeof payload.profile === 'object' && payload.profile !== null &&
+      'must_change_password' in payload.profile && payload.profile.must_change_password === true
+    )) {
+      invalidateCachedDataToken();
+    }
     setUser(buildSyntheticUser(payload));
     setProfile(payload.profile ? ({ ...payload.profile } as Profile) : null);
   }, []);
@@ -500,6 +508,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener('online', handleOnline);
     };
   }, [invalidateAuthScopedQueries, loadAuthSession, requestBackgroundAuthRefresh, scheduleResumeAuthRefresh]);
+
+  useEffect(() => {
+    if (profile?.must_change_password === true) {
+      invalidateCachedDataToken();
+      if (pathname !== '/change-password') window.location.replace('/change-password');
+    }
+  }, [pathname, profile?.must_change_password]);
 
   useEffect(() => {
     if (!user || !profile) return;

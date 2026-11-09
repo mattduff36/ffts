@@ -1069,13 +1069,15 @@ input[type="number"] {
 .schedule-manager-layout > .schedule-resources-panel,
 .schedule-manager-layout > .schedule-teams-panel { height: 22rem; }
 .schedule-manager-layout > .schedule-board-panel { height: 44rem; }
-@media (min-width: 640px) and (max-width: 1099px) {
-  .schedule-manager-layout[data-layout="columns"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .schedule-manager-layout[data-layout="columns"] > .schedule-board-panel { grid-column: 1 / -1; }
-}
 @media (min-width: 1100px) {
-  .schedule-manager-layout { grid-template-columns: 350px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-  .schedule-manager-layout[data-layout="columns"] { grid-template-columns: minmax(210px, 20fr) minmax(200px, 19fr) minmax(0, 61fr); }
+  .schedule-manager-layout {
+    --schedule-resources-width: 350px;
+    grid-template-columns: var(--schedule-resources-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .schedule-manager-layout[data-layout="columns"] {
+    grid-template-columns: var(--schedule-resources-width) minmax(200px, 19fr) minmax(0, 61fr);
+  }
   .schedule-manager-layout > .schedule-resources-panel,
   .schedule-manager-layout > .schedule-teams-panel,
   .schedule-manager-layout > .schedule-board-panel { height: 100%; }

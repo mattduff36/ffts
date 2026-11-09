@@ -6610,7 +6610,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       setQuoteStage(value as ScheduleQuoteStage | 'projects' | 'all')
                     }
                   >
-                    <TabsList className="flex h-auto w-full flex-wrap justify-start gap-0">
+                    <TabsList className="flex h-auto w-full flex-wrap gap-0 *:flex-auto">
                       <TabsTrigger value="all" className="px-1 text-[10px]">
                         All ({returnedVisits.length + unscheduledQuotes.length + unscheduledProjects.length + unfinishedResourceJobs.length})
                       </TabsTrigger>

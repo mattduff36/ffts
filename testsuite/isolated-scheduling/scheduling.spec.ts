@@ -396,6 +396,37 @@ test('layout choice persists independently of daily view and primary axis', asyn
   await expect(page.getByRole('tab', { name: 'Primary Jobs', exact: true })).toHaveAttribute('data-state', 'active');
 });
 
+test('Resources and its tab rows keep the same width when switching layouts', async ({ page }) => {
+  await mockScheduling(page);
+  await page.goto(`/?date=${date}`);
+  const grid = page.getByTestId('schedule-manager-layout');
+  const resources = page.getByTestId('schedule-resources-panel');
+  const mainTabs = resources.getByTestId('schedule-resource-tabs');
+  const filters = resources.getByRole('tablist').filter({ has: page.getByRole('tab', { name: /^Projects \(/ }) });
+
+  for (const [width, height] of sizes) {
+    await page.setViewportSize({ width, height });
+    const resourceWidths = [];
+    for (const [layout, label] of [
+      ['standard', 'Standard layout'],
+      ['columns', 'Resources, Teams and Calendar columns'],
+    ]) {
+      await page.getByRole('button', { name: label, exact: true }).click();
+      await expect(grid).toHaveAttribute('data-layout', layout);
+      resourceWidths.push((await resources.boundingBox())!.width);
+
+      const mainRow = (await mainTabs.boundingBox())!;
+      const filterRow = (await filters.boundingBox())!;
+      const firstFilter = (await filters.getByRole('tab').first().boundingBox())!;
+      const lastFilter = (await filters.getByRole('tab').last().boundingBox())!;
+      expect(filterRow.x).toBeCloseTo(mainRow.x);
+      expect(filterRow.width).toBeCloseTo(mainRow.width);
+      expect(lastFilter.x + lastFilter.width - firstFilter.x).toBeGreaterThan(filterRow.width - 12);
+    }
+    expect(resourceWidths[0]).toBeCloseTo(resourceWidths[1]);
+  }
+});
+
 test('an expired unfinished job is read-only until explicitly completed, then leaves Resources', async ({ page }) => {
   const data = await mockScheduling(page);
   const assignments = structuredClone(data.board.assignments);

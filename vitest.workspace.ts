@@ -26,6 +26,7 @@ export default defineWorkspace([
   },
   // Happy DOM environment for UI component tests
   {
+    envDir: false,
     plugins: [react()],
     test: {
       name: 'ui',

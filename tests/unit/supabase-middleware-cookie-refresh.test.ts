@@ -69,6 +69,20 @@ describe('supabase middleware cookie refresh', () => {
     vi.unstubAllEnvs();
   });
 
+  it('lets the exact development identity route enforce its own target before Auth clients', async () => {
+    const response = await updateSession(new NextRequest('http://localhost/api/development/target'));
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    expect(createServerClientMock).not.toHaveBeenCalled();
+    expect(verifyJwtHS256Mock).not.toHaveBeenCalled();
+  });
+
+  it('keeps other development paths behind app-session authentication', async () => {
+    mockSupabaseMiddlewareAuth({ user: null });
+    const response = await updateSession(new NextRequest('http://localhost/api/development/target/admin'));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+  });
+
   it('preserves refreshed cookies on root redirects for authenticated users', async () => {
     mockSupabaseMiddlewareAuth({
       user: null,

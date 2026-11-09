@@ -1,0 +1,11 @@
+# Runtime data and private bootstrap material stay on the NAS, outside Git.
+.env
+backup/
+bin/
+cli-home/
+*.tgz
+volumes/db/data/
+volumes/storage/
+volumes/mailpit/
+volumes/snippets/
+volumes/functions/

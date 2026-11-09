@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { DevelopmentTargetError } from '@/lib/utils/development-target';
 
 const mocks = vi.hoisted(() => ({
   requireDebugConsoleAccess: vi.fn(),
@@ -58,6 +59,9 @@ function request(
 describe('Debug Sample Data API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('FFTS_DATA_ENVIRONMENT', 'development');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:55321');
+    vi.stubEnv('POSTGRES_URL_NON_POOLING', 'postgresql://postgres:fictional@127.0.0.1:55322/postgres');
     mocks.requireDebugConsoleAccess.mockResolvedValue({
       ok: true,
       status: 200,
@@ -65,6 +69,16 @@ describe('Debug Sample Data API', () => {
       profileId: 'super-admin-profile',
     });
     mocks.getManagedSampleDataStatus.mockResolvedValue(registry);
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('rejects hosted mutation requests before any authentication or registry work', async () => {
+    vi.stubEnv('FFTS_DATA_ENVIRONMENT', 'production');
+    const response = await EXECUTE(request('/api/debug/sample-data/execute', { fixtureKey: 'scheduling-sample-v1', action: 'remove' }));
+    expect(response.status).toBe(403);
+    expect(mocks.requireDebugConsoleAccess).not.toHaveBeenCalled();
+    expect(mocks.executeSampleDataOperation).not.toHaveBeenCalled();
   });
 
   it('requires the Debug PIN boundary for status', async () => {
@@ -155,6 +169,16 @@ describe('Debug Sample Data API', () => {
     expect(mocks.executeSampleDataOperation).toHaveBeenCalledWith(
       expect.objectContaining({ actorProfileId: 'super-admin-profile' })
     );
+  });
+
+  it('returns an explicit forbidden response for a protected hosted target', async () => {
+    mocks.executeSampleDataOperation.mockRejectedValue(new DevelopmentTargetError('Hosted target.'));
+    const response = await EXECUTE(request('/api/debug/sample-data/execute', {
+      fixtureKey: 'fleet-inventory-sample-v1', action: 'create',
+      confirmation: 'CREATE FLEET INVENTORY SAMPLE', fingerprint: 'signed-preview-fingerprint-value',
+    }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toMatch(/protected/u);
   });
 
   it('returns a partial clear-all result without pretending rollback', async () => {

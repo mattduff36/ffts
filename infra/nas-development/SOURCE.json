@@ -1,0 +1,13 @@
+{
+  "upstream": "189adda99d1b56da55fc5a6ee3f849354aaea92a",
+  "source": "https://raw.githubusercontent.com/supabase/supabase/189adda99d1b56da55fc5a6ee3f849354aaea92a/docker/",
+  "mailpit": "v1.33.1",
+  "changes": [
+    "unique FFTS container/project names",
+    "internal network only; all published ports removed",
+    "unused Edge Runtime and pooler omitted",
+    "private Mailpit for local email",
+    "independent credentials and local redirect URLs",
+    "bounded container logs"
+  ]
+}

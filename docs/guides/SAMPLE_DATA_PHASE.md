@@ -1,25 +1,20 @@
-# Sample-data phase
+# Pre-launch data protection
 
-The connected Forest Farm database currently holds **only SAMPLE DATA**. There are no real customer records in use. The application codebase is the production product, but the app has not gone truly live.
+Sample cleanup is complete. The hosted Forest Farm target is **protected client data**, even while the app remains pre-launch and some existing business records originated as test work. Incoming real data must never be treated as disposable.
 
-Guarded fixtures (scheduling `scheduling-sample-v1`, fleet/inventory `fleet-inventory-sample-v1`, and other owned SAMPLE rows) and any other records created during development are still sample data.
+Seven identities were retained. Four explicitly protected test identities are Matt Duffill TEST ACCOUNT, Testsuite Admin, Testsuite Manager and Testsuite Employee. Their presence is not authorization to delete, disable, reset, seed or run automated workflows against hosted accounts.
 
-## TEE lane
+## Fixtures and tests
 
-While this phase holds, **do not use the CRITICAL lane** when planning or implementing new work. Classify FAST, STANDARD, or GUARDED from coordination and uncertainty only.
+All managed scheduling/fleet fixtures, CLI plans and cleanup, test-user provisioning and automated suites require the explicit verified development target. Production confirmation flags and old sample-project allowlists cannot override it. Hosted Debug sample tools report unavailable without inspecting hosted rows. Existing production fixture runbook examples are superseded by [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
 
-Generic TEE still treats persistence, schema, migrations, auth, money, concurrency, and production-data risk as CRITICAL categories. FFTS overrides that until go-live. See `.cursor/rules/sample-data-phase.mdc`.
+The dedicated NAS `ffts-development` project and SSH forwards are operational and have passed runtime checks. The hosted permission migration and development copy are recorded in [LAUNCH_PHASES_1_2.md](LAUNCH_PHASES_1_2.md). Keep future migration and infrastructure operations explicitly scoped; isolated checks alone never establish live readiness.
 
-Keep ordinary safety: approved `pg` migrations, no secret exposure, `npm run db:validate` after rename/drop, and explicit authorization before destructive schema or data changes.
+## Risk and migration safety
 
-## Trigger to resume CRITICAL
+The blanket SAMPLE DATA lane exemption is retired for hosted work. Apply proportionate safeguards to the actual persistence, authorization, money, concurrency and production-data risks; use CRITICAL when the applicable workflow requires it. Isolated development work can still use FAST, STANDARD or GUARDED as appropriate. See `.cursor/rules/sample-data-phase.mdc`.
 
-Start using the CRITICAL lane again **where necessary** when both of the following are true:
-
-1. All SAMPLE data has been removed.
-2. Real customer data is being used (the app is truly live).
-
-That removal is the obvious go-live signal. Until then, do not plan new tasks as CRITICAL merely because they touch the database.
+Use approved `pg` migrations, do not expose secrets, run `npm run db:validate` after rename/drop, and obtain explicit authorization before destructive schema/data changes. Workers do not apply hosted migrations; the parent owns inventory, approval, application and live verification.
 
 ## Related
 

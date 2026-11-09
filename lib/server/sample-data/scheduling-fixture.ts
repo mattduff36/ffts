@@ -2,6 +2,7 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getDevelopmentTargetAvailabilityReason, requireDevelopmentTarget } from '@/lib/utils/development-target';
 import {
   buildFixtureDefinitions,
   buildQueueFixtureDefinitions,
@@ -30,6 +31,7 @@ const BASE_REFERENCES = references(BASE_START, BASE_COUNT);
 const QUEUE_REFERENCES = references(QUEUE_START, QUEUE_COUNT);
 
 async function findAuthUserByEmail() {
+  requireDevelopmentTarget(process.env);
   const admin = createAdminClient();
   for (let page = 1; page <= 20; page += 1) {
     const result = await admin.auth.admin.listUsers({ page, perPage: 200 });
@@ -44,26 +46,7 @@ async function findAuthUserByEmail() {
 }
 
 function getProjectAvailabilityReason(): string | null {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const connectionString =
-    process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-  const allowedProjectRef = process.env.SCHEDULING_SAMPLE_PRODUCTION_PROJECT_REF;
-  if (!supabaseUrl || !connectionString || !allowedProjectRef) {
-    return 'Scheduling sample production allowlist is not configured.';
-  }
-
-  try {
-    const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
-    if (
-      projectRef !== allowedProjectRef
-      || !connectionString.includes(allowedProjectRef)
-    ) {
-      return 'Configured URL and database do not match the Scheduling sample allowlist.';
-    }
-  } catch {
-    return 'Scheduling sample environment configuration is invalid.';
-  }
-  return null;
+  return getDevelopmentTargetAvailabilityReason(process.env);
 }
 
 export async function inspectSchedulingFixture(
@@ -398,6 +381,7 @@ function unavailableSchedulingStatus(reason: string): SampleDataFixtureStatus {
 }
 
 export async function createSchedulingAuthUser(): Promise<string> {
+  requireDevelopmentTarget(process.env);
   const admin = createAdminClient();
   const existing = await findAuthUserByEmail();
   if (existing) throw new Error('Scheduling SAMPLE auth identity already exists.');
@@ -421,6 +405,7 @@ export async function createSchedulingAuthUser(): Promise<string> {
 }
 
 export async function deleteSchedulingAuthUser(profileId: string): Promise<void> {
+  requireDevelopmentTarget(process.env);
   const result = await createAdminClient().auth.admin.deleteUser(profileId);
   if (result.error) throw result.error;
 }

@@ -14,13 +14,19 @@ The dedicated `testsuite/` folder is the finalise smoke and workflow suite. It c
 
 ## Prerequisites
 
-`.env.local` must contain the Supabase values plus a strong local-only `TESTSUITE_SETUP_PASSWORD`. Never commit or print this password.
+Use a provisioned dedicated `ffts-development` NAS project and the SSH tunnel described in `docs/guides/LOCAL_DEVELOPMENT.md`. Hosted/client data and all four retained test identities are protected. NAS readiness and hosted permission application were verified on 9 November 2026; see the launch handoff for evidence and remaining configuration work.
 
-The setup script refuses a non-local Supabase target unless the production confirmation is explicit. Review the printed host and three fictional `@ffts.test` identities, then provision them with:
+Ignored `.env.development.local` must contain `FFTS_DATA_ENVIRONMENT=development`, the exact development API/PG targets, development Supabase keys and a strong private `TESTSUITE_SETUP_PASSWORD`. Never commit or print credentials. Keep hosted credentials in ignored `.env.ffts-hosted.local`; do not leave a hosted `.env.local` fallback for the local app.
+
+The configs, runner and preflight reject hosted/mixed/unknown targets. Preflight checks `/api/development/target` on the running local app before constructing an admin client or authenticating. Production returns 404. Provision only development users with:
 
 ```bash
-npm run testsuite:setup:production
+npx tsx scripts/setup-test-users.ts --confirm-development=FFTS_TESTSUITE
 ```
+
+Use `npm run testsuite:setup:development` for the same confirmed local setup. The obsolete `testsuite:setup:production` command was removed; production confirmation flags cannot authorize hosted setup. Ordinary unit tests never implicitly load `.env.local`; real integration access requires `FFTS_INTEGRATION_TESTS=development` and verified targets. The credential-free launch suite is `npx vitest run --config vitest.launch.config.ts --maxWorkers=1 --no-file-parallelism`; it uses PGlite in memory for real role/ACL/RLS tests and does not start the app or connect to Supabase.
+
+The copied Manager and Employee identities currently have no assigned team and no Scheduling module grant, matching hosted configuration. Configure intended development test-team permissions before expecting full manager/employee module workflows to pass. Account provisioning verifies hidden identities and credentials; it does not grant an implicit permission matrix.
 
 The command is idempotent. It writes credentials only to ignored `testsuite/.state/test-users.json` after all three hidden profiles have been verified. Normal tests and `finalise --full` consume this state but never create accounts.
 

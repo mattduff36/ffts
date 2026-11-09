@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+import { getDevelopmentTargetAvailabilityReason, requireDevelopmentTarget } from '@/lib/utils/development-target';
 import {
   acquireFixtureTransactionLock,
   createSampleDataDbClient,
@@ -76,7 +77,7 @@ function unavailableFixture(
       fixtureKey === SCHEDULING_FIXTURE_KEY
         ? 'Scheduling Sample Data'
         : 'Fleet and Inventory Sample Data',
-    description: 'Managed production sample fixture.',
+    description: 'Managed development sample fixture.',
     toolingVersion: 'unavailable',
     state: 'unavailable',
     available: false,
@@ -106,7 +107,10 @@ async function inspectFixture(
 }
 
 export async function getManagedSampleDataStatus(): Promise<SampleDataRegistryStatus> {
-  const fixtures = await Promise.all(REMOVE_ORDER.map(inspectFixture));
+  const reason = getDevelopmentTargetAvailabilityReason(process.env);
+  const fixtures = reason
+    ? REMOVE_ORDER.map((key) => unavailableFixture(key, reason))
+    : await Promise.all(REMOVE_ORDER.map(inspectFixture));
   if (fixtures.every((fixture) => fixture.available)) {
     try {
       const operations = await getLastSampleDataOperations();
@@ -681,6 +685,7 @@ async function executeClearAll(
 export async function executeSampleDataOperation(
   input: SampleDataMutationInput
 ): Promise<SampleDataMutationResult> {
+  requireDevelopmentTarget(process.env);
   if (!isValidConfirmation(input.fixtureKey, input.action, input.confirmation)) {
     throw new Error('Typed confirmation does not match the required phrase.');
   }

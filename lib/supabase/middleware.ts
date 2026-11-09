@@ -183,6 +183,9 @@ async function getSupabaseUser(
 
 export async function updateSession(request: NextRequest) {
   const response = NextResponse.next({ request })
+  // This exact, nonsecret identity endpoint validates its own development target
+  // and returns 404 elsewhere. Preflight must reach it before any Auth client.
+  if (request.nextUrl.pathname === '/api/development/target') return response
   const session = await getMiddlewareSession(request)
   await getSupabaseUser(request, response)
   const hasLegacyCookie = hasLegacySupabaseSessionCookie(request)

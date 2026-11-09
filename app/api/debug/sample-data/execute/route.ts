@@ -9,6 +9,7 @@ import {
 } from '@/lib/server/sample-data/api';
 import { executeSampleDataOperation } from '@/lib/server/sample-data/registry';
 import { logServerError } from '@/lib/utils/server-error-logger';
+import { DevelopmentTargetError, getDevelopmentTargetAvailabilityReason } from '@/lib/utils/development-target';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
@@ -22,6 +23,10 @@ function getFailureStatus(message: string): number {
 }
 
 export async function POST(request: NextRequest) {
+  const unavailable = getDevelopmentTargetAvailabilityReason(process.env);
+  if (unavailable) {
+    return NextResponse.json({ error: unavailable }, { status: 403, headers: NO_STORE_HEADERS });
+  }
   const access = await requireDebugConsoleAccess();
   if (!access.ok) {
     return NextResponse.json(createDebugAccessErrorBody(access), {
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Sample-data operation failed.';
-    const status = getFailureStatus(message);
+    const status = error instanceof DevelopmentTargetError ? 403 : getFailureStatus(message);
     if (status >= 500) {
       await logServerError({
         error: error as Error,

@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const STATE_DIR = path.resolve(__dirname, '../.state');
-const PRODUCTION_SETUP_COMMAND = 'npm run testsuite:setup:production';
+const DEVELOPMENT_SETUP_COMMAND = 'npm run testsuite:setup:development';
 
 interface TestUser {
   email: string;
@@ -17,7 +17,7 @@ function loadTestUsers(): Record<string, TestUser> {
   if (!fs.existsSync(stateFile)) {
     throw new Error(
       'Test users not provisioned. Run: npm run testsuite:setup\n' +
-      `For the configured production project run: ${PRODUCTION_SETUP_COMMAND}\n` +
+      `For the verified NAS development project run: ${DEVELOPMENT_SETUP_COMMAND}\n` +
       `Expected ignored state file: ${stateFile}`
     );
   }
@@ -29,7 +29,7 @@ export function getTestUser(role: 'admin' | 'manager' | 'employee'): TestUser {
   const user = users[role];
   if (!user) {
     throw new Error(
-      `No test user found for role "${role}". Re-run ${PRODUCTION_SETUP_COMMAND}; credentials are never committed.`
+      `No test user found for role "${role}". Re-run ${DEVELOPMENT_SETUP_COMMAND}; credentials are never committed.`
     );
   }
   return user;

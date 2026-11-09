@@ -4,14 +4,12 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
 import pg, { type Client } from 'pg';
+import { requireDevelopmentTarget } from '../../lib/utils/development-target';
 
 const { Client: PgClient } = pg;
 
-config({ path: resolve(process.cwd(), '.env.local') });
-
 export const FIXTURE_KEY = 'fleet-inventory-sample-v1';
-export const CONFIRMATION = '--confirm-production=FFTS_FLEET_INVENTORY_SAMPLE';
-export const ALLOWED_PROJECT_ENV = 'FLEET_INVENTORY_SAMPLE_PRODUCTION_PROJECT_REF';
+export const CONFIRMATION = '--confirm-development=FFTS_FLEET_INVENTORY_SAMPLE';
 
 const ALL_PLANT_CATEGORY_NAME = 'All plant';
 const ALL_PLANT_CATEGORY_DESCRIPTION = 'All plant machinery and equipment';
@@ -517,33 +515,22 @@ export function createManifest(
 }
 
 function requiredEnvironment(): RequiredEnvironment {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const target = requireDevelopmentTarget(process.env);
   const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-  const allowedProjectRef = process.env[ALLOWED_PROJECT_ENV];
-
-  if (!supabaseUrl || !connectionString || !allowedProjectRef) {
-    throw new Error(
-      `Set NEXT_PUBLIC_SUPABASE_URL, POSTGRES_URL_NON_POOLING, and ${ALLOWED_PROJECT_ENV}.`
-    );
-  }
-
-  const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
-  if (projectRef !== allowedProjectRef || !connectionString.includes(allowedProjectRef)) {
-    throw new Error('Configured Supabase URL and database do not match the explicitly allowed production project.');
-  }
-
-  return { connectionString, projectRef };
+  if (!connectionString) throw new Error('Set development POSTGRES_URL_NON_POOLING.');
+  return { connectionString, projectRef: target.projectId };
 }
 
 function createPgClient(connectionString: string): Client {
+  requireDevelopmentTarget(process.env);
   const url = new URL(connectionString);
   return new PgClient({
-    host: url.hostname,
-    port: Number.parseInt(url.port || '5432', 10),
+    host: url.hostname.replace(/^\[|\]$/gu, ''),
+    port: Number.parseInt(url.port, 10),
     database: url.pathname.slice(1),
-    user: url.username,
-    password: url.password,
-    ssl: { rejectUnauthorized: false },
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    ssl: false,
   });
 }
 
@@ -1380,12 +1367,13 @@ async function planFixture(
   }
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
+  config({ path: resolve(process.cwd(), '.env.development.local') });
   const mode = (process.argv.find((argument) => argument.startsWith('--mode='))?.split('=')[1] || 'plan') as Mode;
   if (!['plan', 'apply', 'cleanup'].includes(mode)) throw new Error('Invalid mode.');
   const isDryRun = process.argv.includes('--dry-run');
   if ((mode === 'apply' || (mode === 'cleanup' && !isDryRun)) && !process.argv.includes(CONFIRMATION)) {
-    throw new Error(`Production confirmation required: ${CONFIRMATION}`);
+    throw new Error(`Development confirmation required: ${CONFIRMATION}`);
   }
 
   const environment = requiredEnvironment();

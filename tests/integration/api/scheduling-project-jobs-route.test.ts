@@ -196,6 +196,17 @@ describe('Project-backed scheduling job routes', () => {
     });
   });
 
+  it.each([401, 403])('denies unauthorized create and delete before any admin RPC (%s)', async (status) => {
+    mockAccess.mockResolvedValue({ allowed: false, status, error: 'Denied' });
+    const { POST } = await import('@/app/api/scheduling/jobs/route');
+    const { DELETE } = await import('@/app/api/scheduling/jobs/[id]/route');
+    expect((await POST(postRequest(validCreateBody()))).status).toBe(status);
+    expect((await DELETE(new NextRequest('http://localhost/api/scheduling/jobs/job-1', { method: 'DELETE' }), params)).status).toBe(status);
+    expect(mockCreateRpc).not.toHaveBeenCalled();
+    expect(mockQuickAddRpc).not.toHaveBeenCalled();
+    expect(mockRemoveRpc).not.toHaveBeenCalled();
+  });
+
   it('requires the Quotes sensitive-access boundary before creation', async () => {
     mockSensitiveAccess.mockResolvedValue(
       NextResponse.json({ error: 'Sensitive access PIN required.' }, { status: 428 })
@@ -209,7 +220,7 @@ describe('Project-backed scheduling job routes', () => {
 
   it('atomically creates a Project Number and its schedule projection', async () => {
     const { POST } = await import('@/app/api/scheduling/jobs/route');
-    const response = await POST(postRequest(validCreateBody()));
+    const response = await POST(postRequest({ ...validCreateBody(), actor_user_id: 'forged-client-actor' }));
     const payload = await response.json();
 
     expect(response.status).toBe(201);

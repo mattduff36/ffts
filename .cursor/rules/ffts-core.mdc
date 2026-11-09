@@ -9,7 +9,7 @@ alwaysApply: true
 - Commit completed coding tasks locally unless the task is planning/review-only or the user says not to commit.
 - Never push unless the user writes the exact phrase `push to GitHub`, or explicitly requests a push as part of finalisation such as `finalise and push`, `fap` / `/fap`, `finalise full and push`, `ffap` / `/ffap`, or `finalise:push`. These aliases implement the global COMPLETE_AND_RELEASE contract. State the branch and summary before pushing.
 - Never destructively change production data without explicit permission.
-- Follow `.cursor/rules/sample-data-phase.mdc`: while all records are SAMPLE DATA, use FAST, STANDARD, or GUARDED; resume CRITICAL after sample data is removed and real customer data is live.
+- Follow `.cursor/rules/sample-data-phase.mdc`: the hosted/client target is protected even while pre-launch. Retained test identities do not make its records disposable. Use development-only fixtures/tests; classify actual data/security risk rather than assuming SAMPLE DATA.
 - For database/persistence intent, load `.cursor/rules/database-migrations.mdc` and the migration guide before acting.
 - Use the existing TypeScript, Node.js, Next.js App Router, React, and Tailwind patterns already established in this repository.
 - Keep functions typed and focused; update targeted tests when behavior changes.

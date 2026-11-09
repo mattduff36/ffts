@@ -1,7 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
-const BASE_URL = process.env.TESTSUITE_BASE_URL || 'http://localhost:4000';
+import { config } from 'dotenv';
+import { requireDevelopmentTarget } from '../../lib/utils/development-target';
+
+config({ path: path.resolve(process.cwd(), '.env.development.local') });
+const BASE_URL = requireDevelopmentTarget(process.env).appOrigin;
+for (const key of ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']) {
+  if (!process.env[key]) throw new Error(`Development testsuite credential is missing: ${key}`);
+}
+process.env.TESTSUITE_BASE_URL = BASE_URL;
 const parsedBaseUrl = new URL(BASE_URL);
 const webServerPort = Number(parsedBaseUrl.port || (parsedBaseUrl.protocol === 'https:' ? 443 : 80));
 const webServerCommand = process.env.TESTSUITE_BASE_URL

@@ -67,5 +67,5 @@ PostgreSQL trigger functions store column names as plain text. When you rename a
 
 Never apply migrations or baseline SQL against Forest production without a schema inventory, an explicit deployment plan, and approval for any destructive data change.
 
-The connected database currently contains only SAMPLE DATA. Do not classify migration or persistence work as CRITICAL until all SAMPLE data has been removed and real customer data is in use. See [SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
+The hosted client database is protected. Sample cleanup is complete; retained test identities do not make hosted data disposable. Incoming real data requires normal data/security safeguards, even while pre-launch. Automated fixtures and tests must use the verified dedicated development target described in [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md). The launch permission migration was applied and verified on hosted and NAS databases on 9 November 2026; see LAUNCH_PHASES_1_2.md for the receipt, validation and remaining release work. New migrations still require target inventory and the approved application path. See [SAMPLE_DATA_PHASE.md](SAMPLE_DATA_PHASE.md).
 

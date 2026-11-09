@@ -1,4 +1,5 @@
 import 'server-only';
+import { getDevelopmentTargetAvailabilityReason } from '@/lib/utils/development-target';
 
 import {
   buildFixtureDefinitions,
@@ -35,26 +36,7 @@ function allItems(fixture: FixtureDefinitions) {
 }
 
 function getProjectAvailabilityReason(): string | null {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const connectionString =
-    process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-  const allowedProjectRef =
-    process.env.FLEET_INVENTORY_SAMPLE_PRODUCTION_PROJECT_REF;
-  if (!supabaseUrl || !connectionString || !allowedProjectRef) {
-    return 'Fleet and Inventory sample production allowlist is not configured.';
-  }
-  try {
-    const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
-    if (
-      projectRef !== allowedProjectRef
-      || !connectionString.includes(allowedProjectRef)
-    ) {
-      return 'Configured URL and database do not match the Fleet sample allowlist.';
-    }
-  } catch {
-    return 'Fleet sample environment configuration is invalid.';
-  }
-  return null;
+  return getDevelopmentTargetAvailabilityReason(process.env);
 }
 
 async function loadCategoryCandidates(

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import pg, { type Client } from 'pg';
+import { requireDevelopmentTarget } from '@/lib/utils/development-target';
 
 const { Client: PgClient } = pg;
 
@@ -11,6 +12,7 @@ export function getSampleDataConnectionString(): string | null {
 }
 
 export function createSampleDataDbClient(): SampleDataDbClient {
+  requireDevelopmentTarget(process.env);
   const connectionString = getSampleDataConnectionString();
   if (!connectionString) {
     throw new Error('Sample-data database access is not configured.');
@@ -18,12 +20,12 @@ export function createSampleDataDbClient(): SampleDataDbClient {
 
   const url = new URL(connectionString);
   return new PgClient({
-    host: url.hostname,
+    host: url.hostname.replace(/^\[|\]$/gu, ''),
     port: Number.parseInt(url.port || '5432', 10),
     database: url.pathname.slice(1),
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
-    ssl: { rejectUnauthorized: false },
+    ssl: false,
     connectionTimeoutMillis: 5_000,
     query_timeout: 30_000,
     statement_timeout: 30_000,

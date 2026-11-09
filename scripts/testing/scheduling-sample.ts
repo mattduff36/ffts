@@ -6,13 +6,12 @@ import { config } from 'dotenv';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { addDays, format, startOfWeek } from 'date-fns';
 import pg, { type Client } from 'pg';
+import { requireDevelopmentTarget } from '../../lib/utils/development-target';
 
 const { Client: PgClient } = pg;
 
-config({ path: resolve(process.cwd(), '.env.local') });
-
 const FIXTURE_KEY = 'scheduling-sample-v1';
-const CONFIRMATION = '--confirm-production=FFTS_SCHEDULING_SAMPLE';
+const CONFIRMATION = '--confirm-development=FFTS_SCHEDULING_SAMPLE';
 const SAMPLE_EMAIL = 'scheduling-sample-v1@example.test';
 const SAMPLE_INITIALS = 'SD';
 const SAMPLE_NUMBER_START = 90000;
@@ -140,20 +139,14 @@ interface QueueSampleManifest {
 }
 
 function requiredEnvironment() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const target = requireDevelopmentTarget(process.env);
+  const supabaseUrl = target.apiOrigin;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-  const allowedProjectRef = process.env.SCHEDULING_SAMPLE_PRODUCTION_PROJECT_REF;
-  if (!supabaseUrl || !serviceRoleKey || !connectionString || !allowedProjectRef) {
-    throw new Error(
-      'Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL_NON_POOLING, and SCHEDULING_SAMPLE_PRODUCTION_PROJECT_REF.'
-    );
+  if (!serviceRoleKey || !connectionString) {
+    throw new Error('Set development SUPABASE_SERVICE_ROLE_KEY and POSTGRES_URL_NON_POOLING.');
   }
-  const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
-  if (projectRef !== allowedProjectRef || !connectionString.includes(allowedProjectRef)) {
-    throw new Error('Configured Supabase URL and database do not match the explicitly allowed production project.');
-  }
-  return { supabaseUrl, serviceRoleKey, connectionString, projectRef };
+  return { supabaseUrl, serviceRoleKey, connectionString, projectRef: target.projectId };
 }
 
 function londonOffsetFor(date: string): string {
@@ -516,14 +509,15 @@ export function createPlayManifest(projectRef: string, today = new Date()): Play
 }
 
 function createPgClient(connectionString: string): Client {
+  requireDevelopmentTarget(process.env);
   const url = new URL(connectionString);
   return new PgClient({
-    host: url.hostname,
-    port: Number.parseInt(url.port, 10) || 5432,
+    host: url.hostname.replace(/^\[|\]$/gu, ''),
+    port: Number.parseInt(url.port, 10),
     database: url.pathname.slice(1),
-    user: url.username,
-    password: url.password,
-    ssl: { rejectUnauthorized: false },
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    ssl: false,
   });
 }
 
@@ -1386,7 +1380,8 @@ async function cleanupFixture(
   }
 }
 
-async function main() {
+export async function main() {
+  config({ path: resolve(process.cwd(), '.env.development.local') });
   const mode = (process.argv.find((argument) => argument.startsWith('--mode='))?.split('=')[1] || 'plan') as Mode;
   if (!['plan', 'apply', 'cleanup', 'queue-plan', 'queue-apply', 'play-plan', 'play-apply'].includes(mode)) {
     throw new Error('Invalid mode.');
@@ -1401,7 +1396,7 @@ async function main() {
     )
     && !process.argv.includes(CONFIRMATION)
   ) {
-    throw new Error(`Production confirmation required: ${CONFIRMATION}`);
+    throw new Error(`Development confirmation required: ${CONFIRMATION}`);
   }
 
   const environment = requiredEnvironment();

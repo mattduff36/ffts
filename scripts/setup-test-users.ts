@@ -5,11 +5,10 @@
  * Uses Supabase service role key — never commits credentials.
  *
  * Usage:
- *   Local:      npx tsx scripts/setup-test-users.ts
- *   Production: npx tsx scripts/setup-test-users.ts --confirm-production=FFTS_TESTSUITE
+ *   npx tsx scripts/setup-test-users.ts --confirm-development=FFTS_TESTSUITE
  *
- * NON-DESTRUCTIVE: Only creates/updates testsuite-specific accounts.
- * Does NOT touch any existing user accounts.
+ * Development only: creates/updates dedicated testsuite accounts.
+ * Hosted accounts are protected regardless of legacy production confirmations.
  */
 
 import { config } from 'dotenv';
@@ -17,12 +16,18 @@ import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 
-config({ path: resolve(process.cwd(), '.env.local') });
+import { requireDevelopmentTarget } from '../lib/utils/development-target';
+
+config({ path: resolve(process.cwd(), '.env.development.local') });
+const developmentTarget = requireDevelopmentTarget(process.env);
+if (!process.argv.includes('--confirm-development=FFTS_TESTSUITE')) {
+  throw new Error('Development confirmation required: --confirm-development=FFTS_TESTSUITE');
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASSWORD = process.env.TESTSUITE_SETUP_PASSWORD;
-const PRODUCTION_CONFIRMATION = '--confirm-production=FFTS_TESTSUITE';
+
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !PASSWORD) {
   console.error('Missing required env vars:');
@@ -44,29 +49,6 @@ if (
   process.exit(1);
 }
 const TESTSUITE_PASSWORD = PASSWORD;
-
-const targetUrl = new URL(SUPABASE_URL);
-const targetHost = targetUrl.hostname.toLowerCase();
-const isLocalTarget =
-  targetHost === 'localhost' ||
-  targetHost === '127.0.0.1' ||
-  targetHost === '::1' ||
-  targetHost.endsWith('.local');
-const isForbiddenTarget = targetHost.includes('avsworklog') || targetHost.includes('squires');
-
-if (isForbiddenTarget) {
-  console.error(`Refusing testsuite setup for forbidden non-FFTS target: ${targetHost}`);
-  process.exit(1);
-}
-
-if (!isLocalTarget && !process.argv.includes(PRODUCTION_CONFIRMATION)) {
-  console.error(`Refusing remote testsuite setup for ${targetHost}.`);
-  console.error(`Review the fictional accounts below, then rerun with ${PRODUCTION_CONFIRMATION}:`);
-  console.error('  testsuite-admin@ffts.test (TS-ADM)');
-  console.error('  testsuite-manager@ffts.test (TS-MGR)');
-  console.error('  testsuite-employee@ffts.test (TS-EMP)');
-  process.exit(1);
-}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -223,7 +205,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
 }
 
 async function main() {
-  console.log(`Setting up testsuite users on ${targetHost}...`);
+  console.log(`Setting up testsuite users on ${developmentTarget.apiOrigin}...`);
   console.log('Only the three hidden @ffts.test identities will be created or updated.\n');
 
   const results: Record<string, { email: string; password: string; userId: string; role: string }> = {};

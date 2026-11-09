@@ -70,7 +70,6 @@
     "lint:theme": "tsx scripts/lint-high-risk-patterns.ts",
     "test:contrast:workshop": "playwright test tests/ui/contrast.spec.ts",
     "testsuite:setup": "tsx scripts/setup-test-users.ts",
-    "testsuite:setup:production": "tsx scripts/setup-test-users.ts --confirm-production=FFTS_TESTSUITE",
     "testsuite:ui": "npx playwright test --config=testsuite/config/playwright.config.ts",
     "testsuite:api": "vitest run --config=testsuite/config/vitest.config.ts",
     "testsuite:run": "tsx testsuite/runner/run.ts --all",
@@ -86,7 +85,9 @@
     "workflow-review:process": "tsx scripts/workflow-review.ts process-json",
     "workflow-plan:validate": "tsx scripts/workflow-plan-validate.ts",
     "workflow-protocol": "tsx scripts/workflow-protocol.ts",
-    "review:preflight": "tsx scripts/review-preflight.ts"
+    "review:preflight": "tsx scripts/review-preflight.ts",
+    "testsuite:setup:development": "tsx scripts/setup-test-users.ts --confirm-development=FFTS_TESTSUITE",
+    "dev:nas:tunnel": "node scripts/development/nas-tunnel.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",
@@ -142,6 +143,7 @@
   },
   "devDependencies": {
     "@cursor/sdk": "^1.0.21",
+    "@electric-sql/pglite": "0.5.15",
     "@eslint/eslintrc": "^3",
     "@lhci/cli": "^0.15.1",
     "@next/bundle-analyzer": "^15.5.12",
@@ -176,6 +178,7 @@
     "pg": "^8.16.3",
     "pg-connection-string": "^2.7.0",
     "sharp": "^0.34.5",
+    "supabase": "3.1.0",
     "tailwindcss": "^4",
     "ts-morph": "^27.0.2",
     "tsx": "^4.20.6",

@@ -36,38 +36,23 @@ To undo a just-staged rollback before committing it, use `git apply --reverse --
 
 ## Safety Rules
 
-1. Load credentials only from `.env.local`; never print environment values.
+1. Never print environment values. Development fixture/test automation loads only ignored `.env.development.local`; preserve hosted credentials privately in ignored `.env.ffts-hosted.local`, never as a test fallback. See `docs/guides/LOCAL_DEVELOPMENT.md`.
 2. Use `POSTGRES_URL_NON_POOLING` with the documented `pg.Client` pattern for migrations.
 3. Inspect target SQL and take a schema inventory before a live migration.
 4. Run `npm run db:validate` after schema changes.
 5. Do not add demo seeds, customer exports, employee records, fleet records, or one-off client repair scripts.
 6. Test helpers must use deterministic fictional fixtures and must not alter production data unless a runbook explicitly authorizes it.
-7. The connected database currently holds only SAMPLE DATA. Do not classify script or migration work as CRITICAL until all SAMPLE data is removed and real customer data is live. See `docs/guides/SAMPLE_DATA_PHASE.md`.
+7. The hosted/client target is protected after sample cleanup, even while pre-launch. Retained test identities do not make it disposable. Fixtures and automated tests are development-only; use proportionate data/security gates. See `docs/guides/SAMPLE_DATA_PHASE.md`.
 
-### Scheduling sample-data exception
+### Development-only sample fixtures and test users
 
-The approved Scheduling production sample fixture is `scripts/testing/scheduling-sample.ts`. It is limited to
-fictional `example.test` data marked `scheduling-sample-v1`, requires the configured production project
-reference, validates the timed scheduling schema, creates no resource assignments, and has a matching
-ownership-checked cleanup command. Its guarded queue extension reuses that same owner and cleanup path,
-adds unscheduled Quote workflow coverage only when the base fixture is still in its expected state,
-and supports a denser current/next-week client-demo play pack (`90100-SD` range) on top of that owner.
+`scripts/testing/scheduling-sample.ts` and `scripts/testing/fleet-inventory-sample.ts` require `FFTS_DATA_ENVIRONMENT=development` and exact verified API/PG/app targets even for read-only plans. Hosted tools report unavailable; legacy production-project allowlists cannot override this. CLI entrypoints load only `.env.development.local`; importing pure fixture builders loads no environment files.
 
-Follow `docs/guides/SCHEDULING_SAMPLE_DATA_RUNBOOK.md`. Never run the apply or destructive cleanup
-commands without the exact confirmation token and an operator review of the generated manifest.
+Use `--confirm-development=FFTS_SCHEDULING_SAMPLE` or `--confirm-development=FFTS_FLEET_INVENTORY_SAMPLE` for apply/destructive cleanup. `scripts/setup-test-users.ts` requires `--confirm-development=FFTS_TESTSUITE` before creating any admin client. Legacy production confirmation commands are rejected. See `docs/guides/LOCAL_DEVELOPMENT.md` for NAS/tunnel configuration and readiness limits.
 
-### Fleet and Inventory sample-data exception
+Scheduling retains fictional owned `example.test` records, unassigned work, guarded base/queue/play variants and ownership-checked cleanup. Fleet/Inventory retains deterministic `ZZ99-` records, existing locations, zero active overlap and no tracker identifiers/registrations. Cleanup still aborts on drift, ownership conflicts and operational dependencies. Debug PIN, signed previews and exact confirmation checks remain in force. Generated manifests stay under ignored `docs_private/automation/runs/`; test-user credentials remain only in ignored `testsuite/.state/test-users.json`. Never broadly delete residue or touch the four retained hosted test identities.
 
-The approved removable Fleet and Inventory production sample fixture is
-`scripts/testing/fleet-inventory-sample.ts`. It creates only deterministic fictional `ZZ99-` Plant
-and Inventory records marked `fleet-inventory-sample-v1`, requires an exact production-project
-allowlist, writes a reviewable manifest, preserves existing locations, creates no registrations or
-tracker identifiers, and enforces zero active Fleet Plant / Inventory Minor Plant overlap.
-
-Its cleanup command verifies exact ownership and aborts if any sample asset has acquired inspections,
-maintenance history, scheduling assignments, movements, checks, groups, or other operational
-dependencies. Follow `docs/guides/FLEET_INVENTORY_SAMPLE_DATA_RUNBOOK.md`. Never run apply or
-destructive cleanup without the exact confirmation token and explicit operator approval.
+Historical production examples in the sample runbooks are superseded by the development-only guard; neither those examples nor a production confirmation grant hosted access.
 
 ## TEE V2.5 workflow with legacy protocol compatibility
 
@@ -219,3 +204,9 @@ The `.cursor/commands/fixerrors.md` contract permits the premium parent or its a
 Monthly advisor follow-ups now produce a premium lead handoff. Approval/rejection remains explicit, and non-interactive runs leave undecided suggestions pending. Approved plans stay repository-local; resolving a follow-up does not open Cursor, dispatch a worker or activate a schedule. The lead may dispatch only approved, scoped implementation through the installed premium runner, retains operational/release authority, and checks its completion evidence. Legacy Cursor stop-hook telemetry remains editor-specific and is not required for worker receipts.
 
 Follow-up plan generation requires an explicit build-model recommendation and fails before authoring a plan if that contract field is absent. The generated handoff retains its premium implementation recommendation.
+
+## NAS development tunnel
+
+Run `npm run dev:nas:tunnel` from this repository on MPDEE-SERVER, then `npm run dev` in a second terminal. The tunnel uses SSH and the existing NAS Docker engine; it does not install Docker on the PC or alter services. It checks only the dedicated FFTS containers, their internal network/static destinations, free local ports and all four forwarded services. It stops on an occupied port, configuration mismatch or SSH forwarding denial. Ctrl+C closes its own tunnel.
+
+Use `npm run testsuite:setup:development` to provision the three local testsuite accounts after target verification. The production setup alias is removed. Environment separation, generated private files, fixture confirmations, maintenance and recovery are documented in `docs/guides/LOCAL_DEVELOPMENT.md`; public NAS configuration is in `infra/nas-development/`. Never track runtime volumes, private `.env` files, copied data, auth state or backup archives.

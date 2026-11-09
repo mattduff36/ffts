@@ -3,7 +3,9 @@ import { resolve } from 'path';
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-config({ path: resolve(process.cwd(), '.env.local') });
+import { requireDevelopmentTarget } from '../../lib/utils/development-target';
+
+config({ path: resolve(process.cwd(), '.env.development.local') });
 
 const TEST_USER_ROLES = ['admin', 'manager', 'employee'] as const;
 const STATE_FILE = resolve(process.cwd(), 'testsuite', '.state', 'test-users.json');
@@ -21,7 +23,7 @@ function loadState(): TestUsersState {
   if (!existsSync(STATE_FILE)) {
     throw new Error(
       `Testsuite users are not provisioned. Expected ${STATE_FILE}. ` +
-      'Run npm run testsuite:setup:production after reviewing the target.'
+      'Run npx tsx scripts/setup-test-users.ts --confirm-development=FFTS_TESTSUITE after reviewing the development target.'
     );
   }
 
@@ -34,7 +36,32 @@ function loadState(): TestUsersState {
   }
 }
 
+export async function verifyDevelopmentAppTarget() {
+  const target = requireDevelopmentTarget(process.env);
+  // Verify the running app before constructing clients or authenticating test users.
+  const response = await fetch(`${target.appOrigin}/api/development/target`, {
+    signal: AbortSignal.timeout(15_000),
+    redirect: 'error',
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error('Testsuite requires a verified development app (target identity unavailable).');
+  const identity: unknown = await response.json();
+  if (!identity || typeof identity !== 'object'
+    || !('environment' in identity) || identity.environment !== target.environment
+    || !('projectId' in identity) || identity.projectId !== target.projectId
+    || !('apiOrigin' in identity) || identity.apiOrigin !== target.apiOrigin
+    || !('appOrigin' in identity) || identity.appOrigin !== target.appOrigin
+    || !('database' in identity) || !identity.database || typeof identity.database !== 'object'
+    || !('host' in identity.database) || identity.database.host !== target.database.host
+    || !('port' in identity.database) || identity.database.port !== target.database.port
+    || !('name' in identity.database) || identity.database.name !== target.database.name) {
+    throw new Error('Testsuite app and tooling development targets do not match.');
+  }
+  return target;
+}
+
 export async function runTestsuitePreflight(): Promise<void> {
+  await verifyDevelopmentAppTarget();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -58,21 +85,6 @@ export async function runTestsuitePreflight(): Promise<void> {
   const supabase = createClient(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const baseUrl = process.env.TESTSUITE_BASE_URL || 'http://localhost:4000';
-
-  try {
-    const response = await fetch(`${baseUrl}/api/version`, {
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (response.status >= 500) {
-      failures.push(`application preflight returned ${response.status} from ${baseUrl}/api/version`);
-    }
-  } catch (error) {
-    failures.push(
-      `application is not reachable at ${baseUrl}: ${error instanceof Error ? error.message : 'request failed'}`
-    );
-  }
-
   const [
     rolesResult,
     modulesResult,

@@ -2,6 +2,23 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1126.2.2
+
+**GIT COMMIT MESSAGE**
+`fix(layout): update navigation`
+
+**PUSHED AT**
+2026-11-09T23:01:43.600Z
+
+**WHAT CHANGED**
+Update navigation.
+
+**VERSION HISTORY DETAILS**
+- Updated navigation across 1 changed file.
+
+**COMMITS IN THIS RELEASE**
+- `fix(layout): update navigation`
+
 ## 1126.2.1
 
 **GIT COMMIT MESSAGE**

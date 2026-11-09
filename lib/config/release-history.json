@@ -1,5 +1,22 @@
 [
   {
+    "version": "1126.2.2",
+    "updateKind": "minor",
+    "title": "Navigation improvements",
+    "description": "Updated navigation.",
+    "summary": "Updated navigation.",
+    "details": [
+      "Updated navigation across 1 changed file."
+    ],
+    "areas": [
+      "Navigation"
+    ],
+    "areaKeys": [
+      "navigation"
+    ],
+    "pushedAt": "2026-11-09T23:01:43.600Z"
+  },
+  {
     "version": "1126.2.1",
     "updateKind": "minor",
     "title": "Help and FAQ guidance update",

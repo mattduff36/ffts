@@ -1,5 +1,22 @@
 [
   {
+    "version": "1126.3.0",
+    "updateKind": "major",
+    "title": "App screens update",
+    "description": "Updated app screens.",
+    "summary": "Updated app screens.",
+    "details": [
+      "Updated app screens, with changes to app screens."
+    ],
+    "areas": [
+      "App screens"
+    ],
+    "areaKeys": [
+      "app-screens"
+    ],
+    "pushedAt": "2026-11-09T23:33:59.946Z"
+  },
+  {
     "version": "1126.2.2",
     "updateKind": "minor",
     "title": "Navigation improvements",

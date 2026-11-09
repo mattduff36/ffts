@@ -19,3 +19,7 @@
 ## Do NOT load
 
 Do not load the full docs tree, unrelated module PRDs, historical review runs, sibling repositories, or release/protocol procedures for an ordinary local fix. No new stage artifacts for DIRECT/FAST work. Use the existing task/plan for a useful handoff: scope, selected inputs, evidence and next action; use existing protocol artifacts only for TEE-FULL. There is no additional CONTEXT.md or state engine.
+
+## MPDEE Worker
+
+For suitable engineering work, use the **MPDEE Worker** through Copilot CLI. Follow the installed `mpdee-worker` skill for routing, checks and return to the parent chat. Use **MPDEE Worker** in plans and progress reports.

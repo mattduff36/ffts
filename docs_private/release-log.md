@@ -2,6 +2,33 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1126.1.0
+
+**GIT COMMIT MESSAGE**
+`feat(scheduling): add permission-aware quotes and customers panels`
+
+**PUSHED AT**
+2026-11-09T17:24:57.907Z
+
+**WHAT CHANGED**
+Update repository files. Secure database access and isolate NAS development. Restore dragging existing resource jobs to calendar. Add permission-aware quotes and customers panels.
+
+**VERSION HISTORY DETAILS**
+- Updated quotes, with changes to app screens, interface components, and automated tests.
+- Updated help and FAQ, with changes to automated tests, data storage, and documentation.
+- Updated navigation, with changes to interface components and automated tests.
+- Updated data storage, with changes to shared logic, data storage, and documentation.
+- Updated customers, with changes to app screens and interface components.
+- Updated inventory, with changes to shared logic and automation scripts.
+- Updated fleet, with changes to shared logic and automation scripts.
+- Updated debug tools, with changes to background routes and automated tests.
+
+**COMMITS IN THIS RELEASE**
+- `chore(agents-md): update repository files`
+- `fix: secure database access and isolate NAS development`
+- `fix(scheduling): restore dragging existing resource jobs to calendar`
+- `feat(scheduling): add permission-aware quotes and customers panels`
+
 ## 1126.0.0
 
 **GIT COMMIT MESSAGE**

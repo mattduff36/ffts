@@ -1,5 +1,34 @@
 [
   {
+    "version": "1126.2.0",
+    "updateKind": "major",
+    "title": "Sign in update",
+    "description": "Updated Sign in, User Management, Profile, Help and FAQ, and Data storage.",
+    "summary": "Updated Sign in, User Management, Profile, Help and FAQ, and Data storage.",
+    "details": [
+      "Updated Sign in, User Management, Profile, Help and FAQ, and Data storage, with changes to background routes, shared logic, and automated tests.",
+      "Updated user management, with changes to background routes and app screens.",
+      "Updated help and FAQ, with changes to documentation.",
+      "Updated profile, with changes to shared logic and automated tests.",
+      "Updated data storage, with changes to data storage."
+    ],
+    "areas": [
+      "Sign in",
+      "User Management",
+      "Profile",
+      "Help",
+      "FAQ",
+      "Data storage"
+    ],
+    "areaKeys": [
+      "sign-in",
+      "user-management",
+      "profile",
+      "data-storage"
+    ],
+    "pushedAt": "2026-11-09T20:03:43.193Z"
+  },
+  {
     "version": "1126.1.0",
     "updateKind": "major",
     "title": "Scheduling update",

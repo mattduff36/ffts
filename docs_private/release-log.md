@@ -2,6 +2,27 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1126.2.0
+
+**GIT COMMIT MESSAGE**
+`feat(auth): update Sign in, User Management, Profile, Help and FAQ, and Data storage`
+
+**PUSHED AT**
+2026-11-09T20:03:43.193Z
+
+**WHAT CHANGED**
+Update Sign in, User Management, Profile, Help and FAQ, and Data storage.
+
+**VERSION HISTORY DETAILS**
+- Updated Sign in, User Management, Profile, Help and FAQ, and Data storage, with changes to background routes, shared logic, and automated tests.
+- Updated user management, with changes to background routes and app screens.
+- Updated help and FAQ, with changes to documentation.
+- Updated profile, with changes to shared logic and automated tests.
+- Updated data storage, with changes to data storage.
+
+**COMMITS IN THIS RELEASE**
+- `feat(auth): update Sign in, User Management, Profile, Help and FAQ, and Data storage`
+
 ## 1126.1.0
 
 **GIT COMMIT MESSAGE**

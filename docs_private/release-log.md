@@ -2,6 +2,24 @@
 
 Private changelog for production builds. Newest entries first.
 
+## 1126.2.1
+
+**GIT COMMIT MESSAGE**
+`docs(help): update Help and FAQ and Data storage`
+
+**PUSHED AT**
+2026-11-09T22:16:08.402Z
+
+**WHAT CHANGED**
+Update Help and FAQ and Data storage.
+
+**VERSION HISTORY DETAILS**
+- Updated data storage, with changes to shared logic, automated tests, and data storage.
+- Updated Help and FAQ and Data storage, with changes to documentation.
+
+**COMMITS IN THIS RELEASE**
+- `docs(help): update Help and FAQ and Data storage`
+
 ## 1126.2.0
 
 **GIT COMMIT MESSAGE**

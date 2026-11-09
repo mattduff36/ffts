@@ -1,5 +1,25 @@
 [
   {
+    "version": "1126.2.1",
+    "updateKind": "minor",
+    "title": "Help and FAQ guidance update",
+    "description": "Updated Help and FAQ and Data storage.",
+    "summary": "Updated Help and FAQ and Data storage.",
+    "details": [
+      "Updated data storage, with changes to shared logic, automated tests, and data storage.",
+      "Updated Help and FAQ and Data storage, with changes to documentation."
+    ],
+    "areas": [
+      "Help and FAQ",
+      "Data storage"
+    ],
+    "areaKeys": [
+      "help",
+      "data-storage"
+    ],
+    "pushedAt": "2026-11-09T22:16:08.402Z"
+  },
+  {
     "version": "1126.2.0",
     "updateKind": "major",
     "title": "Sign in update",

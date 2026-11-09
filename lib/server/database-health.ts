@@ -1,6 +1,7 @@
 import 'server-only';
 
 import pg from 'pg';
+import { developmentPgOptions } from '@/lib/utils/development-pg-options';
 
 const { Client } = pg;
 
@@ -77,8 +78,18 @@ function getConnectionString(explicitConnectionString?: string | null): string |
 }
 
 function createDatabaseClient(connectionString: string, timeoutMs: number): PgClientLike {
-  const url = new URL(connectionString);
+  if (process.env.FFTS_DATA_ENVIRONMENT === 'development') {
+    return new Client(
+      developmentPgOptions(process.env, {
+        connectionString,
+        connectionTimeoutMillis: timeoutMs,
+        query_timeout: timeoutMs,
+        statement_timeout: timeoutMs,
+      })
+    );
+  }
 
+  const url = new URL(connectionString);
   return new Client({
     host: url.hostname,
     port: Number.parseInt(url.port || '5432', 10),

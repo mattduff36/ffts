@@ -633,11 +633,11 @@ test.describe('@scheduling Scheduling', () => {
     await outlineButton.focus();
     expect((await readControlContrast(outlineButton)).boxShadow).not.toBe('none');
 
-    const dangerButton = page.getByRole('button', { name: 'Remove TEST-JOB-101' }).first();
-    expect((await readControlContrast(dangerButton)).ratio).toBeGreaterThanOrEqual(4.5);
-    await dangerButton.hover();
+    const jobActionsButton = page.getByRole('button', { name: 'Actions for TEST-JOB-101 visit 1' }).first();
+    expect((await readControlContrast(jobActionsButton)).ratio).toBeGreaterThanOrEqual(4.5);
+    await jobActionsButton.hover();
     await page.waitForTimeout(200);
-    expect((await readControlContrast(dangerButton)).ratio).toBeGreaterThanOrEqual(4.5);
+    expect((await readControlContrast(jobActionsButton)).ratio).toBeGreaterThanOrEqual(4.5);
 
     await boardResourceTab(page, 'Employees').click();
     await page.getByRole('button', { name: 'Select visit 1 for TEST-JOB-101' }).first().click();
@@ -653,7 +653,7 @@ test.describe('@scheduling Scheduling', () => {
   test('retired crew-offer actions are absent', async ({ page }) => {
     await mockManagerBoard(page);
     await page.goto('/scheduling');
-    await expect(page.getByTestId('schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111')).toBeVisible();
+    await expect(page.getByTestId('schedule-job-actions-11111111-1111-4111-8111-111111111111').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Offer if crew/ })).toHaveCount(0);
   });
 
@@ -768,8 +768,9 @@ test.describe('@scheduling Scheduling', () => {
     await expect(resources).toBeVisible();
     await expect(resources).toHaveAttribute('data-visit-return-target', 'true');
     await source.getByRole('button', {
-      name: 'Return visit 1 for TEST-JOB-101 to Jobs',
+      name: 'Actions for TEST-JOB-101 visit 1',
     }).click();
+    await page.getByRole('menuitem', { name: 'Return visit to Jobs' }).click();
 
     await expect(page.getByRole('alertdialog', {
       name: 'Return this visit to Jobs?',
@@ -786,9 +787,10 @@ test.describe('@scheduling Scheduling', () => {
     await expect(page.getByRole('button', {
       name: 'TEST-JOB-101 · Visit 1: select job or drag to a calendar date',
     })).toBeVisible();
-    await expect(page.getByTestId(
-      'schedule-job-actions-desktop-11111111-1111-4111-8111-111111111111'
-    )).toHaveCount(1);
+    await expect(source).toHaveCount(0);
+    await expect(page.getByRole('button', {
+      name: 'Actions for TEST-JOB-101 visit 2',
+    })).toBeVisible();
   });
 
   test('DND-RETURN-007 returns a visit to Jobs by dragging onto Resources', async ({ page }) => {
@@ -1121,22 +1123,21 @@ test.describe('@scheduling Scheduling', () => {
       'schedule-visit-44444444-4444-4444-8444-444444444444'
     );
     await expect(timelineVisit).toBeVisible();
-    await expect(timelineVisit).toHaveCSS('background-color', 'rgb(51, 65, 85)');
-    const singleVisitGeometry = await page.evaluate(() => {
-      const timelineCell = document.querySelector<HTMLElement>(
+    expect(await timelineVisit.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .not.toBe('rgba(0, 0, 0, 0)');
+    const jobRow = timeline.getByTestId('schedule-board-row-job-11111111-1111-4111-8111-111111111111');
+    await expect(jobRow.getByTestId('schedule-daily-job-cell-11111111-1111-4111-8111-111111111111'))
+      .toHaveCount(0);
+    const singleVisitGeometry = await jobRow.evaluate((row) => {
+      const timelineCell = row.querySelector<HTMLElement>(
         '[data-testid^="schedule-cell-11111111-1111-4111-8111-111111111111-"]'
       );
-      const jobCell = document.querySelector<HTMLElement>(
-        '[data-testid="schedule-daily-job-cell-11111111-1111-4111-8111-111111111111"]'
-      );
-      const visitPlacement = document.querySelector<HTMLElement>(
+      const visitPlacement = row.querySelector<HTMLElement>(
         '[data-testid="schedule-timeline-visit-44444444-4444-4444-8444-444444444444"]'
       );
-      if (!timelineCell || !jobCell || !visitPlacement) return null;
+      if (!timelineCell || !visitPlacement) return null;
       return {
-        sharedHeightDifference: Math.abs(
-          timelineCell.offsetHeight - jobCell.offsetHeight
-        ),
+        sharedHeightDifference: Math.abs(timelineCell.offsetHeight - (row as HTMLElement).clientHeight),
         topInset: visitPlacement.offsetTop,
         bottomInset:
           timelineCell.offsetHeight
@@ -1155,39 +1156,8 @@ test.describe('@scheduling Scheduling', () => {
     await expect.poll(() => timeline.evaluate((element) => element.scrollLeft))
       .toBe(500);
 
-    const jobCellTestId =
-      'schedule-daily-job-cell-11111111-1111-4111-8111-111111111111';
-    const visitTestId = 'schedule-visit-44444444-4444-4444-8444-444444444444';
-    const stacking = await page.evaluate(({ jobCellTestId, visitTestId }) => {
-      const jobCell = document.querySelector<HTMLElement>(
-        `[data-testid="${jobCellTestId}"]`
-      );
-      const visit = document.querySelector<HTMLElement>(
-        `[data-testid="${visitTestId}"]`
-      );
-      if (!jobCell || !visit) return null;
-      const jobRect = jobCell.getBoundingClientRect();
-      const visitRect = visit.getBoundingClientRect();
-      const point = {
-        x: Math.max(jobRect.left + 8, Math.min(jobRect.right - 8, visitRect.left + 8)),
-        y: Math.max(jobRect.top + 8, Math.min(jobRect.bottom - 8, visitRect.top + 8)),
-      };
-      const hitTarget = document.elementFromPoint(point.x, point.y);
-      return {
-        hasHorizontalOverlap:
-          visitRect.left < jobRect.right && visitRect.right > jobRect.left,
-        hitStickyJobCell: hitTarget?.closest(
-          `[data-testid="${jobCellTestId}"]`
-        ) === jobCell,
-      };
-    }, { jobCellTestId, visitTestId });
-    expect(stacking).toEqual({
-      hasHorizontalOverlap: true,
-      hitStickyJobCell: true,
-    });
-
-    const stickyJobCell = timeline.getByTestId(jobCellTestId);
-    await stickyJobCell.getByRole('button', { name: 'Edit TEST-JOB-101' }).click();
+    await timelineVisit.getByRole('button', { name: 'Actions for TEST-JOB-101 visit 1' }).click();
+    await page.getByRole('menuitem', { name: 'Edit scheduled job' }).click();
     const editDialog = page.getByRole('dialog', { name: 'Edit scheduled job' });
     await expect(editDialog).toBeVisible();
     await editDialog.getByRole('button', { name: 'Cancel' }).click();
@@ -1268,7 +1238,7 @@ test.describe('@scheduling Scheduling', () => {
       return metrics.scrollWidth > metrics.clientWidth;
     }).toBe(true);
     const scrolledMetrics = await readMetrics();
-    expect(scrolledMetrics.contentLayoutWidth).toBe(1680);
+    expect(scrolledMetrics.contentLayoutWidth).toBe(1440);
     expect(scrolledMetrics.hourWidth).toBe(96);
     expect(scrolledMetrics.scrollWidth).toBeGreaterThan(scrolledMetrics.clientWidth);
   });
@@ -1298,24 +1268,33 @@ test.describe('@scheduling Scheduling', () => {
     await expect(page.getByLabel('Daily schedule timeline')).toBeVisible();
   });
 
-  test('DND-MOBILE-005 shows the wider-screen requirement on a narrow tall viewport', async ({ page }) => {
+  test('DND-MOBILE-005 keeps the scheduling board usable on a narrow tall viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 2400 });
+    await mockManagerBoard(page);
     await page.goto('/scheduling');
 
     await expect(
-      page.getByRole('heading', { name: 'Job Scheduling needs a wider screen' })
+      page.getByTestId('schedule-board-row-job-11111111-1111-4111-8111-111111111111-mobile')
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('tab', { name: 'Weekly' })).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Job Scheduling needs a wider screen' })
+    ).toHaveCount(0);
   });
 
-  test('mobile board hides desktop scheduling controls', async ({ page }) => {
+  test('mobile board shows mobile job cards and hides desktop board rows', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
+    await mockManagerBoard(page);
     await page.goto('/scheduling');
 
     await expect(
-      page.getByRole('heading', { name: 'Job Scheduling needs a wider screen' })
+      page.getByTestId('schedule-board-row-job-11111111-1111-4111-8111-111111111111-mobile')
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Remove TEST-JOB-101' })).toHaveCount(0);
+    await expect(
+      page.getByTestId('schedule-board-row-job-11111111-1111-4111-8111-111111111111')
+    ).toBeHidden();
+    await expect(
+      page.getByRole('button', { name: 'Actions for TEST-JOB-101 visit 1' }).first()
+    ).toBeVisible();
   });
 
   test.describe('touchscreen laptop context', () => {

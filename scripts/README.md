@@ -217,6 +217,8 @@ Run `npm run dev:nas:tunnel` from this repository on MPDEE-SERVER, then `npm run
 
 Use `npm run testsuite:setup:development` to provision the three local testsuite accounts after target verification. The production setup alias is removed. Environment separation, generated private files, fixture confirmations, maintenance and recovery are documented in `docs/guides/LOCAL_DEVELOPMENT.md`; public NAS configuration is in `infra/nas-development/`. Never track runtime volumes, private `.env` files, copied data, auth state or backup archives.
 
+The development Manager and Employee use the active `civils` team by default. Set `TESTSUITE_TEAM_ID` to another active development team before running setup to exercise that team's permissions. The Admin remains unassigned.
+
 ## Account handover permission regression
 
 Run `node scripts/testing/verify-account-handover-guards.cjs` with the NAS tunnel and local app running. It loads only ignored `.env.development.local`, checks the exact development API/PostgreSQL target and the app's development identity, then replays `20261109190808_staff_account_handover_guards.sql` inside a transaction. Fictional Auth/profile fixtures prove that role/onboarding changes and profile insertion/deletion are denied to browser roles, while self-service contact updates and authorised holiday-allowance changes still work. Every fixture and DDL statement rolls back on success or failure; the command prints a credential-free JSON summary and never sends mail or opens a hosted connection.

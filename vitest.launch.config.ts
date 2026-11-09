@@ -13,6 +13,7 @@ export default defineConfig({
       'tests/unit/development-target.test.ts',
       'tests/unit/supabase-middleware-cookie-refresh.test.ts',
       'tests/unit/development-pg-options.test.ts',
+      'tests/unit/database-health-pg-options.test.ts',
       'tests/integration/api/development-target-route.test.ts',
       'tests/integration/api/scheduling-project-jobs-route.test.ts',
       'tests/integration/api/debug-sample-data-route.test.ts',

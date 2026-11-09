@@ -49,6 +49,7 @@ if (
   process.exit(1);
 }
 const TESTSUITE_PASSWORD = PASSWORD;
+const TESTSUITE_OPERATIONAL_TEAM_ID = process.env.TESTSUITE_TEAM_ID?.trim() || 'civils';
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -61,6 +62,7 @@ const TEST_USERS = [
     fullName: 'Testsuite Admin',
     employeeId: 'TS-ADM',
     superAdmin: false,
+    teamId: null,
     roleMatcher: { is_manager_admin: true, is_super_admin: false, name: 'admin' },
     roleFallback: { is_manager_admin: true },
   },
@@ -70,6 +72,7 @@ const TEST_USERS = [
     fullName: 'Testsuite Manager',
     employeeId: 'TS-MGR',
     superAdmin: false,
+    teamId: TESTSUITE_OPERATIONAL_TEAM_ID,
     roleMatcher: { is_manager_admin: true, name: 'manager' },
     roleFallback: { is_manager_admin: true },
   },
@@ -79,6 +82,7 @@ const TEST_USERS = [
     fullName: 'Testsuite Employee',
     employeeId: 'TS-EMP',
     superAdmin: false,
+    teamId: TESTSUITE_OPERATIONAL_TEAM_ID,
     roleMatcher: { is_manager_admin: false, name: 'employee' },
     roleFallback: { is_manager_admin: false },
   },
@@ -115,6 +119,20 @@ async function findAuthUserByEmail(email: string) {
     const match = data.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
     if (match) return match;
     if (data.users.length < perPage) return null;
+  }
+}
+
+async function assertOperationalTeamExists(): Promise<void> {
+  const { data, error } = await supabase
+    .from('org_teams')
+    .select('id, active')
+    .eq('id', TESTSUITE_OPERATIONAL_TEAM_ID)
+    .single();
+
+  if (error || !data?.active) {
+    throw new Error(
+      `Testsuite operational team "${TESTSUITE_OPERATIONAL_TEAM_ID}" is missing or inactive: ${error?.message || 'inactive team'}`
+    );
   }
 }
 
@@ -159,7 +177,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
   // Wait for trigger to create profile
   await new Promise(r => setTimeout(r, 1000));
 
-  // Upsert profile — ensure must_change_password is false for test users
+  // Upsert profile — ensure the operational test roles have a real development team.
   const { error: profileError } = await supabase
     .from('profiles')
     .upsert({
@@ -167,6 +185,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
       full_name: userDef.fullName,
       employee_id: userDef.employeeId,
       role_id: roleId,
+      team_id: userDef.teamId,
       super_admin: userDef.superAdmin,
       is_placeholder: true,
       must_change_password: false,
@@ -181,7 +200,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
       supabase.auth.admin.getUserById(userId),
       supabase
         .from('profiles')
-        .select('id, employee_id, role_id, super_admin, is_placeholder, must_change_password')
+        .select('id, employee_id, role_id, team_id, super_admin, is_placeholder, must_change_password')
         .eq('id', userId)
         .single(),
     ]);
@@ -194,6 +213,7 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
     !profile ||
     profile.employee_id !== userDef.employeeId ||
     profile.role_id !== roleId ||
+    profile.team_id !== userDef.teamId ||
     profile.super_admin !== userDef.superAdmin ||
     profile.is_placeholder !== true ||
     profile.must_change_password !== false
@@ -206,7 +226,9 @@ async function ensureUser(userDef: typeof TEST_USERS[number]): Promise<{ email: 
 
 async function main() {
   console.log(`Setting up testsuite users on ${developmentTarget.apiOrigin}...`);
-  console.log('Only the three hidden @ffts.test identities will be created or updated.\n');
+  console.log('Only the three hidden @ffts.test identities will be created or updated.');
+  console.log(`Manager and employee use development team "${TESTSUITE_OPERATIONAL_TEAM_ID}".\n`);
+  await assertOperationalTeamExists();
 
   const results: Record<string, { email: string; password: string; userId: string; role: string }> = {};
 

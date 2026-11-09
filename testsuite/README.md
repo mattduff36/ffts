@@ -26,7 +26,7 @@ npx tsx scripts/setup-test-users.ts --confirm-development=FFTS_TESTSUITE
 
 Use `npm run testsuite:setup:development` for the same confirmed local setup. The obsolete `testsuite:setup:production` command was removed; production confirmation flags cannot authorize hosted setup. Ordinary unit tests never implicitly load `.env.local`; real integration access requires `FFTS_INTEGRATION_TESTS=development` and verified targets. The credential-free launch suite is `npx vitest run --config vitest.launch.config.ts --maxWorkers=1 --no-file-parallelism`; it uses PGlite in memory for real role/ACL/RLS tests and does not start the app or connect to Supabase.
 
-The copied Manager and Employee identities currently have no assigned team and no Scheduling module grant, matching hosted configuration. Configure intended development test-team permissions before expecting full manager/employee module workflows to pass. Account provisioning verifies hidden identities and credentials; it does not grant an implicit permission matrix.
+Development setup assigns the Manager and Employee to the active `civils` team by default. Set `TESTSUITE_TEAM_ID` to another active development team to exercise that team's permissions. The Admin has no team. Setup verifies the saved assignments and uses the existing team permission matrix.
 
 The command is idempotent. It writes credentials only to ignored `testsuite/.state/test-users.json` after all three hidden profiles have been verified. Normal tests and `finalise --full` consume this state but never create accounts.
 

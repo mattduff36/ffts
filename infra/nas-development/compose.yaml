@@ -223,6 +223,10 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+    networks:
+      default:
+        aliases:
+          - realtime-dev.supabase-realtime
   storage:
     container_name: ffts-storage
     image: supabase/storage-api:v1.89.12

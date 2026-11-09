@@ -48,6 +48,15 @@ Evidence is on MPDEE-SERVER outside Git at `D:/_storage/Codex-Documents/2026-11-
 
 ## Remaining launch work
 
+Launch hardening follow-up on 9 November 2026:
+
+- Hosted public sign-up was verified disabled via the Auth settings endpoint. The owner confirmed enabling leaked-password protection in the dashboard.
+- The development Manager and Employee are assigned to Civils. Scheduling resolved to level 4 with board access for Manager and level 2 with HTTP 403 on the manager board for Employee.
+- The five Realtime entries below are present on NAS and hosted, together with the four previous entries. NAS used repository migration `20261109203007_enable_core_realtime_publications.sql`. Hosted records the same SQL under version `20261109210618`. Do not replay or repair migration history just to align those version numbers.
+- NAS verification used the FFTS app data token to receive a `message_recipients` update and restore the original value. The five hosted tables still have RLS and read policies. Supabase Postgres Changes can deliver DELETE primary keys without row-policy filtering. No hosted event was generated for testing.
+
+The list below records the original launch checklist.
+
 1. Disable public sign-up and enable hosted leaked-password protection in Supabase Auth, then recheck the configuration and security advisor. Public sign-up was still enabled during the account-handover audit. The current connection has no authenticated dashboard or Auth-configuration API access, so these settings remain open.
 2. Define intended team/module permissions for the manager and employee test roles, then provision those explicitly in the development environment before full role-workflow tests. Both retained test accounts currently have no team and Scheduling level 0 on hosted and NAS; their 403 responses are correct under that copied configuration. Login tests do not establish usable permissions for every module. Review actual staff team/role assignments before client onboarding.
 3. Restore the five missing Realtime publication entries after checking their RLS and exercising them locally: `timesheets`, `van_inspections`, `plant_inspections`, `absences` and `message_recipients`. The app subscribes to these tables, but neither hosted nor NAS publishes them. This pre-existing gap can leave live lists and notification badges stale until refreshed. Use a targeted migration for the normal database release process; do not copy managed Realtime message partitions.

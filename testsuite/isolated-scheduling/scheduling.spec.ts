@@ -8,6 +8,47 @@ const screenshots = resolve('testsuite', 'reports', 'scheduling-local', 'screens
 const jobId = '11111111-1111-4111-8111-111111111111';
 const visitId = '44444444-4444-4444-8444-444444444444';
 
+test('daily Teams shares a line for back-to-back jobs and stacks overlapping jobs', async ({ page }) => {
+  const { board } = await mockScheduling(page);
+  const [firstJob] = board.jobs;
+  const [firstVisit] = board.visits;
+  const [firstAssignment] = board.assignments;
+
+  const addJob = (id: string, start: string, end: string) => {
+    const job = { ...firstJob, id: `job-${id}`, job_reference: `LOCAL-${id}` };
+    const visit = {
+      ...firstVisit,
+      id,
+      job_id: job.id,
+      starts_at: `${date}T${start}:00.000Z`,
+      ends_at: `${date}T${end}:00.000Z`,
+    };
+    board.jobs.push(job);
+    board.visits.push(visit);
+    board.assignments.push({
+      ...firstAssignment, id: `assignment-${id}`, job_id: job.id, visit_id: id, visit,
+    });
+  };
+
+  addJob('overlapping', '10:59', '12:30');
+  addJob('back-to-back', '11:00', '14:00');
+  await page.goto(`/?date=${date}`);
+  await page.getByRole('tab', { name: 'Daily', exact: true }).click();
+  await page.getByRole('tab', { name: 'Primary Teams', exact: true }).click();
+
+  const team = page.getByTestId('schedule-board-row-team-1');
+  const first = team.getByTestId(new RegExp(`^schedule-timeline-visit-.*${visitId}$`));
+  const backToBack = team.getByTestId(/^schedule-timeline-visit-.*back-to-back$/);
+  const overlapping = team.getByTestId(/^schedule-timeline-visit-.*overlapping$/);
+  await expect(backToBack).toBeVisible();
+  const firstBox = (await first.boundingBox())!;
+  const nextBox = (await backToBack.boundingBox())!;
+  const overlapBox = (await overlapping.boundingBox())!;
+  expect(nextBox.y).toBeCloseTo(firstBox.y);
+  expect(nextBox.x).toBeGreaterThanOrEqual(firstBox.x + firstBox.width);
+  expect(overlapBox.y).toBeGreaterThanOrEqual(firstBox.y + firstBox.height);
+});
+
 test.describe('Jobs timeline coordinates', () => {
   for (const mode of ['fit', 'scroll']) {
     test(`Jobs daily ${mode} uses the full-width timeline for moving and resizing visits`, async ({ page }) => {

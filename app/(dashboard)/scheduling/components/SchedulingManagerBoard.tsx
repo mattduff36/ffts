@@ -1198,38 +1198,68 @@ interface DailyTimelineLayout {
   rowHeight: number;
 }
 
-function getDailyTimelineLayout(
-  dayPlacements: ScheduleBoardVisitPlacement[],
-  legacyAssignments: ScheduleAssignment[],
-  range: DailyTimelineRange,
-  showJobIdentity = false
-): DailyTimelineLayout {
-  const sortedPlacements = [...dayPlacements].sort((first, second) =>
-    first.visit.starts_at.localeCompare(second.visit.starts_at)
-  );
-  const firstLaneTop =
-    DAILY_TIMELINE_EDGE_PADDING
-    + (legacyAssignments.length > 0 ? DAILY_TIMELINE_LEGACY_HEIGHT : 0);
-  let nextTop = firstLaneTop;
-  const placements = sortedPlacements.map((placement, index) => {
-    const cardWidth = getDailyVisitPlacementWidth({
-      startsAt: placement.visit.starts_at,
-      endsAt: placement.visit.ends_at,
+function getDailyVisitBounds(visit: ScheduleVisit, range: DailyTimelineRange) {
+  const minutesFromStart = Math.max(0, getScheduleTimeMinutes(visit.starts_at) - range.startHour * 60);
+  return {
+    left: (minutesFromStart / 60) * range.hourWidth + 4,
+    width: getDailyVisitPlacementWidth({
+      startsAt: visit.starts_at,
+      endsAt: visit.ends_at,
       startHour: range.startHour,
       endHour: range.endHour,
       hourWidth: range.hourWidth,
       rangeWidth: range.width,
-    });
-    const height = getDailyVisitLaneHeight(placement.assignments.length, cardWidth)
-      + (showJobIdentity ? (cardWidth >= 322 ? -20 : cardWidth < 120 ? 64 : 40) : 0);
-    const laidOut = { ...placement, top: nextTop, height };
-    nextTop += height;
-    if (index < sortedPlacements.length - 1) nextTop += DAILY_TIMELINE_LANE_GAP;
-    return laidOut;
+    }),
+  };
+}
+
+function getDailyTimelineLayout(
+  dayPlacements: ScheduleBoardVisitPlacement[],
+  legacyAssignments: ScheduleAssignment[],
+  range: DailyTimelineRange,
+  primary: SchedulingBoardPrimary
+): DailyTimelineLayout {
+  const sortedPlacements = [...dayPlacements].sort((first, second) =>
+    first.visit.starts_at.localeCompare(second.visit.starts_at)
+  );
+  const showJobIdentity = primary === SCHEDULING_BOARD_PRIMARIES.job;
+  const packVisits = primary === SCHEDULING_BOARD_PRIMARIES.team;
+  const firstLaneTop =
+    DAILY_TIMELINE_EDGE_PADDING
+    + (legacyAssignments.length > 0 ? DAILY_TIMELINE_LEGACY_HEIGHT : 0);
+  const lanes: { endsAt: number; right: number; height: number }[] = [];
+  const lanePlacements = sortedPlacements.map((placement) => {
+    const { visit } = placement;
+    const { left, width } = getDailyVisitBounds(visit, range);
+    const height = getDailyVisitLaneHeight(placement.assignments.length, width)
+      + (showJobIdentity ? (width >= 322 ? -20 : width < 120 ? 64 : 40) : 0);
+    const startsAt = Date.parse(visit.starts_at);
+    // Short visits can render wider than their time slot.
+    const availableLane = packVisits
+      ? lanes.findIndex((lane) => lane.endsAt <= startsAt && lane.right <= left)
+      : -1;
+    const laneIndex = availableLane === -1 ? lanes.length : availableLane;
+    lanes[laneIndex] = {
+      endsAt: Date.parse(visit.ends_at),
+      right: left + width,
+      height: Math.max(lanes[laneIndex]?.height ?? 0, height),
+    };
+    return { placement, laneIndex, height };
   });
+  let nextTop = firstLaneTop;
+  const laneTops = lanes.map(({ height }) => {
+    const top = nextTop;
+    nextTop += height + DAILY_TIMELINE_LANE_GAP;
+    return top;
+  });
+  const placements = lanePlacements.map(({ placement, laneIndex, height }) => ({
+    ...placement,
+    top: laneTops[laneIndex],
+    height,
+  }));
   const naturalRowHeight =
     placements.length > 0
-      ? nextTop + DAILY_TIMELINE_EDGE_PADDING
+      ? nextTop - DAILY_TIMELINE_LANE_GAP + DAILY_TIMELINE_EDGE_PADDING
       : DAILY_JOB_ROW_MIN_HEIGHT;
   const rowHeight = Math.max(DAILY_JOB_ROW_MIN_HEIGHT, naturalRowHeight);
 
@@ -1529,21 +1559,7 @@ function ResizableDailyVisit({
   const displayedVisit = draftTimes
     ? { ...visit, starts_at: draftTimes.startsAt, ends_at: draftTimes.endsAt }
     : visit;
-  const rangeStartMinutes = range.startHour * 60;
-  const startsAt = Math.max(
-    rangeStartMinutes,
-    getScheduleTimeMinutes(displayedVisit.starts_at)
-  );
-  const left =
-    ((startsAt - rangeStartMinutes) / 60) * range.hourWidth + 4;
-  const width = getDailyVisitPlacementWidth({
-    startsAt: displayedVisit.starts_at,
-    endsAt: displayedVisit.ends_at,
-    startHour: range.startHour,
-    endHour: range.endHour,
-    hourWidth: range.hourWidth,
-    rangeWidth: range.width,
-  });
+  const { left, width } = getDailyVisitBounds(displayedVisit, range);
 
   function handleResizePointerDown(
     event: PointerEvent<HTMLElement>,
@@ -7305,7 +7321,7 @@ export function SchedulingManagerBoard({ userId }: SchedulingManagerBoardProps) 
                       row.visitsByDate[selectedDate] || [],
                       row.legacyAssignmentsByDate[selectedDate] || [],
                       dailyTimelineRange,
-                      primary === SCHEDULING_BOARD_PRIMARIES.job
+                      primary
                     );
                     const job = row.job;
 

@@ -54,6 +54,7 @@ Launch hardening follow-up on 9 November 2026:
 - The development Manager and Employee are assigned to Civils. Scheduling resolved to level 4 with board access for Manager and level 2 with HTTP 403 on the manager board for Employee.
 - The five Realtime entries below are present on NAS and hosted, together with the four previous entries. NAS used repository migration `20261109203007_enable_core_realtime_publications.sql`. Hosted records the same SQL under version `20261109210618`. Do not replay or repair migration history just to align those version numbers.
 - NAS verification used the FFTS app data token to receive a `message_recipients` update and restore the original value. The five hosted tables still have RLS and read policies. Supabase Postgres Changes can deliver DELETE primary keys without row-policy filtering. No hosted event was generated for testing.
+- Follow-up migration `20261109222000_harden_core_realtime_delivery.sql` disables DELETE delivery across the nine tables in the shared feed while retaining live creates and updates. On NAS, the migration also repaired the workshop permission helper so the Civils Manager received both create and update events for van and plant inspections. A deletion made elsewhere appears on the next normal refresh.
 
 The list below records the original launch checklist.
 
